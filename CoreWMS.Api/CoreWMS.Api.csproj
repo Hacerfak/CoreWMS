@@ -16,6 +16,13 @@
     <PackageReference Include="MongoDB.Driver" Version="3.11.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Zeus.Net.NFe.NFCe" Version="2026.8.18.2047" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Schemas\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

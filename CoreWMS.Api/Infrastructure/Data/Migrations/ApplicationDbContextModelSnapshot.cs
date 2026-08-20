@@ -28,20 +28,78 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<byte[]>("CertificateBytes")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime?>("CertificateExpiration")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CertificatePassword")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("CityCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CityName")
+                        .HasColumnType("text");
+
                     b.Property<string>("Cnpj")
                         .IsRequired()
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)");
+
+                    b.Property<string>("Complement")
                         .HasColumnType("text");
+
+                    b.Property<string>("CorporateName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Name")
+                    b.Property<int>("Crt")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Environment")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MunicipalRegistration")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Neighborhood")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Number")
+                        .HasColumnType("text");
+
+                    b.Property<string>("State")
                         .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("StateRegistration")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Street")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TradeName")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ZipCode")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

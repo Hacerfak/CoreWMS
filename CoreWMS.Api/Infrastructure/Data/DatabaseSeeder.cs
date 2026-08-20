@@ -13,20 +13,11 @@ public static class DatabaseSeeder
         // 1. Aplica as migrações automaticamente no banco
         await context.Database.MigrateAsync();
 
-        // 2. Injeta as Empresas (CNPJs)
-        if (!await context.Companies.AnyAsync())
-        {
-            context.Companies.Add(new Company("00.000.000/0001-00", "Armazém Geral (Matriz)"));
-            context.Companies.Add(new Company("11.111.111/0001-11", "Depósito de Terceiros (Filial)"));
-            await context.SaveChangesAsync();
-        }
-
-        // 3. Injeta o Usuário Master
+        // 2. Injeta o Usuário Master
         if (!await context.Users.AnyAsync(u => u.IsMaster))
         {
             var masterPasswordHash = BCrypt.Net.BCrypt.HashPassword("Master@123");
             var masterUser = new User("Administrador Master", "master@corewms.com.br", masterPasswordHash, isMaster: true);
-
             context.Users.Add(masterUser);
             await context.SaveChangesAsync();
         }

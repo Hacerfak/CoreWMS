@@ -3,9 +3,11 @@ using CoreWMS.Api.Features.Identity.Login;
 using CoreWMS.Api.Features.Identity.Users;
 using CoreWMS.Api.Features.Identity.Roles;
 using CoreWMS.Api.Features.Identity.AssignUserToCompany;
+using CoreWMS.Api.Features.Identity.Onboarding;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Fiscal;
 using CoreWMS.Api.Core.CQRS;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -66,6 +68,9 @@ builder.Services.AddScoped<IQueryHandler<ListRolesQuery, IResult>, ListRolesHand
 
 builder.Services.AddScoped<ICommandHandler<AssignUserCommand, IResult>, AssignUserHandler>();
 builder.Services.AddScoped<IQueryHandler<ListCompaniesQuery, IResult>, ListCompaniesHandler>();
+builder.Services.AddScoped<ICommandHandler<RegisterCompanyCommand, IResult>, RegisterCompanyHandler>();
+
+builder.Services.AddScoped<ISefazService, SefazService>();
 
 // 3. Configuração do JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -127,6 +132,7 @@ app.UseAuthorization();
 // 6. Mapeamento dos Endpoints (VSA)
 app.MapLoginEndpoint();
 app.MapRefreshTokenEndpoint();
+app.MapOnboardingCompanyEndpoint();
 app.MapUserCrudEndpoints();
 app.MapRoleCrudEndpoints();
 app.MapAssignUserEndpoint();

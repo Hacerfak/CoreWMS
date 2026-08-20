@@ -39,11 +39,20 @@ public class ApplicationDbContext : DbContext
         });
 
         builder.Entity<Company>(b =>
-        {
-            b.HasKey(c => c.Id);
-            b.HasIndex(c => c.Cnpj).IsUnique(); // CNPJ não pode repetir
-            b.Property(c => c.Name).IsRequired().HasMaxLength(150);
-        });
+{
+    b.HasKey(c => c.Id);
+    b.HasIndex(c => c.Cnpj).IsUnique();
+    b.Property(c => c.Cnpj).IsRequired().HasMaxLength(14);
+    b.Property(c => c.CorporateName).IsRequired().HasMaxLength(150);
+    b.Property(c => c.TradeName).HasMaxLength(150);
+    b.Property(c => c.StateRegistration).HasMaxLength(20);
+    b.Property(c => c.MunicipalRegistration).HasMaxLength(20);
+    b.Property(c => c.State).IsRequired().HasMaxLength(2);
+
+    // O EF Core mapeia byte[] como bytea no PostgreSQL por padrão
+    b.Property(c => c.CertificateBytes);
+    b.Property(c => c.CertificatePassword).HasMaxLength(100);
+});
 
         builder.Entity<Role>(b =>
         {

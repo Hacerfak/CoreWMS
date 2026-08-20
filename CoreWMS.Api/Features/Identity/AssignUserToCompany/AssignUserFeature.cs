@@ -80,7 +80,7 @@ public class ListCompaniesHandler : IQueryHandler<ListCompaniesQuery, IResult>
     public async Task<IResult> HandleAsync(ListCompaniesQuery query, CancellationToken ct = default)
     {
         var companies = await _db.Companies.AsNoTracking()
-            .Select(c => new { c.Id, c.Cnpj, c.Name })
+            .Select(c => new { c.Id, c.Cnpj, c.CorporateName })
             .ToListAsync(ct);
         return Results.Ok(companies);
     }

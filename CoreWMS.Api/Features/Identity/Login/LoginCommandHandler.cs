@@ -32,7 +32,7 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, IResult>
         {
             // Master tem passe livre para todas as empresas
             userCompanies = await _db.Companies
-                .Select(c => new CompanyLoginDto(c.Id, c.Cnpj, c.Name))
+                .Select(c => new CompanyLoginDto(c.Id, c.Cnpj, c.CorporateName))
                 .ToListAsync(ct);
         }
         else
@@ -40,7 +40,7 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, IResult>
             // Usuário comum vê apenas os CNPJs onde possui algum vínculo
             userCompanies = await _db.UserCompanyRoles
                 .Where(ucr => ucr.UserId == user.Id)
-                .Select(ucr => new CompanyLoginDto(ucr.Company.Id, ucr.Company.Cnpj, ucr.Company.Name))
+                .Select(ucr => new CompanyLoginDto(ucr.Company.Id, ucr.Company.Cnpj, ucr.Company.CorporateName))
                 .Distinct()
                 .ToListAsync(ct);
         }
