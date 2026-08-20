@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # 1. Banco de Dados Relacional (Operacional)
+  postgres:
+    image: postgres:16-alpine
+    container_name: corewms_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: corewms_password
+      POSTGRES_DB: corewms_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - corewms_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # 2. Banco de Dados NoSQL (Logs de Auditoria)
+  mongodb:
+    image: mongo:7.0
+    container_name: corewms_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: corewms_password
+    ports:
+      - "27017:27017"
+    volumes:
+      - corewms_mongo_data:/data/db
+    restart: unless-stopped
+
+  # 3. Nosso Backend (A API .NET 10)
+  corewms-api:
+    container_name: corewms_api
+    build:
+      context: ./CoreWMS.Api
+      dockerfile: Dockerfile
+    ports:
+      - "5000:8080" # A porta 5000 da sua máquina vai apontar para a 8080 do container
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Vamos injetar as strings de conexão via variáveis de ambiente
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=corewms_db;Username=postgres;Password=corewms_password;
+      - ConnectionStrings__MongoDb=mongodb://root:corewms_password@mongodb:27017/?authSource=admin
+    depends_on:
+      - postgres
+      - mongodb
+    restart: unless-stopped
+
+# Volumes nomeados para persistir os dados dos bancos caso os containers sejam recriados
+volumes:
+  corewms_postgres_data:
+  corewms_mongo_data:

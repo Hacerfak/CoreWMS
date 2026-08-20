@@ -1,0 +1,30 @@
+# ==========================================
+# CoreWMS - .gitignore
+# ==========================================
+
+# Pastas de compilação do .NET
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# Arquivos de IDEs (Visual Studio, VS Code, Rider)
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# Arquivos de Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# Arquivos de ambiente e segredos locais (Boa prática)
+.env
+appsettings.Development.json
+appsettings.Local.json
+
+# Publicação
+[Pp]ublish/
