@@ -15,6 +15,7 @@ public static class LoginEndpoint
             return await handler.HandleAsync(command, ct);
         })
         .WithTags("Identity")
-        .AllowAnonymous();
+        .AllowAnonymous()
+        .RequireRateLimiting("loginPolicy");
     }
 }

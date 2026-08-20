@@ -15,26 +15,26 @@ public class JwtTokenGenerator
         _configuration = configuration;
     }
 
-    public string GenerateToken(User user)
+    public string GenerateToken(User user, List<Guid> allowedCompanyIds)
     {
-        // Puxando a chave secreta (vamos configurar isso no appsettings/env)
         var secret = _configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        // Criando os dados do usuário que vão dentro do token (Claims)
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim("name", user.Name),
-            new Claim("isMaster", user.IsMaster.ToString())
+            new Claim("isMaster", user.IsMaster.ToString()),
+            // Adiciona as empresas permitidas como uma string separada por vírgula
+            new Claim("companies", string.Join(",", allowedCompanyIds))
         };
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddHours(4), // Token válido por 4 horas
+            Expires = DateTime.UtcNow.AddMinutes(15), // Diminuímos o tempo de vida!
             SigningCredentials = credentials,
             Issuer = "CoreWMS",
             Audience = "CoreWMS.Users"
@@ -44,5 +44,13 @@ public class JwtTokenGenerator
         var token = tokenHandler.CreateToken(tokenDescriptor);
 
         return tokenHandler.WriteToken(token);
+    }
+
+    public string GenerateRefreshToken()
+    {
+        var randomNumber = new byte[64];
+        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
     }
 }

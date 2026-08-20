@@ -45,8 +45,14 @@ public class LoginCommandHandler : ICommandHandler<LoginCommand, IResult>
                 .ToListAsync(ct);
         }
 
-        var token = _jwt.GenerateToken(user);
+        var allowedCompanyIds = userCompanies.Select(c => c.Id).ToList();
+        var token = _jwt.GenerateToken(user, allowedCompanyIds);
 
-        return Results.Ok(new LoginResponse(token, user.Name, user.IsMaster, userCompanies));
+        // Geração e salvamento do Refresh Token
+        var refreshToken = _jwt.GenerateRefreshToken();
+        user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7)); // Válido por 7 dias
+        await _db.SaveChangesAsync(ct);
+
+        return Results.Ok(new LoginResponse(token, refreshToken, user.Name, user.IsMaster, userCompanies));
     }
 }

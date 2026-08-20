@@ -14,6 +14,8 @@ using Microsoft.OpenApi.Models;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +24,20 @@ BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard
 
 // Adiciona acesso ao HttpContext (Necessário para pegar o JWT logado no Banco de Dados)
 builder.Services.AddHttpContextAccessor();
+
+// Configuração de Rate Limiting (Proteção contra força bruta)
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("loginPolicy", opt =>
+    {
+        opt.PermitLimit = 5; // 5 requisições permitidas
+        opt.Window = TimeSpan.FromMinutes(1); // a cada 1 minuto
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0; // Não coloca em fila, rejeita na hora
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 
 // Registra o serviço de Auditoria do Mongo
 builder.Services.AddScoped<IAuditService, MongoAuditService>();
@@ -35,6 +51,7 @@ builder.Services.AddScoped<JwtTokenGenerator>();
 
 // Registro dos Handlers CQRS (Nativo)
 builder.Services.AddScoped<ICommandHandler<LoginCommand, IResult>, LoginCommandHandler>();
+builder.Services.AddScoped<ICommandHandler<RefreshTokenCommand, IResult>, RefreshTokenHandler>();
 
 builder.Services.AddScoped<ICommandHandler<CreateUserCommand, IResult>, CreateUserHandler>();
 builder.Services.AddScoped<IQueryHandler<ListUsersQuery, IResult>, ListUsersHandler>();
@@ -99,6 +116,8 @@ var app = builder.Build();
 // 5. Seed e Middleware do Swagger
 await DatabaseSeeder.SeedAsync(app.Services);
 
+app.UseRateLimiter();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -107,6 +126,7 @@ app.UseAuthorization();
 
 // 6. Mapeamento dos Endpoints (VSA)
 app.MapLoginEndpoint();
+app.MapRefreshTokenEndpoint();
 app.MapUserCrudEndpoints();
 app.MapRoleCrudEndpoints();
 app.MapAssignUserEndpoint();

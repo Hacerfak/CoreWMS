@@ -8,6 +8,8 @@ public class User : AuditableEntity
     public string Email { get; private set; }
     public string PasswordHash { get; private set; }
     public bool IsMaster { get; private set; }
+    public string? RefreshToken { get; private set; }
+    public DateTime? RefreshTokenExpiryTime { get; private set; }
 
     // Relação com as empresas e perfis
     private readonly List<UserCompanyRole> _userCompanyRoles = new();
@@ -38,5 +40,11 @@ public class User : AuditableEntity
     {
         Name = name;
         Email = email;
+    }
+
+    public void SetRefreshToken(string token, DateTime expiryTime)
+    {
+        RefreshToken = token;
+        RefreshTokenExpiryTime = expiryTime;
     }
 }
