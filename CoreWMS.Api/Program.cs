@@ -7,7 +7,8 @@ using CoreWMS.Api.Features.Identity.Onboarding;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
-using CoreWMS.Api.Infrastructure.Fiscal;
+using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
+using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Core.CQRS;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -70,7 +71,9 @@ builder.Services.AddScoped<ICommandHandler<AssignUserCommand, IResult>, AssignUs
 builder.Services.AddScoped<IQueryHandler<ListCompaniesQuery, IResult>, ListCompaniesHandler>();
 builder.Services.AddScoped<ICommandHandler<RegisterCompanyCommand, IResult>, RegisterCompanyHandler>();
 
-builder.Services.AddScoped<ISefazService, SefazService>();
+builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
+builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
+builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
 
 // 3. Configuração do JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

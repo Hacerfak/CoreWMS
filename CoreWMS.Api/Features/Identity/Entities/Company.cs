@@ -76,7 +76,8 @@ public class Company : AuditableEntity
     {
         CertificateBytes = bytes;
         CertificatePassword = password;
-        CertificateExpiration = expiration;
+        // Garante que a data seja gravada em UTC no PostgreSQL
+        CertificateExpiration = expiration.Kind == DateTimeKind.Utc ? expiration : expiration.ToUniversalTime();
     }
 
     public void UpdateEnvironment(int environment)

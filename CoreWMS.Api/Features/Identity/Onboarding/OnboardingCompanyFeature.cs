@@ -1,7 +1,8 @@
 using CoreWMS.Api.Core.CQRS;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
-using CoreWMS.Api.Infrastructure.Fiscal;
+using CoreWMS.Api.Infrastructure.Fiscal.Models;
+using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,13 +11,6 @@ namespace CoreWMS.Api.Features.Identity.Onboarding;
 // ==============================================================================
 // 1. CONTRATOS
 // ==============================================================================
-public class OnboardingCompanyRequest
-{
-    public IFormFile CertificateFile { get; set; } = null!;
-    public string CertificatePassword { get; set; } = string.Empty;
-    public string Uf { get; set; } = string.Empty;
-}
-
 public record RegisterCompanyCommand(byte[] CertBytes, string Password, string Uf) : ICommand<IResult>;
 
 // ==============================================================================
@@ -25,12 +19,12 @@ public record RegisterCompanyCommand(byte[] CertBytes, string Password, string U
 public class RegisterCompanyHandler : ICommandHandler<RegisterCompanyCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly ISefazService _sefazService;
+    private readonly ISefazConsultaCadastroService _consultaCadastroService;
 
-    public RegisterCompanyHandler(ApplicationDbContext db, ISefazService sefazService)
+    public RegisterCompanyHandler(ApplicationDbContext db, ISefazConsultaCadastroService consultaCadastroService)
     {
         _db = db;
-        _sefazService = sefazService;
+        _consultaCadastroService = consultaCadastroService;
     }
 
     public async Task<IResult> HandleAsync(RegisterCompanyCommand command, CancellationToken ct = default)
@@ -38,7 +32,7 @@ public class RegisterCompanyHandler : ICommandHandler<RegisterCompanyCommand, IR
         SefazCompanyDataDto sefazData;
         try
         {
-            sefazData = _sefazService.ConsultarCadastro(command.CertBytes, command.Password, command.Uf);
+            sefazData = _consultaCadastroService.Consultar(command.CertBytes, command.Password, command.Uf);
         }
         catch (Exception ex)
         {
@@ -94,21 +88,23 @@ public static class OnboardingCompanyEndpoint
     public static void MapOnboardingCompanyEndpoint(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/onboarding/companies", async (
-            [FromForm] OnboardingCompanyRequest request,
+            IFormFile certificateFile,
+            [FromForm] string certificatePassword,
+            [FromForm] string uf,
             [FromServices] ICommandHandler<RegisterCompanyCommand, IResult> handler,
             CancellationToken ct) =>
         {
-            if (request.CertificateFile == null || request.CertificateFile.Length == 0)
+            if (certificateFile == null || certificateFile.Length == 0)
                 return Results.BadRequest(new { Message = "O arquivo do Certificado Digital A1 (.pfx) é obrigatório." });
 
-            if (string.IsNullOrWhiteSpace(request.CertificatePassword) || string.IsNullOrWhiteSpace(request.Uf))
+            if (string.IsNullOrWhiteSpace(certificatePassword) || string.IsNullOrWhiteSpace(uf))
                 return Results.BadRequest(new { Message = "Senha do certificado e UF são obrigatórios." });
 
             using var memoryStream = new MemoryStream();
-            await request.CertificateFile.CopyToAsync(memoryStream, ct);
+            await certificateFile.CopyToAsync(memoryStream, ct);
             var certBytes = memoryStream.ToArray();
 
-            var command = new RegisterCompanyCommand(certBytes, request.CertificatePassword, request.Uf);
+            var command = new RegisterCompanyCommand(certBytes, certificatePassword, uf);
             return await handler.HandleAsync(command, ct);
         })
         .WithTags("Onboarding")
