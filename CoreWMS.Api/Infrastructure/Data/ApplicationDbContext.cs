@@ -23,6 +23,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserCompanyRole> UserCompanyRoles => Set<UserCompanyRole>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -60,10 +61,24 @@ public class ApplicationDbContext : DbContext
             b.Property(r => r.Name).IsRequired().HasMaxLength(100);
         });
 
+        builder.Entity<RolePermission>(b =>
+        {
+            b.HasKey(rp => rp.Id);
+            b.Property(rp => rp.Permission).IsRequired().HasMaxLength(100);
+            b.HasIndex(rp => new { rp.RoleId, rp.Permission }).IsUnique();
+
+            b.HasOne(rp => rp.Role)
+            .WithMany(r => r.Permissions)
+            .HasForeignKey(rp => rp.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Configuração do Vínculo N:N (Usuário -> Empresa -> Perfil)
         builder.Entity<UserCompanyRole>(b =>
         {
             b.HasKey(ucr => ucr.Id);
+            // Índice composto para buscas instantâneas por Usuário e Empresa
+            b.HasIndex(ucr => new { ucr.UserId, ucr.CompanyId });
 
             // Relacionamentos
             b.HasOne(ucr => ucr.User)
@@ -138,10 +153,11 @@ public class ApplicationDbContext : DbContext
         // 3. Salva no Postgres (Transacional)
         var result = await base.SaveChangesAsync(cancellationToken);
 
-        // 4. Salva no MongoDB (Auditoria)
-        foreach (var log in auditLogs)
+        // 4. Salva no MongoDB em paralelo (Auditoria Assíncrona)
+        if (auditLogs.Count > 0)
         {
-            await _auditService.LogAsync(log, cancellationToken);
+            var auditTasks = auditLogs.Select(log => _auditService.LogAsync(log, cancellationToken));
+            await Task.WhenAll(auditTasks);
         }
 
         return result;

@@ -3,7 +3,7 @@ using CoreWMS.Api.Features.Identity.Login;
 using CoreWMS.Api.Features.Identity.Users;
 using CoreWMS.Api.Features.Identity.Roles;
 using CoreWMS.Api.Features.Identity.AssignUserToCompany;
-using CoreWMS.Api.Features.Identity.Onboarding;
+using CoreWMS.Api.Features.Identity.Companies;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
@@ -51,6 +51,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 // 2. Registro dos nossos serviços
 builder.Services.AddScoped<JwtTokenGenerator>();
+builder.Services.AddMemoryCache();
 
 // Registro dos Handlers CQRS (Nativo)
 builder.Services.AddScoped<ICommandHandler<LoginCommand, IResult>, LoginCommandHandler>();
@@ -69,7 +70,10 @@ builder.Services.AddScoped<IQueryHandler<ListRolesQuery, IResult>, ListRolesHand
 
 builder.Services.AddScoped<ICommandHandler<AssignUserCommand, IResult>, AssignUserHandler>();
 builder.Services.AddScoped<IQueryHandler<ListCompaniesQuery, IResult>, ListCompaniesHandler>();
-builder.Services.AddScoped<ICommandHandler<RegisterCompanyCommand, IResult>, RegisterCompanyHandler>();
+builder.Services.AddScoped<ICommandHandler<CreateCompanyCommand, IResult>, CreateCompanyHandler>();
+builder.Services.AddScoped<IQueryHandler<ListAllCompaniesQuery, IResult>, ListAllCompaniesHandler>();
+builder.Services.AddScoped<ICommandHandler<UpdateCompanyCommand, IResult>, UpdateCompanyHandler>();
+builder.Services.AddScoped<ICommandHandler<DeleteCompanyCommand, IResult>, DeleteCompanyHandler>();
 
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
@@ -135,10 +139,9 @@ app.UseAuthorization();
 // 6. Mapeamento dos Endpoints (VSA)
 app.MapLoginEndpoint();
 app.MapRefreshTokenEndpoint();
-app.MapOnboardingCompanyEndpoint();
+app.MapCompanyCrudEndpoints();
 app.MapUserCrudEndpoints();
 app.MapRoleCrudEndpoints();
 app.MapAssignUserEndpoint();
-app.MapCompanyEndpoints();
 
 app.Run();
