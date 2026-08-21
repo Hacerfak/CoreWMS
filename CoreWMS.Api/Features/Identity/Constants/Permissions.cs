@@ -31,4 +31,9 @@ public static class Permissions
     {
         public const string UpdateSelf = "profile:update-self";
     }
+
+    public static class Audit
+    {
+        public const string View = "audit:view";
+    }
 }

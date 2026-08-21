@@ -4,6 +4,7 @@ using CoreWMS.Api.Features.Identity.Users;
 using CoreWMS.Api.Features.Identity.Roles;
 using CoreWMS.Api.Features.Identity.AssignUserToCompany;
 using CoreWMS.Api.Features.Identity.Companies;
+using CoreWMS.Api.Features.Audit;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
@@ -61,6 +62,8 @@ builder.Services.AddScoped<ICommandHandler<CreateUserCommand, IResult>, CreateUs
 builder.Services.AddScoped<IQueryHandler<ListUsersQuery, IResult>, ListUsersHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateUserCommand, IResult>, UpdateUserHandler>();
 builder.Services.AddScoped<ICommandHandler<DeleteUserCommand, IResult>, DeleteUserHandler>();
+
+builder.Services.AddScoped<IQueryHandler<AuditLogFilterQuery, IResult>, ListAuditLogsHandler>();
 
 // Handlers de Roles
 builder.Services.AddScoped<ICommandHandler<CreateRoleCommand, IResult>, CreateRoleHandler>();
@@ -137,6 +140,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // 6. Mapeamento dos Endpoints (VSA)
+app.MapAuditLogEndpoints();
 app.MapLoginEndpoint();
 app.MapRefreshTokenEndpoint();
 app.MapCompanyCrudEndpoints();
