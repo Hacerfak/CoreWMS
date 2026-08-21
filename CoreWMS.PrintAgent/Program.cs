@@ -1,13 +1,22 @@
 using CoreWMS.PrintAgent.Services;
 using CoreWMS.PrintAgent.Storage;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Suporte para rodar como Windows Service ou Linux systemd
 builder.Host.UseWindowsService();
 builder.Host.UseSystemd();
 
-// Injeção dos Serviços
+// Configuração de Logs
+var logBuffer = new InMemoryLogBuffer();
+builder.Logging.ClearProviders(); // Limpa loggers padrão redundantes
+builder.Logging.AddConsole();     // Mantém log bonito no terminal
+builder.Logging.AddProvider(logBuffer);
+builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning); // Silencia HTTP estático
+
+
+builder.Services.AddSingleton(logBuffer);
+builder.Services.AddSingleton<AgentConfigManager>();
 builder.Services.AddSingleton<LocalQueueRepository>();
 builder.Services.AddSingleton<IRawPrinterService, RawPrinterService>();
 builder.Services.AddSingleton<PrintAgentWorker>();
@@ -15,39 +24,59 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<PrintAgentWorker>(
 
 var app = builder.Build();
 
-// Endpoints da API Local (Painel de Monitoramento na Estação Local)
-app.MapGet("/", (PrintAgentWorker worker, LocalQueueRepository repo) => new
+var htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "index.html");
+
+string RenderHtml(bool isConfigView, AgentConfig cfg, int port)
 {
-    AgentStatus = "CoreWMS Print Agent Active",
-    CloudConnection = worker.ConnectionStatus,
-    IsConnected = worker.IsConnected,
-    Timestamp = DateTime.UtcNow
+    if (!File.Exists(htmlPath)) return "<h1>Arquivo index.html não encontrado no diretório de execução.</h1>";
+
+    var html = File.ReadAllText(htmlPath);
+    return html
+        .Replace("{{SHOW_DASHBOARD}}", isConfigView ? "none" : "block")
+        .Replace("{{SHOW_CONFIG}}", isConfigView ? "block" : "none")
+        .Replace("{{AGENT_ID}}", cfg.AgentId)
+        .Replace("{{TENANT}}", string.IsNullOrWhiteSpace(cfg.Cnpj) ? "Não configurado" : cfg.Cnpj)
+        .Replace("{{VAL_CNPJ}}", cfg.Cnpj)
+        .Replace("{{VAL_DOMINIO}}", cfg.Dominio)
+        .Replace("{{VAL_KEY}}", cfg.ApiKey)
+        .Replace("{{PORT}}", port.ToString());
+}
+
+// ROUTING HTML
+app.MapGet("/", (AgentConfigManager configMgr) =>
+    Results.Content(RenderHtml(false, configMgr.Config, configMgr.Config.LocalPort), "text/html"));
+
+app.MapGet("/config", (AgentConfigManager configMgr) =>
+    Results.Content(RenderHtml(true, configMgr.Config, configMgr.Config.LocalPort), "text/html"));
+
+// API DE DADOS PARA O DASHBOARD (POLLING)
+app.MapGet("/status-data", (PrintAgentWorker worker) => new
+{
+    online = worker.IsConnected,
+    lastCheck = worker.LastCheck.ToString("dd/MM/yyyy HH:mm:ss")
 });
 
-app.MapGet("/pending-jobs", async (LocalQueueRepository repo) =>
+app.MapGet("/logs-data", (InMemoryLogBuffer buffer) =>
+    Results.Text(buffer.GetLogsText()));
+
+// DEMAIS AÇÕES DE CONFIGURAÇÃO E SERVIÇO OS
+app.MapPost("/api/save-config", ([FromBody] AgentConfig body, AgentConfigManager configMgr) =>
 {
-    var jobs = await repo.GetPendingAsync();
-    return Results.Ok(new { TotalPending = jobs.Count, Jobs = jobs });
+    configMgr.Save(body);
+    return Results.Ok("Configurações salvas com sucesso! O agente irá reconectar.");
 });
 
-app.MapPost("/test-local-print", async (string printerTarget, string? zpl, IRawPrinterService printer) =>
+app.MapPost("/api/install-service", () =>
 {
-    var zplToPrint = zpl ?? @"
-^XA
-^FO50,50^A0N,30,30^FDCoreWMS - Impressao Local Direta^FS
-^FO50,100^BY2^BCN,80,Y,N,N^FDLOCAL-TEST^FS
-^XZ";
-
-    try
-    {
-        await printer.PrintAsync(printerTarget, zplToPrint);
-        return Results.Ok(new { Status = "Sucesso", Target = printerTarget });
-    }
-    catch (Exception ex)
-    {
-        return Results.BadRequest(new { Status = "Erro", Message = ex.Message });
-    }
+    var res = ServiceManager.InstallService();
+    return res.Success ? Results.Ok(res.Message) : Results.BadRequest(res.Message);
 });
 
-var port = builder.Configuration.GetValue<int>("AgentSettings:LocalApiPort", 9191);
+app.MapPost("/api/uninstall-service", () =>
+{
+    var res = ServiceManager.UninstallService();
+    return res.Success ? Results.Ok(res.Message) : Results.BadRequest(res.Message);
+});
+
+var port = app.Services.GetRequiredService<AgentConfigManager>().Config.LocalPort;
 app.Run($"http://localhost:{port}");

@@ -1,28 +1,26 @@
-using Microsoft.AspNetCore.SignalR;
-
 namespace CoreWMS.Api.Infrastructure.Printing;
 
 public interface IPrintService
 {
-    Task<string> SendPrintJobAsync(Guid companyId, string stationName, string printerName, string zplContent);
+    Task<string> SendPrintJobAsync(string agentName, string printerName, string zplContent);
 }
 
 public class PrintService : IPrintService
 {
-    private readonly IHubContext<PrintHub, IPrintClient> _hubContext;
+    private readonly Microsoft.AspNetCore.SignalR.IHubContext<PrintHub, IPrintClient> _hubContext;
 
-    public PrintService(IHubContext<PrintHub, IPrintClient> hubContext)
+    public PrintService(Microsoft.AspNetCore.SignalR.IHubContext<PrintHub, IPrintClient> hubContext)
     {
         _hubContext = hubContext;
     }
 
-    public async Task<string> SendPrintJobAsync(Guid companyId, string stationName, string printerName, string zplContent)
+    public async Task<string> SendPrintJobAsync(string agentName, string printerName, string zplContent)
     {
         var jobId = Guid.NewGuid().ToString("N");
-        var stationGroup = $"company:{companyId}:station:{stationName.ToLower()}";
+        var agentGroup = $"agent:{agentName.ToLower()}";
 
-        // Dispara o evento WebSockets direto para a estação específica em submilissegundos
-        await _hubContext.Clients.Group(stationGroup).ExecutePrintJob(jobId, printerName, zplContent);
+        // Envia o comando ZPL direto para o grupo do Agente Global em tempo real
+        await _hubContext.Clients.Group(agentGroup).ExecutePrintJob(jobId, printerName, zplContent);
 
         return jobId;
     }

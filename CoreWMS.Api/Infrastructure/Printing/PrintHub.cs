@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Authorization;
+using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.SignalR;
-using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Infrastructure.Printing;
 
@@ -9,58 +9,57 @@ public interface IPrintClient
     Task ExecutePrintJob(string jobId, string printerName, string zplContent);
 }
 
-[Authorize]
 public class PrintHub : Hub<IPrintClient>
 {
-    // O Agent local chama este método ao se conectar para registrar suas impressoras disponíveis
-    public async Task RegisterAgent(string stationName, List<string> availablePrinters)
-    {
-        var companyId = Context.GetHttpContext()?.Request.Headers["X-Company-Id"].ToString();
-        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    private readonly ApplicationDbContext _db;
 
-        if (string.IsNullOrEmpty(companyId))
+    public PrintHub(ApplicationDbContext db)
+    {
+        _db = db;
+    }
+
+    public override async Task OnConnectedAsync()
+    {
+        var httpContext = Context.GetHttpContext();
+        var apiKey = httpContext?.Request.Headers["X-Api-Key"].ToString();
+
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            apiKey = httpContext?.Request.Query["api_key"].ToString();
+        }
+
+        if (string.IsNullOrEmpty(apiKey))
         {
             Context.Abort();
             return;
         }
 
-        // Adiciona a conexão do Agent a um grupo exclusivo da Empresa e Estação
-        var companyGroup = $"company:{companyId}";
-        var stationGroup = $"company:{companyId}:station:{stationName.ToLower()}";
+        // Valida se a API Key do Agente existe no banco global
+        var agent = await _db.PrintAgents.FirstOrDefaultAsync(a => a.ApiKey == apiKey && a.IsActive);
+        if (agent == null)
+        {
+            Context.Abort();
+            return;
+        }
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, companyGroup);
-        await Groups.AddToGroupAsync(Context.ConnectionId, stationGroup);
+        // Adiciona o canal a um grupo específico pelo Nome do Agente
+        var agentGroup = $"agent:{agent.Name.ToLower()}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, agentGroup);
 
-        // Mapeia os detalhes da conexão
-        Context.Items["CompanyId"] = companyId;
-        Context.Items["StationName"] = stationName;
-        Context.Items["Printers"] = availablePrinters;
+        Context.Items["AgentName"] = agent.Name;
+        Console.WriteLine($"[PRINT AGENT CONNECTED] Agente Global '{agent.Name}' autenticado via API Key.");
+
+        await base.OnConnectedAsync();
     }
 
-    // Chamado pelo Agent Local após enviar os bytes para a impressora física (ACK)
     public Task ConfirmPrintJob(string jobId, bool success, string? errorMessage)
     {
-        var stationName = Context.Items["StationName"]?.ToString() ?? "Desconhecida";
-
+        var agentName = Context.Items["AgentName"]?.ToString() ?? "Desconhecido";
         if (success)
-        {
-            Console.WriteLine($"[PRINT SUCCESS] Job {jobId} impresso com sucesso na estação '{stationName}'.");
-        }
+            Console.WriteLine($"[PRINT ACK SUCCESS] Job {jobId} impresso com sucesso no Agente '{agentName}'.");
         else
-        {
-            Console.WriteLine($"[PRINT ERROR] Job {jobId} falhou na estação '{stationName}': {errorMessage}");
-        }
+            Console.WriteLine($"[PRINT ACK ERROR] Job {jobId} falhou no Agente '{agentName}': {errorMessage}");
 
         return Task.CompletedTask;
-    }
-
-    public override Task OnDisconnectedAsync(Exception? exception)
-    {
-        var stationName = Context.Items["StationName"]?.ToString();
-        if (!string.IsNullOrEmpty(stationName))
-        {
-            Console.WriteLine($"[PRINT AGENT DISCONNECTED] Estação '{stationName}' desconectou.");
-        }
-        return base.OnDisconnectedAsync(exception);
     }
 }

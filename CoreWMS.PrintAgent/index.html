@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Print Agent</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-body: #f8fafc;
+            --bg-card: #ffffff;
+            --text-main: #0f172a;
+            --text-sec: #64748b;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg-body);
+            color: var(--text-main);
+            padding: 20px;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+        }
+
+        .header h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-pill {
+            padding: 6px 12px;
+            border-radius: 99px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-pill.on {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .status-pill.off {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        /* DASHBOARD INFO */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f1f5f9;
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .info-item small {
+            color: var(--text-sec);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .info-item strong {
+            display: block;
+            font-size: 1.1rem;
+            margin-top: 4px;
+        }
+
+        /* LOGS */
+        .log-container {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 12px;
+            height: 350px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            border: 1px solid #1e293b;
+        }
+
+        /* FORM */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            transition: 0.2s;
+        }
+
+        .form-group input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .form-group small {
+            color: var(--text-sec);
+            font-size: 0.85rem;
+            margin-top: 5px;
+            display: block;
+        }
+
+        /* BUTTONS */
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-pri {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-pri:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-sec {
+            background: white;
+            border: 1px solid #cbd5e1;
+            color: var(--text-main);
+        }
+
+        .btn-sec:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+        }
+
+        .btn-install {
+            background: #0f172a;
+            color: white;
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .btn-install:hover {
+            background: #1e293b;
+        }
+
+        .btn-uninstall {
+            background: transparent;
+            border: 1px solid #fee2e2;
+            color: #ef4444;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .btn-uninstall:hover {
+            background: #fef2f2;
+            border-color: #fca5a5;
+        }
+
+        .divider {
+            margin: 30px 0;
+            border: 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: var(--text-sec);
+        }
+    </style>
+    <script>
+        // --- FUNÇÕES DE API ---
+        async function callApi(endpoint, body = null) {
+            try {
+                const opts = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { method: 'POST' };
+                const res = await fetch(endpoint, opts);
+                if (res.ok) {
+                    const msg = await res.text() || 'Operação realizada com sucesso!';
+                    alert(msg);
+                    if (endpoint.includes('save-config')) window.location = '/';
+                } else {
+                    alert('Erro: ' + (await res.text()));
+                }
+            } catch (e) {
+                alert('Erro de conexão com o agente.');
+            }
+        }
+
+        function salvarConfig(e) {
+            e.preventDefault();
+            const data = Object.fromEntries(new FormData(e.target).entries());
+            callApi('/api/save-config', data);
+        }
+
+        function manageService(action) {
+            const verb = action === 'install' ? 'instalar' : 'remover';
+            if (confirm(`Tem certeza que deseja ${verb} o serviço do Windows/Linux?\n\nIsso requer que o agente esteja rodando como Administrador.`)) {
+                callApi(`/api/${action}-service`);
+            }
+        }
+
+        // --- POLLING ---
+        if (window.location.pathname === '/') {
+            setInterval(async () => {
+                try {
+                    const status = await (await fetch('/status-data')).json();
+
+                    const badge = document.getElementById('status-badge');
+                    badge.className = 'status-pill ' + (status.online ? 'on' : 'off');
+                    badge.innerText = status.online ? 'ONLINE' : 'OFFLINE';
+
+                    document.getElementById('dyn-status').innerText = status.online ? 'Conectado' : 'Desconectado';
+                    document.getElementById('dyn-lastcheck').innerText = status.lastCheck;
+
+                    const logs = await (await fetch('/logs-data')).text();
+                    document.getElementById('log-content').innerText = logs;
+                } catch (e) { }
+            }, 2000);
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+
+            <div class="header">
+                <h3>🖨️ Print Hub</h3>
+                <span id="status-badge" class="status-pill off">Carregando...</span>
+            </div>
+
+            <div style="display: {{SHOW_DASHBOARD}}">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <small>Agente</small>
+                        <strong>{{AGENT_ID}}</strong>
+                    </div>
+                    <div class="info-item">
+                        <small>Ambiente (Tenant)</small>
+                        <strong>{{TENANT}}</strong>
+                    </div>
+                    <div class="info-item">
+                        <small>Status Conexão</small>
+                        <strong id="dyn-status">...</strong>
+                    </div>
+                </div>
+
+                <div id="log-content" class="log-container">Aguardando logs do sistema...</div>
+
+                <div style="text-align: right; margin-top: 20px;">
+                    <a href="/config" class="btn btn-sec">⚙️ Configurações</a>
+                </div>
+
+                <div class="footer">
+                    Agente rodando na porta {{PORT}} • <span id="dyn-lastcheck">-</span>
+                </div>
+            </div>
+
+            <div style="display: {{SHOW_CONFIG}}">
+                <h2 style="margin-top: 0; margin-bottom: 20px;">Configurações</h2>
+
+                <form onsubmit="salvarConfig(event)">
+                    <div class="form-group">
+                        <label>ID do Agente</label>
+                        <input type="text" name="agentId" value="{{AGENT_ID}}" required placeholder="Ex: EXPEDICAO_01">
+                        <small>Nome único para identificar este computador no WMS.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>CNPJ da Empresa</label>
+                        <input type="text" name="cnpj" value="{{VAL_CNPJ}}" required placeholder="Apenas números">
+                        <small>Utilizado para identificar seu ambiente (Tenant).</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Domínio do Servidor</label>
+                        <input type="text" name="dominio" value="{{VAL_DOMINIO}}" required
+                            placeholder="Ex: wms.empresa.com">
+                        <small>Endereço onde o sistema WMS está hospedado (sem http/https).</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Chave de API (Token)</label>
+                        <input type="password" name="apiKey" value="{{VAL_KEY}}" required>
+                        <small>Copie a chave gerada no painel "Hub de Impressão".</small>
+                    </div>
+
+                    <div class="actions" style="margin-top: 30px;">
+                        <a href="/" class="btn btn-sec">Cancelar</a>
+                        <button type="submit" class="btn btn-pri">Salvar Alterações</button>
+                    </div>
+                </form>
+
+                <div class="divider"></div>
+
+                <h3 style="margin-bottom: 10px;">🛠️ Serviço do Sistema</h3>
+                <p style="color: var(--text-sec); font-size: 0.9rem; margin-bottom: 15px;">
+                    Instale o agente como serviço para que ele inicie automaticamente com o Windows/Linux e rode em
+                    segundo plano.
+                </p>
+
+                <button onclick="manageService('install')" class="btn btn-install">Instalar Serviço</button>
+                <button onclick="manageService('uninstall')" class="btn btn-uninstall">Desinstalar Serviço</button>
+            </div>
+
+        </div>
+    </div>
+</body>
+
+</html>

@@ -36,4 +36,9 @@ public static class Permissions
     {
         public const string View = "audit:view";
     }
+
+    public static class Printing
+    {
+        public const string Manage = "printing:manage";
+    }
 }

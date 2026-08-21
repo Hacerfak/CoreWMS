@@ -12,6 +12,7 @@ using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Printing;
+using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Core.CQRS;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,12 @@ builder.Services.AddRateLimiter(options =>
     });
 
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
+// Prevenção global contra loops de referência circular na Minimal API
+builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
+{
+    options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
 });
 
 // Registra o serviço de Auditoria do Mongo
@@ -86,8 +93,13 @@ builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService
 
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddScoped<ICommandHandler<SendTestPrintCommand, IResult>, SendTestPrintHandler>();
+builder.Services.AddScoped<ICommandHandler<CreateAgentCommand, IResult>, CreateAgentHandler>();
+builder.Services.AddScoped<ICommandHandler<CreatePrinterCommand, IResult>, CreatePrinterHandler>();
+builder.Services.AddScoped<ICommandHandler<CreateLabelTemplateCommand, IResult>, CreateLabelTemplateHandler>();
 
 // 3. Configuração do JWT Authentication
+var jwtSecret = builder.Configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -99,7 +111,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = "CoreWMS",
             ValidAudience = "CoreWMS.Users",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!")) // Em produção, vai pro Vault ou Env
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
 builder.Services.AddAuthorization();
@@ -154,6 +166,7 @@ app.MapRoleCrudEndpoints();
 app.MapAssignUserEndpoint();
 
 app.MapPrintEndpoints();
+app.MapPrintingCrudEndpoints();
 
 // 3. Mapeamento do Hub de WebSockets do SignalR
 app.MapHub<PrintHub>("/hubs/print");

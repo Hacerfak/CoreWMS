@@ -2,6 +2,7 @@ using System.Security.Claims;
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
+using CoreWMS.Api.Features.Printing.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Infrastructure.Data;
@@ -25,6 +26,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserCompanyRole> UserCompanyRoles => Set<UserCompanyRole>();
+    public DbSet<PrintAgent> PrintAgents => Set<PrintAgent>();
+    public DbSet<Printer> Printers => Set<Printer>();
+    public DbSet<LabelTemplate> LabelTemplates => Set<LabelTemplate>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -95,6 +99,34 @@ public class ApplicationDbContext : DbContext
              .WithMany()
              .HasForeignKey(ucr => ucr.RoleId)
              .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<PrintAgent>(b =>
+        {
+            b.HasKey(a => a.Id);
+            b.Property(a => a.Name).IsRequired().HasMaxLength(100);
+            b.Property(a => a.ApiKey).IsRequired().HasMaxLength(128);
+            b.HasIndex(a => a.ApiKey).IsUnique();
+            b.HasIndex(a => a.Name).IsUnique();
+        });
+
+        builder.Entity<Printer>(b =>
+        {
+            b.HasKey(p => p.Id);
+            b.Property(p => p.Name).IsRequired().HasMaxLength(100);
+            b.Property(p => p.Target).IsRequired().HasMaxLength(150);
+
+            b.HasOne(p => p.PrintAgent)
+             .WithMany(a => a.Printers)
+             .HasForeignKey(p => p.PrintAgentId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<LabelTemplate>(b =>
+        {
+            b.HasKey(t => t.Id);
+            b.Property(t => t.Name).IsRequired().HasMaxLength(100);
+            b.Property(t => t.ZplContent).IsRequired();
         });
     }
 
