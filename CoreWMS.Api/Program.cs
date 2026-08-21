@@ -10,6 +10,8 @@ using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
+using CoreWMS.Api.Features.Printing;
+using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Core.CQRS;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +55,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 // 2. Registro dos nossos serviços
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
+builder.Services.AddSignalR();
 
 // Registro dos Handlers CQRS (Nativo)
 builder.Services.AddScoped<ICommandHandler<LoginCommand, IResult>, LoginCommandHandler>();
@@ -65,7 +68,6 @@ builder.Services.AddScoped<ICommandHandler<DeleteUserCommand, IResult>, DeleteUs
 
 builder.Services.AddScoped<IQueryHandler<AuditLogFilterQuery, IResult>, ListAuditLogsHandler>();
 
-// Handlers de Roles
 builder.Services.AddScoped<ICommandHandler<CreateRoleCommand, IResult>, CreateRoleHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateRoleCommand, IResult>, UpdateRoleHandler>();
 builder.Services.AddScoped<ICommandHandler<DeleteRoleCommand, IResult>, DeleteRoleHandler>();
@@ -81,6 +83,9 @@ builder.Services.AddScoped<ICommandHandler<DeleteCompanyCommand, IResult>, Delet
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
 builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
+
+builder.Services.AddScoped<IPrintService, PrintService>();
+builder.Services.AddScoped<ICommandHandler<SendTestPrintCommand, IResult>, SendTestPrintHandler>();
 
 // 3. Configuração do JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -147,5 +152,10 @@ app.MapCompanyCrudEndpoints();
 app.MapUserCrudEndpoints();
 app.MapRoleCrudEndpoints();
 app.MapAssignUserEndpoint();
+
+app.MapPrintEndpoints();
+
+// 3. Mapeamento do Hub de WebSockets do SignalR
+app.MapHub<PrintHub>("/hubs/print");
 
 app.Run();
