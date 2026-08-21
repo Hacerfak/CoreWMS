@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WMS Print Agent</title>
+    <title>CoreWMS Print Agent</title>
     <style>
         :root {
             --primary: #2563eb;
@@ -39,7 +39,6 @@
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
 
-        /* HEADER */
         .header {
             display: flex;
             justify-content: space-between;
@@ -76,10 +75,9 @@
             color: #b91c1c;
         }
 
-        /* DASHBOARD INFO */
         .info-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 15px;
             margin-bottom: 20px;
             background: #f1f5f9;
@@ -100,7 +98,6 @@
             margin-top: 4px;
         }
 
-        /* LOGS */
         .log-container {
             background: #0f172a;
             color: #e2e8f0;
@@ -115,7 +112,6 @@
             border: 1px solid #1e293b;
         }
 
-        /* FORM */
         .form-group {
             margin-bottom: 20px;
         }
@@ -150,7 +146,6 @@
             display: block;
         }
 
-        /* BUTTONS */
         .btn {
             padding: 12px 24px;
             border-radius: 8px;
@@ -188,6 +183,15 @@
         .btn-sec:hover {
             background: #f8fafc;
             border-color: #94a3b8;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
         }
 
         .btn-install {
@@ -228,7 +232,6 @@
         }
     </style>
     <script>
-        // --- FUNÇÕES DE API ---
         async function callApi(endpoint, body = null) {
             try {
                 const opts = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { method: 'POST' };
@@ -258,19 +261,21 @@
             }
         }
 
-        // --- POLLING ---
+        function shutdownAgent() {
+            if (confirm('Deseja realmente encerrar o CoreWMS Print Agent?')) {
+                callApi('/api/shutdown');
+            }
+        }
+
         if (window.location.pathname === '/') {
             setInterval(async () => {
                 try {
                     const status = await (await fetch('/status-data')).json();
-
                     const badge = document.getElementById('status-badge');
                     badge.className = 'status-pill ' + (status.online ? 'on' : 'off');
                     badge.innerText = status.online ? 'ONLINE' : 'OFFLINE';
-
                     document.getElementById('dyn-status').innerText = status.online ? 'Conectado' : 'Desconectado';
                     document.getElementById('dyn-lastcheck').innerText = status.lastCheck;
-
                     const logs = await (await fetch('/logs-data')).text();
                     document.getElementById('log-content').innerText = logs;
                 } catch (e) { }
@@ -282,7 +287,6 @@
 <body>
     <div class="container">
         <div class="card">
-
             <div class="header">
                 <h3>🖨️ Print Hub</h3>
                 <span id="status-badge" class="status-pill off">Carregando...</span>
@@ -291,12 +295,8 @@
             <div style="display: {{SHOW_DASHBOARD}}">
                 <div class="info-grid">
                     <div class="info-item">
-                        <small>Agente</small>
+                        <small>Agente Global</small>
                         <strong>{{AGENT_ID}}</strong>
-                    </div>
-                    <div class="info-item">
-                        <small>Ambiente (Tenant)</small>
-                        <strong>{{TENANT}}</strong>
                     </div>
                     <div class="info-item">
                         <small>Status Conexão</small>
@@ -306,7 +306,8 @@
 
                 <div id="log-content" class="log-container">Aguardando logs do sistema...</div>
 
-                <div style="text-align: right; margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+                    <button onclick="shutdownAgent()" class="btn btn-danger">🛑 Encerrar Agente</button>
                     <a href="/config" class="btn btn-sec">⚙️ Configurações</a>
                 </div>
 
@@ -317,31 +318,24 @@
 
             <div style="display: {{SHOW_CONFIG}}">
                 <h2 style="margin-top: 0; margin-bottom: 20px;">Configurações</h2>
-
                 <form onsubmit="salvarConfig(event)">
                     <div class="form-group">
-                        <label>ID do Agente</label>
+                        <label>ID / Nome do Agente</label>
                         <input type="text" name="agentId" value="{{AGENT_ID}}" required placeholder="Ex: EXPEDICAO_01">
-                        <small>Nome único para identificar este computador no WMS.</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>CNPJ da Empresa</label>
-                        <input type="text" name="cnpj" value="{{VAL_CNPJ}}" required placeholder="Apenas números">
-                        <small>Utilizado para identificar seu ambiente (Tenant).</small>
+                        <small>Nome do Agente cadastrado no WMS Cloud.</small>
                     </div>
 
                     <div class="form-group">
                         <label>Domínio do Servidor</label>
                         <input type="text" name="dominio" value="{{VAL_DOMINIO}}" required
                             placeholder="Ex: wms.empresa.com">
-                        <small>Endereço onde o sistema WMS está hospedado (sem http/https).</small>
+                        <small>Endereço onde a API do WMS está hospedada (sem http/https).</small>
                     </div>
 
                     <div class="form-group">
-                        <label>Chave de API (Token)</label>
+                        <label>Chave de API (API Key)</label>
                         <input type="password" name="apiKey" value="{{VAL_KEY}}" required>
-                        <small>Copie a chave gerada no painel "Hub de Impressão".</small>
+                        <small>Chave de API gerada no cadastro do Agente no WMS Cloud.</small>
                     </div>
 
                     <div class="actions" style="margin-top: 30px;">
@@ -354,14 +348,12 @@
 
                 <h3 style="margin-bottom: 10px;">🛠️ Serviço do Sistema</h3>
                 <p style="color: var(--text-sec); font-size: 0.9rem; margin-bottom: 15px;">
-                    Instale o agente como serviço para que ele inicie automaticamente com o Windows/Linux e rode em
-                    segundo plano.
+                    Instale o agente como serviço para que ele inicie automaticamente com o Windows/Linux.
                 </p>
 
                 <button onclick="manageService('install')" class="btn btn-install">Instalar Serviço</button>
                 <button onclick="manageService('uninstall')" class="btn btn-uninstall">Desinstalar Serviço</button>
             </div>
-
         </div>
     </div>
 </body>

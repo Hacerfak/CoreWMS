@@ -5,7 +5,6 @@ namespace CoreWMS.PrintAgent.Services;
 public class AgentConfig
 {
     public string AgentId { get; set; } = "EXPEDICAO_01";
-    public string Cnpj { get; set; } = "";
     public string Dominio { get; set; } = "localhost:5000";
     public string ApiKey { get; set; } = "";
     public int LocalPort { get; set; } = 9191;
