@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. Banco de Dados Relacional (Operacional)
   postgres:
@@ -44,6 +42,19 @@ services:
     depends_on:
       - postgres
       - mongodb
+    restart: unless-stopped
+
+  frontend:
+    container_name: corewms_frontend
+    build:
+      context: ./wms-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000
+    ports:
+      - "3000:80"
+    depends_on:
+      - corewms-api
     restart: unless-stopped
 
 # Volumes nomeados para persistir os dados dos bancos caso os containers sejam recriados
