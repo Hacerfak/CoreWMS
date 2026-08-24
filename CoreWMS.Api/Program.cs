@@ -1,32 +1,33 @@
 using System.Text;
-using CoreWMS.Api.Features.Identity.Login;
-using CoreWMS.Api.Features.Identity.Users;
-using CoreWMS.Api.Features.Identity.Roles;
+using System.Threading.RateLimiting;
+using CoreWMS.Api.Core.CQRS;
+using CoreWMS.Api.Features.Audit;
 using CoreWMS.Api.Features.Identity.AssignUserToCompany;
 using CoreWMS.Api.Features.Identity.Companies;
-using CoreWMS.Api.Features.Audit;
+using CoreWMS.Api.Features.Customers;
+using CoreWMS.Api.Features.Identity.Login;
+using CoreWMS.Api.Features.Identity.Roles;
+using CoreWMS.Api.Features.Identity.Users;
+using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
-using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Printing;
-using CoreWMS.Api.Core.CQRS;
+using CoreWMS.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using Microsoft.AspNetCore.RateLimiting;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. CARREGAMENTO PRECOCE DA CONFIGURAÇÃO LOCAL (Sobrescreve appsettings.json e appsettings.Development.json)
+// 1. Configurações Locais de Ambiente
 builder.Configuration
     .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -34,66 +35,84 @@ builder.Configuration
     .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
-// Configuração Global do MongoDB para Guids
 BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
-
 builder.Services.AddHttpContextAccessor();
 
-// Rate Limiting
+// 2. Política Estrita de CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("CoreWmsCorsPolicy", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "https://app.corewms.com.br")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+// 3. Otimização de Rate Limiting por Tipo de Operação
 builder.Services.AddRateLimiter(options =>
 {
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Login: 5 tentativas/minuto
     options.AddFixedWindowLimiter("loginPolicy", opt =>
     {
         opt.PermitLimit = 5;
         opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         opt.QueueLimit = 0;
     });
 
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Refresh Token: 10 tentativas/minuto
+    options.AddFixedWindowLimiter("refreshPolicy", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
 });
 
-// Prevenção contra loops circulares em JSON
 builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
 {
     options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
 });
 
-// Registra o serviço de Auditoria do Mongo (Agora lendo a string autenticada de appsettings.Local.json)
-builder.Services.AddScoped<IAuditService, MongoAuditService>();
+// 4. Arquitetura de Auditoria Assíncrona via Channel
+builder.Services.AddSingleton<AuditChannel>();
+builder.Services.AddHostedService<MongoAuditWorker>();
 
-// Configuração do PostgreSQL
+// Banco de Dados PostgreSQL
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-// Registro dos Serviços e Caches
+// Serviços de Segurança e Cache
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IPermissionCacheService, PermissionCacheService>();
 
-// Handlers CQRS
+// Registros CQRS
 builder.Services.AddScoped<ICommandHandler<LoginCommand, IResult>, LoginCommandHandler>();
 builder.Services.AddScoped<ICommandHandler<RefreshTokenCommand, IResult>, RefreshTokenHandler>();
-
 builder.Services.AddScoped<ICommandHandler<CreateUserCommand, IResult>, CreateUserHandler>();
 builder.Services.AddScoped<IQueryHandler<ListUsersQuery, IResult>, ListUsersHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateUserCommand, IResult>, UpdateUserHandler>();
 builder.Services.AddScoped<ICommandHandler<DeleteUserCommand, IResult>, DeleteUserHandler>();
-
 builder.Services.AddScoped<IQueryHandler<AuditLogFilterQuery, IResult>, ListAuditLogsHandler>();
-
 builder.Services.AddScoped<ICommandHandler<CreateRoleCommand, IResult>, CreateRoleHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateRoleCommand, IResult>, UpdateRoleHandler>();
 builder.Services.AddScoped<ICommandHandler<DeleteRoleCommand, IResult>, DeleteRoleHandler>();
 builder.Services.AddScoped<IQueryHandler<ListRolesQuery, IResult>, ListRolesHandler>();
-
 builder.Services.AddScoped<ICommandHandler<AssignUserCommand, IResult>, AssignUserHandler>();
 builder.Services.AddScoped<IQueryHandler<ListCompaniesQuery, IResult>, ListCompaniesHandler>();
 builder.Services.AddScoped<ICommandHandler<CreateCompanyCommand, IResult>, CreateCompanyHandler>();
 builder.Services.AddScoped<IQueryHandler<ListAllCompaniesQuery, IResult>, ListAllCompaniesHandler>();
 builder.Services.AddScoped<ICommandHandler<UpdateCompanyCommand, IResult>, UpdateCompanyHandler>();
 builder.Services.AddScoped<ICommandHandler<DeleteCompanyCommand, IResult>, DeleteCompanyHandler>();
+
+builder.Services.AddScoped<ICommandHandler<CreateCustomerCommand, IResult>, CreateCustomerHandler>();
+builder.Services.AddScoped<ICommandHandler<UpdateCustomerCommand, IResult>, UpdateCustomerHandler>();
+builder.Services.AddScoped<IQueryHandler<ListCustomersQuery, IResult>, ListCustomersHandler>();
 
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
@@ -105,12 +124,9 @@ builder.Services.AddScoped<ICommandHandler<CreateAgentCommand, IResult>, CreateA
 builder.Services.AddScoped<ICommandHandler<CreatePrinterCommand, IResult>, CreatePrinterHandler>();
 builder.Services.AddScoped<ICommandHandler<CreateLabelTemplateCommand, IResult>, CreateLabelTemplateHandler>();
 
-// Validação de Segurança do Segredo JWT
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
-{
     throw new InvalidOperationException("ERRO DE SEGURANÇA: A chave 'JwtSettings:Secret' deve conter no mínimo 32 caracteres.");
-}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -128,12 +144,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// Documentação Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "CoreWMS API", Version = "v1" });
-
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Insira o token JWT desta forma: Bearer {seu_token}",
@@ -156,25 +170,40 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Seed de dados e Middlewares
 await DatabaseSeeder.SeedAsync(app.Services);
 
+// 5. Middleware de Security Headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    await next();
+});
+
+app.UseCors("CoreWmsCorsPolicy");
 app.UseRateLimiter();
+app.UseStaticFiles();
+
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CoreWMS API v1");
+    c.InjectJavascript("/swagger/swagger-refresh.js");
+});
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Mapeamento de Rotas
 app.MapAuditLogEndpoints();
 app.MapLoginEndpoint();
 app.MapRefreshTokenEndpoint();
 app.MapCompanyCrudEndpoints();
+app.MapCustomerCrudEndpoints();
 app.MapUserCrudEndpoints();
 app.MapRoleCrudEndpoints();
 app.MapAssignUserEndpoint();
-
 app.MapPrintEndpoints();
 app.MapPrintingCrudEndpoints();
 

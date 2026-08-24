@@ -33,11 +33,7 @@ public class SendTestPrintHandler : ICommandHandler<SendTestPrintCommand, IResul
         // Se encontrou no banco, usa o Target (ex: "192.168.1.20:9100"). Se não, usa o que foi enviado no comando.
         var targetHardware = printer?.Target ?? command.PrinterName;
 
-        var zpl = command.CustomZpl ?? @"
-^XA
-^FO50,50^A0N,40,40^FDCoreWMS - Teste de Impressao^FS
-^FO50,110^BY3^BCN,100,Y,N,N^FDTEST-123456^FS
-^XZ";
+        var zpl = command.CustomZpl ?? "^XA^FO50,50^A0N,40,40^FDCoreWMS - Teste de Impressao^FS^FO50,110^BY3^BCN,100,Y,N,N^FDTEST-123456^FS^XZ";
 
         // 2. Dispara o Target real para o Agente via SignalR
         var jobId = await _printService.SendPrintJobAsync(

@@ -3,6 +3,7 @@ using System;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CoreWMS.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824163148_AddDepositorsTable")]
+    partial class AddDepositorsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,7 +25,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("CoreWMS.Api.Features.Customers.Entities.Customer", b =>
+            modelBuilder.Entity("CoreWMS.Api.Features.Depositors.Entities.Depositor", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -117,7 +120,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.HasIndex("CompanyId", "Cnpj")
                         .IsUnique();
 
-                    b.ToTable("Customers");
+                    b.ToTable("Depositors");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Identity.Entities.Company", b =>
@@ -430,17 +433,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.HasIndex("PrintAgentId");
 
                     b.ToTable("Printers");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Customers.Entities.Customer", b =>
-                {
-                    b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Identity.Entities.RolePermission", b =>

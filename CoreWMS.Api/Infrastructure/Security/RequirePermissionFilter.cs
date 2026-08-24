@@ -56,8 +56,12 @@ public class RequirePermissionFilter : IEndpointFilter
 
             userPermissions = new HashSet<string>(permissionsList);
 
-            // Armazena na memória da API por 10 minutos
-            cache.Set(cacheKey, userPermissions, TimeSpan.FromMinutes(10));
+            // Armazena na memória da API
+            var cacheOptions = new MemoryCacheEntryOptions()
+            .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+
+            cache.Set(cacheKey, userPermissions, cacheOptions);
         }
 
         if (!userPermissions.Contains(_permission))

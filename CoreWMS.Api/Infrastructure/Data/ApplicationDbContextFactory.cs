@@ -2,6 +2,7 @@ using CoreWMS.Api.Infrastructure.Audit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Configuration;
 
 namespace CoreWMS.Api.Infrastructure.Data;
 
@@ -9,21 +10,26 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
+        var basePath = AppDomain.CurrentDomain.BaseDirectory;
+
+        // Constrói a configuração para ler as credenciais reais no CLI do EF Core
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(basePath)
+            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddJsonFile("appsettings.Local.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        var connectionString = configuration.GetConnectionString("Postgres")
+            ?? "Host=localhost;Database=corewms_db;Username=postgres;Password=SuaSenhaPostgresSegura123!";
+
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        optionsBuilder.UseNpgsql(connectionString);
 
-        // String dummy só para o EF ler a estrutura das classes e montar a Migration
-        optionsBuilder.UseNpgsql("Host=localhost;Database=dummy_db;Username=postgres;Password=dummy");
+        var auditChannel = new AuditChannel();
+        var httpContextAccessor = new HttpContextAccessor();
 
-        // Instâncias MOCK apenas para satisfazer o construtor do DbContext em tempo de design
-        var dummyAuditService = new DummyAuditService();
-        var dummyHttpContextAccessor = new HttpContextAccessor();
-
-        return new ApplicationDbContext(optionsBuilder.Options, dummyAuditService, dummyHttpContextAccessor);
+        return new ApplicationDbContext(optionsBuilder.Options, auditChannel, httpContextAccessor);
     }
-}
-
-// Dummy service apenas para o EF Core não reclamar no CLI
-internal class DummyAuditService : IAuditService
-{
-    public Task LogAsync(AuditLog log, CancellationToken ct = default) => Task.CompletedTask;
 }

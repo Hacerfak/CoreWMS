@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
+using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -9,20 +10,30 @@ namespace CoreWMS.Api.Infrastructure.Data;
 
 public class ApplicationDbContext : DbContext
 {
-    private readonly IAuditService _auditService;
+    // Lista de propriedades globais ignoradas na auditoria (Sensíveis ou Efêmeras)
+    private static readonly HashSet<string> IgnoredAuditProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PasswordHash",
+        "RefreshToken",
+        "RefreshTokenExpiryTime",
+        "CertificateBytes",
+        "CertificatePassword"
+    };
+    private readonly AuditChannel _auditChannel;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public ApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options,
-        IAuditService auditService,
+        AuditChannel auditChannel,
         IHttpContextAccessor httpContextAccessor) : base(options)
     {
-        _auditService = auditService;
+        _auditChannel = auditChannel;
         _httpContextAccessor = httpContextAccessor;
     }
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Company> Companies => Set<Company>();
+    public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserCompanyRole> UserCompanyRoles => Set<UserCompanyRole>();
@@ -44,20 +55,38 @@ public class ApplicationDbContext : DbContext
         });
 
         builder.Entity<Company>(b =>
-{
-    b.HasKey(c => c.Id);
-    b.HasIndex(c => c.Cnpj).IsUnique();
-    b.Property(c => c.Cnpj).IsRequired().HasMaxLength(14);
-    b.Property(c => c.CorporateName).IsRequired().HasMaxLength(150);
-    b.Property(c => c.TradeName).HasMaxLength(150);
-    b.Property(c => c.StateRegistration).HasMaxLength(20);
-    b.Property(c => c.MunicipalRegistration).HasMaxLength(20);
-    b.Property(c => c.State).IsRequired().HasMaxLength(2);
+        {
+            b.HasKey(c => c.Id);
+            b.HasIndex(c => c.Cnpj).IsUnique();
+            b.Property(c => c.Cnpj).IsRequired().HasMaxLength(14);
+            b.Property(c => c.CorporateName).IsRequired().HasMaxLength(150);
+            b.Property(c => c.TradeName).HasMaxLength(150);
+            b.Property(c => c.StateRegistration).HasMaxLength(20);
+            b.Property(c => c.MunicipalRegistration).HasMaxLength(20);
+            b.Property(c => c.State).IsRequired().HasMaxLength(2);
 
-    // O EF Core mapeia byte[] como bytea no PostgreSQL por padrão
-    b.Property(c => c.CertificateBytes);
-    b.Property(c => c.CertificatePassword).HasMaxLength(100);
-});
+            // O EF Core mapeia byte[] como bytea no PostgreSQL por padrão
+            b.Property(c => c.CertificateBytes);
+            b.Property(c => c.CertificatePassword).HasMaxLength(100);
+        });
+
+        builder.Entity<Customer>(b =>
+        {
+            b.HasKey(c => c.Id);
+            b.HasIndex(c => new { c.CompanyId, c.Cnpj }).IsUnique(); // Unicidade por Empresa + CNPJ
+            b.Property(c => c.Cnpj).IsRequired().HasMaxLength(14);
+            b.Property(c => c.CorporateName).IsRequired().HasMaxLength(150);
+            b.Property(c => c.TradeName).HasMaxLength(150);
+            b.Property(c => c.StateRegistration).HasMaxLength(20);
+            b.Property(c => c.MunicipalRegistration).HasMaxLength(20);
+            b.Property(c => c.State).IsRequired().HasMaxLength(2);
+
+            // Chave estrangeira explícita restritiva para a Empresa
+            b.HasOne(c => c.Company)
+             .WithMany()
+             .HasForeignKey(c => c.CompanyId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
 
         builder.Entity<Role>(b =>
         {
@@ -132,13 +161,10 @@ public class ApplicationDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // 1. Pega o ID do usuário que fez a requisição HTTP (Token JWT)
         var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
         var entries = ChangeTracker.Entries<AuditableEntity>().ToList();
         var auditLogs = new List<AuditLog>();
 
-        // 2. Prepara os logs e atualiza as datas de auditoria (CreatedAt/UpdatedAt)
         foreach (var entry in entries)
         {
             if (entry.State == EntityState.Detached || entry.State == EntityState.Unchanged)
@@ -148,7 +174,7 @@ public class ApplicationDbContext : DbContext
             {
                 EntityName = entry.Entity.GetType().Name,
                 EntityId = entry.Entity.Id.ToString(),
-                UserId = userId ?? "Sistema" // Se for o Seed inicial rodando sem token, fica como "Sistema"
+                UserId = userId ?? "Sistema"
             };
 
             if (entry.State == EntityState.Added)
@@ -158,7 +184,7 @@ public class ApplicationDbContext : DbContext
 
                 foreach (var prop in entry.Properties)
                 {
-                    if (prop.Metadata.Name != "PasswordHash") // Nunca logue senhas!
+                    if (!IgnoredAuditProperties.Contains(prop.Metadata.Name))
                         auditLog.Changes[prop.Metadata.Name] = prop.CurrentValue;
                 }
             }
@@ -169,10 +195,15 @@ public class ApplicationDbContext : DbContext
 
                 foreach (var prop in entry.Properties.Where(p => p.IsModified))
                 {
-                    if (prop.Metadata.Name != "PasswordHash")
+                    if (!IgnoredAuditProperties.Contains(prop.Metadata.Name))
+                    {
                         auditLog.Changes[$"{prop.Metadata.Name}_Old"] = prop.OriginalValue;
-                    auditLog.Changes[$"{prop.Metadata.Name}_New"] = prop.CurrentValue;
+                        auditLog.Changes[$"{prop.Metadata.Name}_New"] = prop.CurrentValue;
+                    }
                 }
+
+                if (auditLog.Changes.Count == 0)
+                    continue;
             }
             else if (entry.State == EntityState.Deleted)
             {
@@ -182,14 +213,12 @@ public class ApplicationDbContext : DbContext
             auditLogs.Add(auditLog);
         }
 
-        // 3. Salva no Postgres (Transacional)
         var result = await base.SaveChangesAsync(cancellationToken);
 
-        // 4. Salva no MongoDB em paralelo (Auditoria Assíncrona)
-        if (auditLogs.Count > 0)
+        // Enfileiramento não-bloqueante no Channel
+        foreach (var log in auditLogs)
         {
-            var auditTasks = auditLogs.Select(log => _auditService.LogAsync(log, cancellationToken));
-            await Task.WhenAll(auditTasks);
+            await _auditChannel.WriteAsync(log, cancellationToken);
         }
 
         return result;

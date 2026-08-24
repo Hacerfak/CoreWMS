@@ -9,7 +9,7 @@ namespace CoreWMS.Api.Infrastructure.Fiscal.Queries;
 
 public interface ISefazConsultaCadastroService
 {
-    SefazCompanyDataDto Consultar(byte[] certBytes, string certPassword, string uf);
+    SefazCompanyDataDto Consultar(byte[] certBytes, string certPassword, string uf, string? targetCnpj = null);
 }
 
 public class SefazConsultaCadastroService : ISefazConsultaCadastroService
@@ -21,23 +21,25 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
         _zeusConfigurator = zeusConfigurator;
     }
 
-    public SefazCompanyDataDto Consultar(byte[] certBytes, string certPassword, string uf)
+    public SefazCompanyDataDto Consultar(byte[] certBytes, string certPassword, string uf, string? targetCnpj = null)
     {
         using var certificado = _zeusConfigurator.LoadCertificate(certBytes, certPassword);
 
-        var match = Regex.Match(certificado.Subject, @"([0-9]{14})");
-        if (!match.Success)
-            throw new InvalidOperationException("CNPJ (14 dígitos) não foi encontrado no Certificado Digital.");
-
-        var cnpjEmitente = match.Groups[1].Value;
+        var cnpjConsulta = targetCnpj;
+        if (string.IsNullOrWhiteSpace(cnpjConsulta))
+        {
+            var match = Regex.Match(certificado.Subject, @"([0-9]{14})");
+            if (!match.Success)
+                throw new InvalidOperationException("CNPJ (14 dígitos) não foi encontrado no Certificado Digital.");
+            cnpjConsulta = match.Groups[1].Value;
+        }
 
         if (!Enum.TryParse<Estado>(uf.ToUpper(), out var estadoEnum))
             throw new ArgumentException($"UF '{uf}' é inválida.");
 
         var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, DFe.Classes.Flags.TipoAmbiente.Producao);
-
         using var servicoSefaz = new ServicosNFe(cfg, certificado);
-        var retornoSefaz = servicoSefaz.NfeConsultaCadastro(uf.ToUpper(), ConsultaCadastroTipoDocumento.Cnpj, cnpjEmitente);
+        var retornoSefaz = servicoSefaz.NfeConsultaCadastro(uf.ToUpper(), ConsultaCadastroTipoDocumento.Cnpj, cnpjConsulta);
 
         if (retornoSefaz?.Retorno?.infCons?.infCad == null)
         {
@@ -46,9 +48,8 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
         }
 
         var cad = retornoSefaz.Retorno.infCons.infCad;
-
         return new SefazCompanyDataDto(
-            Cnpj: cnpjEmitente,
+            Cnpj: cnpjConsulta,
             CorporateName: cad.xNome ?? "",
             TradeName: cad.xFant,
             StateRegistration: cad.IE,

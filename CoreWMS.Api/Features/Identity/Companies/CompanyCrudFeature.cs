@@ -95,7 +95,7 @@ public class ListAllCompaniesHandler : IQueryHandler<ListAllCompaniesQuery, IRes
 
     public async Task<IResult> HandleAsync(ListAllCompaniesQuery query, CancellationToken ct = default)
     {
-        var companies = await _db.Companies
+        var companies = await _db.Companies.AsNoTracking()
             .Select(c => new CompanyDto(c.Id, c.Cnpj, c.CorporateName, c.TradeName, c.State, c.IsActive, c.CreatedAt))
             .ToListAsync(ct);
 

@@ -27,6 +27,14 @@ public static class Permissions
         public const string Delete = "companies:delete";
     }
 
+    public static class Customers
+    {
+        public const string View = "customers:view";
+        public const string Create = "customers:create";
+        public const string Edit = "customers:edit";
+        public const string Delete = "customers:delete";
+    }
+
     public static class Profile
     {
         public const string UpdateSelf = "profile:update-self";
