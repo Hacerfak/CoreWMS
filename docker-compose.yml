@@ -6,9 +6,9 @@ services:
     image: postgres:16-alpine
     container_name: corewms_postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: corewms_password
-      POSTGRES_DB: corewms_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
@@ -20,8 +20,8 @@ services:
     image: mongo:7.0
     container_name: corewms_mongo
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: corewms_password
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
     ports:
       - "27017:27017"
     volumes:
@@ -39,8 +39,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       # Vamos injetar as strings de conexão via variáveis de ambiente
-      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=corewms_db;Username=postgres;Password=corewms_password;
-      - ConnectionStrings__MongoDb=mongodb://root:corewms_password@mongodb:27017/?authSource=admin
+      - ConnectionStrings__Postgres=Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
+      - ConnectionStrings__MongoDb=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
     depends_on:
       - postgres
       - mongodb

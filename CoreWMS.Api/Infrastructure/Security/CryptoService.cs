@@ -5,8 +5,11 @@ namespace CoreWMS.Api.Infrastructure.Security;
 
 public static class CryptoService
 {
-    // Chave de 32 bytes (256 bits). Em produção, este valor é injetado via variável de ambiente / KeyVault
-    private static readonly byte[] Key = Encoding.UTF8.GetBytes("CoreWMS_AES_256_EncryptionKey!");
+    // Hashing da chave via SHA-256 garante que a chave do AES possua EXATAMENTE 32 bytes (256 bits)
+    private static readonly byte[] Key = SHA256.HashData(Encoding.UTF8.GetBytes(
+        Environment.GetEnvironmentVariable("CryptoSettings__Key")
+        ?? "CoreWMS_AES_256_EncryptionKey_Default_Passphrase_32_Bytes"
+    ));
 
     public static string Encrypt(string plainText)
     {
@@ -34,7 +37,6 @@ public static class CryptoService
         if (string.IsNullOrEmpty(cipherText)) return cipherText;
 
         var fullCipher = Convert.FromBase64String(cipherText);
-
         using var aes = Aes.Create();
         aes.Key = Key;
 

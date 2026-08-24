@@ -1,5 +1,6 @@
 using CoreWMS.Api.Core.CQRS;
 using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Features.Identity.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,7 +18,12 @@ public record AssignUserCommand(Guid UserId, Guid CompanyId, Guid RoleId) : ICom
 public class AssignUserHandler : ICommandHandler<AssignUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    public AssignUserHandler(ApplicationDbContext db) => _db = db;
+    private readonly IPermissionCacheService _cacheService;
+    public AssignUserHandler(ApplicationDbContext db, IPermissionCacheService cacheService)
+    {
+        _db = db;
+        _cacheService = cacheService;
+    }
 
     public async Task<IResult> HandleAsync(AssignUserCommand command, CancellationToken ct = default)
     {
@@ -44,7 +50,10 @@ public class AssignUserHandler : ICommandHandler<AssignUserCommand, IResult>
 
         await _db.SaveChangesAsync(ct);
 
-        return Results.NoContent();
+        // Invalida o cache IMEDIATAMENTE para a empresa ajustada
+        _cacheService.InvalidateUserCompanyCache(command.UserId, command.CompanyId);
+
+        return Results.Ok(new { Message = "Usuário atribuído com sucesso!" });
     }
 }
 

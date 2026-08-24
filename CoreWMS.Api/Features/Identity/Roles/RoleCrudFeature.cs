@@ -1,6 +1,7 @@
 using CoreWMS.Api.Core.CQRS;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Roles;
@@ -38,7 +39,13 @@ public class CreateRoleHandler : ICommandHandler<CreateRoleCommand, IResult>
 public class UpdateRoleHandler : ICommandHandler<UpdateRoleCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    public UpdateRoleHandler(ApplicationDbContext db) => _db = db;
+    private readonly IPermissionCacheService _cacheService;
+
+    public UpdateRoleHandler(ApplicationDbContext db, IPermissionCacheService cacheService)
+    {
+        _db = db;
+        _cacheService = cacheService;
+    }
 
     public async Task<IResult> HandleAsync(UpdateRoleCommand command, CancellationToken ct = default)
     {
@@ -50,7 +57,10 @@ public class UpdateRoleHandler : ICommandHandler<UpdateRoleCommand, IResult>
 
         role.UpdateName(command.Name);
         await _db.SaveChangesAsync(ct);
-        return Results.NoContent();
+        // Como o perfil alterado afeta múltiplos usuários, limpamos o cache de permissões
+        _cacheService.InvalidateUserAllCompaniesCache(Guid.Empty);
+
+        return Results.Ok(new { Message = "Perfil atualizado com sucesso!" });
     }
 }
 

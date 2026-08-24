@@ -23,8 +23,10 @@ Thumbs.db
 
 # Arquivos de ambiente e segredos locais (Boa prática)
 .env
-appsettings.Development.json
 appsettings.Local.json
+appsettings.Development.json
+agentconfig.json
+print_queue.db
 
 # Publicação
 [Pp]ublish/

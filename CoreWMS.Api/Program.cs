@@ -10,9 +10,9 @@ using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
+using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Printing;
-using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Core.CQRS;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -26,45 +26,53 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configuração Global do MongoDB para saber como salvar Guids
+// 1. CARREGAMENTO PRECOCE DA CONFIGURAÇÃO LOCAL (Sobrescreve appsettings.json e appsettings.Development.json)
+builder.Configuration
+    .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
+// Configuração Global do MongoDB para Guids
 BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
 
-// Adiciona acesso ao HttpContext (Necessário para pegar o JWT logado no Banco de Dados)
 builder.Services.AddHttpContextAccessor();
 
-// Configuração de Rate Limiting (Proteção contra força bruta)
+// Rate Limiting
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("loginPolicy", opt =>
     {
-        opt.PermitLimit = 5; // 5 requisições permitidas
-        opt.Window = TimeSpan.FromMinutes(1); // a cada 1 minuto
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(1);
         opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        opt.QueueLimit = 0; // Não coloca em fila, rejeita na hora
+        opt.QueueLimit = 0;
     });
 
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
-// Prevenção global contra loops de referência circular na Minimal API
+// Prevenção contra loops circulares em JSON
 builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
 {
     options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
 });
 
-// Registra o serviço de Auditoria do Mongo
+// Registra o serviço de Auditoria do Mongo (Agora lendo a string autenticada de appsettings.Local.json)
 builder.Services.AddScoped<IAuditService, MongoAuditService>();
 
-// 1. Configurações de Banco de Dados
+// Configuração do PostgreSQL
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
-// 2. Registro dos nossos serviços
+// Registro dos Serviços e Caches
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
+builder.Services.AddSingleton<IPermissionCacheService, PermissionCacheService>();
 
-// Registro dos Handlers CQRS (Nativo)
+// Handlers CQRS
 builder.Services.AddScoped<ICommandHandler<LoginCommand, IResult>, LoginCommandHandler>();
 builder.Services.AddScoped<ICommandHandler<RefreshTokenCommand, IResult>, RefreshTokenHandler>();
 
@@ -97,8 +105,12 @@ builder.Services.AddScoped<ICommandHandler<CreateAgentCommand, IResult>, CreateA
 builder.Services.AddScoped<ICommandHandler<CreatePrinterCommand, IResult>, CreatePrinterHandler>();
 builder.Services.AddScoped<ICommandHandler<CreateLabelTemplateCommand, IResult>, CreateLabelTemplateHandler>();
 
-// 3. Configuração do JWT Authentication
-var jwtSecret = builder.Configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
+// Validação de Segurança do Segredo JWT
+var jwtSecret = builder.Configuration["JwtSettings:Secret"];
+if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
+{
+    throw new InvalidOperationException("ERRO DE SEGURANÇA: A chave 'JwtSettings:Secret' deve conter no mínimo 32 caracteres.");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -116,13 +128,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// 4. Configuração do Swagger com suporte a Token JWT
+// Documentação Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "CoreWMS API", Version = "v1" });
 
-    // Configura o botão "Authorize" no topo do Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Insira o token JWT desta forma: Bearer {seu_token}",
@@ -145,18 +156,17 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// 5. Seed e Middleware do Swagger
+// Seed de dados e Middlewares
 await DatabaseSeeder.SeedAsync(app.Services);
 
 app.UseRateLimiter();
-
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-// 6. Mapeamento dos Endpoints (VSA)
+// Mapeamento de Rotas
 app.MapAuditLogEndpoints();
 app.MapLoginEndpoint();
 app.MapRefreshTokenEndpoint();
@@ -168,7 +178,6 @@ app.MapAssignUserEndpoint();
 app.MapPrintEndpoints();
 app.MapPrintingCrudEndpoints();
 
-// 3. Mapeamento do Hub de WebSockets do SignalR
 app.MapHub<PrintHub>("/hubs/print");
 
 app.Run();
