@@ -41,11 +41,12 @@ public class RefreshTokenHandler : ICommandHandler<RefreshTokenCommand, IResult>
         var newAccessToken = _jwt.GenerateToken(user, allowedCompanyIds);
         var newRefreshToken = _jwt.GenerateRefreshToken();
 
-        // 4. Salva o novo Refresh Token no banco (rotacionando o token por segurança)
+        // 4. Salva o novo Refresh Token no banco (rotacionando o token por seguranca)
         user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));
         await _db.SaveChangesAsync(ct);
 
-        return Results.Ok(new { Token = newAccessToken, RefreshToken = newRefreshToken });
+        // AQUI: Retornando AccessToken no padrão da indústria
+        return Results.Ok(new { AccessToken = newAccessToken, RefreshToken = newRefreshToken });
     }
 }
 

@@ -1,18 +1,22 @@
 import { useState } from 'react';
-import { Box, Button, TextField, Typography, Card, CardContent, CircularProgress } from '@mui/material';
-import { Warehouse } from 'lucide-react';
-import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '../../api/client';
-import { useAuthStore } from '../../store/useAuthStore';
+import { api } from '@/api/client';
+import { useAuthStore } from '@/store/useAuthStore';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Warehouse, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
-const Login = () => {
+export default function Login() {
     const navigate = useNavigate();
-    const setTokens = useAuthStore(state => state.setTokens);
+    const setTokens = useAuthStore((state) => state.setTokens);
 
     const [email, setEmail] = useState('master@corewms.com.br');
     const [password, setPassword] = useState('Master@123');
+    const [isTransitioning, setIsTransitioning] = useState(false);
 
     const loginMutation = useMutation({
         mutationFn: async (credentials) => {
@@ -20,26 +24,20 @@ const Login = () => {
             return data;
         },
         onSuccess: (data) => {
-            // CORREÇÃO: Pega 'accessToken' ou 'token' independente de como a API envia
-            const token = data.accessToken || data.token;
+            const { accessToken, refreshToken } = data;
+            setTokens(accessToken, refreshToken);
 
-            if (!token) {
-                toast.error("Erro: O backend não retornou um token válido.");
-                return;
-            }
+            // Inicia a animação de transição moderna
+            setIsTransitioning(true);
 
-            // Grava os dados na memória (Zustand + LocalStorage)
-            setTokens(token, data.refreshToken);
-
-            toast.success("Login realizado com sucesso!");
-            navigate('/selecao-empresa');
+            // Segura o usu rio na tela de loading por 1.5s para transi o suave
+            setTimeout(() => {
+                navigate('/selecao-empresa');
+            }, 1500);
         },
         onError: (error) => {
-            if (error.response?.status === 429) {
-                toast.error("Muitas tentativas. Aguarde 1 minuto.");
-            } else {
-                toast.error("E-mail ou senha inválidos.");
-            }
+            if (error.response?.status === 429) toast.error('Muitas tentativas. Aguarde 1 minuto.');
+            else toast.error('Credenciais inválidas ou erro de conexão (CORS).');
         }
     });
 
@@ -48,36 +46,58 @@ const Login = () => {
         loginMutation.mutate({ email, password });
     };
 
-    return (
-        <Box sx={{
-            height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)'
-        }}>
-            <Card sx={{ maxWidth: 400, width: '100%', m: 2, p: 2, borderRadius: 3 }}>
-                <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                    <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: '50%', color: 'white', mb: 1 }}>
-                        <Warehouse size={32} />
-                    </Box>
-                    <Typography variant="h5" fontWeight="bold" color="primary.main">CoreWMS</Typography>
-                    <Typography variant="body2" color="text.secondary" mb={2}>Acesse sua conta para continuar</Typography>
+    // Tela de Loading Fullscreen (A t tica moderna)
+    if (isTransitioning) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white animate-in fade-in duration-500">
+                <div className="relative flex items-center justify-center mb-8">
+                    <div className="absolute inset-0 border-4 border-blue-500/30 rounded-full animate-ping"></div>
+                    <div className="bg-blue-600 p-4 rounded-full relative z-10">
+                        <Warehouse size={40} className="text-white" />
+                    </div>
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight">Autenticando</h2>
+                <p className="text-slate-400 mt-2 font-mono text-sm">Preparando ambiente logístico seguro...</p>
+            </div>
+        );
+    }
 
-                    <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        <TextField
-                            label="E-mail" type="email" fullWidth required
-                            value={email} onChange={(e) => setEmail(e.target.value)}
-                        />
-                        <TextField
-                            label="Senha" type="password" fullWidth required
-                            value={password} onChange={(e) => setPassword(e.target.value)}
-                        />
-                        <Button variant="contained" size="large" type="submit" fullWidth disabled={loginMutation.isPending}>
-                            {loginMutation.isPending ? <CircularProgress size={24} color="inherit" /> : "Entrar"}
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 animate-in fade-in duration-500">
+            <Card className="w-full max-w-sm shadow-xl border-slate-200">
+                <CardHeader className="space-y-3 items-center text-center pb-6">
+                    <div className="bg-blue-600 p-3 rounded-2xl text-white shadow-md">
+                        <Warehouse size={28} />
+                    </div>
+                    <div>
+                        <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">CoreWMS</CardTitle>
+                        <CardDescription className="text-slate-500 mt-1">Acesso corporativo</CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="space-y-2">
+                            <Label htmlFor="email" className="text-slate-700">E-mail</Label>
+                            <Input
+                                id="email" type="email" required
+                                value={email} onChange={(e) => setEmail(e.target.value)}
+                                className="bg-slate-50 focus-visible:ring-blue-600"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="password" className="text-slate-700">Senha</Label>
+                            <Input
+                                id="password" type="password" required
+                                value={password} onChange={(e) => setPassword(e.target.value)}
+                                className="bg-slate-50 focus-visible:ring-blue-600"
+                            />
+                        </div>
+                        <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white" disabled={loginMutation.isPending}>
+                            {loginMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Entrar'}
                         </Button>
                     </form>
                 </CardContent>
             </Card>
-        </Box>
+        </div>
     );
-};
-
-export default Login;
+}
