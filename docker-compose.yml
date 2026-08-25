@@ -47,7 +47,7 @@ services:
   frontend:
     container_name: corewms_frontend
     build:
-      context: ./wms-frontend
+      context: ./corewms-web
       dockerfile: Dockerfile
       args:
         VITE_API_URL: http://localhost:5000
