@@ -19,6 +19,7 @@ public record CustomerDto(
     string? StateRegistration,
     string? MunicipalRegistration,
     int Crt,
+    string? Cnae,
     string? Street,
     string? Number,
     string? Complement,
@@ -44,6 +45,7 @@ public record CreateCustomerCommand(
     string? StateRegistration,
     string? MunicipalRegistration,
     int Crt,
+    string? Cnae,
     string? Street,
     string? Number,
     string? Complement,
@@ -68,6 +70,7 @@ public record UpdateCustomerCommand(
     string? StateRegistration,
     string? MunicipalRegistration,
     int Crt,
+    string? Cnae,
     string? Street,
     string? Number,
     string? Complement,
@@ -111,7 +114,7 @@ public class CreateCustomerHandler : ICommandHandler<CreateCustomerCommand, IRes
 
         var customer = new Customer(
             companyId, command.Cnpj, command.CorporateName, command.TradeName, command.StateRegistration,
-            command.MunicipalRegistration, command.Crt, command.Street, command.Number, command.Complement,
+            command.MunicipalRegistration, command.Crt, command.Cnae, command.Street, command.Number, command.Complement,
             command.Neighborhood, command.CityCode, command.CityName, command.State, command.ZipCode,
             command.Email, command.Phone, command.RequireBatchControl, command.RequireExpirationControl,
             command.RequireSerialControl, command.AllowNegativeStock, command.AutoApproveReceiving
@@ -147,7 +150,7 @@ public class UpdateCustomerHandler : ICommandHandler<UpdateCustomerCommand, IRes
 
         customer.Update(
             command.CorporateName, command.TradeName, command.StateRegistration, command.MunicipalRegistration,
-            command.Crt, command.Street, command.Number, command.Complement, command.Neighborhood,
+            command.Crt, command.Cnae, command.Street, command.Number, command.Complement, command.Neighborhood,
             command.CityCode, command.CityName, command.State, command.ZipCode, command.Email, command.Phone,
             command.RequireBatchControl, command.RequireExpirationControl, command.RequireSerialControl,
             command.AllowNegativeStock, command.AutoApproveReceiving
@@ -188,7 +191,7 @@ public class ListCustomersHandler : IQueryHandler<ListCustomersQuery, IResult>
 
         var list = await q.Select(c => new CustomerDto(
             c.Id, c.CompanyId, c.Cnpj, c.CorporateName, c.TradeName, c.StateRegistration, c.MunicipalRegistration,
-            c.Crt, c.Street, c.Number, c.Complement, c.Neighborhood, c.CityCode, c.CityName, c.State,
+            c.Crt, c.Cnae, c.Street, c.Number, c.Complement, c.Neighborhood, c.CityCode, c.CityName, c.State,
             c.ZipCode, c.Email, c.Phone, c.RequireBatchControl, c.RequireExpirationControl, c.RequireSerialControl,
             c.AllowNegativeStock, c.AutoApproveReceiving, c.IsActive
         )).ToListAsync(ct);

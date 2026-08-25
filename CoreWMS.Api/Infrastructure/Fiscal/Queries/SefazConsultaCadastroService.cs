@@ -24,8 +24,8 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
     public SefazCompanyDataDto Consultar(byte[] certBytes, string certPassword, string uf, string? targetCnpj = null)
     {
         using var certificado = _zeusConfigurator.LoadCertificate(certBytes, certPassword);
-
         var cnpjConsulta = targetCnpj;
+
         if (string.IsNullOrWhiteSpace(cnpjConsulta))
         {
             var match = Regex.Match(certificado.Subject, @"([0-9]{14})");
@@ -48,12 +48,14 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
         }
 
         var cad = retornoSefaz.Retorno.infCons.infCad;
+
         return new SefazCompanyDataDto(
             Cnpj: cnpjConsulta,
             CorporateName: cad.xNome ?? "",
             TradeName: cad.xFant,
             StateRegistration: cad.IE,
-            Crt: int.TryParse(cad.xRegApur, out var crtVal) ? crtVal : 1,
+            Crt: ResolverCrt(cad.xRegApur), // <-- Mapeamento inteligente de texto para CRT
+            Cnae: cad.CNAE?.ToString(),
             Street: cad.ender?.xLgr,
             Number: cad.ender?.nro,
             Complement: cad.ender?.xCpl,
@@ -64,5 +66,34 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
             ZipCode: cad.ender?.CEP?.ToString(),
             CertificateExpiration: certificado.NotAfter.ToUniversalTime()
         );
+    }
+
+    /// <summary>
+    /// Mapeia a descrição textual do regime de apuração retornado pela SEFAZ para o código numérico CRT.
+    /// </summary>
+    private static int ResolverCrt(string? xRegApur)
+    {
+        if (string.IsNullOrWhiteSpace(xRegApur)) return 1;
+
+        var reg = xRegApur.Trim().ToUpper();
+
+        // Se por acaso a SEFAZ retornar o dígito numérico direto
+        if (int.TryParse(reg, out var crt) && crt >= 1 && crt <= 4)
+            return crt;
+
+        // Mapeamento por palavras-chave do retorno fiscal
+        if (reg.Contains("NORMAL") || reg.Contains("REAL") || reg.Contains("PRESUMIDO") || reg.Contains("CONVENCIONAL") || reg.Contains("PERIÓDICO") || reg.Contains("PERIODICO"))
+            return 3; // 3 - Regime Normal
+
+        if (reg.Contains("SUBLIMITE"))
+            return 2; // 2 - Simples Nacional (Excesso Sublimite)
+
+        if (reg.Contains("MEI"))
+            return 4; // 4 - MEI
+
+        if (reg.Contains("SIMPLES"))
+            return 1; // 1 - Simples Nacional
+
+        return 1;
     }
 }

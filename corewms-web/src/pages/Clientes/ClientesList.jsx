@@ -1,23 +1,46 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, Building, MapPin, Loader2, Edit } from 'lucide-react';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import { Search, Plus, Building, MapPin, Loader2, Edit, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import ClienteFormSheet from './ClienteFormSheet';
 
 export default function ClientesList() {
+    const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedCliente, setSelectedCliente] = useState(null);
+    const [clienteToDelete, setClienteToDelete] = useState(null);
 
+    // Listagem de clientes
     const { data: clientes, isLoading } = useQuery({
         queryKey: ['clientes', search],
         queryFn: async () => {
             const { data } = await api.get('/api/customers', { params: { Search: search } });
             return data || [];
+        }
+    });
+
+    // Mutação para Inativar/Excluir
+    const deleteMutation = useMutation({
+        mutationFn: async (id) => {
+            await api.delete(`/api/customers/${id}`);
+        },
+        onSuccess: () => {
+            toast.success('Cliente inativado com sucesso!');
+            queryClient.invalidateQueries({ queryKey: ['clientes'] });
+            setClienteToDelete(null);
+        },
+        onError: (err) => {
+            toast.error(err.response?.data?.message || 'Erro ao inativar cliente.');
         }
     });
 
@@ -33,6 +56,7 @@ export default function ClientesList() {
 
     return (
         <div className="flex flex-col h-full space-y-6">
+            {/* Cabeçalho */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clientes</h1>
@@ -43,6 +67,7 @@ export default function ClientesList() {
                 </Button>
             </div>
 
+            {/* Tabela de Dados */}
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-100 flex items-center gap-4">
                     <div className="relative flex-1 max-w-md">
@@ -108,9 +133,12 @@ export default function ClientesList() {
                                                 Ativo
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-right space-x-1">
                                             <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)} className="text-blue-600 hover:bg-blue-50">
                                                 <Edit className="h-4 w-4 mr-1" /> Editar
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                                                <Trash2 className="h-4 w-4 mr-1" /> Excluir
                                             </Button>
                                         </TableCell>
                                     </TableRow>
@@ -121,11 +149,34 @@ export default function ClientesList() {
                 </div>
             </div>
 
+            {/* Sheet de Criação e Edição */}
             <ClienteFormSheet
                 open={isSheetOpen}
                 onOpenChange={setIsSheetOpen}
                 clienteToEdit={selectedCliente}
             />
+
+            {/* Modal de Confirmação de Exclusão */}
+            <AlertDialog open={!!clienteToDelete} onOpenChange={(open) => !open && setClienteToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-slate-900">Inativar Cliente Depositante?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-slate-500">
+                            Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>? Ele não aparecerá mais nas operações ativas do WMS.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => deleteMutation.mutate(clienteToDelete.id)}
+                            disabled={deleteMutation.isPending}
+                            className="bg-rose-600 hover:bg-rose-700 text-white"
+                        >
+                            {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Inativação'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

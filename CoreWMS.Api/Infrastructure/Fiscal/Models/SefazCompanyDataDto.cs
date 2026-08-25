@@ -6,6 +6,7 @@ public record SefazCompanyDataDto(
     string? TradeName,
     string? StateRegistration,
     int Crt,
+    string? Cnae,
     string? Street,
     string? Number,
     string? Complement,

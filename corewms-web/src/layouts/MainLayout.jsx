@@ -19,7 +19,6 @@ export default function MainLayout() {
         navigate('/login');
     };
 
-    // Estrutura agrupada por escopos (Mapeamento da API)
     const menuGroups = [
         {
             scope: 'Visão Geral',
@@ -53,12 +52,12 @@ export default function MainLayout() {
     return (
         <div className="flex h-screen w-full bg-slate-50 overflow-hidden text-slate-900 font-sans">
 
-            {/* Sidebar Elegante com Agrupamentos */}
-            <aside className="w-64 flex flex-col border-r border-slate-200 bg-slate-50/50 backdrop-blur-xl">
+            {/* Sidebar Ampliada (w-72 = 288px) */}
+            <aside className="w-72 flex flex-col border-r border-slate-200 bg-slate-50/50 backdrop-blur-xl">
                 <div className="h-16 flex items-center px-6 border-b border-slate-200/60">
-                    <div className="flex items-center gap-2 text-blue-600">
-                        <Warehouse size={22} strokeWidth={2.5} />
-                        <span className="text-lg font-bold tracking-tight text-slate-900">CoreWMS</span>
+                    <div className="flex items-center gap-2.5 text-blue-600">
+                        <Warehouse size={24} strokeWidth={2.5} />
+                        <span className="text-xl font-bold tracking-tight text-slate-900">CoreWMS</span>
                     </div>
                 </div>
 
@@ -75,12 +74,12 @@ export default function MainLayout() {
                                         <button
                                             key={item.label}
                                             onClick={() => navigate(item.path)}
-                                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${isActive
-                                                ? 'bg-blue-50 text-blue-700'
-                                                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                                            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                                                ? 'bg-blue-50 text-blue-700 shadow-xs'
+                                                : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                                                 }`}
                                         >
-                                            <item.icon size={18} className={isActive ? 'text-blue-600' : 'text-slate-400'} />
+                                            <item.icon size={19} className={isActive ? 'text-blue-600' : 'text-slate-400'} />
                                             {item.label}
                                         </button>
                                     );
@@ -97,9 +96,9 @@ export default function MainLayout() {
                 {/* Header Minimalista */}
                 <header className="h-16 flex items-center justify-between px-8 border-b border-slate-200/60 bg-white z-10">
                     <div className="flex items-center">
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-md">
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-lg">
                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                            <span className="text-xs font-medium text-slate-600 tracking-tight">
+                            <span className="text-xs font-semibold text-slate-700 tracking-tight">
                                 {empresaAtual?.corporateName || 'Empresa não selecionada'}
                             </span>
                         </div>
@@ -108,12 +107,12 @@ export default function MainLayout() {
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="relative h-9 rounded-full pl-2 pr-4 flex items-center gap-2 hover:bg-slate-50 border border-transparent hover:border-slate-200">
-                                <Avatar className="h-6 w-6">
-                                    <AvatarFallback className="bg-blue-600 text-white text-xs font-medium">
+                                <Avatar className="h-7 w-7">
+                                    <AvatarFallback className="bg-blue-600 text-white text-xs font-semibold">
                                         {user?.nome?.charAt(0)}
                                     </AvatarFallback>
                                 </Avatar>
-                                <span className="text-sm font-medium truncate max-w-[120px]">{user?.nome?.split(' ')[0]}</span>
+                                <span className="text-sm font-medium truncate max-w-[140px]">{user?.nome?.split(' ')[0]}</span>
                                 <ChevronDown size={14} className="text-slate-400" />
                             </Button>
                         </DropdownMenuTrigger>
