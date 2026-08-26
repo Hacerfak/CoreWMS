@@ -1,26 +1,53 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetApiCompanies } from '@/api/generated/companies/companies';
+import { getApiUsersMePermissions } from '@/api/generated/users/users';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Building2, LogOut, ArrowRight, Plus, Loader2, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function SelecaoEmpresa() {
     const navigate = useNavigate();
-    const { user, setCompanyId, logout, setEmpresas } = useAuthStore();
+    const { user, setCompanyId, logout, setEmpresas, setPermissions } = useAuthStore();
+    const [loadingContext, setLoadingContext] = useState(false);
 
-    // Hook gerado automaticamente pelo Orval
-    const { data: companies, isLoading } = useGetApiCompanies();
+    const { data: apiResponse, isLoading: isLoadingCompanies } = useGetApiCompanies();
+    const companies = apiResponse?.data || apiResponse || [];
 
     useEffect(() => {
-        if (companies) {
+        if (companies.length > 0) {
             setEmpresas(companies);
-            if (companies.length === 0 && user?.role === 'ADMIN') {
-                navigate('/onboarding', { replace: true });
-            }
+        } else if (apiResponse && companies.length === 0 && user?.role === 'ADMIN') {
+            navigate('/onboarding', { replace: true });
         }
-    }, [companies, navigate, setEmpresas, user]);
+    }, [companies, apiResponse, navigate, setEmpresas, user]);
+
+    const handleSelectCompany = async (empresaId) => {
+        try {
+            setLoadingContext(true);
+
+            // 1. Seta a empresa na Store (o interceptor axios agora vai enviar X-Company-Id)
+            setCompanyId(empresaId);
+
+            // 2. Busca as permissões do usuário para a empresa selecionada
+            const permResponse = await getApiUsersMePermissions();
+            const userPermissions = permResponse?.data || permResponse || [];
+
+            // 3. Salva no Zustand e libera acesso
+            setPermissions(userPermissions);
+            navigate('/dashboard');
+
+        } catch (error) {
+            toast.error('Erro ao carregar matriz de permissões. Tente novamente.');
+            setCompanyId(null);
+        } finally {
+            setLoadingContext(false);
+        }
+    };
+
+    const isScreenLoading = isLoadingCompanies || loadingContext;
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex flex-col">
@@ -29,7 +56,7 @@ export default function SelecaoEmpresa() {
                     <ShieldCheck className="text-blue-600" size={24} />
                     <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Ambiente Seguro</h1>
                 </div>
-                <Button variant="ghost" onClick={() => { logout(); navigate('/login'); }} className="text-slate-500 hover:text-slate-900">
+                <Button variant="ghost" onClick={() => { logout(); navigate('/login'); }} className="text-slate-500 hover:text-slate-900" disabled={isScreenLoading}>
                     <LogOut className="mr-2 h-4 w-4" /> Encerrar Sessão
                 </Button>
             </header>
@@ -40,17 +67,17 @@ export default function SelecaoEmpresa() {
                     <p className="text-slate-500 mt-3 text-lg">Olá, {user?.nome?.split(' ')[0]}. Qual operação vamos gerenciar hoje?</p>
                 </div>
 
-                {isLoading ? (
-                    <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+                {isScreenLoading ? (
+                    <div className="flex flex-col items-center gap-4 text-slate-500">
+                        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+                        <p className="text-sm">{loadingContext ? 'Sincronizando permissões...' : 'Carregando empresas...'}</p>
+                    </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-                        {companies?.map((empresa) => (
+                        {companies.map((empresa) => (
                             <Card
                                 key={empresa.id}
-                                onClick={() => {
-                                    setCompanyId(empresa.id);
-                                    navigate('/dashboard');
-                                }}
+                                onClick={() => handleSelectCompany(empresa.id)}
                                 className="group relative overflow-hidden cursor-pointer border-slate-200 bg-white hover:border-blue-300 hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all duration-300"
                             >
                                 <div className="p-8 flex flex-col h-full">
@@ -69,7 +96,6 @@ export default function SelecaoEmpresa() {
                                 </div>
                             </Card>
                         ))}
-
                         {user?.role === 'ADMIN' && (
                             <button
                                 onClick={() => navigate('/onboarding')}

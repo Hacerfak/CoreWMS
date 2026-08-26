@@ -35,7 +35,6 @@ export default function Login() {
             { email, password },
             {
                 onSuccess: (apiResponse) => {
-                    // Trata tanto o retorno envelopado (apiResponse.data) quanto o direto
                     const loginData = apiResponse?.data || apiResponse;
                     const token = loginData?.token;
 
@@ -59,6 +58,7 @@ export default function Login() {
                             role: userRole,
                         },
                         empresas: empresasList,
+                        permissions: [], // Serão preenchidas na tela de seleção de empresa
                     });
 
                     if (empresasList.length === 0 && userRole === 'ADMIN') {

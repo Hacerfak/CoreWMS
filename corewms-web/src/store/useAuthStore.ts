@@ -6,7 +6,7 @@ export interface User {
     id: string;
     nome: string;
     email?: string;
-    role: 'ADMIN' | 'USER';
+    role?: string; // <- Apenas o role, sem isMaster!
 }
 
 export interface Empresa {
@@ -21,7 +21,7 @@ interface CustomJwtPayload {
     sub: string;
     name?: string;
     email?: string;
-    isMaster?: string;
+    isMaster?: string; // Mantemos aqui pois vem de dentro do JWT
     [key: string]: unknown;
 }
 
@@ -31,7 +31,9 @@ interface AuthState {
     companyId: string | null;
     user: User | null;
     empresas: Empresa[];
-    setAuth: (payload: { token: string; user: User; empresas?: Empresa[] }) => void;
+    permissions: string[];
+    setAuth: (payload: { token: string; user: User; empresas?: Empresa[], permissions?: string[] }) => void;
+    setPermissions: (permissions: string[]) => void;
     setTokens: (token: string, refreshToken?: string | null) => void;
     setEmpresas: (empresas: Empresa[]) => void;
     setCompanyId: (id: string | null) => void;
@@ -47,14 +49,16 @@ export const useAuthStore = create<AuthState>()(
             companyId: null,
             user: null,
             empresas: [],
-
-            setAuth: ({ token, user, empresas = [] }) => {
-                set({ token, user, empresas });
+            permissions: [],
+            setAuth: ({ token, user, empresas = [], permissions = [] }) => {
+                set({ token, user, empresas, permissions });
             },
+            setPermissions: (permissions: string[]) => set({ permissions }),
 
             setTokens: (token: string, refreshToken: string | null = null) => {
                 try {
                     const decoded = jwtDecode<CustomJwtPayload>(token);
+
                     set({
                         token,
                         refreshToken,
@@ -62,6 +66,7 @@ export const useAuthStore = create<AuthState>()(
                             id: decoded.sub,
                             nome: decoded.name || decoded.email || 'Usuário',
                             email: decoded.email,
+                            // Transforma a claim do JWT no mesmo padrão da API
                             role: decoded.isMaster === 'True' ? 'ADMIN' : 'USER',
                         },
                     });
@@ -72,7 +77,7 @@ export const useAuthStore = create<AuthState>()(
 
             setEmpresas: (empresas: Empresa[]) => set({ empresas }),
             setCompanyId: (id: string | null) => set({ companyId: id }),
-            logout: () => set({ token: null, refreshToken: null, companyId: null, user: null, empresas: [] }),
+            logout: () => set({ token: null, refreshToken: null, companyId: null, user: null, empresas: [], permissions: [] }),
             isAuthenticated: () => !!get().token,
         }),
         { name: 'corewms-auth' }
