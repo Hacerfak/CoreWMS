@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/api/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { useGetApiCustomers, useDeleteApiCustomersId } from '@/api/generated/customers/customers';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,27 +20,20 @@ export default function ClientesList() {
     const [selectedCliente, setSelectedCliente] = useState(null);
     const [clienteToDelete, setClienteToDelete] = useState(null);
 
-    // Listagem de clientes
-    const { data: clientes, isLoading } = useQuery({
-        queryKey: ['clientes', search],
-        queryFn: async () => {
-            const { data } = await api.get('/api/customers', { params: { Search: search } });
-            return data || [];
-        }
-    });
+    // Hook do Orval para busca de clientes
+    const { data: clientes, isLoading } = useGetApiCustomers({ Search: search });
 
-    // Mutação para Inativar/Excluir
-    const deleteMutation = useMutation({
-        mutationFn: async (id) => {
-            await api.delete(`/api/customers/${id}`);
-        },
-        onSuccess: () => {
-            toast.success('Cliente inativado com sucesso!');
-            queryClient.invalidateQueries({ queryKey: ['clientes'] });
-            setClienteToDelete(null);
-        },
-        onError: (err) => {
-            toast.error(err.response?.data?.message || 'Erro ao inativar cliente.');
+    // Hook do Orval para deletar/inativar cliente
+    const { mutate: deleteCustomer, isPending: isDeleting } = useDeleteApiCustomersId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Cliente inativado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+                setClienteToDelete(null);
+            },
+            onError: (err) => {
+                toast.error(err.response?.data?.message || 'Erro ao inativar cliente.');
+            }
         }
     });
 
@@ -56,7 +49,6 @@ export default function ClientesList() {
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            {/* Cabeçalho */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clientes</h1>
@@ -67,7 +59,6 @@ export default function ClientesList() {
                 </Button>
             </div>
 
-            {/* Tabela de Dados */}
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-100 flex items-center gap-4">
                     <div className="relative flex-1 max-w-md">
@@ -120,7 +111,7 @@ export default function ClientesList() {
                                             </div>
                                         </TableCell>
                                         <TableCell className="font-mono text-sm text-slate-600">
-                                            {cliente.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}
+                                            {cliente.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-1.5 text-sm text-slate-600">
@@ -149,30 +140,28 @@ export default function ClientesList() {
                 </div>
             </div>
 
-            {/* Sheet de Criação e Edição */}
             <ClienteFormSheet
                 open={isSheetOpen}
                 onOpenChange={setIsSheetOpen}
                 clienteToEdit={selectedCliente}
             />
 
-            {/* Modal de Confirmação de Exclusão */}
             <AlertDialog open={!!clienteToDelete} onOpenChange={(open) => !open && setClienteToDelete(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-slate-900">Inativar Cliente Depositante?</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-500">
-                            Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>? Ele não aparecerá mais nas operações ativas do WMS.
+                            Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
-                            onClick={() => deleteMutation.mutate(clienteToDelete.id)}
-                            disabled={deleteMutation.isPending}
+                            onClick={() => deleteCustomer({ id: clienteToDelete.id })}
+                            disabled={isDeleting}
                             className="bg-rose-600 hover:bg-rose-700 text-white"
                         >
-                            {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Inativação'}
+                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Inativação'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

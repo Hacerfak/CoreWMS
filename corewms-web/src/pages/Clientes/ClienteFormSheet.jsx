@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/api/client';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+    usePostApiCustomersConsultSefazCnpj,
+    usePostApiCustomers,
+    usePutApiCustomersId
+} from '@/api/generated/customers/customers';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -58,72 +62,92 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const sefazMutation = useMutation({
-        mutationFn: async () => {
-            const cleanCnpj = formData.cnpj.replace(/\D/g, '');
-            if (cleanCnpj.length !== 14) throw new Error('Digite um CNPJ válido com 14 dígitos.');
-            if (!formData.state) throw new Error('Selecione a UF do CNPJ.');
-
-            const { data } = await api.post(`/api/customers/consult-sefaz/${cleanCnpj}?uf=${formData.state}`);
-            return data;
-        },
-        onSuccess: (sefazData) => {
-            setFormData((prev) => ({
-                ...prev,
-                corporateName: sefazData.corporateName || prev.corporateName,
-                tradeName: sefazData.tradeName || prev.tradeName,
-                stateRegistration: sefazData.stateRegistration || prev.stateRegistration,
-                crt: sefazData.crt ?? prev.crt,
-                cnae: sefazData.cnae || prev.cnae,
-                street: sefazData.street || prev.street,
-                number: sefazData.number || prev.number,
-                complement: sefazData.complement || prev.complement,
-                neighborhood: sefazData.neighborhood || prev.neighborhood,
-                cityCode: sefazData.cityCode || prev.cityCode,
-                cityName: sefazData.cityName || prev.cityName,
-                state: sefazData.state || prev.state,
-                zipCode: sefazData.zipCode || prev.zipCode,
-            }));
-            toast.success('Dados importados com sucesso da SEFAZ!');
-        },
-        onError: (err) => {
-            toast.error(err.response?.data?.detail || err.message || 'Erro ao consultar SEFAZ.');
-        }
-    });
-
-    const saveMutation = useMutation({
-        mutationFn: async (payload) => {
-            const cleanPayload = {
-                ...payload,
-                cnpj: payload.cnpj.replace(/\D/g, ''),
-                cityCode: Number(payload.cityCode) || 0,
-                crt: Number(payload.crt),
-            };
-
-            if (isEditing) {
-                return await api.put(`/api/customers/${clienteToEdit.id}`, cleanPayload);
+    // Mutação SEFAZ via Orval
+    const { mutate: consultSefaz, isPending: isSefazPending } = usePostApiCustomersConsultSefazCnpj({
+        mutation: {
+            onSuccess: (sefazData) => {
+                setFormData((prev) => ({
+                    ...prev,
+                    corporateName: sefazData.corporateName || prev.corporateName,
+                    tradeName: sefazData.tradeName || prev.tradeName,
+                    stateRegistration: sefazData.stateRegistration || prev.stateRegistration,
+                    crt: sefazData.crt ?? prev.crt,
+                    cnae: sefazData.cnae || prev.cnae,
+                    street: sefazData.street || prev.street,
+                    number: sefazData.number || prev.number,
+                    complement: sefazData.complement || prev.complement,
+                    neighborhood: sefazData.neighborhood || prev.neighborhood,
+                    cityCode: sefazData.cityCode || prev.cityCode,
+                    cityName: sefazData.cityName || prev.cityName,
+                    state: sefazData.state || prev.state,
+                    zipCode: sefazData.zipCode || prev.zipCode,
+                }));
+                toast.success('Dados importados com sucesso da SEFAZ!');
+            },
+            onError: (err) => {
+                toast.error(err.response?.data?.detail || err.message || 'Erro ao consultar SEFAZ.');
             }
-            return await api.post('/api/customers', cleanPayload);
-        },
-        onSuccess: () => {
-            toast.success(isEditing ? 'Cliente atualizado!' : 'Cliente cadastrado!');
-            queryClient.invalidateQueries({ queryKey: ['clientes'] });
-            onOpenChange(false);
-        },
-        onError: (err) => {
-            toast.error(err.response?.data?.message || 'Erro ao salvar cliente.');
         }
     });
+
+    // Mutação para Criar Cliente
+    const { mutate: createCustomer, isPending: isCreating } = usePostApiCustomers({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Cliente cadastrado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+                onOpenChange(false);
+            },
+            onError: (err) => {
+                toast.error(err.response?.data?.message || 'Erro ao cadastrar cliente.');
+            }
+        }
+    });
+
+    // Mutação para Atualizar Cliente
+    const { mutate: updateCustomer, isPending: isUpdating } = usePutApiCustomersId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Cliente atualizado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+                onOpenChange(false);
+            },
+            onError: (err) => {
+                toast.error(err.response?.data?.message || 'Erro ao atualizar cliente.');
+            }
+        }
+    });
+
+    const handleConsultSefaz = () => {
+        const cleanCnpj = formData.cnpj.replace(/\D/g, '');
+        if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos.');
+        if (!formData.state) return toast.warning('Selecione a UF.');
+
+        consultSefaz({ cnpj: cleanCnpj, params: { uf: formData.state } });
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
         if (!formData.crt) return toast.warning('Selecione o Regime Tributário (CRT).');
-        saveMutation.mutate(formData);
+
+        const cleanPayload = {
+            ...formData,
+            cnpj: formData.cnpj.replace(/\D/g, ''),
+            cityCode: Number(formData.cityCode) || 0,
+            crt: Number(formData.crt),
+        };
+
+        if (isEditing) {
+            updateCustomer({ id: clienteToEdit.id, data: cleanPayload });
+        } else {
+            createCustomer({ data: cleanPayload });
+        }
     };
+
+    const isSaving = isCreating || isUpdating;
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            {/* Forçamos a largura do painel para 850px no desktop com !max-w-[850px] */}
             <SheetContent className="w-full sm:w-[850px] !max-w-[850px] flex flex-col p-0 bg-white shadow-2xl">
 
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
@@ -154,10 +178,8 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
 
                         <div className="flex-1 overflow-y-auto p-8 space-y-6">
 
-                            {/* ABA 1: DADOS GERAIS */}
+                            {/* DADOS GERAIS */}
                             <TabsContent value="dados-gerais" className="mt-0 space-y-5">
-
-                                {/* CAIXA SEFAZ */}
                                 <div className="bg-blue-50/40 p-5 rounded-xl border border-blue-100 space-y-2">
                                     <div className="flex items-end gap-4">
                                         <div className="flex-1 space-y-1.5">
@@ -193,11 +215,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                         <Button
                                             type="button"
                                             variant="outline"
-                                            onClick={() => sefazMutation.mutate()}
-                                            disabled={sefazMutation.isPending || isEditing || !formData.cnpj}
+                                            onClick={handleConsultSefaz}
+                                            disabled={isSefazPending || isEditing || !formData.cnpj}
                                             className="bg-white hover:bg-blue-600 hover:text-white border-blue-200 text-blue-700 font-medium transition-colors px-6 h-10"
                                         >
-                                            {sefazMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                                            {isSefazPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
                                             SEFAZ
                                         </Button>
                                     </div>
@@ -223,7 +245,6 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                     />
                                 </div>
 
-                                {/* CRT + CNAE */}
                                 <div className="grid grid-cols-3 gap-4">
                                     <div className="col-span-2 space-y-1.5">
                                         <Label htmlFor="crt" className="text-slate-900 font-semibold">Regime Tributário (CRT) *</Label>
@@ -298,7 +319,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                 </div>
                             </TabsContent>
 
-                            {/* ABA 2: ENDEREÇO */}
+                            {/* ENDEREÇO */}
                             <TabsContent value="endereco" className="mt-0 space-y-5">
                                 <div className="grid grid-cols-3 gap-4">
                                     <div className="space-y-1.5">
@@ -387,10 +408,9 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                 </div>
                             </TabsContent>
 
-                            {/* ABA 3: REGRAS LOGÍSTICAS WMS */}
+                            {/* REGRAS LOGÍSTICAS WMS */}
                             <TabsContent value="regras-wms" className="mt-0 space-y-4">
                                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-200/80 space-y-6">
-
                                     <div className="flex items-center justify-between">
                                         <div className="space-y-0.5">
                                             <Label className="text-base text-slate-900">Controle de Lote</Label>
@@ -445,7 +465,6 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                             onCheckedChange={(val) => handleChange('autoApproveReceiving', val)}
                                         />
                                     </div>
-
                                 </div>
                             </TabsContent>
 
@@ -455,8 +474,8 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-5">
                                 Cancelar
                             </Button>
-                            <Button type="submit" disabled={saveMutation.isPending} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[130px] px-6">
-                                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+                            <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[130px] px-6">
+                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
                             </Button>
                         </SheetFooter>
 

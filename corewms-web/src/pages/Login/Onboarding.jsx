@@ -1,59 +1,81 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { api } from '@/api/client';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useMutation } from '@tanstack/react-query';
+import { postApiCompanies } from '@/api/generated/companies/companies';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, Lock, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { UploadCloud, Lock, ArrowLeft, Loader2, CheckCircle2, Warehouse, AlertCircle } from 'lucide-react';
 
-const ESTADOS_BR = ['SP', 'RJ', 'MG', 'RS', 'PR', 'SC', 'BA', 'GO', 'PE', 'CE'];
+const ESTADOS_BR = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
 
 export default function Onboarding() {
     const navigate = useNavigate();
     const location = useLocation();
-    const refreshCompanies = useAuthStore((state) => state.refreshUserCompanies);
 
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
-    const [uf, setUf] = useState('SP');
-    const [loading, setLoading] = useState(false);
+    const [uf, setUf] = useState('RS');
+    const [errorMsg, setErrorMsg] = useState('');
 
-    const handleSubmit = async (e) => {
+    // Mutação explícita enviando o arquivo e os campos diretamente
+    const companyMutation = useMutation({
+        mutationFn: (data) => postApiCompanies(data),
+    });
+
+    const handleSubmit = (e) => {
         e.preventDefault();
-        if (!file || !senha) return toast.warning('Preencha todos os campos.');
+        setErrorMsg('');
 
-        setLoading(true);
-        const formData = new FormData();
-        formData.append('certificateFile', file);
-        formData.append('certificatePassword', senha);
-        formData.append('uf', uf);
-
-        try {
-            await api.post('/api/companies', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            toast.success('Ambiente logístico criado com sucesso!');
-            await refreshCompanies?.();
-
-            const origin = location.state?.from || '/selecao-empresa';
-            navigate(origin);
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao processar certificado.');
-        } finally {
-            setLoading(false);
+        if (!file || !senha) {
+            setErrorMsg('Selecione o arquivo do certificado e informe a senha.');
+            return;
         }
+
+        // Passamos um objeto simples. O Orval cria e popula o FormData internamente.
+        companyMutation.mutate(
+            {
+                certificateFile: file,
+                certificatePassword: senha,
+                uf: uf,
+            },
+            {
+                onSuccess: () => {
+                    const origin = location.state?.from || '/selecao-empresa';
+                    navigate(origin, { replace: true });
+                },
+                onError: (err) => {
+                    const message = err.response?.data?.message || 'Erro ao processar certificado digital.';
+                    setErrorMsg(message);
+                },
+            }
+        );
     };
 
-    return (
-        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500">
-            <Card className="w-full max-w-lg shadow-2xl shadow-slate-200/50 border-slate-200/60 bg-white/80 backdrop-blur-sm relative overflow-hidden">
+    const isPending = companyMutation.isPending;
 
-                {/* Barra de destaque superior */}
+    return (
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex items-center justify-center p-6 relative">
+
+            {/* OVERLAY DE CARREGAMENTO INTERMEDIÁRIO */}
+            {isPending && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
+                    <div className="bg-slate-900/90 border border-slate-700/80 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center space-y-4">
+                        <div className="relative flex items-center justify-center">
+                            <div className="w-16 h-16 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin"></div>
+                            <Warehouse className="absolute text-blue-500" size={24} />
+                        </div>
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-semibold tracking-tight text-white">Implantando Ambiente...</h3>
+                            <p className="text-xs text-slate-400">Validando certificado A1 e consultando dados fiscais na SEFAZ.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <Card className="w-full max-w-lg shadow-2xl shadow-slate-200/50 border-slate-200/60 bg-white/80 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
 
                 <CardHeader className="space-y-1 relative pb-6 pt-8 px-8">
@@ -62,6 +84,7 @@ export default function Onboarding() {
                         size="sm"
                         className="absolute left-6 top-6 text-slate-400 hover:text-slate-900"
                         onClick={() => navigate(location.state?.from || '/selecao-empresa')}
+                        disabled={isPending}
                     >
                         <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
                     </Button>
@@ -76,14 +99,21 @@ export default function Onboarding() {
                 <CardContent className="px-8 pb-8">
                     <form onSubmit={handleSubmit} className="space-y-6">
 
+                        {errorMsg && (
+                            <div className="bg-rose-50 border border-rose-200/80 text-rose-700 text-xs p-3 rounded-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-1">
+                                <AlertCircle size={16} className="shrink-0 text-rose-500" />
+                                <span>{errorMsg}</span>
+                            </div>
+                        )}
+
                         <div className="space-y-2">
                             <Label className="text-slate-700">Estado Sede (UF)</Label>
-                            <Select value={uf} onValueChange={setUf}>
+                            <Select value={uf} onValueChange={setUf} disabled={isPending}>
                                 <SelectTrigger className="bg-slate-50 focus:ring-blue-600">
                                     <SelectValue placeholder="Selecione o estado" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {ESTADOS_BR.map(estado => (
+                                    {ESTADOS_BR.map((estado) => (
                                         <SelectItem key={estado} value={estado}>{estado}</SelectItem>
                                     ))}
                                 </SelectContent>
@@ -110,7 +140,14 @@ export default function Onboarding() {
                                         </>
                                     )}
                                 </div>
-                                <input id="cert-upload" type="file" accept=".pfx" className="hidden" onChange={(e) => setFile(e.target.files[0])} />
+                                <input
+                                    id="cert-upload"
+                                    type="file"
+                                    accept=".pfx"
+                                    disabled={isPending}
+                                    className="hidden"
+                                    onChange={(e) => setFile(e.target.files[0])}
+                                />
                             </label>
                         </div>
 
@@ -122,12 +159,13 @@ export default function Onboarding() {
                                     id="senha" type="password" required
                                     value={senha} onChange={(e) => setSenha(e.target.value)}
                                     className="pl-9 bg-slate-50 focus-visible:ring-blue-600" placeholder="••••••••"
+                                    disabled={isPending}
                                 />
                             </div>
                         </div>
 
-                        <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md mt-4" disabled={loading || !file || !senha}>
-                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Construir Infraestrutura'}
+                        <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md mt-4 h-10" disabled={isPending || !file || !senha}>
+                            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Construir Infraestrutura'}
                         </Button>
                     </form>
                 </CardContent>

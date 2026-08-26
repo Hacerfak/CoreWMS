@@ -17,7 +17,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (res) => res,
     (error) => {
-        if (error.response?.status === 401 && !error.config.url.includes('/login')) {
+        if (error.response?.status === 401 && !error.config?.url?.includes('/login')) {
             toast.error('Sessão expirada. Faça login novamente.');
             useAuthStore.getState().logout();
             window.location.href = '/login';

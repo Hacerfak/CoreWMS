@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/api/client';
+import { useGetApiCompanies } from '@/api/generated/companies/companies';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,18 +10,15 @@ export default function SelecaoEmpresa() {
     const navigate = useNavigate();
     const { user, setCompanyId, logout, setEmpresas } = useAuthStore();
 
-    const { data: companies, isLoading } = useQuery({
-        queryKey: ['my-companies'],
-        queryFn: async () => {
-            const { data } = await api.get('/api/companies');
-            return data || [];
-        }
-    });
+    // Hook gerado automaticamente pelo Orval
+    const { data: companies, isLoading } = useGetApiCompanies();
 
     useEffect(() => {
         if (companies) {
             setEmpresas(companies);
-            if (companies.length === 0 && user?.role === 'ADMIN') navigate('/onboarding', { replace: true });
+            if (companies.length === 0 && user?.role === 'ADMIN') {
+                navigate('/onboarding', { replace: true });
+            }
         }
     }, [companies, navigate, setEmpresas, user]);
 
@@ -63,7 +59,9 @@ export default function SelecaoEmpresa() {
                                     </div>
                                     <div className="flex-1">
                                         <h3 className="text-lg font-semibold text-slate-900 line-clamp-2">{empresa.corporateName}</h3>
-                                        <p className="font-mono text-sm text-slate-500 mt-2 tracking-tight">CNPJ {empresa.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}</p>
+                                        <p className="font-mono text-sm text-slate-500 mt-2 tracking-tight">
+                                            CNPJ {empresa.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}
+                                        </p>
                                     </div>
                                     <div className="mt-6 flex items-center text-sm font-medium text-slate-400 group-hover:text-blue-600 transition-colors">
                                         Acessar operação <ArrowRight className="ml-2 h-4 w-4 transform group-hover:translate-x-1 transition-transform" />

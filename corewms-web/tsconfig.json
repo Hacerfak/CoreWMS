@@ -1,7 +1,9 @@
 {
     "compilerOptions": {
-        "baseUrl": ".",
         "allowJs": true,
+        "types": [
+            "vite/client"
+        ],
         "paths": {
             "@/*": [
                 "./src/*"
