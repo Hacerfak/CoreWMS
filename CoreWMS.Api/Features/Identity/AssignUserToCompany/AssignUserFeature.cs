@@ -1,15 +1,29 @@
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.AssignUserToCompany;
 
+// 1. CONTRATOS
 public record AssignUserRequest(Guid CompanyId, Guid RoleId);
 public record AssignUserCommand(Guid UserId, Guid CompanyId, Guid RoleId) : IRequest<IResult>;
 public record ListCompaniesQuery() : IRequest<IResult>;
 
+// 2. VALIDADOR
+public class AssignUserCommandValidator : AbstractValidator<AssignUserCommand>
+{
+    public AssignUserCommandValidator()
+    {
+        RuleFor(x => x.UserId).NotEmpty();
+        RuleFor(x => x.CompanyId).NotEmpty().WithMessage("A Empresa é obrigatória.");
+        RuleFor(x => x.RoleId).NotEmpty().WithMessage("O Perfil é obrigatório.");
+    }
+}
+
+// 3. HANDLERS
 public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -28,7 +42,7 @@ public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
         if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct)) return Results.BadRequest(new { Message = "Perfil não existe." });
 
         if (await _db.UserCompanyRoles.AnyAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId && x.RoleId == request.RoleId, ct))
-            return Results.BadRequest(new { Message = "O usuário já possui este perfil neste CNPJ." });
+            return Results.BadRequest(new { Message = "O usuário já possui este perfil nesta empresa." });
 
         _db.UserCompanyRoles.Add(new UserCompanyRole(request.UserId, request.CompanyId, request.RoleId));
         await _db.SaveChangesAsync(ct);
@@ -50,6 +64,7 @@ public class ListCompaniesHandler : IRequestHandler<ListCompaniesQuery, IResult>
     }
 }
 
+// 4. ENDPOINTS
 public static class AssignUserEndpoint
 {
     public static void MapAssignUserEndpoint(this IEndpointRouteBuilder app)

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useGetApiCompanies } from '@/api/generated/companies/companies';
-// Usamos o nome correto gerado pelo Swagger após a correção no backend
+import { useQueryClient } from '@tanstack/react-query';
 import { getMyPermissions } from '@/api/generated/users/users';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Card } from '@/components/ui/card';
@@ -11,19 +10,18 @@ import { toast } from 'sonner';
 
 export default function SelecaoEmpresa() {
     const navigate = useNavigate();
-    const { user, setCompanyId, logout, setEmpresas, setPermissions } = useAuthStore();
+    const queryClient = useQueryClient();
+
+    // Pegamos a lista "empresas" que o backend já enviou no momento do Login!
+    const { user, empresas, setCompanyId, logout, setPermissions } = useAuthStore();
     const [loadingContext, setLoadingContext] = useState(false);
 
-    // Agora o Orval entrega o array diretamente via "data"
-    const { data: companies = [], isLoading: isLoadingCompanies } = useGetApiCompanies();
-
     useEffect(() => {
-        if (companies.length > 0) {
-            setEmpresas(companies);
-        } else if (!isLoadingCompanies && companies.length === 0 && user?.role === 'ADMIN') {
+        // Se não tem empresas e é ADMIN, manda pro onboarding
+        if (empresas.length === 0 && user?.role === 'ADMIN') {
             navigate('/onboarding', { replace: true });
         }
-    }, [companies, isLoadingCompanies, navigate, setEmpresas, user]);
+    }, [empresas, navigate, user]);
 
     const handleSelectCompany = async (empresaId) => {
         try {
@@ -43,7 +41,11 @@ export default function SelecaoEmpresa() {
         }
     };
 
-    const isScreenLoading = isLoadingCompanies || loadingContext;
+    const handleLogout = () => {
+        queryClient.clear(); // Limpa todo o cache de requisições antigas do React Query
+        logout();            // Limpa o Zustand e LocalStorage
+        navigate('/login');
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex flex-col">
@@ -52,7 +54,7 @@ export default function SelecaoEmpresa() {
                     <ShieldCheck className="text-blue-600" size={24} />
                     <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Ambiente Seguro</h1>
                 </div>
-                <Button variant="ghost" onClick={() => { logout(); navigate('/login'); }} className="text-slate-500 hover:text-slate-900" disabled={isScreenLoading}>
+                <Button variant="ghost" onClick={handleLogout} className="text-slate-500 hover:text-slate-900" disabled={loadingContext}>
                     <LogOut className="mr-2 h-4 w-4" /> Encerrar Sessão
                 </Button>
             </header>
@@ -61,14 +63,15 @@ export default function SelecaoEmpresa() {
                     <h2 className="text-4xl font-bold tracking-tight text-slate-900">Selecione o Ambiente</h2>
                     <p className="text-slate-500 mt-3 text-lg">Olá, {user?.nome?.split(' ')[0]}. Qual operação vamos gerenciar hoje?</p>
                 </div>
-                {isScreenLoading ? (
+
+                {loadingContext ? (
                     <div className="flex flex-col items-center gap-4 text-slate-500">
                         <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
-                        <p className="text-sm">{loadingContext ? 'Sincronizando permissões...' : 'Carregando empresas...'}</p>
+                        <p className="text-sm">Sincronizando permissões do perfil...</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-                        {companies.map((empresa) => (
+                        {empresas.map((empresa) => (
                             <Card
                                 key={empresa.id}
                                 onClick={() => handleSelectCompany(empresa.id)}
@@ -90,6 +93,7 @@ export default function SelecaoEmpresa() {
                                 </div>
                             </Card>
                         ))}
+
                         {user?.role === 'ADMIN' && (
                             <button
                                 onClick={() => navigate('/onboarding')}

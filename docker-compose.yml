@@ -26,17 +26,16 @@ services:
       - corewms_mongo_data:/data/db
     restart: unless-stopped
 
-  # 3. Nosso Backend (A API .NET 10)
+  # 3. Nosso Backend (A API .NET)
   corewms-api:
     container_name: corewms_api
     build:
       context: ./CoreWMS.Api
       dockerfile: Dockerfile
     ports:
-      - "5000:8080" # A porta 5000 da sua máquina vai apontar para a 8080 do container
+      - "5000:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      # Vamos injetar as strings de conexão via variáveis de ambiente
       - ConnectionStrings__Postgres=Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
       - ConnectionStrings__MongoDb=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
     depends_on:

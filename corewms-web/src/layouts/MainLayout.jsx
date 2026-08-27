@@ -1,4 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHasPermission } from '@/hooks/useHasPermission';
 import {
@@ -12,10 +13,12 @@ import { Button } from '@/components/ui/button';
 export default function MainLayout() {
     const navigate = useNavigate();
     const location = useLocation();
+    const queryClient = useQueryClient();
     const { user, logout, empresas, companyId } = useAuthStore();
     const empresaAtual = empresas?.find(e => e.id === companyId);
 
     const handleLogout = () => {
+        queryClient.clear();
         logout();
         navigate('/login');
     };

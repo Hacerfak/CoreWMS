@@ -4,18 +4,43 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Models;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Security;
+using FluentValidation;
+using Mapster;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Companies;
 
+// 1. CONTRATOS & DTOs
 public record CompanyDto(Guid Id, string Cnpj, string CorporateName, string? TradeName, string State, bool IsActive, DateTime CreatedAt);
 public record CreateCompanyCommand(byte[] CertBytes, string Password, string Uf) : IRequest<IResult>;
 public record UpdateCompanyCommand(Guid Id, string CorporateName, string? TradeName, string State) : IRequest<IResult>;
 public record DeleteCompanyCommand(Guid Id) : IRequest<IResult>;
 public record ListAllCompaniesQuery() : IRequest<IResult>;
 
+// 2. VALIDADORES
+public class CreateCompanyCommandValidator : AbstractValidator<CreateCompanyCommand>
+{
+    public CreateCompanyCommandValidator()
+    {
+        RuleFor(x => x.CertBytes).NotEmpty().WithMessage("O Certificado Digital é obrigatório.");
+        RuleFor(x => x.Password).NotEmpty().WithMessage("A senha do certificado é obrigatória.");
+        RuleFor(x => x.Uf).NotEmpty().Length(2).WithMessage("A UF deve conter 2 caracteres.");
+    }
+}
+
+public class UpdateCompanyCommandValidator : AbstractValidator<UpdateCompanyCommand>
+{
+    public UpdateCompanyCommandValidator()
+    {
+        RuleFor(x => x.Id).NotEmpty();
+        RuleFor(x => x.CorporateName).NotEmpty().MaximumLength(150);
+        RuleFor(x => x.State).NotEmpty().Length(2);
+    }
+}
+
+// 3. HANDLERS
 public class CreateCompanyHandler : IRequestHandler<CreateCompanyCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -45,13 +70,12 @@ public class CreateCompanyHandler : IRequestHandler<CreateCompanyCommand, IResul
         var company = new Company(sefazData.Cnpj, sefazData.CorporateName, sefazData.State);
         company.UpdateFiscalData(sefazData.CorporateName, sefazData.TradeName, sefazData.StateRegistration, null, sefazData.Crt, sefazData.Street, sefazData.Number, sefazData.Complement, sefazData.Neighborhood, sefazData.CityCode, sefazData.CityName, sefazData.State, sefazData.ZipCode);
 
-        var encryptedPassword = CryptoService.Encrypt(request.Password);
-        company.SetCertificate(request.CertBytes, encryptedPassword, sefazData.CertificateExpiration);
+        company.SetCertificate(request.CertBytes, CryptoService.Encrypt(request.Password), sefazData.CertificateExpiration);
 
         _db.Companies.Add(company);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Created($"/api/companies/{company.Id}", new { company.Id, company.Cnpj, company.CorporateName, company.TradeName, company.State, company.CertificateExpiration });
+        return Results.Created($"/api/companies/{company.Id}", company.Adapt<CompanyDto>());
     }
 }
 
@@ -62,9 +86,7 @@ public class ListAllCompaniesHandler : IRequestHandler<ListAllCompaniesQuery, IR
 
     public async Task<IResult> Handle(ListAllCompaniesQuery request, CancellationToken ct)
     {
-        var companies = await _db.Companies.AsNoTracking()
-            .Select(c => new CompanyDto(c.Id, c.Cnpj, c.CorporateName, c.TradeName, c.State, c.IsActive, c.CreatedAt))
-            .ToListAsync(ct);
+        var companies = await _db.Companies.AsNoTracking().ProjectToType<CompanyDto>().ToListAsync(ct);
         return Results.Ok(companies);
     }
 }
@@ -82,7 +104,7 @@ public class UpdateCompanyHandler : IRequestHandler<UpdateCompanyCommand, IResul
         company.UpdateFiscalData(request.CorporateName, request.TradeName, company.StateRegistration, company.MunicipalRegistration, company.Crt, company.Street, company.Number, company.Complement, company.Neighborhood, company.CityCode, company.CityName, request.State, company.ZipCode);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Ok(new { Message = "Dados da empresa atualizados com sucesso." });
+        return Results.NoContent();
     }
 }
 
@@ -98,10 +120,11 @@ public class DeleteCompanyHandler : IRequestHandler<DeleteCompanyCommand, IResul
 
         _db.Companies.Remove(company);
         await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { Message = "Empresa removida com sucesso." });
+        return Results.NoContent();
     }
 }
 
+// 4. ENDPOINTS
 public static class CompanyCrudEndpoints
 {
     public static void MapCompanyCrudEndpoints(this IEndpointRouteBuilder app)

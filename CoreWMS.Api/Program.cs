@@ -22,6 +22,10 @@ using Microsoft.OpenApi.Models;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
+using FluentValidation;
+using CoreWMS.Api.Infrastructure.Behaviors;
+using CoreWMS.Api.Infrastructure.Exceptions;
+using CoreWMS.Api.Infrastructure.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -89,8 +93,21 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 builder.Services.AddSingleton<IPermissionCacheService, PermissionCacheService>();
+
+// 1. Registra o Tratamento Global de Exceções
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
+
+// 2. Registra todos os Validadores do projeto automaticamente
+builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
+
+// 3. Adiciona o MediatR junto com o Interceptador de Validação
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+    cfg.AddOpenBehavior(typeof(ValidationBehavior<,>)); // Adiciona o segurança na porta
+});
 
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
@@ -140,6 +157,7 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+    c.OperationFilter<SwaggerCompanyHeaderFilter>();
 });
 
 var app = builder.Build();
@@ -169,6 +187,7 @@ app.UseSwaggerUI(c =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseExceptionHandler();
 
 app.MapAuditLogEndpoints();
 app.MapLoginEndpoint();

@@ -3,12 +3,14 @@ using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using FluentValidation;
+using Mapster;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Printing;
 
-// DTOs
+// 1. CONTRATOS & DTOs
 public record CreateAgentCommand(string Name) : IRequest<IResult>;
 public record CreatePrinterCommand(Guid PrintAgentId, string Name, string Target) : IRequest<IResult>;
 public record CreateLabelTemplateCommand(string Name, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
@@ -18,7 +20,34 @@ public record ListTemplatesQuery() : IRequest<IResult>;
 public record PrinterResponseDto(Guid Id, string Name, string Target, bool IsActive);
 public record PrintAgentResponseDto(Guid Id, string Name, string ApiKey, bool IsActive, List<PrinterResponseDto> Printers);
 
-// HANDLERS
+// 2. VALIDADORES
+public class CreateAgentCommandValidator : AbstractValidator<CreateAgentCommand>
+{
+    public CreateAgentCommandValidator() => RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+}
+
+public class CreatePrinterCommandValidator : AbstractValidator<CreatePrinterCommand>
+{
+    public CreatePrinterCommandValidator()
+    {
+        RuleFor(x => x.PrintAgentId).NotEmpty();
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Target).NotEmpty().MaximumLength(150);
+    }
+}
+
+public class CreateLabelTemplateCommandValidator : AbstractValidator<CreateLabelTemplateCommand>
+{
+    public CreateLabelTemplateCommandValidator()
+    {
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.ZplContent).NotEmpty();
+        RuleFor(x => x.WidthMm).GreaterThan(0);
+        RuleFor(x => x.HeightMm).GreaterThan(0);
+    }
+}
+
+// 3. HANDLERS
 public class CreateAgentHandler : IRequestHandler<CreateAgentCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -46,9 +75,7 @@ public class ListAgentsHandler : IRequestHandler<ListAgentsQuery, IResult>
 
     public async Task<IResult> Handle(ListAgentsQuery request, CancellationToken ct)
     {
-        var agents = await _db.PrintAgents.AsNoTracking()
-            .Select(a => new PrintAgentResponseDto(a.Id, a.Name, a.ApiKey, a.IsActive, a.Printers.Select(p => new PrinterResponseDto(p.Id, p.Name, p.Target, p.IsActive)).ToList()))
-            .ToListAsync(ct);
+        var agents = await _db.PrintAgents.AsNoTracking().ProjectToType<PrintAgentResponseDto>().ToListAsync(ct);
         return Results.Ok(agents);
     }
 }
@@ -66,7 +93,7 @@ public class CreatePrinterHandler : IRequestHandler<CreatePrinterCommand, IResul
         var printer = new Printer(request.PrintAgentId, request.Name, request.Target);
         _db.Printers.Add(printer);
         await _db.SaveChangesAsync(ct);
-        return Results.Created($"/api/printing/printers/{printer.Id}", new { printer.Id, printer.Name, printer.Target });
+        return Results.Created($"/api/printing/printers/{printer.Id}", printer.Adapt<PrinterResponseDto>());
     }
 }
 
@@ -96,7 +123,7 @@ public class ListTemplatesHandler : IRequestHandler<ListTemplatesQuery, IResult>
     }
 }
 
-// ENDPOINTS
+// 4. ENDPOINTS
 public static class PrintingCrudEndpoints
 {
     public static void MapPrintingCrudEndpoints(this IEndpointRouteBuilder app)
