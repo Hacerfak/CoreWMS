@@ -12,7 +12,6 @@ import { Warehouse, Lock, Mail, Loader2, ArrowRight, AlertCircle } from 'lucide-
 export default function Login() {
     const navigate = useNavigate();
     const setAuth = useAuthStore((s) => s.setAuth);
-
     const [email, setEmail] = useState('master@corewms.com.br');
     const [password, setPassword] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
@@ -25,7 +24,6 @@ export default function Login() {
     const handleSubmit = (e) => {
         e.preventDefault();
         setErrorMsg('');
-
         if (!email || !password) {
             setErrorMsg('Preencha o e-mail e a senha para prosseguir.');
             return;
@@ -34,10 +32,9 @@ export default function Login() {
         loginMutation.mutate(
             { email, password },
             {
-                onSuccess: (apiResponse) => {
-                    const loginData = apiResponse?.data || apiResponse;
-                    const token = loginData?.token;
-
+                onSuccess: (loginData) => {
+                    // O Orval já devolveu o objeto JSON Puro do backend
+                    const token = loginData?.accessToken;
                     if (!token) {
                         setIsRedirecting(false);
                         setErrorMsg('Resposta inválida do servidor: token não fornecido.');
@@ -45,7 +42,6 @@ export default function Login() {
                     }
 
                     setIsRedirecting(true);
-
                     const empresasList = loginData.companies || [];
                     const userRole = loginData.role || 'USER';
 
@@ -58,7 +54,7 @@ export default function Login() {
                             role: userRole,
                         },
                         empresas: empresasList,
-                        permissions: [], // Serão preenchidas na tela de seleção de empresa
+                        permissions: [], // Serão preenchidas na tela de seleção
                     });
 
                     if (empresasList.length === 0 && userRole === 'ADMIN') {
@@ -69,7 +65,8 @@ export default function Login() {
                 },
                 onError: (err) => {
                     setIsRedirecting(false);
-                    const message = err.response?.data?.message || 'E-mail ou senha inválidos.';
+                    // Minimal APIs serializa "Message" para "message" em camelCase
+                    const message = err.response?.data?.message || err.response?.data?.Message || 'E-mail ou senha inválidos.';
                     setErrorMsg(message);
                 },
             }
@@ -94,22 +91,18 @@ export default function Login() {
                     </div>
                 </div>
             )}
-
             <div className="flex items-center gap-2.5 text-blue-600 mb-8">
                 <Warehouse size={32} strokeWidth={2.5} />
                 <span className="text-2xl font-bold tracking-tight text-slate-900">CoreWMS</span>
             </div>
-
             <Card className="w-full max-w-md shadow-2xl shadow-slate-200/50 border-slate-200/60 bg-white/80 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
-
                 <CardHeader className="space-y-1 text-center pb-6 pt-8 px-8">
                     <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight">Acessar Plataforma</CardTitle>
                     <CardDescription className="text-slate-500 text-sm">
                         Entre com suas credenciais para gerenciar a operação.
                     </CardDescription>
                 </CardHeader>
-
                 <CardContent className="px-8 pb-8">
                     <form onSubmit={handleSubmit} className="space-y-5">
                         {errorMsg && (
@@ -118,7 +111,6 @@ export default function Login() {
                                 <span>{errorMsg}</span>
                             </div>
                         )}
-
                         <div className="space-y-2">
                             <Label htmlFor="email" className="text-slate-700">E-mail corporativo</Label>
                             <div className="relative">
@@ -131,7 +123,6 @@ export default function Login() {
                                 />
                             </div>
                         </div>
-
                         <div className="space-y-2">
                             <Label htmlFor="password" className="text-slate-700">Senha</Label>
                             <div className="relative">
@@ -144,7 +135,6 @@ export default function Login() {
                                 />
                             </div>
                         </div>
-
                         <Button type="submit" disabled={isLoadingState} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md mt-2 h-10">
                             {isLoadingState ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

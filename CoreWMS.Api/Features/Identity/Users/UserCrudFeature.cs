@@ -1,93 +1,98 @@
 using System.Security.Claims;
-using CoreWMS.Api.Core;
-using CoreWMS.Api.Core.CQRS;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Users;
 
 // ==============================================================================
-// 1. CONTRATOS (Commands e Queries)
+// 1. CONTRATOS (Usando IRequest do MediatR)
 // ==============================================================================
-public record CreateUserCommand(string Name, string Email, string Password) : ICommand<IResult>;
+public record CreateUserCommand(string Name, string Email, string Password) : IRequest<IResult>;
 public record UpdateUserRequest(string Name, string Email);
-public record UpdateUserCommand(Guid Id, string Name, string Email) : ICommand<IResult>;
-public record DeleteUserCommand(Guid Id) : ICommand<IResult>;
-public record ListUsersQuery() : IQuery<IResult>;
-// NOVO: Query para buscar as permissões do usuário logado
-public record GetMyPermissionsQuery() : IQuery<IResult>;
+public record UpdateUserCommand(Guid Id, string Name, string Email) : IRequest<IResult>;
+public record DeleteUserCommand(Guid Id) : IRequest<IResult>;
+public record ListUsersQuery() : IRequest<IResult>;
+public record GetMyPermissionsQuery() : IRequest<IResult>;
 
 // ==============================================================================
-// 2. HANDLERS (Os executores)
+// 2. HANDLERS (Usando IRequestHandler)
 // ==============================================================================
-public class CreateUserHandler : ICommandHandler<CreateUserCommand, IResult>
+public class CreateUserHandler : IRequestHandler<CreateUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     public CreateUserHandler(ApplicationDbContext db) => _db = db;
-    public async Task<IResult> HandleAsync(CreateUserCommand command, CancellationToken ct = default)
+
+    public async Task<IResult> Handle(CreateUserCommand request, CancellationToken ct)
     {
-        if (await _db.Users.AnyAsync(u => u.Email == command.Email, ct))
+        if (await _db.Users.AnyAsync(u => u.Email == request.Email, ct))
             return Results.BadRequest(new { Message = "E-mail já em uso." });
 
-        var user = new User(command.Name, command.Email, BCrypt.Net.BCrypt.HashPassword(command.Password), false);
+        var user = new User(request.Name, request.Email, BCrypt.Net.BCrypt.HashPassword(request.Password), false);
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
+
         return Results.Created($"/api/users/{user.Id}", new { user.Id, user.Name, user.Email });
     }
 }
 
-public class UpdateUserHandler : ICommandHandler<UpdateUserCommand, IResult>
+public class UpdateUserHandler : IRequestHandler<UpdateUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     public UpdateUserHandler(ApplicationDbContext db) => _db = db;
-    public async Task<IResult> HandleAsync(UpdateUserCommand command, CancellationToken ct = default)
-    {
-        var user = await _db.Users.FindAsync(new object[] { command.Id }, ct);
-        if (user == null) return Results.NotFound();
 
-        if (await _db.Users.AnyAsync(u => u.Email == command.Email && u.Id != command.Id, ct))
+    public async Task<IResult> Handle(UpdateUserCommand request, CancellationToken ct)
+    {
+        var user = await _db.Users.FindAsync(new object[] { request.Id }, ct);
+        if (user == null) return Results.NotFound(new { Message = "Usuário não encontrado." });
+
+        if (await _db.Users.AnyAsync(u => u.Email == request.Email && u.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "E-mail já em uso." });
 
-        user.UpdateDetails(command.Name, command.Email);
+        user.UpdateDetails(request.Name, request.Email);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
 
-public class DeleteUserHandler : ICommandHandler<DeleteUserCommand, IResult>
+public class DeleteUserHandler : IRequestHandler<DeleteUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     public DeleteUserHandler(ApplicationDbContext db) => _db = db;
-    public async Task<IResult> HandleAsync(DeleteUserCommand command, CancellationToken ct = default)
+
+    public async Task<IResult> Handle(DeleteUserCommand request, CancellationToken ct)
     {
-        var user = await _db.Users.FindAsync(new object[] { command.Id }, ct);
-        if (user == null) return Results.NotFound();
+        var user = await _db.Users.FindAsync(new object[] { request.Id }, ct);
+        if (user == null) return Results.NotFound(new { Message = "Usuário não encontrado." });
 
         if (user.IsMaster) return Results.BadRequest(new { Message = "Usuário Master não pode ser excluído." });
 
         _db.Users.Remove(user);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
 
-public class ListUsersHandler : IQueryHandler<ListUsersQuery, IResult>
+public class ListUsersHandler : IRequestHandler<ListUsersQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
     public ListUsersHandler(ApplicationDbContext db) => _db = db;
-    public async Task<IResult> HandleAsync(ListUsersQuery query, CancellationToken ct = default)
+
+    public async Task<IResult> Handle(ListUsersQuery request, CancellationToken ct)
     {
         var users = await _db.Users.AsNoTracking()
             .Select(u => new { u.Id, u.Name, u.Email, u.IsMaster, u.CreatedAt })
             .ToListAsync(ct);
-        return Results.Ok(users);
+
+        return Results.Ok(users); // JSON Puro!
     }
 }
 
-// NOVO: Handler de Permissões
-public class GetMyPermissionsHandler : IQueryHandler<GetMyPermissionsQuery, IResult>
+public class GetMyPermissionsHandler : IRequestHandler<GetMyPermissionsQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -98,7 +103,7 @@ public class GetMyPermissionsHandler : IQueryHandler<GetMyPermissionsQuery, IRes
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public async Task<IResult> HandleAsync(GetMyPermissionsQuery query, CancellationToken ct = default)
+    public async Task<IResult> Handle(GetMyPermissionsQuery request, CancellationToken ct)
     {
         var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!Guid.TryParse(userIdClaim, out var userId))
@@ -109,11 +114,11 @@ public class GetMyPermissionsHandler : IQueryHandler<GetMyPermissionsQuery, IRes
             return Results.Unauthorized();
 
         if (user.IsMaster)
-            return Results.Ok(ApiResponse<List<string>>.Ok(new List<string> { "*" }));
+            return Results.Ok(new List<string> { "*" }); // Retorna direto o array ["*"]
 
         var companyIdHeader = _httpContextAccessor.HttpContext?.Request.Headers["X-Company-Id"].ToString();
         if (!Guid.TryParse(companyIdHeader, out var companyId))
-            return Results.BadRequest(ApiResponse<object>.Fail("Cabeçalho X-Company-Id é obrigatório."));
+            return Results.BadRequest(new { Message = "Cabeçalho X-Company-Id é obrigatório." });
 
         var permissions = await _db.UserCompanyRoles
             .Where(ucr => ucr.UserId == userId && ucr.CompanyId == companyId)
@@ -121,12 +126,12 @@ public class GetMyPermissionsHandler : IQueryHandler<GetMyPermissionsQuery, IRes
             .Select(p => p.Permission)
             .ToListAsync(ct);
 
-        return Results.Ok(ApiResponse<List<string>>.Ok(permissions));
+        return Results.Ok(permissions); // Retorna direto o array ["customers:view", ...]
     }
 }
 
 // ==============================================================================
-// 3. ENDPOINTS (O mapeamento das rotas)
+// 3. ENDPOINTS
 // ==============================================================================
 public static class UserEndpoints
 {
@@ -134,21 +139,17 @@ public static class UserEndpoints
     {
         var group = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization();
 
-        // NOVO ENDPOINT DE PERMISSÕES
-        group.MapGet("/me/permissions", async ([FromServices] IQueryHandler<GetMyPermissionsQuery, IResult> h, CancellationToken ct)
-            => await h.HandleAsync(new GetMyPermissionsQuery(), ct))
+        group.MapGet("/me/permissions", async (IMediator mediator) => await mediator.Send(new GetMyPermissionsQuery()))
             .WithName("GetMyPermissions");
 
-        group.MapPost("/", async (CreateUserCommand cmd, ICommandHandler<CreateUserCommand, IResult> h, CancellationToken ct)
-            => await h.HandleAsync(cmd, ct));
+        group.MapPost("/", async (CreateUserCommand cmd, IMediator mediator) => await mediator.Send(cmd));
 
-        group.MapGet("/", async (IQueryHandler<ListUsersQuery, IResult> h, CancellationToken ct)
-            => await h.HandleAsync(new ListUsersQuery(), ct));
+        group.MapGet("/", async (IMediator mediator) => await mediator.Send(new ListUsersQuery()));
 
-        group.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest req, ICommandHandler<UpdateUserCommand, IResult> h, CancellationToken ct)
-            => await h.HandleAsync(new UpdateUserCommand(id, req.Name, req.Email), ct));
+        group.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest req, IMediator mediator) =>
+            await mediator.Send(new UpdateUserCommand(id, req.Name, req.Email)));
 
-        group.MapDelete("/{id:guid}", async (Guid id, ICommandHandler<DeleteUserCommand, IResult> h, CancellationToken ct)
-            => await h.HandleAsync(new DeleteUserCommand(id), ct));
+        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
+            await mediator.Send(new DeleteUserCommand(id)));
     }
 }

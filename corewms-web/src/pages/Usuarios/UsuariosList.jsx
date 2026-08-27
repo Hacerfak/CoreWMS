@@ -29,8 +29,7 @@ export default function UsuariosList() {
     const [formData, setFormData] = useState({ name: '', email: '', password: '' });
     const [newPassword, setNewPassword] = useState('');
 
-    const { data: apiResponse, isLoading } = useGetApiUsers();
-    const users = apiResponse?.data || apiResponse || [];
+    const { data: users = [], isLoading } = useGetApiUsers();
 
     const { mutate: createUser, isPending: isCreating } = usePostApiUsers({
         mutation: {

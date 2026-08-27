@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetApiCompanies } from '@/api/generated/companies/companies';
-import { getApiUsersMePermissions } from '@/api/generated/users/users';
+// Usamos o nome correto gerado pelo Swagger após a correção no backend
+import { getMyPermissions } from '@/api/generated/users/users';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,32 +14,27 @@ export default function SelecaoEmpresa() {
     const { user, setCompanyId, logout, setEmpresas, setPermissions } = useAuthStore();
     const [loadingContext, setLoadingContext] = useState(false);
 
-    const { data: apiResponse, isLoading: isLoadingCompanies } = useGetApiCompanies();
-    const companies = apiResponse?.data || apiResponse || [];
+    // Agora o Orval entrega o array diretamente via "data"
+    const { data: companies = [], isLoading: isLoadingCompanies } = useGetApiCompanies();
 
     useEffect(() => {
         if (companies.length > 0) {
             setEmpresas(companies);
-        } else if (apiResponse && companies.length === 0 && user?.role === 'ADMIN') {
+        } else if (!isLoadingCompanies && companies.length === 0 && user?.role === 'ADMIN') {
             navigate('/onboarding', { replace: true });
         }
-    }, [companies, apiResponse, navigate, setEmpresas, user]);
+    }, [companies, isLoadingCompanies, navigate, setEmpresas, user]);
 
     const handleSelectCompany = async (empresaId) => {
         try {
             setLoadingContext(true);
-
-            // 1. Seta a empresa na Store (o interceptor axios agora vai enviar X-Company-Id)
             setCompanyId(empresaId);
 
-            // 2. Busca as permissões do usuário para a empresa selecionada
-            const permResponse = await getApiUsersMePermissions();
-            const userPermissions = permResponse?.data || permResponse || [];
+            // A chamada retorna diretamente a matriz de permissões ["customers:view", ...]
+            const userPermissions = await getMyPermissions();
+            setPermissions(userPermissions || []);
 
-            // 3. Salva no Zustand e libera acesso
-            setPermissions(userPermissions);
             navigate('/dashboard');
-
         } catch (error) {
             toast.error('Erro ao carregar matriz de permissões. Tente novamente.');
             setCompanyId(null);
@@ -60,13 +56,11 @@ export default function SelecaoEmpresa() {
                     <LogOut className="mr-2 h-4 w-4" /> Encerrar Sessão
                 </Button>
             </header>
-
             <main className="flex-1 flex flex-col items-center justify-center p-6 max-w-6xl mx-auto w-full animate-in fade-in zoom-in-95 duration-500">
                 <div className="text-center mb-12">
                     <h2 className="text-4xl font-bold tracking-tight text-slate-900">Selecione o Ambiente</h2>
                     <p className="text-slate-500 mt-3 text-lg">Olá, {user?.nome?.split(' ')[0]}. Qual operação vamos gerenciar hoje?</p>
                 </div>
-
                 {isScreenLoading ? (
                     <div className="flex flex-col items-center gap-4 text-slate-500">
                         <Loader2 className="h-10 w-10 animate-spin text-blue-600" />

@@ -65,8 +65,7 @@ export default function PerfisList() {
     const [roleName, setRoleName] = useState('');
     const [selectedPermissions, setSelectedPermissions] = useState([]);
 
-    const { data: apiResponse, isLoading } = useGetApiRoles();
-    const roles = apiResponse?.data || apiResponse || [];
+    const { data: roles = [], isLoading } = useGetApiRoles();
 
     const { mutate: createRole, isPending: isCreating } = usePostApiRoles({
         mutation: {

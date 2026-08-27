@@ -1,6 +1,4 @@
 using System.Text;
-using System.Threading.RateLimiting;
-using CoreWMS.Api.Core.CQRS;
 using CoreWMS.Api.Features.Audit;
 using CoreWMS.Api.Features.Identity.AssignUserToCompany;
 using CoreWMS.Api.Features.Identity.Companies;
@@ -91,41 +89,14 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
 builder.Services.AddSingleton<IPermissionCacheService, PermissionCacheService>();
-
-// Registros CQRS
-builder.Services.AddScoped<ICommandHandler<LoginCommand, IResult>, LoginCommandHandler>();
-builder.Services.AddScoped<ICommandHandler<RefreshTokenCommand, IResult>, RefreshTokenHandler>();
-builder.Services.AddScoped<ICommandHandler<CreateUserCommand, IResult>, CreateUserHandler>();
-builder.Services.AddScoped<IQueryHandler<ListUsersQuery, IResult>, ListUsersHandler>();
-builder.Services.AddScoped<IQueryHandler<GetMyPermissionsQuery, IResult>, GetMyPermissionsHandler>();
-builder.Services.AddScoped<ICommandHandler<UpdateUserCommand, IResult>, UpdateUserHandler>();
-builder.Services.AddScoped<ICommandHandler<DeleteUserCommand, IResult>, DeleteUserHandler>();
-builder.Services.AddScoped<IQueryHandler<AuditLogFilterQuery, IResult>, ListAuditLogsHandler>();
-builder.Services.AddScoped<ICommandHandler<CreateRoleCommand, IResult>, CreateRoleHandler>();
-builder.Services.AddScoped<ICommandHandler<UpdateRoleCommand, IResult>, UpdateRoleHandler>();
-builder.Services.AddScoped<ICommandHandler<DeleteRoleCommand, IResult>, DeleteRoleHandler>();
-builder.Services.AddScoped<IQueryHandler<ListRolesQuery, IResult>, ListRolesHandler>();
-builder.Services.AddScoped<ICommandHandler<AssignUserCommand, IResult>, AssignUserHandler>();
-builder.Services.AddScoped<IQueryHandler<ListCompaniesQuery, IResult>, ListCompaniesHandler>();
-builder.Services.AddScoped<ICommandHandler<CreateCompanyCommand, IResult>, CreateCompanyHandler>();
-builder.Services.AddScoped<IQueryHandler<ListAllCompaniesQuery, IResult>, ListAllCompaniesHandler>();
-builder.Services.AddScoped<ICommandHandler<UpdateCompanyCommand, IResult>, UpdateCompanyHandler>();
-builder.Services.AddScoped<ICommandHandler<DeleteCompanyCommand, IResult>, DeleteCompanyHandler>();
-
-builder.Services.AddScoped<ICommandHandler<CreateCustomerCommand, IResult>, CreateCustomerHandler>();
-builder.Services.AddScoped<ICommandHandler<UpdateCustomerCommand, IResult>, UpdateCustomerHandler>();
-builder.Services.AddScoped<IQueryHandler<ListCustomersQuery, IResult>, ListCustomersHandler>();
 
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
 builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
 
 builder.Services.AddScoped<IPrintService, PrintService>();
-builder.Services.AddScoped<ICommandHandler<SendTestPrintCommand, IResult>, SendTestPrintHandler>();
-builder.Services.AddScoped<ICommandHandler<CreateAgentCommand, IResult>, CreateAgentHandler>();
-builder.Services.AddScoped<ICommandHandler<CreatePrinterCommand, IResult>, CreatePrinterHandler>();
-builder.Services.AddScoped<ICommandHandler<CreateLabelTemplateCommand, IResult>, CreateLabelTemplateHandler>();
 
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
