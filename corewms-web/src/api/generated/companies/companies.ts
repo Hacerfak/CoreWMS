@@ -25,6 +25,7 @@ import type {
 
 import type {
   PostApiCompaniesBody,
+  PutApiCompaniesIdCertificateBody,
   UpdateCompanyCommand
 } from '../model';
 
@@ -325,4 +326,71 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getDeleteApiCompaniesIdMutationOptions(options), queryClient);
+    }
+    export const putApiCompaniesIdCertificate = (
+    id: string,
+    putApiCompaniesIdCertificateBody?: PutApiCompaniesIdCertificateBody,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+      const formData = new FormData();
+if(putApiCompaniesIdCertificateBody?.certificateFile !== undefined) {
+ formData.append(`certificateFile`, putApiCompaniesIdCertificateBody.certificateFile);
+ }
+if(putApiCompaniesIdCertificateBody?.certificatePassword !== undefined) {
+ formData.append(`certificatePassword`, putApiCompaniesIdCertificateBody.certificatePassword);
+ }
+
+      return customInstance<void>(
+      {url: `/api/companies/${id}/certificate`, method: 'PUT',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiCompaniesIdCertificateMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext> => {
+
+const mutationKey = ['putApiCompaniesIdCertificate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, PutApiCompaniesIdCertificateMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiCompaniesIdCertificate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiCompaniesIdCertificateMutationResult = NonNullable<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>>
+    export type PutApiCompaniesIdCertificateMutationBody = PutApiCompaniesIdCertificateBody | undefined
+    export type PutApiCompaniesIdCertificateMutationError = unknown
+    export type PutApiCompaniesIdCertificateMutationVariables = {id: string;data?: PutApiCompaniesIdCertificateBody}
+
+    export const usePutApiCompaniesIdCertificate = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>,
+        TError,
+        PutApiCompaniesIdCertificateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiCompaniesIdCertificateMutationOptions(options), queryClient);
     }

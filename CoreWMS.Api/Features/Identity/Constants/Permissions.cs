@@ -21,10 +21,7 @@ public static class Permissions
 
     public static class Companies
     {
-        public const string View = "companies:view";
-        public const string Create = "companies:create";
-        public const string Edit = "companies:edit";
-        public const string Delete = "companies:delete";
+        public const string Manage = "companies:manage";
     }
 
     public static class Customers

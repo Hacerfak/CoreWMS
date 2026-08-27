@@ -18,6 +18,7 @@ export * from './getApiCustomersParams';
 export * from './loginCommand';
 export * from './postApiCompaniesBody';
 export * from './postApiCustomersConsultSefazCnpjParams';
+export * from './putApiCompaniesIdCertificateBody';
 export * from './refreshTokenCommand';
 export * from './resetUserPasswordRequest';
 export * from './sendTestPrintCommand';

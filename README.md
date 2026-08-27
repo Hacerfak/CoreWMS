@@ -1,10 +1,3 @@
-Aqui está a proposta para o seu `README.md`. Ele foi desenhado para ser o "Norte" do projeto, documentando não apenas o que o sistema faz, mas **como** e **por que** ele foi construído dessa forma, garantindo que o padrão arquitetural se mantenha intacto à medida que o time e o projeto crescem.
-
-Você pode copiar o bloco abaixo e colar diretamente no seu arquivo `README.md` na raiz do projeto.
-
----
-
-```markdown
 # 📦 CoreWMS (Warehouse Management System)
 
 > Um sistema de gestão de armazéns moderno, reativo e distribuído, construído com foco em alta performance, rastreabilidade em tempo real e arquitetura multi-tenant.
@@ -18,13 +11,14 @@ O **CoreWMS** não é apenas um CRUD. Ele é uma plataforma arquitetada para res
 O ecossistema é dividido em três camadas principais, cada uma com responsabilidades estritas e tecnologias específicas:
 
 ### 1. ⚙️ Backend (CoreWMS.Api)
-API RESTful construída em **.NET 8/9**, utilizando princípios de Clean Architecture, Domain-Driven Design (DDD) e CQRS.
-*   **CQRS & Mediator:** Padrão implementado com `MediatR`. Separação clara entre *Commands* (escrita/mudança de estado) e *Queries* (leitura).
-*   **Validação:** `FluentValidation` injetado diretamente no pipeline do MediatR. Requisições inválidas geram erro 400 antes mesmo de tocarem nos Handlers.
-*   **Dados Relacionais:** `Entity Framework Core` com suporte a Multi-Tenancy nativo (Filtros Globais por Empresa/Tenant).
-*   **Dados Não-Relacionais (Auditoria):** `MongoDB` para gravação assíncrona de logs de auditoria em formato de *Snapshot* (imutabilidade temporal).
-*   **Comunicação em Tempo Real:** `SignalR` para rastreamento de conexões ativas e envio instantâneo de comandos (ex: WebSockets para impressão).
-*   **Segurança:** Autenticação via JWT (com Refresh Tokens) e Autorização baseada em Permissões (Custom Filters).
+API RESTful construída em **.NET 10**, utilizando princípios de Clean Architecture, Domain-Driven Design (DDD) e CQRS.
+*   **CQRS & Mediator:** Padrão implementado com `MediatR`[cite: 7]. Separação clara entre *Commands* (escrita/mudança de estado) e *Queries* (leitura)[cite: 7].
+*   **Validação:** `FluentValidation` injetado diretamente no pipeline do MediatR[cite: 7]. Requisições inválidas geram erro 400 antes mesmo de tocarem nos Handlers[cite: 7].
+*   **Dados Relacionais:** `Entity Framework Core` com suporte a Multi-Tenancy nativo (Filtros Globais por Empresa/Tenant)[cite: 7].
+*   **Dados Não-Relacionais (Auditoria):** `MongoDB` para gravação assíncrona de logs de auditoria em formato de *Snapshot* (imutabilidade temporal)[cite: 7].
+*   **Comunicação em Tempo Real:** `SignalR` para rastreamento de conexões ativas e envio instantâneo de comandos (ex: WebSockets para impressão)[cite: 7].
+*   **Tratamento Global de Erros:** Exceções de domínio e bibliotecas interceptadas nativamente pelo `GlobalExceptionHandler`, mantendo os Handlers livres de blocos `try/catch`.
+*   **Segurança:** Autenticação via JWT (com Refresh Tokens) e Autorização baseada em Permissões (Custom Filters)[cite: 7].
 
 ### 2. 🖥️ Frontend (corewms-web)
 Single Page Application (SPA) ultrarrápida desenvolvida com **React** e **Vite**.

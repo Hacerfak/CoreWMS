@@ -168,7 +168,7 @@ export default function UsuariosList() {
                                     <TableCell className="text-sm text-slate-600 font-mono">{user.email}</TableCell>
                                     <TableCell>
                                         {user.isMaster ? (
-                                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">Master (Global)</Badge>
+                                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">Master</Badge>
                                         ) : (
                                             <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-200">Operacional</Badge>
                                         )}

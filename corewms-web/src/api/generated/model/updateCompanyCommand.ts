@@ -12,5 +12,33 @@ export interface UpdateCompanyCommand {
   /** @nullable */
   tradeName?: string | null;
   /** @nullable */
+  stateRegistration?: string | null;
+  /** @nullable */
+  cnae?: string | null;
+  crt?: number;
+  /** @nullable */
+  municipalRegistration?: string | null;
+  /** @nullable */
+  iest?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  zipCode?: string | null;
+  /** @nullable */
+  street?: string | null;
+  /** @nullable */
+  number?: string | null;
+  /** @nullable */
+  complement?: string | null;
+  /** @nullable */
+  neighborhood?: string | null;
+  /** @nullable */
+  cityName?: string | null;
+  cityCode?: number;
+  /** @nullable */
   state?: string | null;
+  /** @nullable */
+  logoBase64?: string | null;
 }
