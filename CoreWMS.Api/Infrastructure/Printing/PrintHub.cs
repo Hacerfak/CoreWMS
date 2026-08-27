@@ -1,8 +1,9 @@
-using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
+using CoreWMS.Api.Infrastructure.Printing;
+using CoreWMS.Api.Infrastructure.Data;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace CoreWMS.Api.Infrastructure.Printing;
+namespace CoreWMS.Api.Features.Printing;
 
 public interface IPrintClient
 {
@@ -11,55 +12,56 @@ public interface IPrintClient
 
 public class PrintHub : Hub<IPrintClient>
 {
-    private readonly ApplicationDbContext _db;
+    private readonly IPrintConnectionManager _connectionManager;
+    private readonly IServiceProvider _serviceProvider;
 
-    public PrintHub(ApplicationDbContext db)
+    public PrintHub(IPrintConnectionManager connectionManager, IServiceProvider serviceProvider)
     {
-        _db = db;
+        _connectionManager = connectionManager;
+        _serviceProvider = serviceProvider;
     }
 
     public override async Task OnConnectedAsync()
     {
         var httpContext = Context.GetHttpContext();
+
         var apiKey = httpContext?.Request.Headers["X-Api-Key"].ToString();
-
         if (string.IsNullOrEmpty(apiKey))
         {
-            apiKey = httpContext?.Request.Query["api_key"].ToString();
+            apiKey = httpContext?.Request.Query["apiKey"].ToString();
         }
 
-        if (string.IsNullOrEmpty(apiKey))
+        if (!string.IsNullOrEmpty(apiKey))
         {
-            Context.Abort();
-            return;
+            // 1. Registra no rastreador para dar o status "Online" no painel
+            _connectionManager.AddConnection(Context.ConnectionId, apiKey);
+
+            // 2. RECUPERA O ERRO: Coloca o Agente de volta no Grupo de impressão!
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var agent = db.PrintAgents.FirstOrDefault(a => a.ApiKey == apiKey);
+            if (agent != null)
+            {
+                var agentGroup = $"agent:{agent.Name.ToLower()}";
+                await Groups.AddToGroupAsync(Context.ConnectionId, agentGroup);
+            }
         }
-
-        // Valida se a API Key do Agente existe no banco global
-        var agent = await _db.PrintAgents.FirstOrDefaultAsync(a => a.ApiKey == apiKey && a.IsActive);
-        if (agent == null)
-        {
-            Context.Abort();
-            return;
-        }
-
-        // Adiciona o canal a um grupo específico pelo Nome do Agente
-        var agentGroup = $"agent:{agent.Name.ToLower()}";
-        await Groups.AddToGroupAsync(Context.ConnectionId, agentGroup);
-
-        Context.Items["AgentName"] = agent.Name;
-        Console.WriteLine($"[PRINT AGENT CONNECTED] Agente Global '{agent.Name}' autenticado via API Key.");
 
         await base.OnConnectedAsync();
     }
 
-    public Task ConfirmPrintJob(string jobId, bool success, string? errorMessage)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var agentName = Context.Items["AgentName"]?.ToString() ?? "Desconhecido";
-        if (success)
-            Console.WriteLine($"[PRINT ACK SUCCESS] Job {jobId} impresso com sucesso no Agente '{agentName}'.");
-        else
-            Console.WriteLine($"[PRINT ACK ERROR] Job {jobId} falhou no Agente '{agentName}': {errorMessage}");
+        _connectionManager.RemoveConnection(Context.ConnectionId);
 
-        return Task.CompletedTask;
+        // Nota: O próprio SignalR já remove conexões caídas dos Grupos automaticamente.
+        await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task ConfirmPrintJob(string jobId, bool success, string? errorMessage)
+    {
+        // Apenas aguarda, sem fazer nada por enquanto.
+        await Task.CompletedTask;
     }
 }

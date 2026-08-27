@@ -9,6 +9,9 @@ import MainLayout from '@/layouts/MainLayout';
 import ClientesList from '@/pages/Clientes/ClientesList';
 import UsuariosList from '@/pages/Usuarios/UsuariosList';
 import PerfisList from '@/pages/Perfis/PerfisList';
+import ImpressaoPage from '@/pages/Impressao/ImpressaoPage';
+import AuditoriaPage from '@/pages/Auditoria/AuditoriaPage';
+import EmpresasPage from './pages/Empresas/EmpresasPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -64,17 +67,16 @@ export default function App() {
                 <Route path="/perfis" element={<PerfisList />} />
               </Route>
 
-              {/* Rotas Futuras em Breve */}
               <Route element={<PermissionGuard requiredPermission="companies:view" />}>
-                <Route path="/empresas" element={<div className="p-8 text-slate-400">Em Breve</div>} />
+                <Route path="/empresas" element={<EmpresasPage />} />
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="printing:manage" />}>
-                <Route path="/impressao" element={<div className="p-8 text-slate-400">Em Breve</div>} />
+                <Route path="/impressao" element={<ImpressaoPage />} />
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="audit:view" />}>
-                <Route path="/auditoria" element={<div className="p-8 text-slate-400">Em Breve</div>} />
+                <Route path="/auditoria" element={<AuditoriaPage />} />
               </Route>
 
             </Route>

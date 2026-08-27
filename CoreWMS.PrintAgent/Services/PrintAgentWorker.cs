@@ -83,20 +83,28 @@ public class PrintAgentWorker : BackgroundService
     {
         try
         {
+            // 1. Tenta imprimir e apaga da fila primeiro
             await _printerService.PrintAsync(printerAlias, zplContent);
-
-            if (IsConnected && _hubConnection != null)
-                await _hubConnection.InvokeAsync("ConfirmPrintJob", jobId, true, null);
-
             await _queueRepo.DeleteAsync(jobId);
+
+            // 2. Isola a comunicação SignalR (Se a API cair aqui, o Agente NÃO quebra)
+            if (IsConnected && _hubConnection != null)
+            {
+                try { await _hubConnection.InvokeAsync("ConfirmPrintJob", jobId, true, null); }
+                catch (Exception ex) { _logger.LogWarning("Impressão OK, mas falhou ao avisar API: {Msg}", ex.Message); }
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erro de impressão no Job {JobId}. Salvando em fila offline...", jobId);
             await _queueRepo.SaveAsync(new PendingJob(jobId, printerAlias, zplContent, DateTime.UtcNow));
 
+            // Isola novamente no fluxo de falha
             if (IsConnected && _hubConnection != null)
-                await _hubConnection.InvokeAsync("ConfirmPrintJob", jobId, false, ex.Message);
+            {
+                try { await _hubConnection.InvokeAsync("ConfirmPrintJob", jobId, false, ex.Message); }
+                catch { /* Ignora o erro silenciosamente */ }
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Features.Identity.Constants;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -37,18 +38,44 @@ public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
 
     public async Task<IResult> Handle(AssignUserCommand request, CancellationToken ct)
     {
-        if (!await _db.Users.AnyAsync(u => u.Id == request.UserId, ct)) return Results.NotFound(new { Message = "Usuário não encontrado." });
-        if (!await _db.Companies.AnyAsync(c => c.Id == request.CompanyId, ct)) return Results.BadRequest(new { Message = "Empresa não existe." });
-        if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct)) return Results.BadRequest(new { Message = "Perfil não existe." });
+        // 1. Validações de integridade
+        if (!await _db.Users.AnyAsync(u => u.Id == request.UserId, ct))
+            return Results.NotFound(new { Message = "Usuário não encontrado." });
 
-        if (await _db.UserCompanyRoles.AnyAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId && x.RoleId == request.RoleId, ct))
-            return Results.BadRequest(new { Message = "O usuário já possui este perfil nesta empresa." });
+        if (!await _db.Companies.AnyAsync(c => c.Id == request.CompanyId, ct))
+            return Results.BadRequest(new { Message = "Empresa não existe." });
 
+        if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct))
+            return Results.BadRequest(new { Message = "Perfil não existe." });
+
+        // 2. Busca se o usuário JÁ POSSUI algum vínculo nesta empresa específica
+        var existingAssignment = await _db.UserCompanyRoles
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId, ct);
+
+        // 3. Lógica de "Upsert" (Substituição) para evitar acúmulo de papéis
+        if (existingAssignment != null)
+        {
+            // Se tentou vincular exatamente o mesmo perfil que ele já tem
+            if (existingAssignment.RoleId == request.RoleId)
+                return Results.BadRequest(new { Message = "O usuário já possui este perfil nesta empresa." });
+
+            // Remove o vínculo antigo para abrir espaço para o novo
+            _db.UserCompanyRoles.Remove(existingAssignment);
+        }
+
+        // 4. Cria o novo vínculo
         _db.UserCompanyRoles.Add(new UserCompanyRole(request.UserId, request.CompanyId, request.RoleId));
         await _db.SaveChangesAsync(ct);
+
+        // 5. Invalida o cache de permissões para aplicar na hora
         _cacheService.InvalidateUserCompanyCache(request.UserId, request.CompanyId);
 
-        return Results.Ok(new { Message = "Usuário atribuído com sucesso!" });
+        return Results.Ok(new
+        {
+            Message = existingAssignment != null
+            ? "Perfil atualizado com sucesso nesta empresa!"
+            : "Usuário vinculado com sucesso!"
+        });
     }
 }
 
@@ -71,7 +98,9 @@ public static class AssignUserEndpoint
     {
         app.MapPost("/api/users/{userId:guid}/companies", async (Guid userId, AssignUserRequest req, IMediator mediator) =>
             await mediator.Send(new AssignUserCommand(userId, req.CompanyId, req.RoleId)))
-        .WithTags("Users").RequireAuthorization();
+        .WithTags("Users")
+        .RequireAuthorization()
+        .RequirePermission(Permissions.Users.Assign);
     }
 }
 

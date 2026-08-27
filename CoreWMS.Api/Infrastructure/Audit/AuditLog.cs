@@ -13,6 +13,7 @@ public class AuditLog
     public string EntityId { get; set; } = string.Empty;
     public string Action { get; set; } = string.Empty; // "Create", "Update", "Delete"
     public string? UserId { get; set; } // Quem fez a ação (ID do JWT)
+    public string UserName { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
     // Guardaremos as mudanças num dicionário que o Mongo converte para um objeto aninhado lindo!

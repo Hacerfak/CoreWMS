@@ -114,6 +114,7 @@ builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroS
 builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
 
 builder.Services.AddScoped<IPrintService, PrintService>();
+builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();
 
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)

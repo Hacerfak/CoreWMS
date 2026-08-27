@@ -31,8 +31,8 @@ public class MongoAuditWorker : BackgroundService
         {
             batch.Add(log);
 
-            // Grava em lotes de 50 itens para otimizar I/O
-            if (batch.Count >= 50)
+            // Grava em lotes de 50 itens para otimizar I/O (mudei para 2 para testar)
+            if (batch.Count >= 2)
             {
                 await FlushBatchAsync(batch, stoppingToken);
             }

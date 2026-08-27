@@ -31,7 +31,7 @@ export default function MainLayout() {
             ]
         },
         {
-            scope: 'Cadastros Base',
+            scope: 'Cadastros',
             items: [
                 { icon: Users, label: 'Clientes', path: '/clientes', permission: 'customers:view' },
             ]
@@ -41,6 +41,7 @@ export default function MainLayout() {
             items: [
                 { icon: Users, label: 'Usuários', path: '/usuarios', permission: 'users:view' },
                 { icon: Shield, label: 'Perfis de Acesso', path: '/perfis', permission: 'roles:view' },
+                { icon: ScrollText, label: 'Auditoria', path: '/auditoria', permission: 'audit:view' },
             ]
         },
         {
@@ -48,7 +49,6 @@ export default function MainLayout() {
             items: [
                 { icon: Building2, label: 'Empresas', path: '/empresas', permission: 'companies:view' },
                 { icon: Printer, label: 'Impressão', path: '/impressao', permission: 'printing:manage' },
-                { icon: ScrollText, label: 'Auditoria', path: '/auditoria', permission: 'audit:view' },
             ]
         }
     ];
@@ -124,7 +124,7 @@ export default function MainLayout() {
                             <DropdownMenuLabel className="font-normal p-3">
                                 <div className="flex flex-col space-y-1">
                                     <p className="text-sm font-medium text-slate-900 leading-none">{user?.nome}</p>
-                                    <p className="text-xs text-slate-500 mt-1">{user?.role === 'ADMIN' ? 'Master (Global)' : 'Operacional'}</p>
+                                    <p className="text-xs text-slate-500 mt-1">{user?.role === 'ADMIN' ? 'Master' : 'Operacional'}</p>
                                 </div>
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />

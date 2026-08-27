@@ -25,9 +25,12 @@ import type {
 
 import type {
   CreateAgentCommand,
-  CreateLabelTemplateCommand,
   CreatePrinterCommand,
-  SendTestPrintCommand
+  CreateTemplateRequest,
+  SendTestPrintCommand,
+  UpdateAgentRequest,
+  UpdatePrinterRequest,
+  UpdateTemplateRequest
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -260,7 +263,67 @@ export function useGetApiPrintingAgents<TData = Awaited<ReturnType<typeof getApi
 
 
 
-export const postApiPrintingPrinters = (
+export const putApiPrintingAgentsId = (
+    id: string,
+    updateAgentRequest: UpdateAgentRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/agents/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateAgentRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiPrintingAgentsIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingAgentsId>>, TError,PutApiPrintingAgentsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingAgentsId>>, TError,PutApiPrintingAgentsIdMutationVariables, TContext> => {
+
+const mutationKey = ['putApiPrintingAgentsId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiPrintingAgentsId>>, PutApiPrintingAgentsIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiPrintingAgentsId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiPrintingAgentsIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiPrintingAgentsId>>>
+    export type PutApiPrintingAgentsIdMutationBody = UpdateAgentRequest
+    export type PutApiPrintingAgentsIdMutationError = unknown
+    export type PutApiPrintingAgentsIdMutationVariables = {id: string;data: UpdateAgentRequest}
+
+    export const usePutApiPrintingAgentsId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingAgentsId>>, TError,PutApiPrintingAgentsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiPrintingAgentsId>>,
+        TError,
+        PutApiPrintingAgentsIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiPrintingAgentsIdMutationOptions(options), queryClient);
+    }
+    export const postApiPrintingPrinters = (
     createPrinterCommand: CreatePrinterCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -319,8 +382,68 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiPrintingPrintersMutationOptions(options), queryClient);
     }
+    export const putApiPrintingPrintersId = (
+    id: string,
+    updatePrinterRequest: UpdatePrinterRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/printers/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updatePrinterRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiPrintingPrintersIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingPrintersId>>, TError,PutApiPrintingPrintersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingPrintersId>>, TError,PutApiPrintingPrintersIdMutationVariables, TContext> => {
+
+const mutationKey = ['putApiPrintingPrintersId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiPrintingPrintersId>>, PutApiPrintingPrintersIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiPrintingPrintersId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiPrintingPrintersIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiPrintingPrintersId>>>
+    export type PutApiPrintingPrintersIdMutationBody = UpdatePrinterRequest
+    export type PutApiPrintingPrintersIdMutationError = unknown
+    export type PutApiPrintingPrintersIdMutationVariables = {id: string;data: UpdatePrinterRequest}
+
+    export const usePutApiPrintingPrintersId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingPrintersId>>, TError,PutApiPrintingPrintersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiPrintingPrintersId>>,
+        TError,
+        PutApiPrintingPrintersIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiPrintingPrintersIdMutationOptions(options), queryClient);
+    }
     export const postApiPrintingTemplates = (
-    createLabelTemplateCommand: CreateLabelTemplateCommand,
+    createTemplateRequest: CreateTemplateRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
@@ -328,7 +451,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return customInstance<void>(
       {url: `/api/printing/templates`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: createLabelTemplateCommand, signal
+      data: createTemplateRequest, signal
     },
       options);
     }
@@ -364,9 +487,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiPrintingTemplatesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPrintingTemplates>>>
-    export type PostApiPrintingTemplatesMutationBody = CreateLabelTemplateCommand
+    export type PostApiPrintingTemplatesMutationBody = CreateTemplateRequest
     export type PostApiPrintingTemplatesMutationError = unknown
-    export type PostApiPrintingTemplatesMutationVariables = {data: CreateLabelTemplateCommand}
+    export type PostApiPrintingTemplatesMutationVariables = {data: CreateTemplateRequest}
 
     export const usePostApiPrintingTemplates = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingTemplates>>, TError,PostApiPrintingTemplatesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
@@ -464,3 +587,63 @@ export function useGetApiPrintingTemplates<TData = Awaited<ReturnType<typeof get
 
 
 
+export const putApiPrintingTemplatesId = (
+    id: string,
+    updateTemplateRequest: UpdateTemplateRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/templates/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateTemplateRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiPrintingTemplatesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>, TError,PutApiPrintingTemplatesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>, TError,PutApiPrintingTemplatesIdMutationVariables, TContext> => {
+
+const mutationKey = ['putApiPrintingTemplatesId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>, PutApiPrintingTemplatesIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiPrintingTemplatesId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiPrintingTemplatesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>>
+    export type PutApiPrintingTemplatesIdMutationBody = UpdateTemplateRequest
+    export type PutApiPrintingTemplatesIdMutationError = unknown
+    export type PutApiPrintingTemplatesIdMutationVariables = {id: string;data: UpdateTemplateRequest}
+
+    export const usePutApiPrintingTemplatesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>, TError,PutApiPrintingTemplatesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiPrintingTemplatesId>>,
+        TError,
+        PutApiPrintingTemplatesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiPrintingTemplatesIdMutationOptions(options), queryClient);
+    }

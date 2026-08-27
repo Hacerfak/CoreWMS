@@ -1,3 +1,5 @@
+using CoreWMS.Api.Features.Printing;
+
 namespace CoreWMS.Api.Infrastructure.Printing;
 
 public interface IPrintService

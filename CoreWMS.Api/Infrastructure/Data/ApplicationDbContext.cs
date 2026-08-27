@@ -161,7 +161,8 @@ public class ApplicationDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0";
+        var userName = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Sistema";
         var entries = ChangeTracker.Entries<AuditableEntity>().ToList();
         var auditLogs = new List<AuditLog>();
 
@@ -174,7 +175,8 @@ public class ApplicationDbContext : DbContext
             {
                 EntityName = entry.Entity.GetType().Name,
                 EntityId = entry.Entity.Id.ToString(),
-                UserId = userId ?? "Sistema"
+                UserId = userId,
+                UserName = userName
             };
 
             if (entry.State == EntityState.Added)

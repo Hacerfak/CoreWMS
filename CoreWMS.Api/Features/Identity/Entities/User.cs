@@ -42,6 +42,11 @@ public class User : AuditableEntity
         Email = email;
     }
 
+    public void UpdatePassword(string passwordHash)
+    {
+        PasswordHash = passwordHash;
+    }
+
     public void SetRefreshToken(string token, DateTime expiryTime)
     {
         RefreshToken = token;
