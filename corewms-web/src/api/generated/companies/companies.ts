@@ -394,3 +394,60 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiCompaniesIdCertificateMutationOptions(options), queryClient);
     }
+    export const postApiCompaniesIdSyncSefaz = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/companies/${id}/sync-sefaz`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCompaniesIdSyncSefazMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>, TError,PostApiCompaniesIdSyncSefazMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>, TError,PostApiCompaniesIdSyncSefazMutationVariables, TContext> => {
+
+const mutationKey = ['postApiCompaniesIdSyncSefaz'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>, PostApiCompaniesIdSyncSefazMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiCompaniesIdSyncSefaz(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCompaniesIdSyncSefazMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>>
+
+    export type PostApiCompaniesIdSyncSefazMutationError = unknown
+    export type PostApiCompaniesIdSyncSefazMutationVariables = {id: string}
+
+    export const usePostApiCompaniesIdSyncSefaz = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>, TError,PostApiCompaniesIdSyncSefazMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>,
+        TError,
+        PostApiCompaniesIdSyncSefazMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCompaniesIdSyncSefazMutationOptions(options), queryClient);
+    }

@@ -33,6 +33,7 @@ public record UpdateCompanyCommand(
 public record UploadCertificateCommand(Guid Id, byte[] CertBytes, string Password) : IRequest<IResult>;
 public record DeleteCompanyCommand(Guid Id) : IRequest<IResult>;
 public record ListAllCompaniesQuery() : IRequest<IResult>;
+public record SyncCompanySefazCommand(Guid Id) : IRequest<IResult>;
 
 // 2. VALIDADORES[cite: 5]
 public class CreateCompanyCommandValidator : AbstractValidator<CreateCompanyCommand>
@@ -163,6 +164,39 @@ public class UploadCertificateHandler : IRequestHandler<UploadCertificateCommand
     }
 }
 
+public class SyncCompanySefazHandler : IRequestHandler<SyncCompanySefazCommand, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    private readonly ISefazConsultaCadastroService _sefazService;
+
+    public SyncCompanySefazHandler(ApplicationDbContext db, ISefazConsultaCadastroService sefazService)
+    {
+        _db = db;
+        _sefazService = sefazService;
+    }
+
+    public async Task<IResult> Handle(SyncCompanySefazCommand request, CancellationToken ct)
+    {
+        var company = await _db.Companies.FindAsync(new object[] { request.Id }, ct);
+        if (company == null) return Results.NotFound(new { Message = "Empresa não encontrada." });
+
+        if (company.CertificateBytes == null || string.IsNullOrEmpty(company.CertificatePassword))
+            return Results.BadRequest(new { Message = "Certificado Digital não configurado. Instale o certificado A1 na aba ao lado antes de sincronizar." });
+
+        // A consulta roda 100% no servidor, sem o usuário precisar digitar a senha do certificado novamente!
+        try
+        {
+            var password = CryptoService.Decrypt(company.CertificatePassword);
+            var sefazData = _sefazService.Consultar(company.CertificateBytes, password, company.State, company.Cnpj);
+            return Results.Ok(sefazData);
+        }
+        catch (Exception ex)
+        {
+            return Results.BadRequest(new { Message = "A SEFAZ rejeitou a consulta ou está offline.", Details = ex.Message });
+        }
+    }
+}
+
 public class DeleteCompanyHandler : IRequestHandler<DeleteCompanyCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -208,6 +242,10 @@ public static class CompanyCrudEndpoints
             await certificateFile.CopyToAsync(ms);
             return await mediator.Send(new UploadCertificateCommand(id, ms.ToArray(), certificatePassword));
         }).RequirePermission(Permissions.Companies.Manage).DisableAntiforgery();
+
+        group.MapPost("/{id:guid}/sync-sefaz", async (Guid id, IMediator mediator) =>
+            await mediator.Send(new SyncCompanySefazCommand(id)))
+            .RequirePermission(Permissions.Companies.Manage);
 
         group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
             await mediator.Send(new DeleteCompanyCommand(id)))

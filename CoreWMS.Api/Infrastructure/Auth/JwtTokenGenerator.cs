@@ -24,10 +24,11 @@ public class JwtTokenGenerator
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Name),
             new Claim("name", user.Name),
             new Claim("isMaster", user.IsMaster.ToString()),
-            // Adiciona as empresas permitidas como uma string separada por vírgula
             new Claim("companies", string.Join(",", allowedCompanyIds))
         };
 
