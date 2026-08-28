@@ -114,7 +114,3 @@ dotnet run
 ---
 
 *CoreWMS - Construído com ❤️ e foco na excelência arquitetural.*
-
-```
-
-```
