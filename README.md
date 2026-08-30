@@ -32,6 +32,7 @@ Um Worker Service (Instalável via Windows Service ou Linux Systemd) que roda na
 *   **Resiliência Offline:** Utiliza SQLite local (`print_queue.db`) para guardar na fila requisições de impressão caso a rede oscile.
 *   **Protocolos de Impressão:** Comunicação direta RAW TCP Socket (Zebra/Epson), Spooler nativo do Windows (winspool) e CUPS do Linux.
 *   **Conexão Global:** Mantém um túnel persistente via SignalR com a nuvem, aguardando comandos ZPL em tempo real e reportando status (Online/Offline/Sucesso/Erro).
+*   **System Tray:** Uso do Ayatana App Indicator para ícone da barra de tarefas (gir1.2-ayatanaappindicator3-0.1)
 
 ---
 
