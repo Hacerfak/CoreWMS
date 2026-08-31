@@ -11,8 +11,9 @@ O **CoreWMS** não é apenas um CRUD. Ele é uma plataforma arquitetada para res
 O ecossistema é dividido em três camadas principais, cada uma com responsabilidades estritas e tecnologias específicas:
 
 ### 1. ⚙️ Backend (CoreWMS.Api)
-API RESTful construída em **.NET 10**, utilizando princípios de Clean Architecture, Domain-Driven Design (DDD) e CQRS.
+API RESTful construída em **.NET 10**, utilizando princípios de Vertical Slice Architecture (VSA), Domain-Driven Design (DDD) e CQRS.
 *   **CQRS & Mediator:** Padrão implementado com `MediatR`. Separação clara entre *Commands* (escrita/mudança de estado) e *Queries* (leitura).
+*   **Mapeamento:** Mapeamento automático com Mapster
 *   **Validação:** `FluentValidation` injetado diretamente no pipeline do MediatR. Requisições inválidas geram erro 400 antes mesmo de tocarem nos Handlers.
 *   **Dados Relacionais:** `Entity Framework Core` com suporte a Multi-Tenancy nativo (Filtros Globais por Empresa/Tenant).
 *   **Dados Não-Relacionais (Auditoria):** `MongoDB` para gravação assíncrona de logs de auditoria em formato de *Snapshot* (imutabilidade temporal).

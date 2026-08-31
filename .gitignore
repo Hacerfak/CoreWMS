@@ -48,6 +48,7 @@ publish/
 [Tt]est[Rr]esults/
 *.tmp
 *.log
+*.db
 
 # SQL Server / Local DB / Mongo Temp
 *.mdf
