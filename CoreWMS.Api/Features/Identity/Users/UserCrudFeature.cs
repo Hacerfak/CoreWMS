@@ -14,17 +14,18 @@ namespace CoreWMS.Api.Features.Identity.Users;
 // 1. CONTRATOS & DTOs
 // ==============================================================================
 public record UserDto(Guid Id, string Name, string Email, bool IsMaster, DateTime CreatedAt);
-
-public record CreateUserCommand(string Name, string Email, string Password) : IRequest<IResult>;
 public record UpdateUserRequest(string Name, string Email);
-public record UpdateUserCommand(Guid Id, string Name, string Email) : IRequest<IResult>;
-public record DeleteUserCommand(Guid Id) : IRequest<IResult>;
-public record ListUsersQuery() : IRequest<IResult>;
-public record GetMyPermissionsQuery() : IRequest<IResult>;
 public record UpdateProfileRequest(string Name, string Email, string? Password);
-public record UpdateProfileCommand(Guid UserId, string Name, string Email, string? Password) : IRequest<IResult>;
 public record ResetUserPasswordRequest(string NewPassword);
-public record ResetUserPasswordCommand(Guid UserId, string NewPassword) : IRequest<IResult>;
+
+// Commands & Queries
+public record CreateUserCommand(string Name, string Email, string Password) : IRequest<UserDto>;
+public record UpdateUserCommand(Guid Id, string Name, string Email) : IRequest<Unit>;
+public record DeleteUserCommand(Guid Id) : IRequest<Unit>;
+public record ListUsersQuery() : IRequest<List<UserDto>>;
+public record GetMyPermissionsQuery(Guid UserId, bool IsMaster, Guid CompanyId) : IRequest<List<string>>;
+public record UpdateProfileCommand(Guid UserId, string Name, string Email, string? Password) : IRequest<Unit>;
+public record ResetUserPasswordCommand(Guid UserId, string NewPassword) : IRequest<Unit>;
 
 // ==============================================================================
 // 2. VALIDAÇÕES (FluentValidation)
@@ -48,6 +49,7 @@ public class UpdateUserCommandValidator : AbstractValidator<UpdateUserCommand>
         RuleFor(x => x.Email).NotEmpty().EmailAddress().WithMessage("Informe um e-mail válido.");
     }
 }
+
 public class UpdateProfileCommandValidator : AbstractValidator<UpdateProfileCommand>
 {
     public UpdateProfileCommandValidator()
@@ -58,6 +60,7 @@ public class UpdateProfileCommandValidator : AbstractValidator<UpdateProfileComm
         RuleFor(x => x.Password).MinimumLength(6).WithMessage("A senha deve ter no mínimo 6 caracteres.").When(x => !string.IsNullOrEmpty(x.Password));
     }
 }
+
 public class ResetUserPasswordCommandValidator : AbstractValidator<ResetUserPasswordCommand>
 {
     public ResetUserPasswordCommandValidator()
@@ -70,119 +73,108 @@ public class ResetUserPasswordCommandValidator : AbstractValidator<ResetUserPass
 // ==============================================================================
 // 3. HANDLERS
 // ==============================================================================
-// ... (CreateUserHandler, UpdateUserHandler, DeleteUserHandler, ListUsersHandler, GetMyPermissionsHandler continuam iguais ao que já tínhamos) ...
-
-public class CreateUserHandler : IRequestHandler<CreateUserCommand, IResult>
+public class CreateUserHandler : IRequestHandler<CreateUserCommand, UserDto>
 {
     private readonly ApplicationDbContext _db;
     public CreateUserHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<IResult> Handle(CreateUserCommand request, CancellationToken ct)
+    public async Task<UserDto> Handle(CreateUserCommand request, CancellationToken ct)
     {
         if (await _db.Users.AnyAsync(u => u.Email == request.Email, ct))
-            return Results.BadRequest(new { Message = "E-mail já em uso." });
+            throw new InvalidOperationException("E-mail já em uso.");
 
         var user = new User(request.Name, request.Email, BCrypt.Net.BCrypt.HashPassword(request.Password), false);
+
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
-        return Results.Created($"/api/users/{user.Id}", user.Adapt<UserDto>());
+
+        return user.Adapt<UserDto>();
     }
 }
 
-public class UpdateUserHandler : IRequestHandler<UpdateUserCommand, IResult>
+public class UpdateUserHandler : IRequestHandler<UpdateUserCommand, Unit>
 {
     private readonly ApplicationDbContext _db;
     public UpdateUserHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<IResult> Handle(UpdateUserCommand request, CancellationToken ct)
+    public async Task<Unit> Handle(UpdateUserCommand request, CancellationToken ct)
     {
         var user = await _db.Users.FindAsync(new object[] { request.Id }, ct);
-        if (user == null) return Results.NotFound(new { Message = "Usuário não encontrado." });
+        if (user == null) throw new KeyNotFoundException("Usuário não encontrado.");
 
         if (await _db.Users.AnyAsync(u => u.Email == request.Email && u.Id != request.Id, ct))
-            return Results.BadRequest(new { Message = "E-mail já em uso por outro usuário." });
+            throw new InvalidOperationException("E-mail já em uso por outro usuário.");
 
         user.UpdateDetails(request.Name, request.Email);
         await _db.SaveChangesAsync(ct);
-        return Results.NoContent();
+
+        return Unit.Value;
     }
 }
 
-public class DeleteUserHandler : IRequestHandler<DeleteUserCommand, IResult>
+public class DeleteUserHandler : IRequestHandler<DeleteUserCommand, Unit>
 {
     private readonly ApplicationDbContext _db;
     public DeleteUserHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<IResult> Handle(DeleteUserCommand request, CancellationToken ct)
+    public async Task<Unit> Handle(DeleteUserCommand request, CancellationToken ct)
     {
         var user = await _db.Users.FindAsync(new object[] { request.Id }, ct);
-        if (user == null) return Results.NotFound(new { Message = "Usuário não encontrado." });
-        if (user.IsMaster) return Results.BadRequest(new { Message = "Usuário Master não pode ser excluído." });
+        if (user == null) throw new KeyNotFoundException("Usuário não encontrado.");
+        if (user.IsMaster) throw new InvalidOperationException("Usuário Master não pode ser excluído.");
 
         _db.Users.Remove(user);
         await _db.SaveChangesAsync(ct);
-        return Results.NoContent();
+
+        return Unit.Value;
     }
 }
 
-public class ListUsersHandler : IRequestHandler<ListUsersQuery, IResult>
+public class ListUsersHandler : IRequestHandler<ListUsersQuery, List<UserDto>>
 {
     private readonly ApplicationDbContext _db;
     public ListUsersHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<IResult> Handle(ListUsersQuery request, CancellationToken ct)
+    public async Task<List<UserDto>> Handle(ListUsersQuery request, CancellationToken ct)
     {
-        var users = await _db.Users.AsNoTracking().ProjectToType<UserDto>().ToListAsync(ct);
-        return Results.Ok(users);
+        return await _db.Users.AsNoTracking().ProjectToType<UserDto>().ToListAsync(ct);
     }
 }
 
-public class GetMyPermissionsHandler : IRequestHandler<GetMyPermissionsQuery, IResult>
+public class GetMyPermissionsHandler : IRequestHandler<GetMyPermissionsQuery, List<string>>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _httpContextAccessor;
-    public GetMyPermissionsHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor)
+    public GetMyPermissionsHandler(ApplicationDbContext db) => _db = db;
+
+    public async Task<List<string>> Handle(GetMyPermissionsQuery request, CancellationToken ct)
     {
-        _db = db; _httpContextAccessor = httpContextAccessor;
-    }
+        if (request.IsMaster) return new List<string> { "*" };
 
-    public async Task<IResult> Handle(GetMyPermissionsQuery request, CancellationToken ct)
-    {
-        var userIdClaim = _httpContextAccessor.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (!Guid.TryParse(userIdClaim, out var userId)) return Results.Unauthorized();
-
-        var user = await _db.Users.FindAsync(new object[] { userId }, ct);
-        if (user == null) return Results.Unauthorized();
-
-        if (user.IsMaster) return Results.Ok(new List<string> { "*" });
-
-        var companyIdHeader = _httpContextAccessor.HttpContext?.Request.Headers["X-Company-Id"].ToString();
-        if (!Guid.TryParse(companyIdHeader, out var companyId))
-            return Results.BadRequest(new { Message = "Cabeçalho X-Company-Id é obrigatório." });
+        if (request.CompanyId == Guid.Empty)
+            throw new InvalidOperationException("Cabeçalho X-Company-Id é obrigatório.");
 
         var permissions = await _db.UserCompanyRoles
-            .Where(ucr => ucr.UserId == userId && ucr.CompanyId == companyId)
+            .Where(ucr => ucr.UserId == request.UserId && ucr.CompanyId == request.CompanyId)
             .SelectMany(ucr => ucr.Role.Permissions)
             .Select(p => p.Permission)
             .ToListAsync(ct);
 
-        return Results.Ok(permissions);
+        return permissions;
     }
 }
 
-// NOVO: Handler para atualizar próprio perfil
-public class UpdateProfileHandler : IRequestHandler<UpdateProfileCommand, IResult>
+public class UpdateProfileHandler : IRequestHandler<UpdateProfileCommand, Unit>
 {
     private readonly ApplicationDbContext _db;
     public UpdateProfileHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<IResult> Handle(UpdateProfileCommand request, CancellationToken ct)
+    public async Task<Unit> Handle(UpdateProfileCommand request, CancellationToken ct)
     {
         var user = await _db.Users.FindAsync(new object[] { request.UserId }, ct);
-        if (user == null) return Results.NotFound(new { Message = "Usuário não encontrado." });
+        if (user == null) throw new KeyNotFoundException("Usuário não encontrado.");
 
         if (await _db.Users.AnyAsync(u => u.Email == request.Email && u.Id != request.UserId, ct))
-            return Results.BadRequest(new { Message = "Este e-mail já está sendo usado." });
+            throw new InvalidOperationException("Este e-mail já está sendo usado.");
 
         user.UpdateDetails(request.Name, request.Email);
 
@@ -192,28 +184,29 @@ public class UpdateProfileHandler : IRequestHandler<UpdateProfileCommand, IResul
         }
 
         await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { Message = "Perfil atualizado com sucesso." });
+        return Unit.Value;
     }
 }
-public class ResetUserPasswordHandler : IRequestHandler<ResetUserPasswordCommand, IResult>
+
+public class ResetUserPasswordHandler : IRequestHandler<ResetUserPasswordCommand, Unit>
 {
     private readonly ApplicationDbContext _db;
     public ResetUserPasswordHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<IResult> Handle(ResetUserPasswordCommand request, CancellationToken ct)
+    public async Task<Unit> Handle(ResetUserPasswordCommand request, CancellationToken ct)
     {
         var user = await _db.Users.FindAsync(new object[] { request.UserId }, ct);
-        if (user == null) return Results.NotFound(new { Message = "Usuário não encontrado." });
+        if (user == null) throw new KeyNotFoundException("Usuário não encontrado.");
 
         user.UpdatePassword(BCrypt.Net.BCrypt.HashPassword(request.NewPassword));
         await _db.SaveChangesAsync(ct);
 
-        return Results.Ok(new { Message = "Senha redefinida com sucesso." });
+        return Unit.Value;
     }
 }
 
 // ==============================================================================
-// 4. ENDPOINTS (AGORA BLINDADOS!)
+// 4. ENDPOINTS
 // ==============================================================================
 public static class UserEndpoints
 {
@@ -222,34 +215,52 @@ public static class UserEndpoints
         var group = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization();
 
         // 1. ROTAS DO PRÓPRIO USUÁRIO (Livre para quem tem acesso básico à tela)
-        group.MapGet("/me/permissions", async (IMediator mediator) => await mediator.Send(new GetMyPermissionsQuery()))
-            .WithName("GetMyPermissions");
+        group.MapGet("/me/permissions", async (HttpContext ctx, ClaimsPrincipal user, IMediator mediator) =>
+        {
+            var userId = Guid.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            var isMaster = bool.Parse(user.FindFirst("isMaster")?.Value ?? "false");
+            Guid.TryParse(ctx.Request.Headers["X-Company-Id"].ToString(), out var companyId);
 
-        // Usa o ClaimsPrincipal (user do Token JWT) para pegar o ID com segurança
+            var permissions = await mediator.Send(new GetMyPermissionsQuery(userId, isMaster, companyId));
+            return Results.Ok(permissions);
+        }).WithName("GetMyPermissions");
+
         group.MapPut("/me", async (UpdateProfileRequest req, ClaimsPrincipal user, IMediator mediator) =>
         {
             var userId = Guid.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
-            return await mediator.Send(new UpdateProfileCommand(userId, req.Name, req.Email, req.Password));
-        })
-        .RequirePermission(Permissions.Profile.UpdateSelf); // <-- Bloqueio aplicado!
+            await mediator.Send(new UpdateProfileCommand(userId, req.Name, req.Email, req.Password));
+            return Results.Ok(new { Message = "Perfil atualizado com sucesso." });
+        }).RequirePermission(Permissions.Profile.UpdateSelf);
 
         // 2. ROTAS DE GESTÃO (Exclusivas para Gestores/Masters)
-        group.MapPost("/", async (CreateUserCommand cmd, IMediator mediator) => await mediator.Send(cmd))
-            .RequirePermission(Permissions.Users.Create); // <-- Bloqueio aplicado!
+        group.MapPost("/", async (CreateUserCommand cmd, IMediator mediator) =>
+        {
+            var result = await mediator.Send(cmd);
+            return Results.Created($"/api/users/{result.Id}", result);
+        }).RequirePermission(Permissions.Users.Create);
 
-        group.MapGet("/", async (IMediator mediator) => await mediator.Send(new ListUsersQuery()))
-            .RequirePermission(Permissions.Users.View); // <-- Bloqueio aplicado!
+        group.MapGet("/", async (IMediator mediator) =>
+        {
+            var result = await mediator.Send(new ListUsersQuery());
+            return Results.Ok(result);
+        }).RequirePermission(Permissions.Users.View);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest req, IMediator mediator) =>
-            await mediator.Send(new UpdateUserCommand(id, req.Name, req.Email)))
-            .RequirePermission(Permissions.Users.Edit); // <-- Bloqueio aplicado!
+        {
+            await mediator.Send(new UpdateUserCommand(id, req.Name, req.Email));
+            return Results.NoContent();
+        }).RequirePermission(Permissions.Users.Edit);
 
         group.MapPut("/{id:guid}/password", async (Guid id, ResetUserPasswordRequest req, IMediator mediator) =>
-            await mediator.Send(new ResetUserPasswordCommand(id, req.NewPassword)))
-            .RequirePermission(Permissions.Users.Edit);
+        {
+            await mediator.Send(new ResetUserPasswordCommand(id, req.NewPassword));
+            return Results.Ok(new { Message = "Senha redefinida com sucesso." });
+        }).RequirePermission(Permissions.Users.Edit);
 
         group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
-            await mediator.Send(new DeleteUserCommand(id)))
-            .RequirePermission(Permissions.Users.Delete); // <-- Bloqueio aplicado!
+        {
+            await mediator.Send(new DeleteUserCommand(id));
+            return Results.NoContent();
+        }).RequirePermission(Permissions.Users.Delete);
     }
 }

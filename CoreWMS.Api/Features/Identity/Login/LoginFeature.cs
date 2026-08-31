@@ -1,17 +1,44 @@
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
+using FluentValidation;
+using Mapster;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Login;
 
-// 1. CONTRATOS
+// ==========================================
+// 1. DTOs
+// ==========================================
+public record LoginRequest(string Email, string Password);
 public record CompanyLoginDto(Guid Id, string Cnpj, string CorporateName);
 public record LoginResponse(string AccessToken, string RefreshToken, Guid UserId, string UserName, string Email, string Role, List<CompanyLoginDto> Companies);
-public record LoginCommand(string Email, string Password) : IRequest<IResult>;
 
-// 2. HANDLER
-public class LoginCommandHandler : IRequestHandler<LoginCommand, IResult>
+// ==========================================
+// 2. Command
+// ==========================================
+public record LoginCommand(string Email, string Password) : IRequest<LoginResponse>;
+
+// ==========================================
+// 3. Validator (Pipeline MediatR)
+// ==========================================
+public class LoginCommandValidator : AbstractValidator<LoginCommand>
+{
+    public LoginCommandValidator()
+    {
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("O e-mail é obrigatório.")
+            .EmailAddress().WithMessage("Formato de e-mail inválido.");
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("A senha é obrigatória.");
+    }
+}
+
+// ==========================================
+// 4. Handler
+// ==========================================
+public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 {
     private readonly ApplicationDbContext _db;
     private readonly JwtTokenGenerator _jwt;
@@ -22,16 +49,21 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, IResult>
         _jwt = jwt;
     }
 
-    public async Task<IResult> Handle(LoginCommand request, CancellationToken ct)
+    public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken ct)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            return Results.BadRequest(new { Message = "E-mail ou senha inválidos." }); // JSON Puro
+        {
+            throw new UnauthorizedAccessException("E-mail ou senha inválidos.");
+        }
 
         List<CompanyLoginDto> userCompanies;
         if (user.IsMaster)
         {
-            userCompanies = await _db.Companies.Select(c => new CompanyLoginDto(c.Id, c.Cnpj, c.CorporateName)).ToListAsync(ct);
+            userCompanies = await _db.Companies
+                .Select(c => new CompanyLoginDto(c.Id, c.Cnpj, c.CorporateName))
+                .ToListAsync(ct);
         }
         else
         {
@@ -43,26 +75,42 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, IResult>
         }
 
         var allowedCompanyIds = userCompanies.Select(c => c.Id).ToList();
+
         var token = _jwt.GenerateToken(user, allowedCompanyIds);
         var refreshToken = _jwt.GenerateRefreshToken();
 
+        // Mutação de estado encapsulada (DDD)
         user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7));
         await _db.SaveChangesAsync(ct);
 
-        var response = new LoginResponse(token, refreshToken, user.Id, user.Name, user.Email, user.IsMaster ? "ADMIN" : "USER", userCompanies);
-
-        return Results.Ok(response); // JSON Puro direto!
+        return new LoginResponse(
+            token,
+            refreshToken,
+            user.Id,
+            user.Name,
+            user.Email,
+            user.IsMaster ? "ADMIN" : "USER",
+            userCompanies);
     }
 }
 
-// 3. ENDPOINT
+// ==========================================
+// 5. Endpoint (Minimal API)
+// ==========================================
 public static class LoginEndpoint
 {
     public static void MapLoginEndpoint(this IEndpointRouteBuilder app)
     {
-        // Olha como a rota fica limpa! Apenas pede o IMediator.
-        app.MapPost("/api/identity/login", async (LoginCommand command, IMediator mediator) =>
-            await mediator.Send(command))
-        .WithTags("Identity").AllowAnonymous();
+        app.MapPost("/api/identity/login", async (LoginRequest request, IMediator mediator) =>
+        {
+            var command = request.Adapt<LoginCommand>();
+            var result = await mediator.Send(command);
+            return Results.Ok(result);
+        })
+        .WithTags("Identity")
+        .AllowAnonymous()
+        .Produces<LoginResponse>(StatusCodes.Status200OK)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .ProducesProblem(StatusCodes.Status401Unauthorized);
     }
 }
