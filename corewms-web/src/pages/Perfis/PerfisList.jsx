@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
@@ -18,7 +17,7 @@ import {
 import { Search, Plus, Shield, Loader2, Edit, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Matriz de permissões simplificada (Removido os CRUDs avulsos de roles)
+// Matriz de permissões simplificada
 const MODULE_PERMISSIONS = [
     {
         module: 'Clientes Depositantes',
@@ -38,7 +37,6 @@ const MODULE_PERMISSIONS = [
     {
         module: 'Perfis de Acesso',
         permissions: [
-            // Agora é apenas Manage!
             { id: 'roles:manage', label: 'Gerenciar Perfis' },
         ]
     },
@@ -52,7 +50,7 @@ const MODULE_PERMISSIONS = [
     }
 ];
 
-// Schema Zod validando Nome e Array de Permissões
+// Schema Zod
 const roleSchema = z.object({
     name: z.string().min(3, 'O nome deve ter no mínimo 3 caracteres.'),
     permissions: z.array(z.string()).min(1, 'Selecione pelo menos uma permissão.')
@@ -164,7 +162,7 @@ export default function PerfisList() {
                     <Table>
                         <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-sm z-10">
                             <TableRow>
-                                <TableHead className="w-[280px]">Nome do Perfil</TableHead>
+                                <TableHead className="w-[350px]">Nome do Perfil</TableHead>
                                 <TableHead>Permissões Ativas</TableHead>
                                 <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
@@ -184,19 +182,20 @@ export default function PerfisList() {
                                             <span className="font-medium text-slate-900">{role.name}</span>
                                         </div>
                                     </TableCell>
+
+                                    {/* COLUNA REFATORADA: EXIBE APENAS O RESUMO */}
                                     <TableCell>
-                                        <div className="flex flex-wrap gap-1.5 max-w-xl">
-                                            {role.permissions?.length > 0 ? (
-                                                role.permissions.map((p) => (
-                                                    <Badge key={p} variant="outline" className="bg-slate-50 text-slate-600 text-[11px] font-mono">
-                                                        {p}
-                                                    </Badge>
-                                                ))
-                                            ) : (
-                                                <span className="text-xs text-slate-400 italic">Nenhuma permissão atribuída</span>
-                                            )}
-                                        </div>
+                                        {role.permissions?.length > 0 ? (
+                                            <span className="text-sm font-medium text-slate-600">
+                                                {role.permissions.length} permissão(ões) ativa(s)
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm text-slate-400 italic">
+                                                Nenhuma permissão atribuída
+                                            </span>
+                                        )}
                                     </TableCell>
+
                                     <TableCell className="text-right space-x-1">
                                         <Button variant="ghost" size="sm" onClick={() => { setSelectedRole(role); setIsDialogOpen(true); }} className="text-blue-600 hover:bg-blue-50">
                                             <Edit className="h-4 w-4 mr-1" /> Configurar Permissões
@@ -216,7 +215,7 @@ export default function PerfisList() {
                 <DialogContent className="sm:max-w-2xl bg-white max-h-[85vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="text-slate-900">{selectedRole ? 'Configurar Perfil' : 'Novo Perfil de Acesso'}</DialogTitle>
-                        <DialogDescription className="text-slate-500">Defina o nome do papel e marque os privilégios concedidos aos usuários.</DialogDescription>
+                        <DialogDescription className="text-slate-500">Defina o nome do papel e marque as permissões concedidas aos usuários.</DialogDescription>
                     </DialogHeader>
 
                     <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0 space-y-4">

@@ -8,12 +8,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.AssignUserToCompany;
 
+// ==========================================
 // 1. CONTRATOS
+// ==========================================
 public record AssignUserRequest(Guid CompanyId, Guid RoleId);
 public record AssignUserCommand(Guid UserId, Guid CompanyId, Guid RoleId) : IRequest<IResult>;
+public record RemoveUserAssignmentCommand(Guid UserId, Guid CompanyId) : IRequest<IResult>; // NOVO
 public record ListCompaniesQuery() : IRequest<IResult>;
 
+// ==========================================
 // 2. VALIDADOR
+// ==========================================
 public class AssignUserCommandValidator : AbstractValidator<AssignUserCommand>
 {
     public AssignUserCommandValidator()
@@ -24,7 +29,9 @@ public class AssignUserCommandValidator : AbstractValidator<AssignUserCommand>
     }
 }
 
+// ==========================================
 // 3. HANDLERS
+// ==========================================
 public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -38,7 +45,6 @@ public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
 
     public async Task<IResult> Handle(AssignUserCommand request, CancellationToken ct)
     {
-        // 1. Validações de integridade
         if (!await _db.Users.AnyAsync(u => u.Id == request.UserId, ct))
             return Results.NotFound(new { Message = "Usuário não encontrado." });
 
@@ -48,26 +54,20 @@ public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
         if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct))
             return Results.BadRequest(new { Message = "Perfil não existe." });
 
-        // 2. Busca se o usuário JÁ POSSUI algum vínculo nesta empresa específica
         var existingAssignment = await _db.UserCompanyRoles
             .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId, ct);
 
-        // 3. Lógica de "Upsert" (Substituição) para evitar acúmulo de papéis
         if (existingAssignment != null)
         {
-            // Se tentou vincular exatamente o mesmo perfil que ele já tem
             if (existingAssignment.RoleId == request.RoleId)
                 return Results.BadRequest(new { Message = "O usuário já possui este perfil nesta empresa." });
 
-            // Remove o vínculo antigo para abrir espaço para o novo
             _db.UserCompanyRoles.Remove(existingAssignment);
         }
 
-        // 4. Cria o novo vínculo
         _db.UserCompanyRoles.Add(new UserCompanyRole(request.UserId, request.CompanyId, request.RoleId));
         await _db.SaveChangesAsync(ct);
 
-        // 5. Invalida o cache de permissões para aplicar na hora
         _cacheService.InvalidateUserCompanyCache(request.UserId, request.CompanyId);
 
         return Results.Ok(new
@@ -76,6 +76,36 @@ public class AssignUserHandler : IRequestHandler<AssignUserCommand, IResult>
             ? "Perfil atualizado com sucesso nesta empresa!"
             : "Usuário vinculado com sucesso!"
         });
+    }
+}
+
+// NOVO: Handler de Remoção de Vínculo
+public class RemoveUserAssignmentHandler : IRequestHandler<RemoveUserAssignmentCommand, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    private readonly IPermissionCacheService _cacheService;
+
+    public RemoveUserAssignmentHandler(ApplicationDbContext db, IPermissionCacheService cacheService)
+    {
+        _db = db;
+        _cacheService = cacheService;
+    }
+
+    public async Task<IResult> Handle(RemoveUserAssignmentCommand request, CancellationToken ct)
+    {
+        var assignment = await _db.UserCompanyRoles
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId, ct);
+
+        if (assignment == null)
+            return Results.NotFound(new { Message = "Vínculo não encontrado." });
+
+        _db.UserCompanyRoles.Remove(assignment);
+        await _db.SaveChangesAsync(ct);
+
+        // Invalida o cache para remover o acesso imediatamente
+        _cacheService.InvalidateUserCompanyCache(request.UserId, request.CompanyId);
+
+        return Results.NoContent();
     }
 }
 
@@ -91,15 +121,23 @@ public class ListCompaniesHandler : IRequestHandler<ListCompaniesQuery, IResult>
     }
 }
 
+// ==========================================
 // 4. ENDPOINTS
+// ==========================================
 public static class AssignUserEndpoint
 {
     public static void MapAssignUserEndpoint(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/users/{userId:guid}/companies", async (Guid userId, AssignUserRequest req, IMediator mediator) =>
+        var group = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization();
+
+        // Rota de Inserção/Atualização (Upsert)
+        group.MapPost("/{userId:guid}/companies", async (Guid userId, AssignUserRequest req, IMediator mediator) =>
             await mediator.Send(new AssignUserCommand(userId, req.CompanyId, req.RoleId)))
-        .WithTags("Users")
-        .RequireAuthorization()
+        .RequirePermission(Permissions.Users.Manage);
+
+        // NOVO: Rota de Exclusão do Vínculo
+        group.MapDelete("/{userId:guid}/companies/{companyId:guid}", async (Guid userId, Guid companyId, IMediator mediator) =>
+            await mediator.Send(new RemoveUserAssignmentCommand(userId, companyId)))
         .RequirePermission(Permissions.Users.Manage);
     }
 }

@@ -3,7 +3,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGetApiUsers, usePostApiUsers, usePutApiUsersId, useDeleteApiUsersId, usePutApiUsersIdPassword } from '@/api/generated/users/users';
+import {
+    useGetApiUsers,
+    usePostApiUsers,
+    usePutApiUsersId,
+    useDeleteApiUsersId,
+    usePutApiUsersIdPassword
+} from '@/api/generated/users/users';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -14,11 +20,11 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Search, Plus, KeyRound, Loader2, Edit, Trash2, Building2, Save } from 'lucide-react';
+import { Search, Plus, KeyRound, Loader2, Edit, Trash2, Building2, Save, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import VincularEmpresaModal from './VincularEmpresaModal';
 
-// Schema do Usuário (Senha é opcional para edição)
+// Schema do Usuário
 const userSchema = z.object({
     name: z.string().min(3, 'O nome deve ter no mínimo 3 caracteres.'),
     email: z.string().email('Formato de e-mail inválido.'),
@@ -159,7 +165,7 @@ export default function UsuariosList() {
                             <TableRow>
                                 <TableHead className="w-[300px]">Usuário</TableHead>
                                 <TableHead>E-mail</TableHead>
-                                <TableHead>Tipo de Acesso</TableHead>
+                                <TableHead>Acessos Vinculados</TableHead>
                                 <TableHead>Data de Cadastro</TableHead>
                                 <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
@@ -182,9 +188,13 @@ export default function UsuariosList() {
                                     <TableCell className="text-sm text-slate-600 font-mono">{user.email}</TableCell>
                                     <TableCell>
                                         {user.isMaster ? (
-                                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold">Master</Badge>
+                                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold gap-1">
+                                                <ShieldCheck size={14} /> Master (Global)
+                                            </Badge>
                                         ) : (
-                                            <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-200">Operacional</Badge>
+                                            <span className="text-sm font-medium text-slate-600 px-2">
+                                                {user.assignments?.length || 0} ambiente(s)
+                                            </span>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-sm text-slate-500">
@@ -193,7 +203,7 @@ export default function UsuariosList() {
                                     <TableCell className="text-right space-x-1">
                                         {!user.isMaster && (
                                             <Button variant="ghost" size="sm" onClick={() => setUserToAssign(user)} className="text-emerald-600 hover:bg-emerald-50">
-                                                <Building2 className="h-4 w-4 mr-1" /> Vincular
+                                                <Building2 className="h-4 w-4 mr-1" /> Vínculos
                                             </Button>
                                         )}
                                         <Button variant="ghost" size="sm" onClick={() => setUserToResetPassword(user)} className="text-amber-600 hover:bg-amber-50">
@@ -283,21 +293,22 @@ export default function UsuariosList() {
                 </DialogContent>
             </Dialog>
 
+            {/* Modal de Gestão de Vínculos - Injeta o Usuário Fresco da Lista */}
             {userToAssign && (
                 <VincularEmpresaModal
-                    user={userToAssign}
+                    user={users.find(u => u.id === userToAssign.id) || userToAssign}
                     open={!!userToAssign}
                     onOpenChange={(open) => !open && setUserToAssign(null)}
                 />
             )}
 
-            {/* Modal de Exclusão */}
+            {/* Modal de Exclusão de Usuário */}
             <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-slate-900">Excluir Usuário?</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-500">
-                            Esta ação revogará permanentemente o acesso do usuário <strong className="text-slate-800">{userToDelete?.name}</strong>.
+                            Esta ação revogará permanentemente o acesso do usuário <strong className="text-slate-800">{userToDelete?.name}</strong> de todas as empresas vinculadas.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
