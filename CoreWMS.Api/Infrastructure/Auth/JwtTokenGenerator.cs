@@ -35,7 +35,7 @@ public class JwtTokenGenerator
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddMinutes(15), // Diminuímos o tempo de vida!
+            Expires = DateTime.UtcNow.AddMinutes(10), // Diminuímos o tempo de vida!
             SigningCredentials = credentials,
             Issuer = "CoreWMS",
             Audience = "CoreWMS.Users"

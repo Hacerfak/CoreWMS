@@ -22,29 +22,48 @@ public class GlobalExceptionHandler : IExceptionHandler
             Instance = httpContext.Request.Path
         };
 
-        // 1. Se for erro de validação (FluentValidation), devolve 400 com os campos
-        if (exception is ValidationException fluentException)
+        // Mapeamento semântico das exceções para os Status Codes HTTP
+        switch (exception)
         {
-            problemDetails.Title = "Erro de Validação";
-            problemDetails.Status = StatusCodes.Status400BadRequest;
-            problemDetails.Detail = "Um ou mais erros de validação ocorreram.";
+            case ValidationException fluentException:
+                problemDetails.Title = "Erro de Validação";
+                problemDetails.Status = StatusCodes.Status400BadRequest;
+                problemDetails.Detail = "Um ou mais erros de validação ocorreram.";
+                problemDetails.Extensions["errors"] = fluentException.Errors
+                    .GroupBy(x => x.PropertyName, x => x.ErrorMessage)
+                    .ToDictionary(x => x.Key, x => x.ToArray());
+                break;
 
-            // Agrupa os erros por campo para o frontend saber onde pintar de vermelho
-            problemDetails.Extensions["errors"] = fluentException.Errors
-                .GroupBy(x => x.PropertyName, x => x.ErrorMessage)
-                .ToDictionary(x => x.Key, x => x.ToArray());
-        }
-        // 2. Se for qualquer outro erro (banco, null reference, etc), devolve 500
-        else
-        {
-            problemDetails.Title = "Erro Interno do Servidor";
-            problemDetails.Status = StatusCodes.Status500InternalServerError;
-            problemDetails.Detail = exception.Message; // Pode ocultar em prod, mas excelente para dev
+            case UnauthorizedAccessException:
+                problemDetails.Title = "Não Autorizado";
+                problemDetails.Status = StatusCodes.Status401Unauthorized;
+                problemDetails.Detail = exception.Message; // Ex: "E-mail ou senha inválidos."
+                break;
+
+            case KeyNotFoundException:
+                problemDetails.Title = "Não Encontrado";
+                problemDetails.Status = StatusCodes.Status404NotFound;
+                problemDetails.Detail = exception.Message;
+                break;
+
+            case InvalidOperationException:
+            case ArgumentException:
+                problemDetails.Title = "Requisição Inválida";
+                problemDetails.Status = StatusCodes.Status400BadRequest;
+                problemDetails.Detail = exception.Message;
+                break;
+
+            default:
+                problemDetails.Title = "Erro Interno do Servidor";
+                problemDetails.Status = StatusCodes.Status500InternalServerError;
+                // Ocultar em prod se necessário, mas útil no desenvolvimento
+                problemDetails.Detail = exception.Message;
+                break;
         }
 
         httpContext.Response.StatusCode = problemDetails.Status.Value;
         await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
 
-        return true; // Diz ao .NET que a exceção foi tratada
+        return true;
     }
 }

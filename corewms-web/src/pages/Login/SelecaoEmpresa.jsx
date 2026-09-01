@@ -12,12 +12,10 @@ export default function SelecaoEmpresa() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // Pegamos a lista "empresas" que o backend já enviou no momento do Login!
     const { user, empresas, setCompanyId, logout, setPermissions } = useAuthStore();
     const [loadingContext, setLoadingContext] = useState(false);
 
     useEffect(() => {
-        // Se não tem empresas e é ADMIN, manda pro onboarding
         if (empresas.length === 0 && user?.role === 'ADMIN') {
             navigate('/onboarding', { replace: true });
         }
@@ -28,9 +26,12 @@ export default function SelecaoEmpresa() {
             setLoadingContext(true);
             setCompanyId(empresaId);
 
-            // A chamada retorna diretamente a matriz de permissões ["customers:view", ...]
-            const userPermissions = await getMyPermissions();
-            setPermissions(userPermissions || []);
+            // A chamada retorna as permissões vinculadas ao Tenant (X-Company-Id)
+            const response = await getMyPermissions();
+
+            // Orval pode retornar o array direto ou envelopado em um data (depende do interceptor)
+            const userPermissions = Array.isArray(response) ? response : (response?.data || []);
+            setPermissions(userPermissions);
 
             navigate('/dashboard');
         } catch (error) {
@@ -42,8 +43,8 @@ export default function SelecaoEmpresa() {
     };
 
     const handleLogout = () => {
-        queryClient.clear(); // Limpa todo o cache de requisições antigas do React Query
-        logout();            // Limpa o Zustand e LocalStorage
+        queryClient.clear();
+        logout();
         navigate('/login');
     };
 
@@ -54,10 +55,11 @@ export default function SelecaoEmpresa() {
                     <ShieldCheck className="text-blue-600" size={24} />
                     <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Ambiente Seguro</h1>
                 </div>
-                <Button variant="ghost" onClick={handleLogout} className="text-slate-500 hover:text-slate-900" disabled={loadingContext}>
+                <Button variant="ghost" onClick={handleLogout} className="text-slate-500 hover:text-rose-600 hover:bg-rose-50" disabled={loadingContext}>
                     <LogOut className="mr-2 h-4 w-4" /> Encerrar Sessão
                 </Button>
             </header>
+
             <main className="flex-1 flex flex-col items-center justify-center p-6 max-w-6xl mx-auto w-full animate-in fade-in zoom-in-95 duration-500">
                 <div className="text-center mb-12">
                     <h2 className="text-4xl font-bold tracking-tight text-slate-900">Selecione o Ambiente</h2>

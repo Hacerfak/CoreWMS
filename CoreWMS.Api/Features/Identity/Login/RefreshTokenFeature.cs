@@ -50,13 +50,16 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 
     public async Task<RefreshTokenResponse> Handle(RefreshTokenCommand request, CancellationToken ct)
     {
+        var emailLower = request.Email.Trim().ToLower();
+
         var user = await _db.Users
             .Include(u => u.UserCompanyRoles)
                 .ThenInclude(ucr => ucr.Company)
-            .FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
 
         if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
         {
+            // Lança a exceção que será perfeitamente capturada e convertida em 401 pelo GlobalExceptionHandler
             throw new UnauthorizedAccessException("Refresh token inválido ou expirado.");
         }
 
@@ -69,6 +72,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 
         // Mutação de estado encapsulada (DDD)
         user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));
+
         await _db.SaveChangesAsync(ct);
 
         return new RefreshTokenResponse(newAccessToken, newRefreshToken);

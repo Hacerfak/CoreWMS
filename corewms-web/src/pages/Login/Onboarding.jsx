@@ -1,29 +1,38 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { postApiCompanies } from '@/api/generated/companies/companies';
+import { postApiIdentityRefresh } from '@/api/generated/identity/identity';
+import { useAuthStore } from '@/store/useAuthStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UploadCloud, Lock, ArrowLeft, Loader2, CheckCircle2, Warehouse, AlertCircle } from 'lucide-react';
+import { UploadCloud, Lock, ArrowLeft, Loader2, CheckCircle2, Warehouse, AlertCircle, LogOut } from 'lucide-react';
+import { toast } from 'sonner';
 
 const ESTADOS_BR = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
 
 export default function Onboarding() {
     const navigate = useNavigate();
     const location = useLocation();
+    const queryClient = useQueryClient();
 
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
     const [uf, setUf] = useState('RS');
     const [errorMsg, setErrorMsg] = useState('');
 
-    // Mutação explícita enviando o arquivo e os campos diretamente
     const companyMutation = useMutation({
         mutationFn: (data) => postApiCompanies(data),
     });
+
+    const handleLogout = () => {
+        queryClient.clear();
+        useAuthStore.getState().logout();
+        navigate('/login');
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -34,7 +43,6 @@ export default function Onboarding() {
             return;
         }
 
-        // Passamos um objeto simples. O Orval cria e popula o FormData internamente.
         companyMutation.mutate(
             {
                 certificateFile: file,
@@ -42,12 +50,45 @@ export default function Onboarding() {
                 uf: uf,
             },
             {
-                onSuccess: () => {
+                onSuccess: async (newCompany) => {
+                    toast.success('Empresa configurada com sucesso!');
+
+                    const authStore = useAuthStore.getState();
+                    const userEmail = authStore.user?.email || authStore.user?.Email;
+                    const currentRefreshToken = authStore.refreshToken;
+
+                    try {
+                        if (userEmail && currentRefreshToken) {
+                            const res = await postApiIdentityRefresh({
+                                email: userEmail,
+                                refreshToken: currentRefreshToken
+                            });
+
+                            const newAccessToken = res?.accessToken || res?.data?.accessToken;
+                            const newRefreshToken = res?.refreshToken || res?.data?.refreshToken;
+
+                            useAuthStore.setState({
+                                token: newAccessToken,
+                                refreshToken: newRefreshToken,
+                                empresas: [
+                                    ...authStore.empresas,
+                                    {
+                                        id: newCompany.id,
+                                        cnpj: newCompany.cnpj,
+                                        corporateName: newCompany.corporateName
+                                    }
+                                ]
+                            });
+                        }
+                    } catch (err) {
+                        console.warn('A renovação silenciosa falhou, mas a empresa foi criada.', err);
+                    }
+
                     const origin = location.state?.from || '/selecao-empresa';
                     navigate(origin, { replace: true });
                 },
                 onError: (err) => {
-                    const message = err.response?.data?.message || 'Erro ao processar certificado digital.';
+                    const message = err.response?.data?.detail || err.response?.data?.message || 'Erro ao processar certificado digital.';
                     setErrorMsg(message);
                 },
             }
@@ -59,7 +100,6 @@ export default function Onboarding() {
     return (
         <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex items-center justify-center p-6 relative">
 
-            {/* OVERLAY DE CARREGAMENTO INTERMEDIÁRIO */}
             {isPending && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
                     <div className="bg-slate-900/90 border border-slate-700/80 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center space-y-4">
@@ -79,15 +119,29 @@ export default function Onboarding() {
                 <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
 
                 <CardHeader className="space-y-1 relative pb-6 pt-8 px-8">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="absolute left-6 top-6 text-slate-400 hover:text-slate-900"
-                        onClick={() => navigate(location.state?.from || '/selecao-empresa')}
-                        disabled={isPending}
-                    >
-                        <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
-                    </Button>
+                    {/* Botões de Ação no Header */}
+                    <div className="absolute left-6 top-6 flex items-center w-[calc(100%-48px)] justify-between">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-400 hover:text-slate-900"
+                            onClick={() => navigate(location.state?.from || '/selecao-empresa')}
+                            disabled={isPending}
+                        >
+                            <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
+                        </Button>
+
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            onClick={handleLogout}
+                            disabled={isPending}
+                        >
+                            <LogOut className="h-4 w-4 mr-2" /> Sair
+                        </Button>
+                    </div>
+
                     <div className="text-center mt-8">
                         <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight">Implantação de Ambiente</CardTitle>
                         <CardDescription className="mt-2 text-slate-500 text-sm">

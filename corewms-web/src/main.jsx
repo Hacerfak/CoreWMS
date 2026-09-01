@@ -10,7 +10,6 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: (failureCount, error) => {
-        // Bloqueia tentativas repetidas em caso de erro de autenticação ou permissão
         if (error?.response?.status === 401 || error?.response?.status === 403) {
           return false;
         }
@@ -24,7 +23,8 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
-      <Toaster position="top-right" richColors />
+      {/* Posição alterada para o rodapé central */}
+      <Toaster position="bottom-center" richColors />
     </QueryClientProvider>
   </StrictMode>
 );
