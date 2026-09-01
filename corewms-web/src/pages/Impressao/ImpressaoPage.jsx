@@ -1,10 +1,19 @@
 import { useState } from 'react';
-import { useGetApiPrintingAgents, usePostApiPrintSendTest, useGetApiPrintingTemplates } from '@/api/generated/printing/printing';
+import {
+    useGetApiPrintingAgents,
+    usePostApiPrintSendTest,
+    useGetApiPrintingTemplates,
+    useDeleteApiPrintingAgentsId,
+    useDeleteApiPrintingPrintersId,
+    useDeleteApiPrintingTemplatesId
+} from '@/api/generated/printing/printing';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Printer, Server, Tag, Loader2, KeyRound, Play, Edit, PenLine } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Plus, Printer, Server, Tag, Loader2, KeyRound, Play, Edit, PenLine, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import AgenteFormModal from './AgenteFormModal';
@@ -13,29 +22,31 @@ import TemplateFormModal from './TemplateFormModal';
 import PrintTemplateModal from './PrintTemplateModal';
 
 export default function ImpressaoPage() {
+    const queryClient = useQueryClient();
+
     // Estados - Agentes
     const [isAgenteModalOpen, setIsAgenteModalOpen] = useState(false);
     const [selectedAgentForEdit, setSelectedAgentForEdit] = useState(null);
+    const [agentToDelete, setAgentToDelete] = useState(null);
 
     // Estados - Impressoras
     const [isImpressoraModalOpen, setIsImpressoraModalOpen] = useState(false);
     const [selectedAgentContext, setSelectedAgentContext] = useState({ id: '' });
     const [selectedPrinterForEdit, setSelectedPrinterForEdit] = useState(null);
+    const [printerToDelete, setPrinterToDelete] = useState(null);
 
     // Estados - Templates
     const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
     const [selectedTemplateForEdit, setSelectedTemplateForEdit] = useState(null);
+    const [templateToDelete, setTemplateToDelete] = useState(null);
+
+    // Estado de Impressão (Teste)
     const [isPrintTemplateModalOpen, setIsPrintTemplateModalOpen] = useState(false);
     const [templateToPrint, setTemplateToPrint] = useState(null);
 
-    const handleOpenPrintTemplate = (template) => {
-        setTemplateToPrint(template);
-        setIsPrintTemplateModalOpen(true);
-    };
-
     // Dados da API
     const { data: agentes = [], isLoading: isLoadingAgentes } = useGetApiPrintingAgents();
-    const { data: templates = [], isLoading: isLoadingTemplates } = useGetApiPrintingTemplates(); // <-- Mude para o hook correto do Orval se diferir
+    const { data: templates = [], isLoading: isLoadingTemplates } = useGetApiPrintingTemplates();
 
     const { mutate: testPrint, isPending: isTesting } = usePostApiPrintSendTest({
         mutation: {
@@ -44,12 +55,43 @@ export default function ImpressaoPage() {
         }
     });
 
+    // Mutações de Deleção
+    const { mutate: deleteAgent, isPending: isDeletingAgent } = useDeleteApiPrintingAgentsId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Agente removido com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/printing/agents'] });
+                setAgentToDelete(null);
+            }
+        }
+    });
+
+    const { mutate: deletePrinter, isPending: isDeletingPrinter } = useDeleteApiPrintingPrintersId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Impressora removida!');
+                queryClient.invalidateQueries({ queryKey: ['/api/printing/agents'] });
+                setPrinterToDelete(null);
+            }
+        }
+    });
+
+    const { mutate: deleteTemplate, isPending: isDeletingTemplate } = useDeleteApiPrintingTemplatesId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Template removido!');
+                queryClient.invalidateQueries({ queryKey: ['/api/printing/templates'] });
+                setTemplateToDelete(null);
+            }
+        }
+    });
+
     const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text);
         toast.success('Copiado para a área de transferência!');
     };
 
-    // Ações de abertura de Modais
+    // Ações de abertura
     const handleOpenAgenteModal = (agente = null) => {
         setSelectedAgentForEdit(agente);
         setIsAgenteModalOpen(true);
@@ -64,6 +106,11 @@ export default function ImpressaoPage() {
     const handleOpenTemplateModal = (template = null) => {
         setSelectedTemplateForEdit(template);
         setIsTemplateModalOpen(true);
+    };
+
+    const handleOpenPrintTemplate = (template) => {
+        setTemplateToPrint(template);
+        setIsPrintTemplateModalOpen(true);
     };
 
     return (
@@ -142,9 +189,11 @@ export default function ImpressaoPage() {
                                                         <div key={p.id} className="flex items-center bg-blue-50 border border-blue-200 rounded-full pl-2 pr-1 py-1 text-xs group">
                                                             <Printer className="w-3 h-3 text-blue-500 mr-1.5" />
                                                             <span className="font-medium text-blue-700 mr-2">{p.name}</span>
-
                                                             <button type="button" onClick={() => handleOpenPrinterModal(agente.id, p)} title="Editar Impressora" className="bg-blue-100 hover:bg-blue-600 text-blue-600 hover:text-white p-1 rounded-full transition-all mr-1">
                                                                 <PenLine className="w-3 h-3" />
+                                                            </button>
+                                                            <button type="button" onClick={() => setPrinterToDelete({ agentId: agente.id, ...p })} title="Remover Impressora" className="bg-rose-100 hover:bg-rose-600 text-rose-600 hover:text-white p-1 rounded-full transition-all mr-1">
+                                                                <Trash2 className="w-3 h-3" />
                                                             </button>
                                                             <button type="button" onClick={() => testPrint({ data: { stationName: agente.name, printerName: p.name, customZpl: "" } })} disabled={isTesting} title="Imprimir Teste" className="bg-blue-100 hover:bg-blue-600 text-blue-600 hover:text-white p-1 rounded-full transition-all disabled:opacity-50">
                                                                 {isTesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
@@ -153,12 +202,15 @@ export default function ImpressaoPage() {
                                                     ))}
                                                 </div>
                                             </TableCell>
-                                            <TableCell className="text-right space-x-2">
+                                            <TableCell className="text-right space-x-1">
+                                                <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleOpenPrinterModal(agente.id)}>
+                                                    <Plus className="h-4 w-4 mr-1" /> Impressora
+                                                </Button>
                                                 <Button variant="ghost" size="sm" onClick={() => handleOpenAgenteModal(agente)}>
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleOpenPrinterModal(agente.id)}>
-                                                    <Plus className="h-4 w-4 mr-1" /> Impressora
+                                                <Button variant="ghost" size="sm" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => setAgentToDelete(agente)}>
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -196,12 +248,15 @@ export default function ImpressaoPage() {
                                             <TableCell className="font-medium text-slate-900">{tpl.name}</TableCell>
                                             <TableCell className="text-slate-600">{tpl.widthMm}x{tpl.heightMm} mm</TableCell>
                                             <TableCell><Badge variant="outline" className="bg-emerald-50 text-emerald-700">Ativo</Badge></TableCell>
-                                            <TableCell className="text-right">
+                                            <TableCell className="text-right space-x-1">
                                                 <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleOpenPrintTemplate(tpl)}>
                                                     <Play className="h-4 w-4 mr-1" /> Testar
                                                 </Button>
                                                 <Button variant="ghost" size="sm" onClick={() => handleOpenTemplateModal(tpl)}>
                                                     <Edit className="h-4 w-4" /> Editar
+                                                </Button>
+                                                <Button variant="ghost" size="sm" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700" onClick={() => setTemplateToDelete(tpl)}>
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </TableCell>
                                         </TableRow>
@@ -213,15 +268,51 @@ export default function ImpressaoPage() {
                 </TabsContent>
             </Tabs>
 
+            {/* Modais de Edição */}
             <AgenteFormModal open={isAgenteModalOpen} onOpenChange={setIsAgenteModalOpen} agenteToEdit={selectedAgentForEdit} />
             <ImpressoraFormModal open={isImpressoraModalOpen} onOpenChange={setIsImpressoraModalOpen} agentId={selectedAgentContext.id} impressoraToEdit={selectedPrinterForEdit} />
             <TemplateFormModal open={isTemplateModalOpen} onOpenChange={setIsTemplateModalOpen} templateToEdit={selectedTemplateForEdit} />
-            <PrintTemplateModal
-                open={isPrintTemplateModalOpen}
-                onOpenChange={setIsPrintTemplateModalOpen}
-                template={templateToPrint}
-                agentes={agentes}
-            />
+            <PrintTemplateModal open={isPrintTemplateModalOpen} onOpenChange={setIsPrintTemplateModalOpen} template={templateToPrint} agentes={agentes} />
+
+            {/* AlertDialogs de Exclusão */}
+            <AlertDialog open={!!agentToDelete} onOpenChange={(open) => !open && setAgentToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Agente?</AlertDialogTitle>
+                        <AlertDialogDescription>Esta ação removerá a estação <strong>{agentToDelete?.name}</strong> e todas as impressoras atreladas a ela.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingAgent}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-700" onClick={() => deleteAgent({ id: agentToDelete.id })} disabled={isDeletingAgent}>Confirmar</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!printerToDelete} onOpenChange={(open) => !open && setPrinterToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Impressora?</AlertDialogTitle>
+                        <AlertDialogDescription>Deseja remover a impressora <strong>{printerToDelete?.name}</strong> do agente selecionado?</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingPrinter}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-700" onClick={() => deletePrinter({ id: printerToDelete.id })} disabled={isDeletingPrinter}>Confirmar</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={!!templateToDelete} onOpenChange={(open) => !open && setTemplateToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Template?</AlertDialogTitle>
+                        <AlertDialogDescription>Esta ação removerá o modelo ZPL <strong>{templateToDelete?.name}</strong> permanentemente.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingTemplate}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-700" onClick={() => deleteTemplate({ id: templateToDelete.id })} disabled={isDeletingTemplate}>Confirmar</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

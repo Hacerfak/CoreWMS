@@ -1,5 +1,7 @@
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Printing;
+using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Features.Identity.Constants;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -68,6 +70,6 @@ public static class PrintEndpoints
         app.MapPost("/api/print/send-test", async ([FromBody] SendTestPrintCommand command, IMediator mediator) =>
             await mediator.Send(command))
         .WithTags("Printing")
-        .RequireAuthorization(); // Se precisar, pode adicionar o .RequirePermission(...) aqui no futuro
+        .RequirePermission(Permissions.Printing.Manage); // Se precisar, pode adicionar o .RequirePermission(...) aqui no futuro
     }
 }

@@ -323,6 +323,63 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiPrintingAgentsIdMutationOptions(options), queryClient);
     }
+    export const deleteApiPrintingAgentsId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/agents/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiPrintingAgentsIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>, TError,DeleteApiPrintingAgentsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>, TError,DeleteApiPrintingAgentsIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiPrintingAgentsId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>, DeleteApiPrintingAgentsIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiPrintingAgentsId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiPrintingAgentsIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>>
+
+    export type DeleteApiPrintingAgentsIdMutationError = unknown
+    export type DeleteApiPrintingAgentsIdMutationVariables = {id: string}
+
+    export const useDeleteApiPrintingAgentsId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>, TError,DeleteApiPrintingAgentsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>,
+        TError,
+        DeleteApiPrintingAgentsIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiPrintingAgentsIdMutationOptions(options), queryClient);
+    }
     export const postApiPrintingPrinters = (
     createPrinterCommand: CreatePrinterCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -441,6 +498,63 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiPrintingPrintersIdMutationOptions(options), queryClient);
+    }
+    export const deleteApiPrintingPrintersId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/printers/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiPrintingPrintersIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>, TError,DeleteApiPrintingPrintersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>, TError,DeleteApiPrintingPrintersIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiPrintingPrintersId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>, DeleteApiPrintingPrintersIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiPrintingPrintersId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiPrintingPrintersIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>>
+
+    export type DeleteApiPrintingPrintersIdMutationError = unknown
+    export type DeleteApiPrintingPrintersIdMutationVariables = {id: string}
+
+    export const useDeleteApiPrintingPrintersId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>, TError,DeleteApiPrintingPrintersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>,
+        TError,
+        DeleteApiPrintingPrintersIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiPrintingPrintersIdMutationOptions(options), queryClient);
     }
     export const postApiPrintingTemplates = (
     createTemplateRequest: CreateTemplateRequest,
@@ -646,4 +760,61 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiPrintingTemplatesIdMutationOptions(options), queryClient);
+    }
+    export const deleteApiPrintingTemplatesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/templates/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiPrintingTemplatesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>, TError,DeleteApiPrintingTemplatesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>, TError,DeleteApiPrintingTemplatesIdMutationVariables, TContext> => {
+
+const mutationKey = ['deleteApiPrintingTemplatesId'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>, DeleteApiPrintingTemplatesIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiPrintingTemplatesId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiPrintingTemplatesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>>
+
+    export type DeleteApiPrintingTemplatesIdMutationError = unknown
+    export type DeleteApiPrintingTemplatesIdMutationVariables = {id: string}
+
+    export const useDeleteApiPrintingTemplatesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>, TError,DeleteApiPrintingTemplatesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>,
+        TError,
+        DeleteApiPrintingTemplatesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiPrintingTemplatesIdMutationOptions(options), queryClient);
     }

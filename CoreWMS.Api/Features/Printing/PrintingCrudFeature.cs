@@ -15,14 +15,24 @@ namespace CoreWMS.Api.Features.Printing;
 public record CreateAgentCommand(string Name) : IRequest<IResult>;
 public record CreatePrinterCommand(Guid PrintAgentId, string Name, string Target) : IRequest<IResult>;
 public record CreateLabelTemplateCommand(string Name, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
+
 public record ListAgentsQuery() : IRequest<IResult>;
 public record ListTemplatesQuery() : IRequest<IResult>;
+
 public record UpdateAgentRequest(string Name);
 public record UpdateAgentCommand(Guid Id, string Name) : IRequest<IResult>;
+
 public record UpdatePrinterRequest(string Name, string Target);
 public record UpdatePrinterCommand(Guid Id, string Name, string Target) : IRequest<IResult>;
+
+// NOVO: Commands de Exclusão
+public record DeleteAgentCommand(Guid Id) : IRequest<IResult>;
+public record DeletePrinterCommand(Guid Id) : IRequest<IResult>;
+public record DeleteTemplateCommand(Guid Id) : IRequest<IResult>;
+
 public record PrinterResponseDto(Guid Id, string Name, string Target, bool IsActive);
 public record PrintAgentResponseDto(Guid Id, string Name, string ApiKey, bool IsActive, bool IsOnline, List<PrinterResponseDto> Printers);
+
 public record CreateTemplateRequest(string Name, string ZplContent, int WidthMm, int HeightMm);
 public record CreateTemplateCommand(string Name, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
 public record UpdateTemplateRequest(string Name, string ZplContent, int WidthMm, int HeightMm);
@@ -45,34 +55,14 @@ public class CreatePrinterCommandValidator : AbstractValidator<CreatePrinterComm
     }
 }
 
-public class CreateLabelTemplateCommandValidator : AbstractValidator<CreateLabelTemplateCommand>
-{
-    public CreateLabelTemplateCommandValidator()
-    {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.ZplContent).NotEmpty();
-        RuleFor(x => x.WidthMm).GreaterThan(0);
-        RuleFor(x => x.HeightMm).GreaterThan(0);
-    }
-}
-
 public class CreateTemplateCommandValidator : AbstractValidator<CreateTemplateCommand>
 {
     public CreateTemplateCommandValidator()
     {
-        RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("O nome do template é obrigatório.")
-            .MinimumLength(3).WithMessage("O nome deve ter no mínimo 3 caracteres.")
-            .MaximumLength(100).WithMessage("O nome deve ter no máximo 100 caracteres.");
-
-        RuleFor(x => x.ZplContent)
-            .NotEmpty().WithMessage("O código ZPL é obrigatório.");
-
-        RuleFor(x => x.WidthMm)
-            .GreaterThan(0).WithMessage("A largura em milímetros deve ser maior que zero.");
-
-        RuleFor(x => x.HeightMm)
-            .GreaterThan(0).WithMessage("A altura em milímetros deve ser maior que zero.");
+        RuleFor(x => x.Name).NotEmpty().WithMessage("O nome do template é obrigatório.").MinimumLength(3).MaximumLength(100);
+        RuleFor(x => x.ZplContent).NotEmpty().WithMessage("O código ZPL é obrigatório.");
+        RuleFor(x => x.WidthMm).GreaterThan(0);
+        RuleFor(x => x.HeightMm).GreaterThan(0);
     }
 }
 
@@ -80,22 +70,11 @@ public class UpdateTemplateCommandValidator : AbstractValidator<UpdateTemplateCo
 {
     public UpdateTemplateCommandValidator()
     {
-        RuleFor(x => x.Id)
-            .NotEmpty().WithMessage("O ID do template é obrigatório.");
-
-        RuleFor(x => x.Name)
-            .NotEmpty().WithMessage("O nome do template é obrigatório.")
-            .MinimumLength(3).WithMessage("O nome deve ter no mínimo 3 caracteres.")
-            .MaximumLength(100).WithMessage("O nome deve ter no máximo 100 caracteres.");
-
-        RuleFor(x => x.ZplContent)
-            .NotEmpty().WithMessage("O código ZPL é obrigatório.");
-
-        RuleFor(x => x.WidthMm)
-            .GreaterThan(0).WithMessage("A largura em milímetros deve ser maior que zero.");
-
-        RuleFor(x => x.HeightMm)
-            .GreaterThan(0).WithMessage("A altura em milímetros deve ser maior que zero.");
+        RuleFor(x => x.Id).NotEmpty().WithMessage("O ID do template é obrigatório.");
+        RuleFor(x => x.Name).NotEmpty().WithMessage("O nome do template é obrigatório.").MinimumLength(3).MaximumLength(100);
+        RuleFor(x => x.ZplContent).NotEmpty().WithMessage("O código ZPL é obrigatório.");
+        RuleFor(x => x.WidthMm).GreaterThan(0);
+        RuleFor(x => x.HeightMm).GreaterThan(0);
     }
 }
 
@@ -136,11 +115,8 @@ public class ListAgentsHandler : IRequestHandler<ListAgentsQuery, IResult>
         var agents = await _db.PrintAgents.Include(a => a.Printers).AsNoTracking().ToListAsync(ct);
 
         var response = agents.Select(a => new PrintAgentResponseDto(
-            a.Id,
-            a.Name,
-            a.ApiKey,
-            a.IsActive,
-            _connectionManager.IsOnline(a.ApiKey), // Verifica em tempo real!
+            a.Id, a.Name, a.ApiKey, a.IsActive,
+            _connectionManager.IsOnline(a.ApiKey), // Verifica no SignalR em tempo real!
             a.Printers.Select(p => new PrinterResponseDto(p.Id, p.Name, p.Target, p.IsActive)).ToList()
         )).ToList();
 
@@ -160,6 +136,7 @@ public class UpdateAgentHandler : IRequestHandler<UpdateAgentCommand, IResult>
 
         agent.Update(request.Name, agent.IsActive);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
@@ -176,6 +153,7 @@ public class UpdatePrinterHandler : IRequestHandler<UpdatePrinterCommand, IResul
 
         printer.Update(request.Name, request.Target, printer.IsActive);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
@@ -193,21 +171,8 @@ public class CreatePrinterHandler : IRequestHandler<CreatePrinterCommand, IResul
         var printer = new Printer(request.PrintAgentId, request.Name, request.Target);
         _db.Printers.Add(printer);
         await _db.SaveChangesAsync(ct);
+
         return Results.Created($"/api/printing/printers/{printer.Id}", printer.Adapt<PrinterResponseDto>());
-    }
-}
-
-public class CreateLabelTemplateHandler : IRequestHandler<CreateLabelTemplateCommand, IResult>
-{
-    private readonly ApplicationDbContext _db;
-    public CreateLabelTemplateHandler(ApplicationDbContext db) => _db = db;
-
-    public async Task<IResult> Handle(CreateLabelTemplateCommand request, CancellationToken ct)
-    {
-        var template = new LabelTemplate(request.Name, request.ZplContent, request.WidthMm, request.HeightMm);
-        _db.LabelTemplates.Add(template);
-        await _db.SaveChangesAsync(ct);
-        return Results.Created($"/api/printing/templates/{template.Id}", new { template.Id, template.Name });
     }
 }
 
@@ -248,10 +213,52 @@ public class UpdateTemplateHandler : IRequestHandler<UpdateTemplateCommand, IRes
         var template = await _db.LabelTemplates.FindAsync(new object[] { request.Id }, ct);
         if (template == null) return Results.NotFound();
 
-        // Repassa o IsActive atual para não alterá-lo indevidamente
         template.Update(request.Name, request.ZplContent, request.WidthMm, request.HeightMm, template.IsActive);
         await _db.SaveChangesAsync(ct);
 
+        return Results.NoContent();
+    }
+}
+
+// NOVO: Handlers de Exclusão
+public class DeleteAgentHandler : IRequestHandler<DeleteAgentCommand, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    public DeleteAgentHandler(ApplicationDbContext db) => _db = db;
+    public async Task<IResult> Handle(DeleteAgentCommand request, CancellationToken ct)
+    {
+        var agent = await _db.PrintAgents.FindAsync(new object[] { request.Id }, ct);
+        if (agent == null) return Results.NotFound();
+        _db.PrintAgents.Remove(agent); // Deleção em cascata apagará as impressoras filhas (EF Core)
+        await _db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+}
+
+public class DeletePrinterHandler : IRequestHandler<DeletePrinterCommand, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    public DeletePrinterHandler(ApplicationDbContext db) => _db = db;
+    public async Task<IResult> Handle(DeletePrinterCommand request, CancellationToken ct)
+    {
+        var printer = await _db.Printers.FindAsync(new object[] { request.Id }, ct);
+        if (printer == null) return Results.NotFound();
+        _db.Printers.Remove(printer);
+        await _db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+}
+
+public class DeleteTemplateHandler : IRequestHandler<DeleteTemplateCommand, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    public DeleteTemplateHandler(ApplicationDbContext db) => _db = db;
+    public async Task<IResult> Handle(DeleteTemplateCommand request, CancellationToken ct)
+    {
+        var template = await _db.LabelTemplates.FindAsync(new object[] { request.Id }, ct);
+        if (template == null) return Results.NotFound();
+        _db.LabelTemplates.Remove(template);
+        await _db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
 }
@@ -267,13 +274,17 @@ public static class PrintingCrudEndpoints
         group.MapPost("/agents", async (CreateAgentCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission(Permissions.Printing.Manage);
         group.MapGet("/agents", async (IMediator mediator) => await mediator.Send(new ListAgentsQuery())).RequirePermission(Permissions.Printing.Manage);
         group.MapPut("/agents/{id:guid}", async (Guid id, UpdateAgentRequest req, IMediator mediator) => await mediator.Send(new UpdateAgentCommand(id, req.Name))).RequirePermission(Permissions.Printing.Manage);
+        group.MapDelete("/agents/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteAgentCommand(id))).RequirePermission(Permissions.Printing.Manage); // Novo
 
         // Impressoras
         group.MapPost("/printers", async (CreatePrinterCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission(Permissions.Printing.Manage);
         group.MapPut("/printers/{id:guid}", async (Guid id, UpdatePrinterRequest req, IMediator mediator) => await mediator.Send(new UpdatePrinterCommand(id, req.Name, req.Target))).RequirePermission(Permissions.Printing.Manage);
+        group.MapDelete("/printers/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeletePrinterCommand(id))).RequirePermission(Permissions.Printing.Manage); // Novo
 
+        // Templates
         group.MapPost("/templates", async (CreateTemplateRequest req, IMediator mediator) => await mediator.Send(new CreateTemplateCommand(req.Name, req.ZplContent, req.WidthMm, req.HeightMm))).RequirePermission(Permissions.Printing.Manage);
         group.MapGet("/templates", async (IMediator mediator) => await mediator.Send(new ListTemplatesQuery())).RequirePermission(Permissions.Printing.Manage);
         group.MapPut("/templates/{id:guid}", async (Guid id, UpdateTemplateRequest req, IMediator mediator) => await mediator.Send(new UpdateTemplateCommand(id, req.Name, req.ZplContent, req.WidthMm, req.HeightMm))).RequirePermission(Permissions.Printing.Manage);
+        group.MapDelete("/templates/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteTemplateCommand(id))).RequirePermission(Permissions.Printing.Manage); // Novo
     }
 }
