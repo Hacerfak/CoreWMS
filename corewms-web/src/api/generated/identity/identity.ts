@@ -15,8 +15,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  LoginCommand,
-  RefreshTokenCommand
+  LoginRequest,
+  LoginResponse,
+  ProblemDetails,
+  RefreshTokenRequest,
+  RefreshTokenResponse
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -31,15 +34,15 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 export const postApiIdentityLogin = (
-    loginCommand: LoginCommand,
+    loginRequest: LoginRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
-      return customInstance<void>(
+      return customInstance<LoginResponse>(
       {url: `/api/identity/login`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: loginCommand, signal
+      data: loginRequest, signal
     },
       options);
     }
@@ -47,7 +50,7 @@ export const postApiIdentityLogin = (
 
 
 
-export const getPostApiIdentityLoginMutationOptions = <TError = unknown,
+export const getPostApiIdentityLoginMutationOptions = <TError = ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityLogin>>, TError,PostApiIdentityLoginMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityLogin>>, TError,PostApiIdentityLoginMutationVariables, TContext> => {
 
@@ -75,11 +78,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiIdentityLoginMutationResult = NonNullable<Awaited<ReturnType<typeof postApiIdentityLogin>>>
-    export type PostApiIdentityLoginMutationBody = LoginCommand
-    export type PostApiIdentityLoginMutationError = unknown
-    export type PostApiIdentityLoginMutationVariables = {data: LoginCommand}
+    export type PostApiIdentityLoginMutationBody = LoginRequest
+    export type PostApiIdentityLoginMutationError = ProblemDetails
+    export type PostApiIdentityLoginMutationVariables = {data: LoginRequest}
 
-    export const usePostApiIdentityLogin = <TError = unknown,
+    export const usePostApiIdentityLogin = <TError = ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityLogin>>, TError,PostApiIdentityLoginMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiIdentityLogin>>,
@@ -90,15 +93,15 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getPostApiIdentityLoginMutationOptions(options), queryClient);
     }
     export const postApiIdentityRefresh = (
-    refreshTokenCommand: RefreshTokenCommand,
+    refreshTokenRequest: RefreshTokenRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
-      return customInstance<void>(
+      return customInstance<RefreshTokenResponse>(
       {url: `/api/identity/refresh`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: refreshTokenCommand, signal
+      data: refreshTokenRequest, signal
     },
       options);
     }
@@ -106,7 +109,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiIdentityRefreshMutationOptions = <TError = unknown,
+export const getPostApiIdentityRefreshMutationOptions = <TError = ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityRefresh>>, TError,PostApiIdentityRefreshMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityRefresh>>, TError,PostApiIdentityRefreshMutationVariables, TContext> => {
 
@@ -134,11 +137,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiIdentityRefreshMutationResult = NonNullable<Awaited<ReturnType<typeof postApiIdentityRefresh>>>
-    export type PostApiIdentityRefreshMutationBody = RefreshTokenCommand
-    export type PostApiIdentityRefreshMutationError = unknown
-    export type PostApiIdentityRefreshMutationVariables = {data: RefreshTokenCommand}
+    export type PostApiIdentityRefreshMutationBody = RefreshTokenRequest
+    export type PostApiIdentityRefreshMutationError = ProblemDetails
+    export type PostApiIdentityRefreshMutationVariables = {data: RefreshTokenRequest}
 
-    export const usePostApiIdentityRefresh = <TError = unknown,
+    export const usePostApiIdentityRefresh = <TError = ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityRefresh>>, TError,PostApiIdentityRefreshMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiIdentityRefresh>>,

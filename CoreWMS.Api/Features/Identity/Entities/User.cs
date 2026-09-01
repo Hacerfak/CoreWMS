@@ -4,9 +4,9 @@ namespace CoreWMS.Api.Features.Identity.Entities;
 
 public class User : AuditableEntity
 {
-    public string Name { get; private set; }
-    public string Email { get; private set; }
-    public string PasswordHash { get; private set; }
+    public string Name { get; private set; } = string.Empty;
+    public string Email { get; private set; } = string.Empty;
+    public string PasswordHash { get; private set; } = string.Empty;
     public bool IsMaster { get; private set; }
     public string? RefreshToken { get; private set; }
     public DateTime? RefreshTokenExpiryTime { get; private set; }
