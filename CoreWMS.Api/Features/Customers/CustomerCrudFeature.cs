@@ -10,13 +10,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Customers;
 
+// ==========================================
 // 1. CONTRATOS E DTOs
+// ==========================================
 public record CustomerDto(Guid Id, Guid CompanyId, string Cnpj, string CorporateName, string? TradeName, string? StateRegistration, string? MunicipalRegistration, int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone, bool RequireBatchControl, bool RequireExpirationControl, bool RequireSerialControl, bool AllowNegativeStock, bool AutoApproveReceiving, bool IsActive);
+
 public record CreateCustomerCommand(string Cnpj, string CorporateName, string? TradeName, string? StateRegistration, string? MunicipalRegistration, int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone, bool RequireBatchControl, bool RequireExpirationControl, bool RequireSerialControl, bool AllowNegativeStock, bool AutoApproveReceiving) : IRequest<IResult>;
 public record UpdateCustomerCommand(Guid Id, string CorporateName, string? TradeName, string? StateRegistration, string? MunicipalRegistration, int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone, bool RequireBatchControl, bool RequireExpirationControl, bool RequireSerialControl, bool AllowNegativeStock, bool AutoApproveReceiving) : IRequest<IResult>;
+
 public record ListCustomersQuery(string? Search, bool OnlyActive = true) : IRequest<IResult>;
 
+// NOVO: Commands/Queries para operações que estavam "inline"
+public record DeleteCustomerCommand(Guid Id) : IRequest<IResult>;
+public record ConsultCustomerSefazQuery(string Cnpj, string Uf) : IRequest<IResult>;
+
+// ==========================================
 // 2. VALIDADORES
+// ==========================================
 public class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCommand>
 {
     public CreateCustomerCommandValidator()
@@ -37,12 +47,19 @@ public class UpdateCustomerCommandValidator : AbstractValidator<UpdateCustomerCo
     }
 }
 
+// ==========================================
 // 3. HANDLERS
+// ==========================================
 public class CreateCustomerHandler : IRequestHandler<CreateCustomerCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    public CreateCustomerHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor) { _db = db; _httpContextAccessor = httpContextAccessor; }
+
+    public CreateCustomerHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor)
+    {
+        _db = db;
+        _httpContextAccessor = httpContextAccessor;
+    }
 
     public async Task<IResult> Handle(CreateCustomerCommand request, CancellationToken ct)
     {
@@ -52,14 +69,19 @@ public class CreateCustomerHandler : IRequestHandler<CreateCustomerCommand, IRes
         if (await _db.Customers.AnyAsync(c => c.CompanyId == companyId && c.Cnpj == request.Cnpj, ct))
             return Results.BadRequest(new { Message = "Já existe um cliente com este CNPJ nesta empresa." });
 
-        var customer = request.Adapt<Customer>(); // Mapster injetando os dados na entidade de forma limpa
-        // Ajustamos os campos protegidos (somente leitura) que não foram mapeados pelo Adapt
-        var finalCustomer = new Customer(companyId, request.Cnpj, request.CorporateName, request.TradeName, request.StateRegistration, request.MunicipalRegistration, request.Crt, request.Cnae, request.Street, request.Number, request.Complement, request.Neighborhood, request.CityCode, request.CityName, request.State, request.ZipCode, request.Email, request.Phone, request.RequireBatchControl, request.RequireExpirationControl, request.RequireSerialControl, request.AllowNegativeStock, request.AutoApproveReceiving);
+        var customer = new Customer(
+            companyId, request.Cnpj, request.CorporateName, request.TradeName,
+            request.StateRegistration, request.MunicipalRegistration, request.Crt,
+            request.Cnae, request.Street, request.Number, request.Complement,
+            request.Neighborhood, request.CityCode, request.CityName, request.State,
+            request.ZipCode, request.Email, request.Phone, request.RequireBatchControl,
+            request.RequireExpirationControl, request.RequireSerialControl,
+            request.AllowNegativeStock, request.AutoApproveReceiving);
 
-        _db.Customers.Add(finalCustomer);
+        _db.Customers.Add(customer);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Created($"/api/customers/{finalCustomer.Id}", finalCustomer.Adapt<CustomerDto>());
+        return Results.Created($"/api/customers/{customer.Id}", customer.Adapt<CustomerDto>());
     }
 }
 
@@ -67,7 +89,12 @@ public class UpdateCustomerHandler : IRequestHandler<UpdateCustomerCommand, IRes
 {
     private readonly ApplicationDbContext _db;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    public UpdateCustomerHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor) { _db = db; _httpContextAccessor = httpContextAccessor; }
+
+    public UpdateCustomerHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor)
+    {
+        _db = db;
+        _httpContextAccessor = httpContextAccessor;
+    }
 
     public async Task<IResult> Handle(UpdateCustomerCommand request, CancellationToken ct)
     {
@@ -88,7 +115,12 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    public ListCustomersHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor) { _db = db; _httpContextAccessor = httpContextAccessor; }
+
+    public ListCustomersHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor)
+    {
+        _db = db;
+        _httpContextAccessor = httpContextAccessor;
+    }
 
     public async Task<IResult> Handle(ListCustomersQuery request, CancellationToken ct)
     {
@@ -96,6 +128,7 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
             return Results.BadRequest(new { Message = "Cabeçalho X-Company-Id é obrigatório." });
 
         var q = _db.Customers.AsNoTracking().Where(c => c.CompanyId == companyId);
+
         if (request.OnlyActive) q = q.Where(c => c.IsActive);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -109,33 +142,93 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
     }
 }
 
+// NOVO: Handler de Exclusão Física/Lógica isolado
+public class DeleteCustomerHandler : IRequestHandler<DeleteCustomerCommand, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    public DeleteCustomerHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor)
+    {
+        _db = db;
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public async Task<IResult> Handle(DeleteCustomerCommand request, CancellationToken ct)
+    {
+        if (!Guid.TryParse(_httpContextAccessor.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
+            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+
+        var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.Id && c.CompanyId == companyId, ct);
+        if (customer == null) return Results.NotFound();
+
+        customer.Deactivate(); // Exclusão Lógica
+        await _db.SaveChangesAsync(ct);
+
+        return Results.NoContent();
+    }
+}
+
+// NOVO: Handler de Consulta SEFAZ isolado
+public class ConsultCustomerSefazHandler : IRequestHandler<ConsultCustomerSefazQuery, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ISefazConsultaCadastroService _sefazService;
+
+    public ConsultCustomerSefazHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor, ISefazConsultaCadastroService sefazService)
+    {
+        _db = db;
+        _httpContextAccessor = httpContextAccessor;
+        _sefazService = sefazService;
+    }
+
+    public async Task<IResult> Handle(ConsultCustomerSefazQuery request, CancellationToken ct)
+    {
+        if (!Guid.TryParse(_httpContextAccessor.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
+            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+
+        var company = await _db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == companyId, ct);
+
+        if (company?.CertificateBytes == null || string.IsNullOrEmpty(company.CertificatePassword))
+            return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado na Matriz." });
+
+        var certPassword = CryptoService.Decrypt(company.CertificatePassword);
+
+        // A falha da SEFAZ lança exceção interceptada pelo GlobalExceptionHandler
+        var sefazData = _sefazService.Consultar(company.CertificateBytes, certPassword, request.Uf, request.Cnpj);
+
+        return Results.Ok(sefazData);
+    }
+}
+
+// ==========================================
 // 4. ENDPOINTS
+// ==========================================
 public static class CustomerEndpoints
 {
     public static void MapCustomerCrudEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/customers").WithTags("Customers").RequireAuthorization();
 
-        group.MapPost("/consult-sefaz/{cnpj}", async (string cnpj, string uf, ApplicationDbContext db, IHttpContextAccessor httpContext, ISefazConsultaCadastroService sefazService) =>
-        {
-            if (!Guid.TryParse(httpContext.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId)) return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
-            var company = await db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == companyId);
-            if (company?.CertificateBytes == null || string.IsNullOrEmpty(company.CertificatePassword)) return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado." });
-            var certPassword = CryptoService.Decrypt(company.CertificatePassword);
-            return Results.Ok(sefazService.Consultar(company.CertificateBytes, certPassword, uf, cnpj));
-        }).RequirePermission(Permissions.Customers.Create);
+        group.MapPost("/consult-sefaz/{cnpj}", async (string cnpj, string uf, IMediator mediator) =>
+            await mediator.Send(new ConsultCustomerSefazQuery(cnpj, uf)))
+            .RequirePermission(Permissions.Customers.Create);
 
-        group.MapGet("/", async ([AsParameters] ListCustomersQuery query, IMediator mediator) => await mediator.Send(query)).RequirePermission(Permissions.Customers.View);
-        group.MapPost("/", async (CreateCustomerCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission(Permissions.Customers.Create);
-        group.MapPut("/{id:guid}", async (Guid id, UpdateCustomerCommand cmd, IMediator mediator) => await mediator.Send(cmd with { Id = id })).RequirePermission(Permissions.Customers.Edit);
-        group.MapDelete("/{id:guid}", async (Guid id, ApplicationDbContext db, IHttpContextAccessor httpContext) =>
-        {
-            if (!Guid.TryParse(httpContext.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId)) return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
-            var customer = await db.Customers.FirstOrDefaultAsync(c => c.Id == id && c.CompanyId == companyId);
-            if (customer == null) return Results.NotFound();
-            customer.Deactivate();
-            await db.SaveChangesAsync();
-            return Results.NoContent();
-        }).RequirePermission(Permissions.Customers.Delete);
+        group.MapGet("/", async ([AsParameters] ListCustomersQuery query, IMediator mediator) =>
+            await mediator.Send(query))
+            .RequirePermission(Permissions.Customers.View);
+
+        group.MapPost("/", async (CreateCustomerCommand cmd, IMediator mediator) =>
+            await mediator.Send(cmd))
+            .RequirePermission(Permissions.Customers.Create);
+
+        group.MapPut("/{id:guid}", async (Guid id, UpdateCustomerCommand cmd, IMediator mediator) =>
+            await mediator.Send(cmd with { Id = id }))
+            .RequirePermission(Permissions.Customers.Edit);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
+            await mediator.Send(new DeleteCustomerCommand(id)))
+            .RequirePermission(Permissions.Customers.Delete);
     }
 }
