@@ -59,15 +59,15 @@ export default function App() {
                 <Route path="/clientes" element={<ClientesList />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="users:view" />}>
+              <Route element={<PermissionGuard requiredPermission="users:manage" />}>
                 <Route path="/usuarios" element={<UsuariosList />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="roles:view" />}>
+              <Route element={<PermissionGuard requiredPermission="roles:manage" />}>
                 <Route path="/perfis" element={<PerfisList />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="companies:view" />}>
+              <Route element={<PermissionGuard requiredPermission="companies:manage" />}>
                 <Route path="/empresas" element={<EmpresasPage />} />
               </Route>
 

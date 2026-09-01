@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
-import { useGetApiUsers, usePostApiUsers, usePutApiUsersId, useDeleteApiUsersId } from '@/api/generated/users/users';
-import { api } from '@/api/client';
+import { useGetApiUsers, usePostApiUsers, usePutApiUsersId, useDeleteApiUsersId, usePutApiUsersIdPassword } from '@/api/generated/users/users';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,29 +18,66 @@ import { Search, Plus, KeyRound, Loader2, Edit, Trash2, Building2, Save } from '
 import { toast } from 'sonner';
 import VincularEmpresaModal from './VincularEmpresaModal';
 
+// Schema do Usuário (Senha é opcional para edição)
+const userSchema = z.object({
+    name: z.string().min(3, 'O nome deve ter no mínimo 3 caracteres.'),
+    email: z.string().email('Formato de e-mail inválido.'),
+    password: z.string().optional()
+});
+
+// Schema para Reset de Senha
+const resetPasswordSchema = z.object({
+    newPassword: z.string().min(6, 'A nova senha deve ter no mínimo 6 caracteres.')
+});
+
 export default function UsuariosList() {
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
 
+    // Controles de Modais
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
     const [userToDelete, setUserToDelete] = useState(null);
     const [userToAssign, setUserToAssign] = useState(null);
     const [userToResetPassword, setUserToResetPassword] = useState(null);
 
-    const [formData, setFormData] = useState({ name: '', email: '', password: '' });
-    const [newPassword, setNewPassword] = useState('');
-
     const { data: users = [], isLoading } = useGetApiUsers();
 
+    // RHF - Form de Usuário
+    const { register: regUser, handleSubmit: submitUser, reset: resetUser, formState: { errors: errUser } } = useForm({
+        resolver: zodResolver(userSchema),
+        defaultValues: { name: '', email: '', password: '' }
+    });
+
+    // RHF - Form de Senha
+    const { register: regPwd, handleSubmit: submitPwd, reset: resetPwd, formState: { errors: errPwd } } = useForm({
+        resolver: zodResolver(resetPasswordSchema),
+        defaultValues: { newPassword: '' }
+    });
+
+    useEffect(() => {
+        if (isUserModalOpen) {
+            resetUser({
+                name: selectedUser ? selectedUser.name : '',
+                email: selectedUser ? selectedUser.email : '',
+                password: ''
+            });
+        }
+    }, [isUserModalOpen, selectedUser, resetUser]);
+
+    useEffect(() => {
+        if (userToResetPassword) resetPwd();
+    }, [userToResetPassword, resetPwd]);
+
+    // Mutações
     const { mutate: createUser, isPending: isCreating } = usePostApiUsers({
         mutation: {
             onSuccess: () => {
                 toast.success('Usuário cadastrado com sucesso!');
                 queryClient.invalidateQueries({ queryKey: ['/api/users'] });
-                handleCloseUserModal();
+                setIsUserModalOpen(false);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao criar usuário.')
+            onError: (err) => toast.error(err.response?.data?.detail || 'Erro ao criar usuário.')
         }
     });
 
@@ -47,9 +86,19 @@ export default function UsuariosList() {
             onSuccess: () => {
                 toast.success('Usuário atualizado com sucesso!');
                 queryClient.invalidateQueries({ queryKey: ['/api/users'] });
-                handleCloseUserModal();
+                setIsUserModalOpen(false);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar usuário.')
+            onError: (err) => toast.error(err.response?.data?.detail || 'Erro ao atualizar usuário.')
+        }
+    });
+
+    const { mutate: resetPassword, isPending: isResetting } = usePutApiUsersIdPassword({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Senha alterada com sucesso!');
+                setUserToResetPassword(null);
+            },
+            onError: (err) => toast.error(err.response?.data?.detail || 'Erro ao redefinir senha.')
         }
     });
 
@@ -60,51 +109,16 @@ export default function UsuariosList() {
                 queryClient.invalidateQueries({ queryKey: ['/api/users'] });
                 setUserToDelete(null);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao excluir usuário.')
+            onError: (err) => toast.error(err.response?.data?.detail || 'Erro ao excluir usuário.')
         }
     });
 
-    const handleOpenCreate = () => {
-        setSelectedUser(null);
-        setFormData({ name: '', email: '', password: '' });
-        setIsUserModalOpen(true);
-    };
-
-    const handleOpenEdit = (user) => {
-        setSelectedUser(user);
-        setFormData({ name: user.name, email: user.email, password: '' });
-        setIsUserModalOpen(true);
-    };
-
-    const handleCloseUserModal = () => {
-        setIsUserModalOpen(false);
-        setSelectedUser(null);
-        setFormData({ name: '', email: '', password: '' });
-    };
-
-    const handleSave = (e) => {
-        e.preventDefault();
-        if (!formData.name || !formData.email) return toast.warning('Preencha os campos obrigatórios.');
-
+    const handleSaveUser = (data) => {
         if (selectedUser) {
-            updateUser({ id: selectedUser.id, data: { name: formData.name, email: formData.email } });
+            updateUser({ id: selectedUser.id, data: { name: data.name, email: data.email } });
         } else {
-            if (!formData.password) return toast.warning('Informe a senha do novo usuário.');
-            createUser({ data: formData });
-        }
-    };
-
-    const handleResetPasswordSubmit = async (e) => {
-        e.preventDefault();
-        if (!newPassword || newPassword.length < 6) return toast.warning('A senha deve ter no mínimo 6 caracteres.');
-
-        try {
-            await api.put(`/api/users/${userToResetPassword.id}/password`, { newPassword });
-            toast.success('Senha alterada com sucesso!');
-            setUserToResetPassword(null);
-            setNewPassword('');
-        } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao redefinir senha.');
+            if (!data.password) return toast.warning('A senha é obrigatória para novos usuários.');
+            createUser({ data: { name: data.name, email: data.email, password: data.password } });
         }
     };
 
@@ -113,7 +127,7 @@ export default function UsuariosList() {
         u.email.toLowerCase().includes(search.toLowerCase())
     );
 
-    const isSaving = isCreating || isUpdating;
+    const isSavingUser = isCreating || isUpdating;
 
     return (
         <div className="flex flex-col h-full space-y-6">
@@ -122,7 +136,7 @@ export default function UsuariosList() {
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Gestão de Usuários</h1>
                     <p className="text-sm text-slate-500 mt-1">Gerencie os acessos, permissões e empresas vinculadas.</p>
                 </div>
-                <Button onClick={handleOpenCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <Button onClick={() => { setSelectedUser(null); setIsUserModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                     <Plus className="mr-2 h-4 w-4" /> Novo Usuário
                 </Button>
             </div>
@@ -185,7 +199,7 @@ export default function UsuariosList() {
                                         <Button variant="ghost" size="sm" onClick={() => setUserToResetPassword(user)} className="text-amber-600 hover:bg-amber-50">
                                             <KeyRound className="h-4 w-4 mr-1" /> Senha
                                         </Button>
-                                        <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(user)} className="text-blue-600 hover:bg-blue-50">
+                                        <Button variant="ghost" size="sm" onClick={() => { setSelectedUser(user); setIsUserModalOpen(true); }} className="text-blue-600 hover:bg-blue-50">
                                             <Edit className="h-4 w-4" />
                                         </Button>
                                         {!user.isMaster && (
@@ -201,6 +215,7 @@ export default function UsuariosList() {
                 </div>
             </div>
 
+            {/* Modal de Usuário */}
             <Dialog open={isUserModalOpen} onOpenChange={setIsUserModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
@@ -209,43 +224,39 @@ export default function UsuariosList() {
                             {selectedUser ? 'Atualize as informações do usuário.' : 'Cadastre as credenciais para concessão de acesso.'}
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleSave} className="space-y-4 py-2">
-                        <div className="space-y-2">
+
+                    <form onSubmit={submitUser(handleSaveUser)} className="space-y-4 py-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="name" className="text-slate-700">Nome Completo *</Label>
-                            <Input
-                                id="name" placeholder="Ex: João da Silva"
-                                value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                className="bg-slate-50"
-                            />
+                            <Input id="name" {...regUser('name')} className={`bg-slate-50 ${errUser.name ? 'border-rose-500' : ''}`} />
+                            {errUser.name && <p className="text-xs text-rose-500">{errUser.name.message}</p>}
                         </div>
-                        <div className="space-y-2">
+
+                        <div className="space-y-1.5">
                             <Label htmlFor="email" className="text-slate-700">E-mail corporativo *</Label>
-                            <Input
-                                id="email" type="email" placeholder="nome@empresa.com"
-                                value={formData.email} onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                                className="bg-slate-50"
-                            />
+                            <Input id="email" type="email" {...regUser('email')} className={`bg-slate-50 ${errUser.email ? 'border-rose-500' : ''}`} />
+                            {errUser.email && <p className="text-xs text-rose-500">{errUser.email.message}</p>}
                         </div>
+
                         {!selectedUser && (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 <Label htmlFor="password" className="text-slate-700">Senha de Acesso *</Label>
-                                <Input
-                                    id="password" type="password" placeholder="••••••••"
-                                    value={formData.password} onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                                    className="bg-slate-50"
-                                />
+                                <Input id="password" type="password" {...regUser('password')} className={`bg-slate-50 ${errUser.password ? 'border-rose-500' : ''}`} />
+                                {errUser.password && <p className="text-xs text-rose-500">{errUser.password.message}</p>}
                             </div>
                         )}
-                        <DialogFooter className="pt-2">
-                            <Button type="button" variant="outline" onClick={handleCloseUserModal}>Cancelar</Button>
-                            <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[100px]">
-                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+
+                        <DialogFooter className="pt-2 border-t border-slate-100">
+                            <Button type="button" variant="outline" onClick={() => setIsUserModalOpen(false)}>Cancelar</Button>
+                            <Button type="submit" disabled={isSavingUser} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[100px]">
+                                {isSavingUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
                             </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
             </Dialog>
 
+            {/* Modal de Reset de Senha */}
             <Dialog open={!!userToResetPassword} onOpenChange={(open) => !open && setUserToResetPassword(null)}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
@@ -254,18 +265,19 @@ export default function UsuariosList() {
                             Digite a nova senha de acesso para <strong className="text-slate-800">{userToResetPassword?.name}</strong>.
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleResetPasswordSubmit} className="space-y-4 py-2">
-                        <div className="space-y-2">
+
+                    <form onSubmit={submitPwd((data) => resetPassword({ id: userToResetPassword.id, data }))} className="space-y-4 py-2">
+                        <div className="space-y-1.5">
                             <Label htmlFor="newPassword" className="text-slate-700">Nova Senha *</Label>
-                            <Input
-                                id="newPassword" type="password" placeholder="••••••••"
-                                value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                                className="bg-slate-50"
-                            />
+                            <Input id="newPassword" type="password" {...regPwd('newPassword')} className={`bg-slate-50 ${errPwd.newPassword ? 'border-rose-500' : ''}`} />
+                            {errPwd.newPassword && <p className="text-xs text-rose-500">{errPwd.newPassword.message}</p>}
                         </div>
-                        <DialogFooter className="pt-2">
+
+                        <DialogFooter className="pt-2 border-t border-slate-100">
                             <Button type="button" variant="outline" onClick={() => setUserToResetPassword(null)}>Cancelar</Button>
-                            <Button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white">Salvar Nova Senha</Button>
+                            <Button type="submit" disabled={isResetting} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[150px]">
+                                {isResetting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar Nova Senha'}
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>
@@ -279,6 +291,7 @@ export default function UsuariosList() {
                 />
             )}
 
+            {/* Modal de Exclusão */}
             <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>

@@ -237,30 +237,30 @@ public static class UserEndpoints
         {
             var result = await mediator.Send(cmd);
             return Results.Created($"/api/users/{result.Id}", result);
-        }).RequirePermission(Permissions.Users.Create);
+        }).RequirePermission(Permissions.Users.Manage);
 
         group.MapGet("/", async (IMediator mediator) =>
         {
             var result = await mediator.Send(new ListUsersQuery());
             return Results.Ok(result);
-        }).RequirePermission(Permissions.Users.View);
+        }).RequirePermission(Permissions.Users.Manage);
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateUserRequest req, IMediator mediator) =>
         {
             await mediator.Send(new UpdateUserCommand(id, req.Name, req.Email));
             return Results.NoContent();
-        }).RequirePermission(Permissions.Users.Edit);
+        }).RequirePermission(Permissions.Users.Manage);
 
         group.MapPut("/{id:guid}/password", async (Guid id, ResetUserPasswordRequest req, IMediator mediator) =>
         {
             await mediator.Send(new ResetUserPasswordCommand(id, req.NewPassword));
             return Results.Ok(new { Message = "Senha redefinida com sucesso." });
-        }).RequirePermission(Permissions.Users.Edit);
+        }).RequirePermission(Permissions.Users.Manage);
 
         group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             await mediator.Send(new DeleteUserCommand(id));
             return Results.NoContent();
-        }).RequirePermission(Permissions.Users.Delete);
+        }).RequirePermission(Permissions.Users.Manage);
     }
 }

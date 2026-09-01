@@ -26,11 +26,7 @@ public static class DatabaseSeeder
         {
             // --- ADMINISTRADOR (Tudo exceto excluir empresa) ---
             var adminRole = new Role("Administrador");
-            adminRole.AddPermission(Permissions.Users.View);
-            adminRole.AddPermission(Permissions.Users.Create);
-            adminRole.AddPermission(Permissions.Users.Edit);
-            adminRole.AddPermission(Permissions.Users.Delete);
-            adminRole.AddPermission(Permissions.Users.Assign);
+            adminRole.AddPermission(Permissions.Users.Manage);
             adminRole.AddPermission(Permissions.Roles.Manage);
             adminRole.AddPermission(Permissions.Companies.Manage);
             adminRole.AddPermission(Permissions.Profile.UpdateSelf);
@@ -43,11 +39,7 @@ public static class DatabaseSeeder
 
             // --- GERENTE (CRUD Usuários + Vínculos) ---
             var gerenteRole = new Role("Gerente");
-            gerenteRole.AddPermission(Permissions.Users.View);
-            gerenteRole.AddPermission(Permissions.Users.Create);
-            gerenteRole.AddPermission(Permissions.Users.Edit);
-            gerenteRole.AddPermission(Permissions.Users.Delete);
-            gerenteRole.AddPermission(Permissions.Users.Assign);
+            gerenteRole.AddPermission(Permissions.Users.Manage);
             gerenteRole.AddPermission(Permissions.Profile.UpdateSelf);
             gerenteRole.AddPermission(Permissions.Printing.Manage);
             gerenteRole.AddPermission(Permissions.Customers.View);

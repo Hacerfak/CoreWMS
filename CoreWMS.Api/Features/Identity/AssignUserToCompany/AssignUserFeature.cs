@@ -100,7 +100,7 @@ public static class AssignUserEndpoint
             await mediator.Send(new AssignUserCommand(userId, req.CompanyId, req.RoleId)))
         .WithTags("Users")
         .RequireAuthorization()
-        .RequirePermission(Permissions.Users.Assign);
+        .RequirePermission(Permissions.Users.Manage);
     }
 }
 

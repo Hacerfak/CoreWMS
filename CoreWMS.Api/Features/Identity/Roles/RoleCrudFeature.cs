@@ -75,23 +75,49 @@ public class UpdateRoleHandler : IRequestHandler<UpdateRoleCommand, IResult>
 
     public async Task<IResult> Handle(UpdateRoleCommand request, CancellationToken ct)
     {
-        var role = await _db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Id == request.Id, ct);
-        if (role == null) return Results.NotFound(new { Message = "Perfil não encontrado." });
+        // 1. Carrega APENAS a Role (Sem .Include() para NÃO confundir o Change Tracker)
+        var role = await _db.Roles.FirstOrDefaultAsync(r => r.Id == request.Id, ct);
+
+        if (role == null)
+            return Results.NotFound(new { Message = "Perfil não encontrado." });
 
         if (await _db.Roles.AnyAsync(r => r.Name == request.Name && r.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "Já existe outro perfil com este nome." });
 
+        // Atualiza os dados básicos do pai
         role.UpdateName(request.Name);
-        role.ClearPermissions(); // Remove as antigas
 
-        foreach (var p in request.Permissions)
+        // 2. Busca as permissões de forma isolada diretamente do DbSet (Tabela)
+        var currentPermissions = await _db.RolePermissions
+            .Where(rp => rp.RoleId == role.Id)
+            .ToListAsync(ct);
+
+        // 3. Descobre o que precisa ser removido e apaga direto da tabela
+        var toRemove = currentPermissions
+            .Where(p => !request.Permissions.Contains(p.Permission))
+            .ToList();
+
+        if (toRemove.Any())
         {
-            role.AddPermission(p); // Adiciona as novas
+            _db.RolePermissions.RemoveRange(toRemove);
         }
 
+        // 4. Descobre o que é inédito e insere direto na tabela
+        var currentNames = currentPermissions.Select(p => p.Permission).ToList();
+        var toAdd = request.Permissions
+            .Where(p => !currentNames.Contains(p))
+            .Select(p => new RolePermission(role.Id, p))
+            .ToList();
+
+        if (toAdd.Any())
+        {
+            _db.RolePermissions.AddRange(toAdd);
+        }
+
+        // 5. Agora o EF Core enxerga as operações como comandos SQL puros e independentes!
         await _db.SaveChangesAsync(ct);
 
-        // Força todos os usuários a revalidarem as permissões
+        // Força todos os usuários a revalidarem as permissões instantaneamente
         _cacheService.InvalidateUserAllCompaniesCache(Guid.Empty);
 
         return Results.NoContent();

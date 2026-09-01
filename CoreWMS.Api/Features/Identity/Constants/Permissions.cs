@@ -4,11 +4,7 @@ public static class Permissions
 {
     public static class Users
     {
-        public const string View = "users:view";
-        public const string Create = "users:create";
-        public const string Edit = "users:edit";
-        public const string Delete = "users:delete";
-        public const string Assign = "users:assign";
+        public const string Manage = "users:manage";
     }
 
     public static class Roles

@@ -32,11 +32,7 @@ const MODULE_PERMISSIONS = [
     {
         module: 'Usuários e Acessos',
         permissions: [
-            { id: 'users:view', label: 'Visualizar Usuários' },
-            { id: 'users:create', label: 'Cadastrar Usuário' },
-            { id: 'users:edit', label: 'Editar Usuário' },
-            { id: 'users:delete', label: 'Excluir Usuário' },
-            { id: 'users:assign', label: 'Vincular Empresas/Perfis' },
+            { id: 'users:manage', label: 'Gerenciar Usuários e Vínculos' },
         ]
     },
     {
