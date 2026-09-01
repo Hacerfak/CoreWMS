@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollText, Search, Loader2, FilterX, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 
-// 1. O SCHEMA (Regras para os filtros de busca)
 const filterSchema = z.object({
     entityName: z.string().optional(),
     userId: z.string().optional(),
@@ -18,54 +17,70 @@ const filterSchema = z.object({
     endDate: z.string().optional(),
 });
 
+// Helper para montar data YYYY-MM-DD usando o fuso local do navegador
+const getTodayLocal = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 export default function AuditoriaPage() {
     const [page, setPage] = useState(1);
     const pageSize = 20;
 
-    // Estado que guarda os filtros aplicados (só atualiza ao clicar em buscar)
-    const [appliedFilters, setAppliedFilters] = useState({});
+    const todayStr = getTodayLocal();
+
+    // Já inicia o estado de filtros aplicados forçando os limites de hoje para a API buscar logo no início
+    const [appliedFilters, setAppliedFilters] = useState({
+        StartDate: new Date(`${todayStr}T00:00:00`).toISOString(),
+        EndDate: new Date(`${todayStr}T23:59:59.999`).toISOString()
+    });
+
     const [selectedLog, setSelectedLog] = useState(null);
 
-    // 2. CONFIGURAÇÃO DO REACT HOOK FORM
+    // React Hook Form já inicia visualmente com a data de hoje preenchida
     const { register, handleSubmit, reset } = useForm({
         resolver: zodResolver(filterSchema),
         defaultValues: {
             entityName: '',
             userId: '',
-            startDate: '',
-            endDate: ''
+            startDate: todayStr,
+            endDate: todayStr
         }
     });
 
-    // 3. CONSULTA NA API (Dispara automaticamente quando appliedFilters ou page mudam)
     const { data: apiResponse, isLoading, isFetching } = useGetApiAuditLogs({
         ...appliedFilters,
         Page: page,
         PageSize: pageSize
     });
 
-    // Orval desempacota o data, e nós desestruturamos a paginação
     const { items: logs = [], totalCount = 0 } = apiResponse || {};
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // 4. AÇÕES DE FILTRO
     const onSubmitFilters = (data) => {
-        setPage(1); // Volta pra primeira página ao filtrar
+        setPage(1);
+
+        const startDateString = data.startDate ? new Date(`${data.startDate}T00:00:00`).toISOString() : undefined;
+        const endDateString = data.endDate ? new Date(`${data.endDate}T23:59:59.999`).toISOString() : undefined;
+
         setAppliedFilters({
             EntityName: data.entityName,
             UserId: data.userId,
-            StartDate: data.startDate ? new Date(data.startDate).toISOString() : undefined,
-            EndDate: data.endDate ? new Date(data.endDate).toISOString() : undefined,
+            StartDate: startDateString,
+            EndDate: endDateString,
         });
     };
 
     const handleClearFilters = () => {
-        reset();
+        const resetData = { entityName: '', userId: '', startDate: '', endDate: '' };
+        reset(resetData);
         setPage(1);
         setAppliedFilters({});
     };
 
-    // Função auxiliar para colorir as badges de Ação
     const getActionBadge = (action) => {
         switch (action) {
             case 'Create': return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Criação</Badge>;

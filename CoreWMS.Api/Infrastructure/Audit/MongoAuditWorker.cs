@@ -8,6 +8,10 @@ public class MongoAuditWorker : BackgroundService
     private readonly IMongoCollection<AuditLog> _collection;
     private readonly ILogger<MongoAuditWorker> _logger;
 
+    // Regras de negócio da fila
+    private const int MaxBatchSize = 50;
+    private static readonly TimeSpan MaxIdleTime = TimeSpan.FromMinutes(1);
+
     public MongoAuditWorker(AuditChannel auditChannel, IConfiguration config, ILogger<MongoAuditWorker> logger)
     {
         _auditChannel = auditChannel;
@@ -25,30 +29,53 @@ public class MongoAuditWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var batch = new List<AuditLog>();
+        var batch = new List<AuditLog>(MaxBatchSize);
 
-        await foreach (var log in _auditChannel.ReadAllAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
-            batch.Add(log);
+            // Cria um cronômetro que vai "estourar" em 1 minuto
+            using var timerCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            timerCts.CancelAfter(MaxIdleTime);
 
-            // Grava em lotes de 50 itens para otimizar I/O (mudei para 2 para testar)
-            if (batch.Count >= 2)
+            try
+            {
+                // Espera por novos itens na fila OU até passar 1 minuto
+                while (await _auditChannel.Reader.WaitToReadAsync(timerCts.Token))
+                {
+                    while (_auditChannel.Reader.TryRead(out var log))
+                    {
+                        batch.Add(log);
+
+                        // REGRA 1: Bateu 50 registros, manda para o banco
+                        if (batch.Count >= MaxBatchSize)
+                        {
+                            await FlushBatchAsync(batch, stoppingToken);
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cai aqui suavemente quando o 1 minuto estourar
+            }
+
+            // REGRA 2: Passou 1 minuto (ou a API está desligando). 
+            // Se tiver qualquer coisa na fila (mesmo que seja 1 registro), manda pro banco.
+            if (batch.Any())
             {
                 await FlushBatchAsync(batch, stoppingToken);
             }
-        }
-
-        if (batch.Count > 0)
-        {
-            await FlushBatchAsync(batch, CancellationToken.None);
         }
     }
 
     private async Task FlushBatchAsync(List<AuditLog> batch, CancellationToken ct)
     {
+        if (batch.Count == 0) return;
+
         try
         {
             await _collection.InsertManyAsync(batch, cancellationToken: ct);
+            _logger.LogInformation("Auditoria: Lote de {Count} registros gravados no MongoDB com sucesso.", batch.Count);
         }
         catch (Exception ex)
         {
@@ -56,7 +83,7 @@ public class MongoAuditWorker : BackgroundService
         }
         finally
         {
-            batch.Clear();
+            batch.Clear(); // Limpa o lote atual para começar a acumular novamente
         }
     }
 }

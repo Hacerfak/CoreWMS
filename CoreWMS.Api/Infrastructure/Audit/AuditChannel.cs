@@ -10,5 +10,6 @@ public class AuditChannel
     });
 
     public ValueTask WriteAsync(AuditLog log, CancellationToken ct = default) => _channel.Writer.WriteAsync(log, ct);
-    public IAsyncEnumerable<AuditLog> ReadAllAsync(CancellationToken ct = default) => _channel.Reader.ReadAllAsync(ct);
+
+    public ChannelReader<AuditLog> Reader => _channel.Reader;
 }

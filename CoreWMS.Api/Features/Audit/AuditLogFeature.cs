@@ -38,16 +38,30 @@ public class ListAuditLogsHandler : IRequestHandler<AuditLogFilterQuery, IResult
         var builder = Builders<AuditLog>.Filter;
         var filter = builder.Empty;
 
-        if (!string.IsNullOrWhiteSpace(request.EntityName)) filter &= builder.Eq(x => x.EntityName, request.EntityName);
-        if (!string.IsNullOrWhiteSpace(request.EntityId)) filter &= builder.Eq(x => x.EntityId, request.EntityId);
-        if (!string.IsNullOrWhiteSpace(request.UserId)) filter &= builder.Eq(x => x.UserId, request.UserId);
-        if (request.StartDate.HasValue) filter &= builder.Gte(x => x.Timestamp, request.StartDate.Value.ToUniversalTime());
-        if (request.EndDate.HasValue) filter &= builder.Lte(x => x.Timestamp, request.EndDate.Value.ToUniversalTime());
+        // Alterado de Eq para Regex (Busca parcial e ignorando maiúsculas/minúsculas)
+        if (!string.IsNullOrWhiteSpace(request.EntityName))
+            filter &= builder.Regex(x => x.EntityName, new MongoDB.Bson.BsonRegularExpression(request.EntityName, "i"));
+
+        if (!string.IsNullOrWhiteSpace(request.EntityId))
+            filter &= builder.Eq(x => x.EntityId, request.EntityId);
+
+        if (!string.IsNullOrWhiteSpace(request.UserId))
+            filter &= builder.Eq(x => x.UserId, request.UserId);
+
+        if (request.StartDate.HasValue)
+            filter &= builder.Gte(x => x.Timestamp, request.StartDate.Value.ToUniversalTime());
+
+        if (request.EndDate.HasValue)
+            filter &= builder.Lte(x => x.Timestamp, request.EndDate.Value.ToUniversalTime());
 
         var skip = (request.Page - 1) * request.PageSize;
 
         var totalTask = _auditCollection.CountDocumentsAsync(filter, cancellationToken: ct);
-        var itemsTask = _auditCollection.Find(filter).SortByDescending(x => x.Timestamp).Skip(skip).Limit(request.PageSize).ToListAsync(ct);
+        var itemsTask = _auditCollection.Find(filter)
+            .SortByDescending(x => x.Timestamp)
+            .Skip(skip)
+            .Limit(request.PageSize)
+            .ToListAsync(ct);
 
         await Task.WhenAll(totalTask, itemsTask);
 
