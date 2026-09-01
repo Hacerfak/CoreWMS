@@ -40,7 +40,7 @@ export default function MainLayout() {
             scope: 'Segurança',
             items: [
                 { icon: Users, label: 'Usuários', path: '/usuarios', permission: 'users:view' },
-                { icon: Shield, label: 'Perfis de Acesso', path: '/perfis', permission: 'roles:view' },
+                { icon: Shield, label: 'Perfis de Acesso', path: '/perfis', permission: 'roles:manage' },
                 { icon: ScrollText, label: 'Auditoria', path: '/auditoria', permission: 'audit:view' },
             ]
         },

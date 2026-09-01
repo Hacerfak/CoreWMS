@@ -1,18 +1,19 @@
+using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
-using Mapster;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Roles;
 
 // 1. CONTRATOS & DTOs
-public record RoleDto(Guid Id, string Name, DateTime CreatedAt);
-public record CreateRoleCommand(string Name) : IRequest<IResult>;
-public record UpdateRoleRequest(string Name);
-public record UpdateRoleCommand(Guid Id, string Name) : IRequest<IResult>;
+public record RoleDto(Guid Id, string Name, List<string> Permissions, DateTime CreatedAt);
+
+public record CreateRoleCommand(string Name, List<string> Permissions) : IRequest<IResult>;
+public record UpdateRoleRequest(string Name, List<string> Permissions);
+public record UpdateRoleCommand(Guid Id, string Name, List<string> Permissions) : IRequest<IResult>;
 public record DeleteRoleCommand(Guid Id) : IRequest<IResult>;
 public record ListRolesQuery() : IRequest<IResult>;
 
@@ -22,6 +23,7 @@ public class CreateRoleCommandValidator : AbstractValidator<CreateRoleCommand>
     public CreateRoleCommandValidator()
     {
         RuleFor(x => x.Name).NotEmpty().WithMessage("O nome do perfil é obrigatório.").MaximumLength(100);
+        RuleFor(x => x.Permissions).NotNull().WithMessage("A lista de permissões não pode ser nula.");
     }
 }
 
@@ -31,6 +33,7 @@ public class UpdateRoleCommandValidator : AbstractValidator<UpdateRoleCommand>
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty().WithMessage("O nome do perfil é obrigatório.").MaximumLength(100);
+        RuleFor(x => x.Permissions).NotNull().WithMessage("A lista de permissões não pode ser nula.");
     }
 }
 
@@ -46,10 +49,16 @@ public class CreateRoleHandler : IRequestHandler<CreateRoleCommand, IResult>
             return Results.BadRequest(new { Message = "Já existe um perfil com este nome." });
 
         var role = new Role(request.Name);
+        foreach (var p in request.Permissions)
+        {
+            role.AddPermission(p);
+        }
+
         _db.Roles.Add(role);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Created($"/api/roles/{role.Id}", role.Adapt<RoleDto>());
+        var dto = new RoleDto(role.Id, role.Name, role.Permissions.Select(x => x.Permission).ToList(), role.CreatedAt);
+        return Results.Created($"/api/roles/{role.Id}", dto);
     }
 }
 
@@ -66,16 +75,25 @@ public class UpdateRoleHandler : IRequestHandler<UpdateRoleCommand, IResult>
 
     public async Task<IResult> Handle(UpdateRoleCommand request, CancellationToken ct)
     {
-        var role = await _db.Roles.FindAsync(new object[] { request.Id }, ct);
+        var role = await _db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Id == request.Id, ct);
         if (role == null) return Results.NotFound(new { Message = "Perfil não encontrado." });
 
         if (await _db.Roles.AnyAsync(r => r.Name == request.Name && r.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "Já existe outro perfil com este nome." });
 
         role.UpdateName(request.Name);
+        role.ClearPermissions(); // Remove as antigas
+
+        foreach (var p in request.Permissions)
+        {
+            role.AddPermission(p); // Adiciona as novas
+        }
+
         await _db.SaveChangesAsync(ct);
 
+        // Força todos os usuários a revalidarem as permissões
         _cacheService.InvalidateUserAllCompaniesCache(Guid.Empty);
+
         return Results.NoContent();
     }
 }
@@ -95,6 +113,7 @@ public class DeleteRoleHandler : IRequestHandler<DeleteRoleCommand, IResult>
 
         _db.Roles.Remove(role);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
@@ -106,9 +125,15 @@ public class ListRolesHandler : IRequestHandler<ListRolesQuery, IResult>
 
     public async Task<IResult> Handle(ListRolesQuery request, CancellationToken ct)
     {
-        // Mapster magic!
-        var roles = await _db.Roles.AsNoTracking().ProjectToType<RoleDto>().ToListAsync(ct);
-        return Results.Ok(roles);
+        var roles = await _db.Roles.Include(r => r.Permissions).AsNoTracking().ToListAsync(ct);
+        var response = roles.Select(r => new RoleDto(
+            r.Id,
+            r.Name,
+            r.Permissions.Select(p => p.Permission).ToList(),
+            r.CreatedAt
+        )).ToList();
+
+        return Results.Ok(response);
     }
 }
 
@@ -119,9 +144,17 @@ public static class RoleEndpoints
     {
         var group = app.MapGroup("/api/roles").WithTags("Roles").RequireAuthorization();
 
-        group.MapPost("/", async (CreateRoleCommand cmd, IMediator mediator) => await mediator.Send(cmd));
-        group.MapGet("/", async (IMediator mediator) => await mediator.Send(new ListRolesQuery()));
-        group.MapPut("/{id:guid}", async (Guid id, UpdateRoleRequest req, IMediator mediator) => await mediator.Send(new UpdateRoleCommand(id, req.Name)));
-        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteRoleCommand(id)));
+        // Todos os endpoints agora exigem roles:manage
+        group.MapPost("/", async (CreateRoleCommand cmd, IMediator mediator) => await mediator.Send(cmd))
+             .RequirePermission(Permissions.Roles.Manage);
+
+        group.MapGet("/", async (IMediator mediator) => await mediator.Send(new ListRolesQuery()))
+             .RequirePermission(Permissions.Roles.Manage);
+
+        group.MapPut("/{id:guid}", async (Guid id, UpdateRoleRequest req, IMediator mediator) => await mediator.Send(new UpdateRoleCommand(id, req.Name, req.Permissions)))
+             .RequirePermission(Permissions.Roles.Manage);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteRoleCommand(id)))
+             .RequirePermission(Permissions.Roles.Manage);
     }
 }

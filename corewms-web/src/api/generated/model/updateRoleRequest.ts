@@ -8,4 +8,6 @@
 export interface UpdateRoleRequest {
   /** @nullable */
   name?: string | null;
+  /** @nullable */
+  permissions?: string[] | null;
 }

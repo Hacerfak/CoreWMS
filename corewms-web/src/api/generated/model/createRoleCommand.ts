@@ -8,4 +8,6 @@
 export interface CreateRoleCommand {
   /** @nullable */
   name?: string | null;
+  /** @nullable */
+  permissions?: string[] | null;
 }

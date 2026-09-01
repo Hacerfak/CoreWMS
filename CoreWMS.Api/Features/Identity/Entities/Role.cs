@@ -26,4 +26,9 @@ public class Role : AuditableEntity
             Permissions.Add(new RolePermission(Id, permission));
         }
     }
+
+    public void ClearPermissions()
+    {
+        Permissions.Clear();
+    }
 }

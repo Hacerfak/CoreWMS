@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiRoles, usePostApiRoles, usePutApiRolesId, useDeleteApiRolesId } from '@/api/generated/roles/roles';
 import { Input } from '@/components/ui/input';
@@ -15,6 +18,7 @@ import {
 import { Search, Plus, Shield, Loader2, Edit, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Matriz de permissões simplificada (Removido os CRUDs avulsos de roles)
 const MODULE_PERMISSIONS = [
     {
         module: 'Clientes Depositantes',
@@ -38,23 +42,25 @@ const MODULE_PERMISSIONS = [
     {
         module: 'Perfis de Acesso',
         permissions: [
-            { id: 'roles:view', label: 'Visualizar Perfis' },
-            { id: 'roles:create', label: 'Criar Perfil' },
-            { id: 'roles:edit', label: 'Editar Perfil' },
-            { id: 'roles:delete', label: 'Excluir Perfil' },
+            // Agora é apenas Manage!
+            { id: 'roles:manage', label: 'Gerenciar Perfis' },
         ]
     },
     {
         module: 'Configurações e Serviços',
         permissions: [
-            { id: 'companies:view', label: 'Visualizar Empresas' },
-            { id: 'companies:create', label: 'Implantar Empresa' },
-            { id: 'companies:edit', label: 'Editar Empresa' },
+            { id: 'companies:manage', label: 'Gerenciar Empresas' },
             { id: 'printing:manage', label: 'Gestão de Impressão' },
             { id: 'audit:view', label: 'Consultar Auditoria' },
         ]
     }
 ];
+
+// Schema Zod validando Nome e Array de Permissões
+const roleSchema = z.object({
+    name: z.string().min(3, 'O nome deve ter no mínimo 3 caracteres.'),
+    permissions: z.array(z.string()).min(1, 'Selecione pelo menos uma permissão.')
+});
 
 export default function PerfisList() {
     const queryClient = useQueryClient();
@@ -62,17 +68,32 @@ export default function PerfisList() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [selectedRole, setSelectedRole] = useState(null);
     const [roleToDelete, setRoleToDelete] = useState(null);
-    const [roleName, setRoleName] = useState('');
-    const [selectedPermissions, setSelectedPermissions] = useState([]);
 
     const { data: roles = [], isLoading } = useGetApiRoles();
+
+    // RHF Setup
+    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+        resolver: zodResolver(roleSchema),
+        defaultValues: { name: '', permissions: [] }
+    });
+
+    const watchedPermissions = watch('permissions');
+
+    useEffect(() => {
+        if (isDialogOpen) {
+            reset({
+                name: selectedRole ? selectedRole.name : '',
+                permissions: selectedRole ? selectedRole.permissions : []
+            });
+        }
+    }, [isDialogOpen, selectedRole, reset]);
 
     const { mutate: createRole, isPending: isCreating } = usePostApiRoles({
         mutation: {
             onSuccess: () => {
                 toast.success('Perfil criado com sucesso!');
                 queryClient.invalidateQueries({ queryKey: ['/api/roles'] });
-                handleClose();
+                setIsDialogOpen(false);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao criar perfil.')
         }
@@ -83,7 +104,7 @@ export default function PerfisList() {
             onSuccess: () => {
                 toast.success('Perfil atualizado com sucesso!');
                 queryClient.invalidateQueries({ queryKey: ['/api/roles'] });
-                handleClose();
+                setIsDialogOpen(false);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar perfil.')
         }
@@ -100,43 +121,19 @@ export default function PerfisList() {
         }
     });
 
-    const handleOpenCreate = () => {
-        setSelectedRole(null);
-        setRoleName('');
-        setSelectedPermissions([]);
-        setIsDialogOpen(true);
+    const togglePermission = (permId, checked) => {
+        const current = watchedPermissions;
+        const updated = checked
+            ? [...current, permId]
+            : current.filter(p => p !== permId);
+        setValue('permissions', updated, { shouldValidate: true });
     };
 
-    const handleOpenEdit = (role) => {
-        setSelectedRole(role);
-        setRoleName(role.name);
-        setSelectedPermissions(role.permissions || []);
-        setIsDialogOpen(true);
-    };
-
-    const handleClose = () => {
-        setIsDialogOpen(false);
-        setSelectedRole(null);
-        setRoleName('');
-        setSelectedPermissions([]);
-    };
-
-    const togglePermission = (permId) => {
-        setSelectedPermissions((prev) =>
-            prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
-        );
-    };
-
-    const handleSave = (e) => {
-        e.preventDefault();
-        if (!roleName.trim()) return toast.warning('Informe o nome do perfil.');
-
-        const payload = { name: roleName, permissions: selectedPermissions };
-
+    const onSubmit = (data) => {
         if (selectedRole) {
-            updateRole({ id: selectedRole.id, data: payload });
+            updateRole({ id: selectedRole.id, data });
         } else {
-            createRole({ data: payload });
+            createRole({ data });
         }
     };
 
@@ -150,7 +147,7 @@ export default function PerfisList() {
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Perfis de Acesso</h1>
                     <p className="text-sm text-slate-500 mt-1">Configure os papéis e defina a matriz de permissões da equipe.</p>
                 </div>
-                <Button onClick={handleOpenCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <Button onClick={() => { setSelectedRole(null); setIsDialogOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                     <Plus className="mr-2 h-4 w-4" /> Novo Perfil
                 </Button>
             </div>
@@ -205,7 +202,7 @@ export default function PerfisList() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right space-x-1">
-                                        <Button variant="ghost" size="sm" onClick={() => handleOpenEdit(role)} className="text-blue-600 hover:bg-blue-50">
+                                        <Button variant="ghost" size="sm" onClick={() => { setSelectedRole(role); setIsDialogOpen(true); }} className="text-blue-600 hover:bg-blue-50">
                                             <Edit className="h-4 w-4 mr-1" /> Configurar Permissões
                                         </Button>
                                         <Button variant="ghost" size="sm" onClick={() => setRoleToDelete(role)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
@@ -226,14 +223,15 @@ export default function PerfisList() {
                         <DialogDescription className="text-slate-500">Defina o nome do papel e marque os privilégios concedidos aos usuários.</DialogDescription>
                     </DialogHeader>
 
-                    <form onSubmit={handleSave} className="flex-1 flex flex-col min-h-0 space-y-4">
+                    <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0 space-y-4">
                         <div className="space-y-1.5 pt-2">
-                            <Label htmlFor="roleName" className="text-slate-700 font-medium">Nome do Perfil *</Label>
+                            <Label htmlFor="name" className="text-slate-700 font-medium">Nome do Perfil *</Label>
                             <Input
-                                id="roleName" placeholder="Ex: Operador de Recebimento"
-                                value={roleName} onChange={(e) => setRoleName(e.target.value)}
-                                className="bg-slate-50"
+                                id="name" placeholder="Ex: Operador de Recebimento"
+                                {...register('name')}
+                                className={`bg-slate-50 ${errors.name ? 'border-rose-500' : ''}`}
                             />
+                            {errors.name && <p className="text-xs text-rose-500">{errors.name.message}</p>}
                         </div>
 
                         <div className="flex-1 overflow-y-auto space-y-5 pr-2 py-2">
@@ -242,7 +240,7 @@ export default function PerfisList() {
                                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{group.module}</h4>
                                     <div className="grid grid-cols-2 gap-3">
                                         {group.permissions.map((perm) => {
-                                            const isChecked = selectedPermissions.includes(perm.id);
+                                            const isChecked = watchedPermissions.includes(perm.id);
                                             return (
                                                 <label
                                                     key={perm.id}
@@ -251,7 +249,7 @@ export default function PerfisList() {
                                                 >
                                                     <Checkbox
                                                         checked={isChecked}
-                                                        onCheckedChange={() => togglePermission(perm.id)}
+                                                        onCheckedChange={(checked) => togglePermission(perm.id, checked)}
                                                     />
                                                     <span>{perm.label}</span>
                                                 </label>
@@ -260,10 +258,11 @@ export default function PerfisList() {
                                     </div>
                                 </div>
                             ))}
+                            {errors.permissions && <p className="text-xs text-rose-500 text-center">{errors.permissions.message}</p>}
                         </div>
 
                         <DialogFooter className="pt-2 border-t border-slate-100">
-                            <Button type="button" variant="outline" onClick={handleClose}>Cancelar</Button>
+                            <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                             <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]">
                                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar Perfil</>}
                             </Button>

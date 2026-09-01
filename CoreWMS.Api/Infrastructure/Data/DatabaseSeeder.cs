@@ -31,10 +31,7 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Users.Edit);
             adminRole.AddPermission(Permissions.Users.Delete);
             adminRole.AddPermission(Permissions.Users.Assign);
-            adminRole.AddPermission(Permissions.Roles.View);
-            adminRole.AddPermission(Permissions.Roles.Create);
-            adminRole.AddPermission(Permissions.Roles.Edit);
-            adminRole.AddPermission(Permissions.Roles.Delete);
+            adminRole.AddPermission(Permissions.Roles.Manage);
             adminRole.AddPermission(Permissions.Companies.Manage);
             adminRole.AddPermission(Permissions.Profile.UpdateSelf);
             adminRole.AddPermission(Permissions.Audit.View);
@@ -51,7 +48,6 @@ public static class DatabaseSeeder
             gerenteRole.AddPermission(Permissions.Users.Edit);
             gerenteRole.AddPermission(Permissions.Users.Delete);
             gerenteRole.AddPermission(Permissions.Users.Assign);
-            gerenteRole.AddPermission(Permissions.Roles.View);
             gerenteRole.AddPermission(Permissions.Profile.UpdateSelf);
             gerenteRole.AddPermission(Permissions.Printing.Manage);
             gerenteRole.AddPermission(Permissions.Customers.View);

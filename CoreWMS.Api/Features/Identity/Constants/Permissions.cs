@@ -13,10 +13,7 @@ public static class Permissions
 
     public static class Roles
     {
-        public const string View = "roles:view";
-        public const string Create = "roles:create";
-        public const string Edit = "roles:edit";
-        public const string Delete = "roles:delete";
+        public const string Manage = "roles:manage";
     }
 
     public static class Companies
