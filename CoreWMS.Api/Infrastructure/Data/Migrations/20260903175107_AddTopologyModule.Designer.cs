@@ -3,6 +3,7 @@ using System;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CoreWMS.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903175107_AddTopologyModule")]
+    partial class AddTopologyModule
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -450,197 +453,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.ToTable("Printers");
                 });
 
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.PackagingType", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId", "Code")
-                        .IsUnique();
-
-                    b.ToTable("PackagingTypes");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.Product", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("BaseBarcode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("BaseUnit")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<string>("Cest")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int?>("InboundShelfLifeToleranceDays")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("MaxStacking")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Ncm")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<int>("Origin")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("OutboundShelfLifeToleranceDays")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PickingStrategy")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("RequireBatchControl")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("RequireExpirationDate")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("RequireManufactureDate")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("RequireSerialControl")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Sku")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.HasIndex("CompanyId", "CustomerId", "BaseBarcode")
-                        .IsUnique();
-
-                    b.HasIndex("CompanyId", "CustomerId", "Sku")
-                        .IsUnique();
-
-                    b.ToTable("Products");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.ProductPackaging", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("AllowFractionalPicking")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Barcode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<decimal>("ConversionFactor")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("GrossWeight")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("HeightMm")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<bool>("IsDefaultInbound")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDefaultOutbound")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal>("LengthMm")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("NetWeight")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<Guid>("PackagingTypeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("WidthMm")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Barcode");
-
-                    b.HasIndex("PackagingTypeId");
-
-                    b.HasIndex("ProductId", "PackagingTypeId")
-                        .IsUnique();
-
-                    b.ToTable("ProductPackagings");
-                });
-
             modelBuilder.Entity("CoreWMS.Api.Features.Topology.Entities.Location", b =>
                 {
                     b.Property<Guid>("Id")
@@ -876,55 +688,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Navigation("PrintAgent");
                 });
 
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.PackagingType", b =>
-                {
-                    b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Company");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.Product", b =>
-                {
-                    b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CoreWMS.Api.Features.Customers.Entities.Customer", "Customer")
-                        .WithMany()
-                        .HasForeignKey("CustomerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Company");
-
-                    b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.ProductPackaging", b =>
-                {
-                    b.HasOne("CoreWMS.Api.Features.Products.Entities.PackagingType", "PackagingType")
-                        .WithMany()
-                        .HasForeignKey("PackagingTypeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CoreWMS.Api.Features.Products.Entities.Product", "Product")
-                        .WithMany("Packagings")
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("PackagingType");
-
-                    b.Navigation("Product");
-                });
-
             modelBuilder.Entity("CoreWMS.Api.Features.Topology.Entities.Location", b =>
                 {
                     b.HasOne("CoreWMS.Api.Features.Topology.Entities.StorageType", "StorageType")
@@ -968,11 +731,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
             modelBuilder.Entity("CoreWMS.Api.Features.Printing.Entities.PrintAgent", b =>
                 {
                     b.Navigation("Printers");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Products.Entities.Product", b =>
-                {
-                    b.Navigation("Packagings");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Topology.Entities.Warehouse", b =>

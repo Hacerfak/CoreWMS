@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
@@ -17,7 +18,7 @@ import {
 import { Search, Plus, Shield, Loader2, Edit, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Matriz de permissões simplificada
+// Matriz de permissões atualizada com Topologia e Produtos granulados
 const MODULE_PERMISSIONS = [
     {
         module: 'Clientes Depositantes',
@@ -29,28 +30,32 @@ const MODULE_PERMISSIONS = [
         ]
     },
     {
-        module: 'Usuários e Acessos',
+        module: 'Catálogo de Produtos',
+        permissions: [
+            { id: 'products:view', label: 'Visualizar Catálogo e Embalagens' },
+            { id: 'products:create', label: 'Cadastrar Produtos e Embalagens' },
+            { id: 'products:edit', label: 'Editar Produtos e Embalagens' },
+            { id: 'products:delete', label: 'Excluir Produtos e Embalagens' },
+        ]
+    },
+    {
+        module: 'Logística e Infraestrutura',
+        permissions: [
+            { id: 'topology:manage', label: 'Gerenciar Topologia (Armazéns, Zonas e Endereços)' },
+            { id: 'printing:manage', label: 'Gestão de Impressão e Templates ZPL' },
+        ]
+    },
+    {
+        module: 'Segurança e Acessos',
         permissions: [
             { id: 'users:manage', label: 'Gerenciar Usuários e Vínculos' },
-        ]
-    },
-    {
-        module: 'Perfis de Acesso',
-        permissions: [
-            { id: 'roles:manage', label: 'Gerenciar Perfis' },
-        ]
-    },
-    {
-        module: 'Configurações e Serviços',
-        permissions: [
-            { id: 'companies:manage', label: 'Gerenciar Empresas' },
-            { id: 'printing:manage', label: 'Gestão de Impressão' },
-            { id: 'audit:view', label: 'Consultar Auditoria' },
+            { id: 'roles:manage', label: 'Gerenciar Perfis de Acesso' },
+            { id: 'companies:manage', label: 'Gerenciar Empresas (Multi-Tenant)' },
+            { id: 'audit:view', label: 'Consultar Auditoria (Logs)' },
         ]
     }
 ];
 
-// Schema Zod
 const roleSchema = z.object({
     name: z.string().min(3, 'O nome deve ter no mínimo 3 caracteres.'),
     permissions: z.array(z.string()).min(1, 'Selecione pelo menos uma permissão.')
@@ -65,7 +70,6 @@ export default function PerfisList() {
 
     const { data: roles = [], isLoading } = useGetApiRoles();
 
-    // RHF Setup
     const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(roleSchema),
         defaultValues: { name: '', permissions: [] }
@@ -182,12 +186,10 @@ export default function PerfisList() {
                                             <span className="font-medium text-slate-900">{role.name}</span>
                                         </div>
                                     </TableCell>
-
-                                    {/* COLUNA REFATORADA: EXIBE APENAS O RESUMO */}
                                     <TableCell>
                                         {role.permissions?.length > 0 ? (
                                             <span className="text-sm font-medium text-slate-600">
-                                                {role.permissions.length} permissão(ões) ativa(s)
+                                                {role.permissions.length} privilégio(s) ativo(s)
                                             </span>
                                         ) : (
                                             <span className="text-sm text-slate-400 italic">
@@ -195,10 +197,9 @@ export default function PerfisList() {
                                             </span>
                                         )}
                                     </TableCell>
-
                                     <TableCell className="text-right space-x-1">
                                         <Button variant="ghost" size="sm" onClick={() => { setSelectedRole(role); setIsDialogOpen(true); }} className="text-blue-600 hover:bg-blue-50">
-                                            <Edit className="h-4 w-4 mr-1" /> Configurar Permissões
+                                            <Edit className="h-4 w-4 mr-1" /> Configurar
                                         </Button>
                                         <Button variant="ghost" size="sm" onClick={() => setRoleToDelete(role)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
                                             <Trash2 className="h-4 w-4 mr-1" /> Excluir
@@ -212,51 +213,55 @@ export default function PerfisList() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-2xl bg-white max-h-[85vh] flex flex-col">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900">{selectedRole ? 'Configurar Perfil' : 'Novo Perfil de Acesso'}</DialogTitle>
-                        <DialogDescription className="text-slate-500">Defina o nome do papel e marque as permissões concedidas aos usuários.</DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="sm:max-w-3xl bg-white max-h-[85vh] flex flex-col p-0">
+                    <div className="p-6 border-b border-slate-100">
+                        <DialogHeader>
+                            <DialogTitle className="text-slate-900">{selectedRole ? 'Configurar Perfil' : 'Novo Perfil de Acesso'}</DialogTitle>
+                            <DialogDescription className="text-slate-500">Defina o nome do papel e marque os privilégios concedidos aos usuários.</DialogDescription>
+                        </DialogHeader>
+                    </div>
 
-                    <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0 space-y-4">
-                        <div className="space-y-1.5 pt-2">
-                            <Label htmlFor="name" className="text-slate-700 font-medium">Nome do Perfil *</Label>
-                            <Input
-                                id="name" placeholder="Ex: Operador de Recebimento"
-                                {...register('name')}
-                                className={`bg-slate-50 ${errors.name ? 'border-rose-500' : ''}`}
-                            />
-                            {errors.name && <p className="text-xs text-rose-500">{errors.name.message}</p>}
-                        </div>
+                    <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="name" className="text-slate-700 font-medium">Nome do Perfil *</Label>
+                                <Input
+                                    id="name" placeholder="Ex: Operador de Recebimento"
+                                    {...register('name')}
+                                    className={`bg-slate-50 h-10 ${errors.name ? 'border-rose-500' : ''}`}
+                                />
+                                {errors.name && <p className="text-xs text-rose-500">{errors.name.message}</p>}
+                            </div>
 
-                        <div className="flex-1 overflow-y-auto space-y-5 pr-2 py-2">
-                            {MODULE_PERMISSIONS.map((group) => (
-                                <div key={group.module} className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/60 space-y-3">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{group.module}</h4>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {group.permissions.map((perm) => {
-                                            const isChecked = watchedPermissions.includes(perm.id);
-                                            return (
-                                                <label
-                                                    key={perm.id}
-                                                    className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${isChecked ? 'bg-blue-50/80 border-blue-200 text-blue-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/50'
-                                                        }`}
-                                                >
-                                                    <Checkbox
-                                                        checked={isChecked}
-                                                        onCheckedChange={(checked) => togglePermission(perm.id, checked)}
-                                                    />
-                                                    <span>{perm.label}</span>
-                                                </label>
-                                            );
-                                        })}
+                            <div className="space-y-4">
+                                {MODULE_PERMISSIONS.map((group) => (
+                                    <div key={group.module} className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/60 space-y-3">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{group.module}</h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {group.permissions.map((perm) => {
+                                                const isChecked = watchedPermissions.includes(perm.id);
+                                                return (
+                                                    <label
+                                                        key={perm.id}
+                                                        className={`flex items-center gap-2.5 p-3 rounded-lg border text-xs font-medium cursor-pointer transition-all ${isChecked ? 'bg-blue-50/80 border-blue-200 text-blue-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/50'
+                                                            }`}
+                                                    >
+                                                        <Checkbox
+                                                            checked={isChecked}
+                                                            onCheckedChange={(checked) => togglePermission(perm.id, checked)}
+                                                        />
+                                                        <span>{perm.label}</span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                             {errors.permissions && <p className="text-xs text-rose-500 text-center">{errors.permissions.message}</p>}
                         </div>
 
-                        <DialogFooter className="pt-2 border-t border-slate-100">
+                        <DialogFooter className="p-6 border-t border-slate-100 bg-slate-50/50">
                             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
                             <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]">
                                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar Perfil</>}

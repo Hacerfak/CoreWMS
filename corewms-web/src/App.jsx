@@ -12,6 +12,8 @@ import PerfisList from '@/pages/Perfis/PerfisList';
 import ImpressaoPage from '@/pages/Impressao/ImpressaoPage';
 import AuditoriaPage from '@/pages/Auditoria/AuditoriaPage';
 import EmpresasPage from './pages/Empresas/EmpresasPage';
+import TopologiaPage from '@/pages/Topologia/TopologiaPage';
+import ProdutosPage from '@/pages/Produtos/ProdutosPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -77,6 +79,14 @@ export default function App() {
 
               <Route element={<PermissionGuard requiredPermission="audit:view" />}>
                 <Route path="/auditoria" element={<AuditoriaPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="topology:manage" />}>
+                <Route path="/topologia" element={<TopologiaPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="products:view" />}>
+                <Route path="/produtos" element={<ProdutosPage />} />
               </Route>
 
             </Route>

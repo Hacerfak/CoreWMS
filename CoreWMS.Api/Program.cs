@@ -1,15 +1,9 @@
 using System.Text;
-using CoreWMS.Api.Features.Audit;
-using CoreWMS.Api.Features.Identity.AssignUserToCompany;
-using CoreWMS.Api.Features.Identity.Companies;
-using CoreWMS.Api.Features.Customers;
-using CoreWMS.Api.Features.Identity.Login;
-using CoreWMS.Api.Features.Identity.Roles;
-using CoreWMS.Api.Features.Identity.Users;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Extensions; // NOVO USING do Mapeador Automático
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
@@ -106,7 +100,7 @@ builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
-    cfg.AddOpenBehavior(typeof(ValidationBehavior<,>)); // Adiciona o segurança na porta
+    cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 });
 
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
@@ -182,17 +176,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseExceptionHandler();
 
-app.MapAuditLogEndpoints();
-app.MapLoginEndpoint();
-app.MapRefreshTokenEndpoint();
-app.MapCompanyCrudEndpoints();
-app.MapCustomerCrudEndpoints();
-app.MapUserCrudEndpoints();
-app.MapRoleCrudEndpoints();
-app.MapAssignUserEndpoint();
-app.MapPrintEndpoints();
-app.MapPrintingCrudEndpoints();
+// =================================================================================
+// 🔥 MAGIA DO EXTENSION METHOD: Varre as DLLs e injeta todas as rotas (Endpoints)
+// =================================================================================
+app.MapAllEndpoints();
 
+// Hub do SignalR continua sendo mapeado à parte
 app.MapHub<PrintHub>("/hubs/print");
 
 app.Run();

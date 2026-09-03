@@ -84,7 +84,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 // ==========================================
 public static class RefreshTokenEndpoint
 {
-    public static void MapRefreshTokenEndpoint(this IEndpointRouteBuilder app)
+    public static void MapRefreshTokenEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/identity/refresh", async (RefreshTokenRequest request, IMediator mediator) =>
         {

@@ -4,6 +4,8 @@ using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
+using CoreWMS.Api.Features.Topology.Entities;
+using CoreWMS.Api.Features.Products.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Infrastructure.Data;
@@ -40,6 +42,13 @@ public class ApplicationDbContext : DbContext
     public DbSet<PrintAgent> PrintAgents => Set<PrintAgent>();
     public DbSet<Printer> Printers => Set<Printer>();
     public DbSet<LabelTemplate> LabelTemplates => Set<LabelTemplate>();
+    public DbSet<StorageType> StorageTypes => Set<StorageType>();
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<Zone> Zones => Set<Zone>();
+    public DbSet<Location> Locations => Set<Location>();
+    public DbSet<PackagingType> PackagingTypes => Set<PackagingType>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductPackaging> ProductPackagings => Set<ProductPackaging>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -156,6 +165,139 @@ public class ApplicationDbContext : DbContext
             b.HasKey(t => t.Id);
             b.Property(t => t.Name).IsRequired().HasMaxLength(100);
             b.Property(t => t.ZplContent).IsRequired();
+        });
+
+        builder.Entity<StorageType>(b =>
+{
+    b.HasKey(s => s.Id);
+    b.Property(s => s.Name).IsRequired().HasMaxLength(100);
+    b.HasIndex(s => s.Name).IsUnique(); // Nomes de Tipos devem ser únicos
+});
+
+        builder.Entity<Warehouse>(b =>
+        {
+            b.HasKey(w => w.Id);
+            b.Property(w => w.Code).IsRequired().HasMaxLength(20);
+            b.Property(w => w.Name).IsRequired().HasMaxLength(150);
+            b.Property(w => w.ClearanceHeight).HasPrecision(10, 2);
+            b.HasIndex(w => w.Code).IsUnique(); // Código P1 não pode repetir
+        });
+
+        builder.Entity<Zone>(b =>
+        {
+            b.HasKey(z => z.Id);
+            b.Property(z => z.Code).IsRequired().HasMaxLength(20);
+            b.Property(z => z.Name).IsRequired().HasMaxLength(150);
+
+            // Protege contra exclusão acidental em cascata do armazém
+            b.HasOne(z => z.Warehouse)
+             .WithMany(w => w.Zones)
+             .HasForeignKey(z => z.WarehouseId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(z => new { z.WarehouseId, z.Code }).IsUnique(); // C1 deve ser único DENTRO do P1
+        });
+
+        builder.Entity<Location>(b =>
+        {
+            b.HasKey(l => l.Id);
+            b.Property(l => l.Code).IsRequired().HasMaxLength(50);
+            b.Property(l => l.FullPath).IsRequired().HasMaxLength(100);
+            b.Property(l => l.Aisle).HasMaxLength(10);
+            b.Property(l => l.Building).HasMaxLength(10);
+            b.Property(l => l.Level).HasMaxLength(10);
+            b.Property(l => l.Slot).HasMaxLength(10);
+
+            b.HasIndex(l => l.FullPath).IsUnique(); // O código de barras lido pelo coletor (P1-C1-B1) é chave única global
+
+            b.HasOne(l => l.Zone)
+             .WithMany(z => z.Locations)
+             .HasForeignKey(l => l.ZoneId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne(l => l.StorageType)
+             .WithMany()
+             .HasForeignKey(l => l.StorageTypeId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==========================================
+        // MÓDULO DE PRODUTOS E EMBALAGENS
+        // ==========================================
+
+        builder.Entity<PackagingType>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Code).IsRequired().HasMaxLength(20);
+            b.Property(x => x.Description).IsRequired().HasMaxLength(150);
+
+            b.HasOne(x => x.Company)
+             .WithMany()
+             .HasForeignKey(x => x.CompanyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // Um código de embalagem (ex: "PAL") é único dentro da mesma Empresa
+            b.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+        });
+
+        builder.Entity<Product>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Sku).IsRequired().HasMaxLength(50);
+            b.Property(x => x.Description).IsRequired().HasMaxLength(200);
+            b.Property(x => x.BaseUnit).IsRequired().HasMaxLength(10);
+            b.Property(x => x.BaseBarcode).HasMaxLength(50);
+            b.Property(x => x.Ncm).HasMaxLength(10);
+            b.Property(x => x.Cest).HasMaxLength(10);
+
+            // Vínculos Restritivos (Não apaga produto se apagar empresa/cliente)
+            b.HasOne(x => x.Company)
+             .WithMany()
+             .HasForeignKey(x => x.CompanyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne(x => x.Customer)
+             .WithMany()
+             .HasForeignKey(x => x.CustomerId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // 1. O SKU deve ser único PARA AQUELE DEPOSITANTE, DENTRO DAQUELA EMPRESA
+            b.HasIndex(x => new { x.CompanyId, x.CustomerId, x.Sku }).IsUnique();
+
+            // 2. NOVO: O GTIN/EAN também deve ser único PARA AQUELE DEPOSITANTE (se preenchido)
+            b.HasIndex(x => new { x.CompanyId, x.CustomerId, x.BaseBarcode }).IsUnique();
+        });
+
+        builder.Entity<ProductPackaging>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Barcode).HasMaxLength(50);
+
+            // Precisão (18 dígitos totais, 4 ou 2 casas decimais)
+            b.Property(x => x.ConversionFactor).HasPrecision(18, 4);
+            b.Property(x => x.GrossWeight).HasPrecision(18, 4);
+            b.Property(x => x.NetWeight).HasPrecision(18, 4);
+            b.Property(x => x.LengthMm).HasPrecision(18, 2);
+            b.Property(x => x.WidthMm).HasPrecision(18, 2);
+            b.Property(x => x.HeightMm).HasPrecision(18, 2);
+
+            // Se o produto for excluído, apagamos as amarrações de embalagem dele (Cascade)
+            b.HasOne(x => x.Product)
+             .WithMany(p => p.Packagings)
+             .HasForeignKey(x => x.ProductId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Restringe exclusão de um "Tipo de Embalagem" se ele estiver em uso por algum produto
+            b.HasOne(x => x.PackagingType)
+             .WithMany()
+             .HasForeignKey(x => x.PackagingTypeId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            // Impede que a mesma embalagem seja vinculada duas vezes ao mesmo produto
+            b.HasIndex(x => new { x.ProductId, x.PackagingTypeId }).IsUnique();
+
+            // Índice ultrarrápido para bipagem da embalagem via Coletor RF
+            b.HasIndex(x => x.Barcode);
         });
     }
 

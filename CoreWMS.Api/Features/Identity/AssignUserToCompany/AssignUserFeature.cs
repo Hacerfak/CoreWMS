@@ -126,7 +126,7 @@ public class ListCompaniesHandler : IRequestHandler<ListCompaniesQuery, IResult>
 // ==========================================
 public static class AssignUserEndpoint
 {
-    public static void MapAssignUserEndpoint(this IEndpointRouteBuilder app)
+    public static void MapAssignUserEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/users").WithTags("Users").RequireAuthorization();
 

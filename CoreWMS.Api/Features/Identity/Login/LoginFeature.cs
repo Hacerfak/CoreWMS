@@ -99,7 +99,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 // ==========================================
 public static class LoginEndpoint
 {
-    public static void MapLoginEndpoint(this IEndpointRouteBuilder app)
+    public static void MapLoginEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/identity/login", async (LoginRequest request, IMediator mediator) =>
         {

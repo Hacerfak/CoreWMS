@@ -39,4 +39,17 @@ public static class Permissions
     {
         public const string Manage = "printing:manage";
     }
+
+    public static class Topology
+    {
+        public const string Manage = "topology:manage";
+    }
+
+    public static class Products
+    {
+        public const string View = "products:view";
+        public const string Create = "products:create";
+        public const string Edit = "products:edit";
+        public const string Delete = "products:delete";
+    }
 }

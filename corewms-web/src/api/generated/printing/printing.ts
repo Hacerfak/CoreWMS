@@ -59,66 +59,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const postApiPrintSendTest = (
-    sendTestPrintCommand: SendTestPrintCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/print/send-test`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: sendTestPrintCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiPrintSendTestMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext> => {
-
-const mutationKey = ['postApiPrintSendTest'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPrintSendTest>>, PostApiPrintSendTestMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiPrintSendTest(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiPrintSendTestMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPrintSendTest>>>
-    export type PostApiPrintSendTestMutationBody = SendTestPrintCommand
-    export type PostApiPrintSendTestMutationError = unknown
-    export type PostApiPrintSendTestMutationVariables = {data: SendTestPrintCommand}
-
-    export const usePostApiPrintSendTest = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiPrintSendTest>>,
-        TError,
-        PostApiPrintSendTestMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiPrintSendTestMutationOptions(options), queryClient);
-    }
-    export const postApiPrintingAgents = (
+export const postApiPrintingAgents = (
     createAgentCommand: CreateAgentCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -817,4 +758,63 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getDeleteApiPrintingTemplatesIdMutationOptions(options), queryClient);
+    }
+    export const postApiPrintSendTest = (
+    sendTestPrintCommand: SendTestPrintCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/print/send-test`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: sendTestPrintCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiPrintSendTestMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext> => {
+
+const mutationKey = ['postApiPrintSendTest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPrintSendTest>>, PostApiPrintSendTestMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiPrintSendTest(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPrintSendTestMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPrintSendTest>>>
+    export type PostApiPrintSendTestMutationBody = SendTestPrintCommand
+    export type PostApiPrintSendTestMutationError = unknown
+    export type PostApiPrintSendTestMutationVariables = {data: SendTestPrintCommand}
+
+    export const usePostApiPrintSendTest = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPrintSendTest>>,
+        TError,
+        PostApiPrintSendTestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPrintSendTestMutationOptions(options), queryClient);
     }
