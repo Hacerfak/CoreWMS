@@ -29,6 +29,7 @@ export * from './loginRequest';
 export * from './loginResponse';
 export * from './postApiCompaniesBody';
 export * from './postApiCustomersConsultSefazCnpjParams';
+export * from './postApiInboundUploadXmlBody';
 export * from './problemDetails';
 export * from './putApiCompaniesIdCertificateBody';
 export * from './refreshTokenCommand';

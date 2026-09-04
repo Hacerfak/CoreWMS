@@ -138,10 +138,14 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
     };
 
     const onCertSubmit = (data) => {
-        const formData = new FormData();
-        formData.append('certificateFile', data.certificateFile[0]);
-        formData.append('certificatePassword', data.password);
-        uploadCert({ id: empresaToEdit.id, data: formData });
+        // Passamos o objeto puro para o hook do Orval
+        uploadCert({
+            id: empresaToEdit.id,
+            data: {
+                certificateFile: data.certificateFile[0],
+                certificatePassword: data.password
+            }
+        });
     };
 
     return (

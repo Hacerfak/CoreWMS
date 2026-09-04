@@ -3,6 +3,7 @@ using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
+using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Features.Products.Entities;
@@ -49,6 +50,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<PackagingType> PackagingTypes => Set<PackagingType>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductPackaging> ProductPackagings => Set<ProductPackaging>();
+    public DbSet<InboundOrder> InboundOrders => Set<InboundOrder>();
+    public DbSet<InboundOrderItem> InboundOrderItems => Set<InboundOrderItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -298,6 +301,55 @@ public class ApplicationDbContext : DbContext
 
             // Índice ultrarrápido para bipagem da embalagem via Coletor RF
             b.HasIndex(x => x.Barcode);
+        });
+
+        builder.Entity<InboundOrder>(b =>
+{
+    b.HasKey(x => x.Id);
+    b.Property(x => x.AccessKey).IsRequired().HasMaxLength(44);
+    b.Property(x => x.Number).IsRequired().HasMaxLength(20);
+    b.Property(x => x.Series).HasMaxLength(10);
+    b.Property(x => x.IssuerCnpj).IsRequired().HasMaxLength(14);
+    b.Property(x => x.IssuerName).IsRequired().HasMaxLength(150);
+    b.Property(x => x.XmlContent).IsRequired(); // Coluna TEXT no Postgres (ideal para XML)
+
+    b.HasOne(x => x.Company)
+     .WithMany()
+     .HasForeignKey(x => x.CompanyId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    b.HasOne(x => x.Customer)
+     .WithMany()
+     .HasForeignKey(x => x.CustomerId)
+     .OnDelete(DeleteBehavior.Restrict);
+
+    // Impede o upload da mesma NF-e para a mesma Empresa
+    b.HasIndex(x => new { x.CompanyId, x.AccessKey }).IsUnique();
+});
+
+        builder.Entity<InboundOrderItem>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.SkuOriginal).IsRequired().HasMaxLength(50);
+            b.Property(x => x.BarcodeOriginal).HasMaxLength(50);
+            b.Property(x => x.DescriptionOriginal).IsRequired().HasMaxLength(200);
+            b.Property(x => x.UnitOriginal).IsRequired().HasMaxLength(10);
+            b.Property(x => x.ExpectedQty).HasPrecision(18, 4);
+            b.Property(x => x.UnitValue).HasPrecision(18, 4);
+            b.Property(x => x.TotalValue).HasPrecision(18, 4);
+            b.Property(x => x.Ncm).HasMaxLength(10);
+            b.Property(x => x.Cest).HasMaxLength(10);
+            b.Property(x => x.BatchOriginal).HasMaxLength(50);
+
+            b.HasOne(x => x.InboundOrder)
+             .WithMany(o => o.Items)
+             .HasForeignKey(x => x.InboundOrderId)
+             .OnDelete(DeleteBehavior.Cascade); // Excluir a ordem exclui os itens
+
+            b.HasOne(x => x.Product)
+             .WithMany()
+             .HasForeignKey(x => x.ProductId)
+             .OnDelete(DeleteBehavior.Restrict); // Não apaga o item se apagar o produto (Mantém rastreabilidade)
         });
     }
 

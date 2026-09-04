@@ -52,4 +52,34 @@ public static class Permissions
         public const string Edit = "products:edit";
         public const string Delete = "products:delete";
     }
+
+    public static class Inbound
+    {
+        // ==========================================
+        // VISUALIZAÇÃO E DADOS SENSÍVEIS
+        // ==========================================
+        public const string View = "inbound:view"; // Permite acessar a tela unificada e ver a lista.
+        public const string ViewFinancials = "inbound:view_financials"; // Ver valores em R$ da NF-e.
+        public const string ViewExpectedQty = "inbound:view_expected_qty"; // Ver quantidade da NF-e (Sem isso, o sistema força Conferência Cega).
+
+        // ==========================================
+        // BACKOFFICE E PREPARAÇÃO
+        // ==========================================
+        public const string UploadXml = "inbound:upload_xml"; // Fazer upload do XML da SEFAZ.
+        public const string ReviewProducts = "inbound:review_products"; // Vincular produtos do XML ("Malha Fina") ao catálogo do WMS.
+
+        // ==========================================
+        // OPERAÇÃO NO CHÃO DE FÁBRICA
+        // ==========================================
+        public const string AssignDock = "inbound:assign_dock"; // Atribuir/Trocar doca de recebimento.
+        public const string ExecuteChecking = "inbound:execute_checking"; // Iniciar processo e bipar HUs/Produtos.
+        public const string ExecutePutaway = "inbound:execute_putaway"; // Movimentar as HUs recebidas da Doca para o Estoque Físico.
+
+        // ==========================================
+        // AÇÕES GERENCIAIS E CRÍTICAS
+        // ==========================================
+        public const string ManageDivergences = "inbound:manage_divergences"; // Aceitar faltas/sobras e aprovar divergências.
+        public const string ForceFinish = "inbound:force_finish"; // Encerrar o recebimento manualmente (forçar fechamento).
+        public const string Cancel = "inbound:cancel"; // Estornar/Cancelar ordem de recebimento.
+    }
 }

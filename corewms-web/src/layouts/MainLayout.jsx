@@ -2,7 +2,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHasPermission } from '@/hooks/useHasPermission';
-import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package } from 'lucide-react';
+import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package, ArrowDownToLine } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ export default function MainLayout() {
         {
             scope: 'Logística',
             items: [
+                { icon: ArrowDownToLine, label: 'Recebimento (Inbound)', path: '/inbound', permission: 'inbound:view' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
             ]
         },

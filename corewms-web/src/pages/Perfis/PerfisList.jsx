@@ -39,6 +39,29 @@ const MODULE_PERMISSIONS = [
         ]
     },
     {
+        module: 'Recebimento (Inbound)',
+        permissions: [
+            // Acesso Básico e Visibilidade
+            { id: 'inbound:view', label: 'Acessar Workspace de Recebimento' },
+            { id: 'inbound:view_financials', label: 'Visualizar Valores Fiscais (R$)' },
+            { id: 'inbound:view_expected_qty', label: 'Visualizar Qtd Esperada (Quebra Conf. Cega)' },
+
+            // Entrada de Dados e Backoffice
+            { id: 'inbound:upload_xml', label: 'Importar XML (NF-e)' },
+            { id: 'inbound:review_products', label: 'Revisar e Vincular Produtos (Malha Fina)' },
+
+            // Operação Física (Coletor / Doca)
+            { id: 'inbound:assign_dock', label: 'Atribuir Doca' },
+            { id: 'inbound:execute_checking', label: 'Executar Conferência (Bipar HUs)' },
+            { id: 'inbound:execute_putaway', label: 'Executar Putaway (Alocação de Estoque)' },
+
+            // Gestão e Resolução
+            { id: 'inbound:manage_divergences', label: 'Aprovar Divergências (Faltas/Sobras)' },
+            { id: 'inbound:force_finish', label: 'Forçar Encerramento do Recebimento' },
+            { id: 'inbound:cancel', label: 'Estornar / Cancelar Recebimento' },
+        ]
+    },
+    {
         module: 'Logística e Infraestrutura',
         permissions: [
             { id: 'topology:manage', label: 'Gerenciar Topologia (Armazéns, Zonas e Endereços)' },

@@ -14,6 +14,8 @@ import AuditoriaPage from '@/pages/Auditoria/AuditoriaPage';
 import EmpresasPage from './pages/Empresas/EmpresasPage';
 import TopologiaPage from '@/pages/Topologia/TopologiaPage';
 import ProdutosPage from '@/pages/Produtos/ProdutosPage';
+import InboundPage from '@/pages/Inbound/InboundPage';
+import InboundWorkspacePage from '@/pages/Inbound/InboundWorkspacePage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -59,6 +61,11 @@ export default function App() {
 
               <Route element={<PermissionGuard requiredPermission="customers:view" />}>
                 <Route path="/clientes" element={<ClientesList />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="inbound:view" />}>
+                <Route path="/inbound" element={<InboundPage />} />
+                <Route path="/inbound/:id" element={<InboundWorkspacePage />} /> {/* <-- ROTA NOVA */}
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="users:manage" />}>

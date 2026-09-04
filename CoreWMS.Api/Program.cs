@@ -6,6 +6,7 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Extensions; // NOVO USING do Mapeador Automático
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
+using CoreWMS.Api.Infrastructure.Fiscal.Parsers;
 using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -106,6 +107,7 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
 builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
+builder.Services.AddScoped<INfeXmlParserService, NfeXmlParserService>();
 
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();
