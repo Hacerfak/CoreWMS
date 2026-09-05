@@ -4,6 +4,7 @@ using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Printing;
+using CoreWMS.Api.Features.Printing.Enums;
 using FluentValidation;
 using Mapster;
 using MediatR;
@@ -33,11 +34,12 @@ public record DeleteTemplateCommand(Guid Id) : IRequest<IResult>;
 public record PrinterResponseDto(Guid Id, string Name, string Target, bool IsActive);
 public record PrintAgentResponseDto(Guid Id, string Name, string ApiKey, bool IsActive, bool IsOnline, List<PrinterResponseDto> Printers);
 
-public record CreateTemplateRequest(string Name, string ZplContent, int WidthMm, int HeightMm);
-public record CreateTemplateCommand(string Name, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
-public record UpdateTemplateRequest(string Name, string ZplContent, int WidthMm, int HeightMm);
-public record UpdateTemplateCommand(Guid Id, string Name, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
-public record TemplateResponseDto(Guid Id, string Name, string ZplContent, int WidthMm, int HeightMm, bool IsActive);
+public record CreateTemplateRequest(string Name, int Purpose, string ZplContent, int WidthMm, int HeightMm);
+public record CreateTemplateCommand(string Name, int Purpose, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
+public record UpdateTemplateRequest(string Name, int Purpose, string ZplContent, int WidthMm, int HeightMm);
+public record UpdateTemplateCommand(Guid Id, string Name, int Purpose, string ZplContent, int WidthMm, int HeightMm) : IRequest<IResult>;
+public record TemplateResponseDto(Guid Id, string Name, int Purpose, string ZplContent, int WidthMm, int HeightMm, bool IsActive);
+public record GetTemplateVariablesQuery(int Purpose) : IRequest<IResult>;
 
 // 2. VALIDADORES
 public class CreateAgentCommandValidator : AbstractValidator<CreateAgentCommand>
@@ -195,7 +197,7 @@ public class CreateTemplateHandler : IRequestHandler<CreateTemplateCommand, IRes
 
     public async Task<IResult> Handle(CreateTemplateCommand request, CancellationToken ct)
     {
-        var template = new LabelTemplate(request.Name, request.ZplContent, request.WidthMm, request.HeightMm);
+        var template = new LabelTemplate(request.Name, (PrintTemplatePurpose)request.Purpose, request.ZplContent, request.WidthMm, request.HeightMm);
         _db.LabelTemplates.Add(template);
         await _db.SaveChangesAsync(ct);
 
@@ -213,7 +215,7 @@ public class UpdateTemplateHandler : IRequestHandler<UpdateTemplateCommand, IRes
         var template = await _db.LabelTemplates.FindAsync(new object[] { request.Id }, ct);
         if (template == null) return Results.NotFound();
 
-        template.Update(request.Name, request.ZplContent, request.WidthMm, request.HeightMm, template.IsActive);
+        template.Update(request.Name, (PrintTemplatePurpose)request.Purpose, request.ZplContent, request.WidthMm, request.HeightMm, template.IsActive);
         await _db.SaveChangesAsync(ct);
 
         return Results.NoContent();
@@ -263,6 +265,38 @@ public class DeleteTemplateHandler : IRequestHandler<DeleteTemplateCommand, IRes
     }
 }
 
+public class GetTemplateVariablesHandler : IRequestHandler<GetTemplateVariablesQuery, IResult>
+{
+    public Task<IResult> Handle(GetTemplateVariablesQuery request, CancellationToken ct)
+    {
+        var purpose = (PrintTemplatePurpose)request.Purpose;
+        object variables = purpose switch
+        {
+            PrintTemplatePurpose.InboundHU => new[]
+            {
+                new { Key = "{{LpnCode}}", Description = "Código LPN (SSCC) gerado" },
+                new { Key = "{{Sku}}", Description = "SKU do Produto" },
+                new { Key = "{{ProductDescription}}", Description = "Descrição WMS do Produto" },
+                new { Key = "{{Quantity}}", Description = "Quantidade contida neste volume" },
+                new { Key = "{{Unit}}", Description = "Unidade de Medida" },
+                new { Key = "{{Batch}}", Description = "Lote do Produto" },
+                new { Key = "{{ManufactureDate}}", Description = "Data de Fabricação" },
+                new { Key = "{{ExpirationDate}}", Description = "Data de Validade" },
+                new { Key = "{{OrderNumber}}", Description = "Número da NF-e" },
+                new { Key = "{{IssuerName}}", Description = "Depositante / Fornecedor" }
+            },
+            PrintTemplatePurpose.Location => new[]
+            {
+                new { Key = "{{FullPath}}", Description = "Caminho do Endereço (Ex: P1-BLC-01)" },
+                new { Key = "{{Barcode}}", Description = "Código de Barras formatado para o coletor" }
+            },
+            _ => Array.Empty<object>()
+        };
+
+        return Task.FromResult(Results.Ok(variables));
+    }
+}
+
 // 4. ENDPOINTS
 public static class PrintingCrudEndpoints
 {
@@ -282,9 +316,10 @@ public static class PrintingCrudEndpoints
         group.MapDelete("/printers/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeletePrinterCommand(id))).RequirePermission(Permissions.Printing.Manage); // Novo
 
         // Templates
-        group.MapPost("/templates", async (CreateTemplateRequest req, IMediator mediator) => await mediator.Send(new CreateTemplateCommand(req.Name, req.ZplContent, req.WidthMm, req.HeightMm))).RequirePermission(Permissions.Printing.Manage);
+        group.MapPost("/templates", async (CreateTemplateRequest req, IMediator mediator) => await mediator.Send(new CreateTemplateCommand(req.Name, req.Purpose, req.ZplContent, req.WidthMm, req.HeightMm))).RequirePermission(Permissions.Printing.Manage);
         group.MapGet("/templates", async (IMediator mediator) => await mediator.Send(new ListTemplatesQuery())).RequirePermission(Permissions.Printing.Manage);
-        group.MapPut("/templates/{id:guid}", async (Guid id, UpdateTemplateRequest req, IMediator mediator) => await mediator.Send(new UpdateTemplateCommand(id, req.Name, req.ZplContent, req.WidthMm, req.HeightMm))).RequirePermission(Permissions.Printing.Manage);
+        group.MapPut("/templates/{id:guid}", async (Guid id, UpdateTemplateRequest req, IMediator mediator) => await mediator.Send(new UpdateTemplateCommand(id, req.Name, req.Purpose, req.ZplContent, req.WidthMm, req.HeightMm))).RequirePermission(Permissions.Printing.Manage);
         group.MapDelete("/templates/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteTemplateCommand(id))).RequirePermission(Permissions.Printing.Manage); // Novo
+        group.MapGet("/templates/variables/{purpose:int}", async (int purpose, IMediator mediator) => await mediator.Send(new GetTemplateVariablesQuery(purpose))).RequirePermission(Permissions.Printing.Manage);
     }
 }

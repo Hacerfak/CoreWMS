@@ -9,6 +9,7 @@ export interface UpdateStorageTypeCommand {
   id?: string;
   /** @nullable */
   name?: string | null;
+  role?: number;
   isVirtual?: boolean;
   allowMixedProducts?: boolean;
   allowMixedBatches?: boolean;

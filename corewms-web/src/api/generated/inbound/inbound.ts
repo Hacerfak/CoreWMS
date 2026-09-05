@@ -24,7 +24,11 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  PostApiInboundUploadXmlBody
+  AssignDockToItemCommand,
+  ExecutePutawayCommand,
+  FinishItemReceivingCommand,
+  PostApiInboundUploadXmlBody,
+  ReviewInboundItemCommand
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -115,6 +119,241 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiInboundUploadXmlMutationOptions(options), queryClient);
+    }
+    export const postApiInboundReviewItem = (
+    reviewInboundItemCommand: ReviewInboundItemCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/review-item`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: reviewInboundItemCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundReviewItemMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItem>>, TError,PostApiInboundReviewItemMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItem>>, TError,PostApiInboundReviewItemMutationVariables, TContext> => {
+
+const mutationKey = ['postApiInboundReviewItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundReviewItem>>, PostApiInboundReviewItemMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundReviewItem(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundReviewItemMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundReviewItem>>>
+    export type PostApiInboundReviewItemMutationBody = ReviewInboundItemCommand
+    export type PostApiInboundReviewItemMutationError = unknown
+    export type PostApiInboundReviewItemMutationVariables = {data: ReviewInboundItemCommand}
+
+    export const usePostApiInboundReviewItem = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItem>>, TError,PostApiInboundReviewItemMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundReviewItem>>,
+        TError,
+        PostApiInboundReviewItemMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundReviewItemMutationOptions(options), queryClient);
+    }
+    export const postApiInboundItemsIdAssignDock = (
+    id: string,
+    assignDockToItemCommand: AssignDockToItemCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/items/${id}/assign-dock`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: assignDockToItemCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundItemsIdAssignDockMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsIdAssignDock>>, TError,PostApiInboundItemsIdAssignDockMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsIdAssignDock>>, TError,PostApiInboundItemsIdAssignDockMutationVariables, TContext> => {
+
+const mutationKey = ['postApiInboundItemsIdAssignDock'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundItemsIdAssignDock>>, PostApiInboundItemsIdAssignDockMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiInboundItemsIdAssignDock(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundItemsIdAssignDockMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundItemsIdAssignDock>>>
+    export type PostApiInboundItemsIdAssignDockMutationBody = AssignDockToItemCommand
+    export type PostApiInboundItemsIdAssignDockMutationError = unknown
+    export type PostApiInboundItemsIdAssignDockMutationVariables = {id: string;data: AssignDockToItemCommand}
+
+    export const usePostApiInboundItemsIdAssignDock = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsIdAssignDock>>, TError,PostApiInboundItemsIdAssignDockMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundItemsIdAssignDock>>,
+        TError,
+        PostApiInboundItemsIdAssignDockMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundItemsIdAssignDockMutationOptions(options), queryClient);
+    }
+    export const postApiInboundItemsIdStart = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/items/${id}/start`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundItemsIdStartMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsIdStart>>, TError,PostApiInboundItemsIdStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsIdStart>>, TError,PostApiInboundItemsIdStartMutationVariables, TContext> => {
+
+const mutationKey = ['postApiInboundItemsIdStart'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundItemsIdStart>>, PostApiInboundItemsIdStartMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  postApiInboundItemsIdStart(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundItemsIdStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundItemsIdStart>>>
+
+    export type PostApiInboundItemsIdStartMutationError = unknown
+    export type PostApiInboundItemsIdStartMutationVariables = {id: string}
+
+    export const usePostApiInboundItemsIdStart = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsIdStart>>, TError,PostApiInboundItemsIdStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundItemsIdStart>>,
+        TError,
+        PostApiInboundItemsIdStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundItemsIdStartMutationOptions(options), queryClient);
+    }
+    export const postApiInboundItemsFinish = (
+    finishItemReceivingCommand: FinishItemReceivingCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/items/finish`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: finishItemReceivingCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundItemsFinishMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsFinish>>, TError,PostApiInboundItemsFinishMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsFinish>>, TError,PostApiInboundItemsFinishMutationVariables, TContext> => {
+
+const mutationKey = ['postApiInboundItemsFinish'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundItemsFinish>>, PostApiInboundItemsFinishMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundItemsFinish(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundItemsFinishMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundItemsFinish>>>
+    export type PostApiInboundItemsFinishMutationBody = FinishItemReceivingCommand
+    export type PostApiInboundItemsFinishMutationError = unknown
+    export type PostApiInboundItemsFinishMutationVariables = {data: FinishItemReceivingCommand}
+
+    export const usePostApiInboundItemsFinish = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundItemsFinish>>, TError,PostApiInboundItemsFinishMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundItemsFinish>>,
+        TError,
+        PostApiInboundItemsFinishMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundItemsFinishMutationOptions(options), queryClient);
     }
     export const getApiInbound = (
 
@@ -288,3 +527,62 @@ export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInbou
 
 
 
+export const postApiInboundPutaway = (
+    executePutawayCommand: ExecutePutawayCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/putaway`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: executePutawayCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundPutawayMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundPutaway>>, TError,PostApiInboundPutawayMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundPutaway>>, TError,PostApiInboundPutawayMutationVariables, TContext> => {
+
+const mutationKey = ['postApiInboundPutaway'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundPutaway>>, PostApiInboundPutawayMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundPutaway(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundPutawayMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundPutaway>>>
+    export type PostApiInboundPutawayMutationBody = ExecutePutawayCommand
+    export type PostApiInboundPutawayMutationError = unknown
+    export type PostApiInboundPutawayMutationVariables = {data: ExecutePutawayCommand}
+
+    export const usePostApiInboundPutaway = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundPutaway>>, TError,PostApiInboundPutawayMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundPutaway>>,
+        TError,
+        PostApiInboundPutawayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundPutawayMutationOptions(options), queryClient);
+    }

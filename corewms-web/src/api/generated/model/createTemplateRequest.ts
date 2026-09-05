@@ -8,6 +8,7 @@
 export interface CreateTemplateRequest {
   /** @nullable */
   name?: string | null;
+  purpose?: number;
   /** @nullable */
   zplContent?: string | null;
   widthMm?: number;

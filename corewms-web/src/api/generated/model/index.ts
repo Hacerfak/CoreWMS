@@ -5,6 +5,7 @@
  * OpenAPI spec version: v1
  */
 
+export * from './assignDockToItemCommand';
 export * from './assignUserRequest';
 export * from './companyLoginDto';
 export * from './createAgentCommand';
@@ -21,6 +22,8 @@ export * from './createTemplateRequest';
 export * from './createUserCommand';
 export * from './createWarehouseCommand';
 export * from './createZoneCommand';
+export * from './executePutawayCommand';
+export * from './finishItemReceivingCommand';
 export * from './getApiAuditLogsParams';
 export * from './getApiCustomersParams';
 export * from './getApiProductsParams';
@@ -36,6 +39,7 @@ export * from './refreshTokenCommand';
 export * from './refreshTokenRequest';
 export * from './refreshTokenResponse';
 export * from './resetUserPasswordRequest';
+export * from './reviewInboundItemCommand';
 export * from './sendTestPrintCommand';
 export * from './updateAgentRequest';
 export * from './updateCompanyCommand';

@@ -93,9 +93,9 @@ public static class DatabaseSeeder
         if (!await context.StorageTypes.AnyAsync())
         {
             // Tipos de Armazenamento
-            var stDoca = new StorageType("Doca de Recebimento", isVirtual: true, allowMixedProducts: true, allowMixedBatches: true, StorageCapacityStrategy.DynamicStacking);
-            var stBlocado = new StorageType("Blocado de Chão", isVirtual: false, allowMixedProducts: false, allowMixedBatches: false, StorageCapacityStrategy.DynamicStacking);
-            var stPortaPallet = new StorageType("Porta-Pallets Padrão", isVirtual: false, allowMixedProducts: false, allowMixedBatches: false, StorageCapacityStrategy.Unitary);
+            var stDoca = new StorageType("Doca de Recebimento", StorageRole.Dock, isVirtual: true, allowMixedProducts: true, allowMixedBatches: true, StorageCapacityStrategy.DynamicStacking);
+            var stBlocado = new StorageType("Blocado de Chão", StorageRole.Storage, isVirtual: false, allowMixedProducts: false, allowMixedBatches: false, StorageCapacityStrategy.DynamicStacking);
+            var stPortaPallet = new StorageType("Porta-Pallets Padrão", StorageRole.Storage, isVirtual: false, allowMixedProducts: false, allowMixedBatches: false, StorageCapacityStrategy.Unitary);
 
             context.StorageTypes.AddRange(stDoca, stBlocado, stPortaPallet);
             await context.SaveChangesAsync();

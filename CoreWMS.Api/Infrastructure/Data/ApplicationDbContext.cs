@@ -52,6 +52,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ProductPackaging> ProductPackagings => Set<ProductPackaging>();
     public DbSet<InboundOrder> InboundOrders => Set<InboundOrder>();
     public DbSet<InboundOrderItem> InboundOrderItems => Set<InboundOrderItem>();
+    public DbSet<HandlingUnit> HandlingUnits => Set<HandlingUnit>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -304,28 +305,28 @@ public class ApplicationDbContext : DbContext
         });
 
         builder.Entity<InboundOrder>(b =>
-{
-    b.HasKey(x => x.Id);
-    b.Property(x => x.AccessKey).IsRequired().HasMaxLength(44);
-    b.Property(x => x.Number).IsRequired().HasMaxLength(20);
-    b.Property(x => x.Series).HasMaxLength(10);
-    b.Property(x => x.IssuerCnpj).IsRequired().HasMaxLength(14);
-    b.Property(x => x.IssuerName).IsRequired().HasMaxLength(150);
-    b.Property(x => x.XmlContent).IsRequired(); // Coluna TEXT no Postgres (ideal para XML)
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.AccessKey).IsRequired().HasMaxLength(44);
+            b.Property(x => x.Number).IsRequired().HasMaxLength(20);
+            b.Property(x => x.Series).HasMaxLength(10);
+            b.Property(x => x.IssuerCnpj).IsRequired().HasMaxLength(14);
+            b.Property(x => x.IssuerName).IsRequired().HasMaxLength(150);
+            b.Property(x => x.XmlContent).IsRequired(); // Coluna TEXT no Postgres (ideal para XML)
 
-    b.HasOne(x => x.Company)
-     .WithMany()
-     .HasForeignKey(x => x.CompanyId)
-     .OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Company)
+             .WithMany()
+             .HasForeignKey(x => x.CompanyId)
+             .OnDelete(DeleteBehavior.Restrict);
 
-    b.HasOne(x => x.Customer)
-     .WithMany()
-     .HasForeignKey(x => x.CustomerId)
-     .OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer)
+             .WithMany()
+             .HasForeignKey(x => x.CustomerId)
+             .OnDelete(DeleteBehavior.Restrict);
 
-    // Impede o upload da mesma NF-e para a mesma Empresa
-    b.HasIndex(x => new { x.CompanyId, x.AccessKey }).IsUnique();
-});
+            // Impede o upload da mesma NF-e para a mesma Empresa
+            b.HasIndex(x => new { x.CompanyId, x.AccessKey }).IsUnique();
+        });
 
         builder.Entity<InboundOrderItem>(b =>
         {
@@ -350,6 +351,26 @@ public class ApplicationDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.ProductId)
              .OnDelete(DeleteBehavior.Restrict); // Não apaga o item se apagar o produto (Mantém rastreabilidade)
+
+            b.HasOne(x => x.DockLocation)
+             .WithMany()
+             .HasForeignKey(x => x.DockLocationId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<HandlingUnit>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.LpnCode).IsRequired().HasMaxLength(50);
+            b.HasIndex(x => new { x.CompanyId, x.LpnCode }).IsUnique(); // LPN Único por Empresa
+            b.Property(x => x.Quantity).HasPrecision(18, 4);
+
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.ProductPackaging).WithMany().HasForeignKey(x => x.ProductPackagingId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.InboundOrder).WithMany().HasForeignKey(x => x.InboundOrderId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.InboundOrderItem).WithMany().HasForeignKey(x => x.InboundOrderItemId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.CurrentLocation).WithMany().HasForeignKey(x => x.CurrentLocationId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

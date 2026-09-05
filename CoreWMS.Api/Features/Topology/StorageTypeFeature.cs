@@ -13,10 +13,9 @@ namespace CoreWMS.Api.Features.Topology;
 // ==============================================================================
 // 1. DTOs & CONTRATOS
 // ==============================================================================
-public record StorageTypeDto(Guid Id, string Name, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy, bool IsActive);
-
-public record CreateStorageTypeCommand(string Name, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
-public record UpdateStorageTypeCommand(Guid Id, string Name, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
+public record StorageTypeDto(Guid Id, string Name, int Role, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy, bool IsActive);
+public record CreateStorageTypeCommand(string Name, int Role, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
+public record UpdateStorageTypeCommand(Guid Id, string Name, int Role, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
 public record DeleteStorageTypeCommand(Guid Id) : IRequest<IResult>;
 public record ListStorageTypesQuery() : IRequest<IResult>;
 
@@ -30,6 +29,7 @@ public class CreateStorageTypeCommandValidator : AbstractValidator<CreateStorage
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
         RuleFor(x => x.CapacityStrategy).Must(x => Enum.IsDefined(typeof(StorageCapacityStrategy), x))
             .WithMessage("Estratégia de capacidade inválida.");
+        RuleFor(x => x.Role).Must(x => Enum.IsDefined(typeof(StorageRole), x)).WithMessage("Papel inválido.");
     }
 }
 
@@ -41,6 +41,7 @@ public class UpdateStorageTypeCommandValidator : AbstractValidator<UpdateStorage
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
         RuleFor(x => x.CapacityStrategy).Must(x => Enum.IsDefined(typeof(StorageCapacityStrategy), x))
             .WithMessage("Estratégia de capacidade inválida.");
+        RuleFor(x => x.Role).Must(x => Enum.IsDefined(typeof(StorageRole), x)).WithMessage("Papel inválido.");
     }
 }
 
@@ -57,7 +58,7 @@ public class CreateStorageTypeHandler : IRequestHandler<CreateStorageTypeCommand
         if (await _db.StorageTypes.AnyAsync(s => s.Name.ToLower() == request.Name.ToLower(), ct))
             return Results.BadRequest(new { Message = "Já existe um Tipo de Armazenamento com este nome." });
 
-        var storageType = new StorageType(request.Name, request.IsVirtual, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
+        var storageType = new StorageType(request.Name, (StorageRole)request.Role, request.IsVirtual, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
 
         _db.StorageTypes.Add(storageType);
         await _db.SaveChangesAsync(ct);
@@ -79,7 +80,7 @@ public class UpdateStorageTypeHandler : IRequestHandler<UpdateStorageTypeCommand
         if (await _db.StorageTypes.AnyAsync(s => s.Name.ToLower() == request.Name.ToLower() && s.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "Já existe outro Tipo de Armazenamento com este nome." });
 
-        storageType.Update(request.Name, request.IsVirtual, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
+        storageType.Update(request.Name, (StorageRole)request.Role, request.IsVirtual, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
         await _db.SaveChangesAsync(ct);
 
         return Results.NoContent();

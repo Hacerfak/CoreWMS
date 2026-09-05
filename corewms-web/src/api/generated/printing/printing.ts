@@ -759,7 +759,93 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiPrintingTemplatesIdMutationOptions(options), queryClient);
     }
-    export const postApiPrintSendTest = (
+    export const getApiPrintingTemplatesVariablesPurpose = (
+    purpose: number,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/printing/templates/variables/${purpose}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiPrintingTemplatesVariablesPurposeQueryKey = (purpose: number,) => {
+    return [
+    `/api/printing/templates/variables/${purpose}`
+    ] as const;
+    }
+
+
+export const getGetApiPrintingTemplatesVariablesPurposeQueryOptions = <TData = Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError = unknown>(purpose: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiPrintingTemplatesVariablesPurposeQueryKey(purpose);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>> = ({ signal }) => getApiPrintingTemplatesVariablesPurpose(purpose, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: purpose !== null && purpose !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiPrintingTemplatesVariablesPurposeQueryResult = NonNullable<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>>
+export type GetApiPrintingTemplatesVariablesPurposeQueryError = unknown
+
+
+export function useGetApiPrintingTemplatesVariablesPurpose<TData = Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError = unknown>(
+ purpose: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>,
+          TError,
+          Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiPrintingTemplatesVariablesPurpose<TData = Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError = unknown>(
+ purpose: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>,
+          TError,
+          Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiPrintingTemplatesVariablesPurpose<TData = Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError = unknown>(
+ purpose: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiPrintingTemplatesVariablesPurpose<TData = Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError = unknown>(
+ purpose: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplatesVariablesPurpose>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiPrintingTemplatesVariablesPurposeQueryOptions(purpose,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiPrintSendTest = (
     sendTestPrintCommand: SendTestPrintCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {

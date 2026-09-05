@@ -1,4 +1,5 @@
 using CoreWMS.Api.Core.Entities;
+using CoreWMS.Api.Features.Printing.Enums;
 
 namespace CoreWMS.Api.Features.Printing.Entities;
 
@@ -57,6 +58,7 @@ public class Printer : AuditableEntity
 public class LabelTemplate : AuditableEntity
 {
     public string Name { get; private set; } = null!;
+    public PrintTemplatePurpose Purpose { get; private set; } // NOVO
     public string ZplContent { get; private set; } = null!;
     public int WidthMm { get; private set; }
     public int HeightMm { get; private set; }
@@ -64,17 +66,19 @@ public class LabelTemplate : AuditableEntity
 
     protected LabelTemplate() { }
 
-    public LabelTemplate(string name, string zplContent, int widthMm, int heightMm)
+    public LabelTemplate(string name, PrintTemplatePurpose purpose, string zplContent, int widthMm, int heightMm)
     {
         Name = name;
+        Purpose = purpose;
         ZplContent = zplContent;
         WidthMm = widthMm;
         HeightMm = heightMm;
     }
 
-    public void Update(string name, string zplContent, int widthMm, int heightMm, bool isActive)
+    public void Update(string name, PrintTemplatePurpose purpose, string zplContent, int widthMm, int heightMm, bool isActive)
     {
         Name = name;
+        Purpose = purpose;
         ZplContent = zplContent;
         WidthMm = widthMm;
         HeightMm = heightMm;
