@@ -52,4 +52,12 @@ public static class Permissions
         public const string Edit = "products:edit";
         public const string Delete = "products:delete";
     }
+
+    public static class Inventory
+    {
+        public const string View = "Permissions.Inventory.View";
+        public const string Move = "Permissions.Inventory.Move";
+        public const string ManageQuality = "Permissions.Inventory.ManageQuality";
+        public const string EditTraceability = "Permissions.Inventory.EditTraceability";
+    }
 }

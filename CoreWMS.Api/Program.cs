@@ -8,6 +8,7 @@ using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Services.Inventory;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -109,6 +110,13 @@ builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService
 
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();
+
+// Módulo de Performance e Inventário (Infraestrutura)
+builder.Services.AddSingleton<KardexChannel>();
+builder.Services.AddHostedService<KardexWorker>();
+builder.Services.AddSingleton<MasterDataCacheService>();
+
+builder.Services.AddMemoryCache();
 
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)

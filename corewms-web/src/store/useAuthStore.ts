@@ -58,14 +58,15 @@ export const useAuthStore = create<AuthState>()(
             setTokens: (token: string, refreshToken: string | null = null) => {
                 try {
                     const decoded = jwtDecode<CustomJwtPayload>(token);
+                    const userEmail = decoded.email || (decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] as string) || '';
 
                     set({
                         token,
                         refreshToken,
                         user: {
                             id: decoded.sub,
-                            nome: decoded.name || decoded.email || 'Usuário',
-                            email: decoded.email,
+                            nome: decoded.name || userEmail || 'Usuário',
+                            email: userEmail,
                             // Transforma a claim do JWT no mesmo padrão da API
                             role: decoded.isMaster === 'True' ? 'ADMIN' : 'USER',
                         },

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
+using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -49,6 +50,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<PackagingType> PackagingTypes => Set<PackagingType>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductPackaging> ProductPackagings => Set<ProductPackaging>();
+    public DbSet<HandlingUnit> HandlingUnits => Set<HandlingUnit>();
+    public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
+    public DbSet<InventoryBalance> InventoryBalances => Set<InventoryBalance>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -294,6 +298,61 @@ public class ApplicationDbContext : DbContext
 
             // Índice ultrarrápido para bipagem da embalagem via Coletor RF
             b.HasIndex(x => x.Barcode);
+        });
+
+        builder.Entity<HandlingUnit>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Lpn).IsRequired().HasMaxLength(50);
+            b.Property(x => x.Batch).HasMaxLength(50);
+            b.Property(x => x.SerialNumber).HasMaxLength(100);
+
+            b.Property(x => x.InitialQuantity).HasPrecision(18, 4);
+            b.Property(x => x.CurrentQuantity).HasPrecision(18, 4);
+            b.Property(x => x.UnitValue).HasPrecision(18, 4);
+            b.Property(x => x.Version).IsConcurrencyToken();
+
+            b.HasIndex(x => new { x.CompanyId, x.Lpn }).IsUnique();
+            b.HasIndex(x => x.CurrentLocationId);
+            b.HasIndex(x => new { x.ProductId, x.Status, x.QualityStatus });
+
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.PackagingType).WithMany().HasForeignKey(x => x.PackagingTypeId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.CurrentLocation).WithMany().HasForeignKey(x => x.CurrentLocationId).OnDelete(DeleteBehavior.Restrict);
+
+        });
+
+        builder.Entity<InventoryTransaction>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.SourceDocumentNumber).HasMaxLength(100);
+
+            b.Property(x => x.QuantityChange).HasPrecision(18, 4);
+            b.Property(x => x.BalanceAfter).HasPrecision(18, 4);
+
+            b.HasIndex(x => new { x.CompanyId, x.CustomerId, x.Type, x.CreatedAt });
+            b.HasIndex(x => new { x.ProductId, x.HandlingUnitId });
+        });
+
+        // NOVO: Mapeamento do Saldo Consolidado
+        builder.Entity<InventoryBalance>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.TotalExpected).HasPrecision(18, 4);
+            b.Property(x => x.TotalAvailable).HasPrecision(18, 4);
+            b.Property(x => x.TotalAllocated).HasPrecision(18, 4);
+            b.Property(x => x.TotalQuarantine).HasPrecision(18, 4);
+            b.Property(x => x.Version).IsConcurrencyToken();
+
+            // A chave de ouro da performance: Consulta por produto é instantânea e única
+            b.HasIndex(x => new { x.CompanyId, x.CustomerId, x.ProductId }).IsUnique();
+
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

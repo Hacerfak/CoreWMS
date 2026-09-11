@@ -33,15 +33,11 @@ api.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // -------------------------------------------------------------------
         // 1. TRATAMENTO DE PERMISSÕES ALTERADAS EM TEMPO REAL (HTTP 403)
-        // -------------------------------------------------------------------
         if (error.response?.status === 403) {
             toast.warning('Atenção: Suas permissões foram alteradas pelo administrador.');
-
             const authStore = useAuthStore.getState();
 
-            // Busca as permissões atualizadas silenciosamente
             try {
                 const { data: novasPermissoes } = await axios.get(`${api.defaults.baseURL}/api/users/me/permissions`, {
                     headers: {
@@ -49,30 +45,22 @@ api.interceptors.response.use(
                         'X-Company-Id': authStore.companyId
                     }
                 });
-
-                // Atualiza o Zustand para que os menus reajam instantaneamente
                 useAuthStore.setState({ permissions: novasPermissoes });
-
-                // Joga o usuário para o dashboard, saindo da tela que ele perdeu acesso
                 window.location.href = '/dashboard';
             } catch (err) {
-                // Se der erro ao buscar novas permissões, manda escolher a empresa novamente
                 window.location.href = '/selecao-empresa';
             }
-
             return Promise.reject(error);
         }
 
-        // -------------------------------------------------------------------
         // 2. TRATAMENTO DE RENOVAÇÃO DE SESSÃO (HTTP 401)
-        // -------------------------------------------------------------------
         if (
             error.response?.status === 401 &&
             !originalRequest._retry &&
             !originalRequest.url?.includes('/login') &&
             !originalRequest.url?.includes('/refresh')
         ) {
-
+            // Se já tem um refresh acontecendo, segura esta requisição na fila
             if (isRefreshing) {
                 return new Promise(function (resolve, reject) {
                     failedQueue.push({ resolve, reject });
@@ -91,7 +79,9 @@ api.interceptors.response.use(
 
             const authStore = useAuthStore.getState();
             const refreshToken = authStore.refreshToken;
-            const email = authStore.user?.email;
+
+            // Garantia de captura de email (fallback para evitar o bug de claim de email vazia)
+            const email = authStore.user?.email || (authStore.user as any)?.Email || authStore.user?.nome;
 
             if (!refreshToken || !email) {
                 isRefreshing = false;
@@ -101,19 +91,23 @@ api.interceptors.response.use(
             }
 
             try {
+                // Chamada usando axios.post direto para não engatilhar o interceptor em loop
                 const { data } = await axios.post(`${api.defaults.baseURL}/api/identity/refresh`, {
                     email: email,
                     refreshToken: refreshToken
                 });
 
-                const newAccessToken = data.accessToken;
-                const newRefreshToken = data.refreshToken;
+                const newAccessToken = data?.accessToken || data?.data?.accessToken;
+                const newRefreshToken = data?.refreshToken || data?.data?.refreshToken;
 
-                useAuthStore.setState({
-                    token: newAccessToken,
-                    refreshToken: newRefreshToken
-                });
+                if (!newAccessToken) {
+                    throw new Error("API não retornou um token válido.");
+                }
 
+                // Salva na Store usando o método correto para decodificar o JWT novamente
+                authStore.setTokens(newAccessToken, newRefreshToken);
+
+                // Atualiza o header da requisição que falhou e processa as que estavam na fila
                 originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
                 processQueue(null, newAccessToken);
 
@@ -121,11 +115,10 @@ api.interceptors.response.use(
 
             } catch (refreshError) {
                 processQueue(refreshError, null);
-                toast.error('Sessão expirada por inatividade. Faça login novamente.');
+                toast.error('Sessão expirada por segurança. Faça login novamente.');
                 authStore.logout();
                 window.location.href = '/login';
                 return Promise.reject(refreshError);
-
             } finally {
                 isRefreshing = false;
             }
