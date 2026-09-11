@@ -84,9 +84,9 @@ export default function ProductsTab() {
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex gap-1 flex-wrap max-w-[200px]">
-                                        {prod.requireBatchControl && <Badge variant="secondary" className="text-[10px]">Lote</Badge>}
-                                        {prod.requireExpirationDate && <Badge variant="secondary" className="text-[10px]">Validade</Badge>}
-                                        {prod.requireSerialControl && <Badge variant="secondary" className="text-[10px]">Série</Badge>}
+                                        {prod.tracksBatch && <Badge variant="secondary" className="text-[10px]">Lote</Badge>}
+                                        {prod.tracksExpiration && <Badge variant="secondary" className="text-[10px]">Validade</Badge>}
+                                        {prod.tracksSerial && <Badge variant="secondary" className="text-[10px]">Série</Badge>}
                                         <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-700 bg-blue-50">
                                             {prod.pickingStrategy === 1 ? 'FIFO' : prod.pickingStrategy === 2 ? 'FEFO' : 'LIFO'}
                                         </Badge>

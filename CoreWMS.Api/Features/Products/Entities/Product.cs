@@ -9,78 +9,60 @@ public class Product : AuditableEntity
 {
     public Guid CompanyId { get; private set; }
     public Company Company { get; private set; } = null!;
-
-    public Guid CustomerId { get; private set; } // Depositante dono do produto
+    public Guid CustomerId { get; private set; }
     public Customer Customer { get; private set; } = null!;
-
-    // Identificação Básica
     public string Sku { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
-    public string BaseUnit { get; private set; } = "UN"; // Unidade de medida fiscal base
-    public string? BaseBarcode { get; private set; } // EAN/GTIN base
-
-    // Dados Fiscais (Zeus DF-e)
+    public string BaseUnit { get; private set; } = "UN";
+    public string? BaseBarcode { get; private set; }
     public string? Ncm { get; private set; }
     public string? Cest { get; private set; }
-    public int Origin { get; private set; } = 0; // 0-Nacional, 1-Estrangeira Direta, etc.
+    public int Origin { get; private set; } = 0;
+    public int MaxStacking { get; private set; } = 1;
 
-    // Parâmetros Físicos e de Ocupação (Integração com Topologia)
-    public int MaxStacking { get; private set; } = 1; // Limite de empilhamento no Blocado
+    // Regras Logísticas WMS (Autônomas)
+    public bool TracksBatch { get; private set; }
+    public bool StrictBatch { get; private set; }
+    public bool TracksManufacture { get; private set; }
+    public bool StrictManufacture { get; private set; }
+    public bool TracksExpiration { get; private set; }
+    public bool StrictExpiration { get; private set; }
+    public bool TracksSerial { get; private set; }
+    public bool StrictSerial { get; private set; }
 
-    // Regras Logísticas WMS (Herdadas do Customer na criação, mas personalizáveis)
-    public bool RequireBatchControl { get; private set; }
-    public bool RequireManufactureDate { get; private set; }
-    public bool RequireExpirationDate { get; private set; }
-    public bool RequireSerialControl { get; private set; }
     public PickingStrategy PickingStrategy { get; private set; }
+    public PickingBaseDate PickingBaseDate { get; private set; }
 
-    // Tolerâncias de Validade
     public int? InboundShelfLifeToleranceDays { get; private set; }
     public int? OutboundShelfLifeToleranceDays { get; private set; }
-
     public bool IsActive { get; private set; } = true;
 
-    // Relacionamento com os Volumes
     public ICollection<ProductPackaging> Packagings { get; private set; } = new List<ProductPackaging>();
 
     protected Product() { }
 
-    public Product(Guid companyId, Guid customerId, string sku, string description, string baseUnit, PickingStrategy strategy)
+    public Product(Guid companyId, Guid customerId, string sku, string description, string baseUnit)
     {
-        CompanyId = companyId;
-        CustomerId = customerId;
-        Sku = sku.ToUpper().Trim();
-        Description = description;
-        BaseUnit = baseUnit.ToUpper().Trim();
-        PickingStrategy = strategy;
+        CompanyId = companyId; CustomerId = customerId; Sku = sku.ToUpper().Trim(); Description = description; BaseUnit = baseUnit.ToUpper().Trim();
     }
 
     public void UpdateFiscal(string? ncm, string? cest, int origin, string? baseBarcode)
     {
-        Ncm = ncm;
-        Cest = cest;
-        Origin = origin;
-        BaseBarcode = baseBarcode;
-        UpdatedAt = DateTime.UtcNow;
+        Ncm = ncm; Cest = cest; Origin = origin; BaseBarcode = baseBarcode; UpdatedAt = DateTime.UtcNow;
     }
 
-    public void UpdateRules(bool reqBatch, bool reqMfg, bool reqExp, bool reqSerial, PickingStrategy strategy, int maxStacking, int? inShelfLife, int? outShelfLife)
+    public void UpdateRules(
+        bool tracksBatch, bool strictBatch, bool tracksMfg, bool strictMfg, bool tracksExp, bool strictExp, bool tracksSerial, bool strictSerial,
+        PickingStrategy strategy, PickingBaseDate baseDate, int maxStacking, int? inShelfLife, int? outShelfLife)
     {
-        RequireBatchControl = reqBatch;
-        RequireManufactureDate = reqMfg;
-        RequireExpirationDate = reqExp;
-        RequireSerialControl = reqSerial;
-        PickingStrategy = strategy;
-        MaxStacking = maxStacking;
-        InboundShelfLifeToleranceDays = inShelfLife;
-        OutboundShelfLifeToleranceDays = outShelfLife;
-        UpdatedAt = DateTime.UtcNow;
+        TracksBatch = tracksBatch; StrictBatch = strictBatch; TracksManufacture = tracksMfg; StrictManufacture = strictMfg;
+        TracksExpiration = tracksExp; StrictExpiration = strictExp; TracksSerial = tracksSerial; StrictSerial = strictSerial;
+        PickingStrategy = strategy; PickingBaseDate = baseDate; MaxStacking = maxStacking;
+        InboundShelfLifeToleranceDays = inShelfLife; OutboundShelfLifeToleranceDays = outShelfLife; UpdatedAt = DateTime.UtcNow;
     }
 
     public void UpdateBasicInfo(string description, string baseUnit)
     {
-        Description = description;
-        BaseUnit = baseUnit.ToUpper().Trim();
-        UpdatedAt = DateTime.UtcNow;
+        Description = description; BaseUnit = baseUnit.ToUpper().Trim(); UpdatedAt = DateTime.UtcNow;
     }
 }

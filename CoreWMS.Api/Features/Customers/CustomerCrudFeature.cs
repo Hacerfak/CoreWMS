@@ -1,5 +1,6 @@
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Products.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Security;
@@ -13,14 +14,32 @@ namespace CoreWMS.Api.Features.Customers;
 // ==========================================
 // 1. CONTRATOS E DTOs
 // ==========================================
-public record CustomerDto(Guid Id, Guid CompanyId, string Cnpj, string CorporateName, string? TradeName, string? StateRegistration, string? MunicipalRegistration, int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone, bool RequireBatchControl, bool RequireExpirationControl, bool RequireSerialControl, bool AllowNegativeStock, bool AutoApproveReceiving, bool IsActive);
+public record CustomerDto(
+    Guid Id, Guid CompanyId, string Cnpj, string CorporateName, string? TradeName, string? StateRegistration, int IeIndicator, string? MunicipalRegistration,
+    int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone,
+    bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
+    int DefaultPickingStrategy, int DefaultPickingBaseDate,
+    int? MaxDailyInboundOrders, int? MaxDailyOutboundOrders, int? MinStockVolume, int? MaxStockVolume,
+    bool RequiresBlindInbound, bool RequiresBlindOutbound, bool ReturnInvoicePerReferencedInvoice,
+    bool IsActive);
 
-public record CreateCustomerCommand(string Cnpj, string CorporateName, string? TradeName, string? StateRegistration, string? MunicipalRegistration, int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone, bool RequireBatchControl, bool RequireExpirationControl, bool RequireSerialControl, bool AllowNegativeStock, bool AutoApproveReceiving) : IRequest<IResult>;
-public record UpdateCustomerCommand(Guid Id, string CorporateName, string? TradeName, string? StateRegistration, string? MunicipalRegistration, int Crt, string? Cnae, string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone, bool RequireBatchControl, bool RequireExpirationControl, bool RequireSerialControl, bool AllowNegativeStock, bool AutoApproveReceiving) : IRequest<IResult>;
+public record CreateCustomerCommand(
+    string Cnpj, string CorporateName, string? TradeName, string? StateRegistration, int IeIndicator, string? MunicipalRegistration, int Crt, string? Cnae,
+    string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone,
+    bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
+    int DefaultPickingStrategy, int DefaultPickingBaseDate,
+    int? MaxDailyInboundOrders, int? MaxDailyOutboundOrders, int? MinStockVolume, int? MaxStockVolume,
+    bool RequiresBlindInbound, bool RequiresBlindOutbound, bool ReturnInvoicePerReferencedInvoice) : IRequest<IResult>;
+
+public record UpdateCustomerCommand(
+    Guid Id, string CorporateName, string? TradeName, string? StateRegistration, int IeIndicator, string? MunicipalRegistration, int Crt, string? Cnae,
+    string? Street, string? Number, string? Complement, string? Neighborhood, int CityCode, string? CityName, string State, string? ZipCode, string? Email, string? Phone,
+    bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
+    int DefaultPickingStrategy, int DefaultPickingBaseDate,
+    int? MaxDailyInboundOrders, int? MaxDailyOutboundOrders, int? MinStockVolume, int? MaxStockVolume,
+    bool RequiresBlindInbound, bool RequiresBlindOutbound, bool ReturnInvoicePerReferencedInvoice) : IRequest<IResult>;
 
 public record ListCustomersQuery(string? Search, bool OnlyActive = true) : IRequest<IResult>;
-
-// NOVO: Commands/Queries para operações que estavam "inline"
 public record DeleteCustomerCommand(Guid Id) : IRequest<IResult>;
 public record ConsultCustomerSefazQuery(string Cnpj, string Uf) : IRequest<IResult>;
 
@@ -34,6 +53,9 @@ public class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCo
         RuleFor(x => x.Cnpj).NotEmpty().Length(14).WithMessage("O CNPJ deve conter exatamente 14 caracteres numéricos.");
         RuleFor(x => x.CorporateName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.State).NotEmpty().MaximumLength(2);
+        RuleFor(x => x.IeIndicator).InclusiveBetween(1, 9).WithMessage("Indicador de IE inválido.");
+        RuleFor(x => x.DefaultPickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
+        RuleFor(x => x.DefaultPickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
     }
 }
 
@@ -44,6 +66,9 @@ public class UpdateCustomerCommandValidator : AbstractValidator<UpdateCustomerCo
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.CorporateName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.State).NotEmpty().MaximumLength(2);
+        RuleFor(x => x.IeIndicator).InclusiveBetween(1, 9).WithMessage("Indicador de IE inválido.");
+        RuleFor(x => x.DefaultPickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
+        RuleFor(x => x.DefaultPickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
     }
 }
 
@@ -71,12 +96,12 @@ public class CreateCustomerHandler : IRequestHandler<CreateCustomerCommand, IRes
 
         var customer = new Customer(
             companyId, request.Cnpj, request.CorporateName, request.TradeName,
-            request.StateRegistration, request.MunicipalRegistration, request.Crt,
-            request.Cnae, request.Street, request.Number, request.Complement,
-            request.Neighborhood, request.CityCode, request.CityName, request.State,
-            request.ZipCode, request.Email, request.Phone, request.RequireBatchControl,
-            request.RequireExpirationControl, request.RequireSerialControl,
-            request.AllowNegativeStock, request.AutoApproveReceiving);
+            request.StateRegistration, request.IeIndicator, request.MunicipalRegistration, request.Crt, request.Cnae,
+            request.Street, request.Number, request.Complement, request.Neighborhood, request.CityCode, request.CityName, request.State, request.ZipCode, request.Email, request.Phone,
+            request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
+            (PickingStrategy)request.DefaultPickingStrategy, (PickingBaseDate)request.DefaultPickingBaseDate,
+            request.MaxDailyInboundOrders, request.MaxDailyOutboundOrders, request.MinStockVolume, request.MaxStockVolume,
+            request.RequiresBlindInbound, request.RequiresBlindOutbound, request.ReturnInvoicePerReferencedInvoice);
 
         _db.Customers.Add(customer);
         await _db.SaveChangesAsync(ct);
@@ -104,7 +129,12 @@ public class UpdateCustomerHandler : IRequestHandler<UpdateCustomerCommand, IRes
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.Id && c.CompanyId == companyId, ct);
         if (customer == null) return Results.NotFound(new { Message = "Cliente não encontrado." });
 
-        customer.Update(request.CorporateName, request.TradeName, request.StateRegistration, request.MunicipalRegistration, request.Crt, request.Cnae, request.Street, request.Number, request.Complement, request.Neighborhood, request.CityCode, request.CityName, request.State, request.ZipCode, request.Email, request.Phone, request.RequireBatchControl, request.RequireExpirationControl, request.RequireSerialControl, request.AllowNegativeStock, request.AutoApproveReceiving);
+        customer.Update(request.CorporateName, request.TradeName, request.StateRegistration, request.IeIndicator, request.MunicipalRegistration, request.Crt, request.Cnae,
+            request.Street, request.Number, request.Complement, request.Neighborhood, request.CityCode, request.CityName, request.State, request.ZipCode, request.Email, request.Phone,
+            request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
+            (PickingStrategy)request.DefaultPickingStrategy, (PickingBaseDate)request.DefaultPickingBaseDate,
+            request.MaxDailyInboundOrders, request.MaxDailyOutboundOrders, request.MinStockVolume, request.MaxStockVolume,
+            request.RequiresBlindInbound, request.RequiresBlindOutbound, request.ReturnInvoicePerReferencedInvoice);
 
         await _db.SaveChangesAsync(ct);
         return Results.NoContent();
@@ -142,7 +172,6 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
     }
 }
 
-// NOVO: Handler de Exclusão Física/Lógica isolado
 public class DeleteCustomerHandler : IRequestHandler<DeleteCustomerCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -162,14 +191,13 @@ public class DeleteCustomerHandler : IRequestHandler<DeleteCustomerCommand, IRes
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.Id && c.CompanyId == companyId, ct);
         if (customer == null) return Results.NotFound();
 
-        customer.Deactivate(); // Exclusão Lógica
+        customer.Deactivate();
         await _db.SaveChangesAsync(ct);
 
         return Results.NoContent();
     }
 }
 
-// NOVO: Handler de Consulta SEFAZ isolado
 public class ConsultCustomerSefazHandler : IRequestHandler<ConsultCustomerSefazQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -194,8 +222,6 @@ public class ConsultCustomerSefazHandler : IRequestHandler<ConsultCustomerSefazQ
             return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado na Matriz." });
 
         var certPassword = CryptoService.Decrypt(company.CertificatePassword);
-
-        // A falha da SEFAZ lança exceção interceptada pelo GlobalExceptionHandler
         var sefazData = _sefazService.Consultar(company.CertificateBytes, certPassword, request.Uf, request.Cnpj);
 
         return Results.Ok(sefazData);

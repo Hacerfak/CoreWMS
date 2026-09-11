@@ -42,11 +42,18 @@ const productSchema = z.object({
     cest: z.string().optional().nullable(),
     origin: z.coerce.number().default(0),
     maxStacking: z.coerce.number().min(1, 'Min 1'),
+
+    tracksBatch: z.boolean().default(false),
+    strictBatch: z.boolean().default(false),
+    tracksManufacture: z.boolean().default(false),
+    strictManufacture: z.boolean().default(false),
+    tracksExpiration: z.boolean().default(false),
+    strictExpiration: z.boolean().default(false),
+    tracksSerial: z.boolean().default(false),
+    strictSerial: z.boolean().default(false),
+
     pickingStrategy: z.coerce.number().min(1),
-    requireBatchControl: z.boolean().default(false),
-    requireManufactureDate: z.boolean().default(false),
-    requireExpirationDate: z.boolean().default(false),
-    requireSerialControl: z.boolean().default(false),
+    pickingBaseDate: z.coerce.number().min(1),
     inboundShelfLifeToleranceDays: z.coerce.number().optional().nullable(),
     outboundShelfLifeToleranceDays: z.coerce.number().optional().nullable(),
     packagings: z.array(packagingSchema).min(1, 'Adicione pelo menos uma embalagem (ex: Unidade Mestre).')
@@ -64,7 +71,9 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(productSchema),
         defaultValues: {
-            customerId: '', sku: '', description: '', baseUnit: 'UN', origin: 0, maxStacking: 1, pickingStrategy: 1,
+            customerId: '', sku: '', description: '', baseUnit: 'UN', origin: 0, maxStacking: 1, pickingStrategy: 1, pickingBaseDate: 1,
+            tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
+            tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
             packagings: [{ packagingTypeId: '', conversionFactor: 1, isDefaultInbound: true, isDefaultOutbound: true, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0 }]
         }
     });
@@ -77,8 +86,9 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                 reset({ ...productToEdit, customerId: productToEdit.customerId });
             } else {
                 reset({
-                    customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '', origin: 0, maxStacking: 1, pickingStrategy: 1,
-                    requireBatchControl: false, requireManufactureDate: false, requireExpirationDate: false, requireSerialControl: false,
+                    customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '', origin: 0, maxStacking: 1, pickingStrategy: 1, pickingBaseDate: 1,
+                    tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
+                    tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
                     packagings: [{ packagingTypeId: '', conversionFactor: 1, isDefaultInbound: true, isDefaultOutbound: true, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0 }]
                 });
             }
@@ -101,9 +111,68 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     });
 
     const onSubmit = (data) => {
-        if (isEditing) updateProduct({ id: productToEdit.id, data });
-        else createProduct({ data });
+        // Validações Manuais Visuais Antes de Enviar
+        if (data.pickingStrategy === 2 && !data.tracksExpiration) {
+            toast.error("A estratégia FEFO exige que o 'Controle de Validade' esteja habilitado nas Regras WMS.");
+            setActiveTab('regras');
+            return;
+        }
+
+        const defaultIn = data.packagings.filter(p => p.isDefaultInbound).length;
+        const defaultOut = data.packagings.filter(p => p.isDefaultOutbound).length;
+        if (defaultIn !== 1 || defaultOut !== 1) {
+            toast.error("Você deve marcar EXATAMENTE UMA embalagem como Padrão de Recebimento e UMA como Padrão de Expedição.");
+            setActiveTab('embalagens');
+            return;
+        }
+
+        isEditing ? updateProduct({ id: productToEdit.id, data }) : createProduct({ data });
     };
+
+    // A Herança Perfeita do Depositante
+    const handleCustomerChange = (customerId) => {
+        setValue('customerId', customerId, { shouldValidate: true });
+        if (!isEditing) {
+            const customer = customers.find(c => c.id === customerId);
+            if (customer) {
+                setValue('tracksBatch', customer.tracksBatch);
+                setValue('strictBatch', customer.strictBatch);
+                setValue('tracksManufacture', customer.tracksManufacture);
+                setValue('strictManufacture', customer.strictManufacture);
+                setValue('tracksExpiration', customer.tracksExpiration);
+                setValue('strictExpiration', customer.strictExpiration);
+                setValue('tracksSerial', customer.tracksSerial);
+                setValue('strictSerial', customer.strictSerial);
+                setValue('pickingStrategy', customer.defaultPickingStrategy);
+                setValue('pickingBaseDate', customer.defaultPickingBaseDate);
+                toast.info("Regras logísticas pré-carregadas a partir do Depositante.");
+            }
+        }
+    };
+
+    // Helper Visual
+    const renderToggle = (title, desc, trackField, strictField) => (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+                <div>
+                    <Label className="text-sm text-slate-900 font-bold">{title}</Label>
+                    <p className="text-[10px] text-slate-500">{desc}</p>
+                </div>
+                <Switch
+                    checked={watch(trackField)}
+                    onCheckedChange={(v) => { setValue(trackField, v); if (!v) setValue(strictField, false); }}
+                />
+            </div>
+            {watch(trackField) && (
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 ml-2 animate-in slide-in-from-top-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                        <Checkbox checked={watch(strictField)} onCheckedChange={(v) => setValue(strictField, v)} />
+                        <span className="text-rose-700">Exigência Fiscal Obrigatória</span>
+                    </label>
+                </div>
+            )}
+        </div>
+    );
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -123,14 +192,13 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                 <TabsTrigger value="embalagens" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2 px-4"><Box size={16} /> Volumes & Conversão</TabsTrigger>
                             </TabsList>
                         </div>
-
                         <div className="flex-1 overflow-y-auto p-6">
 
                             {/* ABA BÁSICOS */}
                             <TabsContent value="dados" className="space-y-4 mt-0">
                                 <div className="space-y-1.5">
                                     <Label>Depositante (Cliente) *</Label>
-                                    <Select value={watch('customerId')} onValueChange={(v) => setValue('customerId', v)} disabled={isEditing}>
+                                    <Select value={watch('customerId')} onValueChange={handleCustomerChange} disabled={isEditing}>
                                         <SelectTrigger className={errors.customerId ? 'border-rose-500' : ''}><SelectValue placeholder="Selecione o dono da mercadoria" /></SelectTrigger>
                                         <SelectContent>
                                             {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>)}
@@ -184,45 +252,54 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
 
                             {/* ABA WMS */}
                             <TabsContent value="regras" className="space-y-6 mt-0">
-                                <div className="grid grid-cols-2 gap-4 p-4 border border-slate-200 rounded-lg bg-slate-50">
-                                    <div className="space-y-1.5">
-                                        <Label>Estratégia de Retirada (Picking) *</Label>
-                                        <Select value={String(watch('pickingStrategy') || '1')} onValueChange={(v) => setValue('pickingStrategy', Number(v))}>
-                                            <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="1">FIFO (Primeiro a Entrar, Primeiro a Sair)</SelectItem>
-                                                <SelectItem value="2">FEFO (Primeiro a Vencer, Primeiro a Sair)</SelectItem>
-                                                <SelectItem value="3">LIFO (Último a Entrar, Primeiro a Sair)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <Label>Limite de Empilhamento (Blocado) *</Label>
-                                        <Input type="number" {...register('maxStacking')} />
-                                        <p className="text-[10px] text-slate-500">Quantos volumes cabem um em cima do outro.</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-4 p-4 border border-slate-200 rounded-lg">
-                                    <h4 className="text-sm font-semibold text-slate-900 border-b pb-2">Controles e Rastreabilidade</h4>
+                                <div className="bg-slate-50 p-6 rounded-xl border border-slate-200/80 space-y-5">
+                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Controles de Rastreabilidade</h3>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="flex items-center justify-between"><Label>Exige Lote?</Label><Switch checked={watch('requireBatchControl')} onCheckedChange={(v) => setValue('requireBatchControl', v)} /></div>
-                                        <div className="flex items-center justify-between"><Label>Exige N° Série?</Label><Switch checked={watch('requireSerialControl')} onCheckedChange={(v) => setValue('requireSerialControl', v)} /></div>
-                                        <div className="flex items-center justify-between"><Label>Exige Data Fabricação?</Label><Switch checked={watch('requireManufactureDate')} onCheckedChange={(v) => setValue('requireManufactureDate', v)} /></div>
-                                        <div className="flex items-center justify-between"><Label>Exige Data Validade?</Label><Switch checked={watch('requireExpirationDate')} onCheckedChange={(v) => setValue('requireExpirationDate', v)} /></div>
+                                        {renderToggle('Lote / Partida', 'Tracking interno WMS', 'tracksBatch', 'strictBatch')}
+                                        {renderToggle('Data de Fabricação', 'Produção industrial', 'tracksManufacture', 'strictManufacture')}
+                                        {renderToggle('Data de Validade', 'Vencimento para FEFO', 'tracksExpiration', 'strictExpiration')}
+                                        {renderToggle('Número de Série', 'Serialização de unitários', 'tracksSerial', 'strictSerial')}
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5"><Label>Tol. Recebimento (Dias Vida Útil)</Label><Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" /></div>
-                                    <div className="space-y-1.5"><Label>Tol. Expedição (Dias Vida Útil)</Label><Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" /></div>
+                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Motor de Separação & Físico</h3>
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Estratégia de Fila</Label>
+                                            <Select value={String(watch('pickingStrategy'))} onValueChange={(val) => setValue('pickingStrategy', Number(val))}>
+                                                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="1">FIFO (Primeiro que Entra, Sai)</SelectItem>
+                                                    <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO (Primeiro que Vence, Sai)</SelectItem>
+                                                    <SelectItem value="3">LIFO (Último que Entra, Sai)</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Data Base Analisada</Label>
+                                            <Select value={String(watch('pickingBaseDate'))} onValueChange={(val) => setValue('pickingBaseDate', Number(val))} disabled={watch('pickingStrategy') == 2}>
+                                                <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="1">Data Física WMS</SelectItem>
+                                                    <SelectItem value="2">Data Sistêmica WMS</SelectItem>
+                                                    <SelectItem value="3">Data Emissão NF-e</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Limite Empilhamento (Blocado)</Label>
+                                            <Input type="number" {...register('maxStacking')} className="bg-white" />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
+                                        <div className="space-y-1.5"><Label>Tol. Recebimento (Dias Vida Útil)</Label><Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" /></div>
+                                        <div className="space-y-1.5"><Label>Tol. Expedição (Dias Vida Útil)</Label><Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" /></div>
+                                    </div>
                                 </div>
                             </TabsContent>
 
                             {/* ABA EMBALAGENS (FIELD ARRAY) */}
                             <TabsContent value="embalagens" className="space-y-4 mt-0">
                                 {errors.packagings && <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-md">{errors.packagings.root?.message || 'Verifique as informações das embalagens.'}</div>}
-
                                 {fields.map((item, index) => (
                                     <div key={item.id} className="relative p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">
                                         <div className="absolute top-4 right-4">
@@ -230,9 +307,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                 <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0"><Trash2 size={16} /></Button>
                                             )}
                                         </div>
-
                                         <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Box size={16} /> Embalagem #{index + 1}</h4>
-
                                         <div className="grid grid-cols-3 gap-4">
                                             <div className="space-y-1.5">
                                                 <Label>Tipo de Embalagem *</Label>
@@ -255,7 +330,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                 <Input {...register(`packagings.${index}.barcode`)} className="font-mono" />
                                             </div>
                                         </div>
-
                                         <div className="grid grid-cols-5 gap-3">
                                             <div className="space-y-1.5"><Label className="text-xs">Peso Bruto (KG)</Label><Input type="number" step="0.001" {...register(`packagings.${index}.grossWeight`)} className="h-8 text-xs" /></div>
                                             <div className="space-y-1.5"><Label className="text-xs">Peso Líq. (KG)</Label><Input type="number" step="0.001" {...register(`packagings.${index}.netWeight`)} className="h-8 text-xs" /></div>
@@ -263,7 +337,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                             <div className="space-y-1.5"><Label className="text-xs">Largura (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.widthMm`)} className="h-8 text-xs" /></div>
                                             <div className="space-y-1.5"><Label className="text-xs">Altura (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.heightMm`)} className="h-8 text-xs" /></div>
                                         </div>
-
                                         <div className="flex gap-6 pt-2 border-t border-slate-200">
                                             <label className="flex items-center gap-2 text-xs font-medium cursor-pointer"><Checkbox checked={watch(`packagings.${index}.isDefaultInbound`)} onCheckedChange={(v) => setValue(`packagings.${index}.isDefaultInbound`, v)} /> Padrão Recebimento</label>
                                             <label className="flex items-center gap-2 text-xs font-medium cursor-pointer"><Checkbox checked={watch(`packagings.${index}.isDefaultOutbound`)} onCheckedChange={(v) => setValue(`packagings.${index}.isDefaultOutbound`, v)} /> Padrão Expedição</label>
@@ -271,14 +344,11 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         </div>
                                     </div>
                                 ))}
-
                                 <Button type="button" variant="outline" onClick={() => append({ packagingTypeId: '', conversionFactor: 1, isDefaultInbound: false, isDefaultOutbound: false, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0 })} className="w-full border-dashed border-2 text-blue-600 hover:bg-blue-50">
                                     <PlusCircle size={16} className="mr-2" /> Adicionar Embalagem Secundária
                                 </Button>
                             </TabsContent>
-
                         </div>
-
                         <SheetFooter className="p-6 border-t border-slate-100 bg-slate-50/50">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
                             <Button type="submit" disabled={isCreating || isUpdating} className="bg-slate-900 text-white min-w-[140px]">

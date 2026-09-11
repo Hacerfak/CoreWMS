@@ -14,14 +14,22 @@ namespace CoreWMS.Api.Features.Products;
 // 1. DTOs & CONTRATOS
 // ==========================================
 public record ProductPackagingDto(Guid Id, Guid PackagingTypeId, string PackagingTypeCode, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, decimal CubageM3, string? Barcode);
-public record ProductDto(Guid Id, Guid CustomerId, string CustomerName, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking, bool RequireBatchControl, bool RequireManufactureDate, bool RequireExpirationDate, bool RequireSerialControl, int PickingStrategy, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, bool IsActive, List<ProductPackagingDto> Packagings);
+public record ProductDto(
+    Guid Id, Guid CustomerId, string CustomerName, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
+    bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
+    int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, bool IsActive, List<ProductPackagingDto> Packagings);
 
 public record CreateProductPackagingCommand(Guid PackagingTypeId, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, string? Barcode);
-public record CreateProductCommand(Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking, bool RequireBatchControl, bool RequireManufactureDate, bool RequireExpirationDate, bool RequireSerialControl, int PickingStrategy, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<CreateProductPackagingCommand> Packagings) : IRequest<IResult>;
+public record CreateProductCommand(
+    Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
+    bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
+    int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<CreateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
-// NOVO: Commands de Edição
 public record UpdateProductPackagingCommand(Guid? Id, Guid PackagingTypeId, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, string? Barcode);
-public record UpdateProductCommand(Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking, bool RequireBatchControl, bool RequireManufactureDate, bool RequireExpirationDate, bool RequireSerialControl, int PickingStrategy, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<UpdateProductPackagingCommand> Packagings) : IRequest<IResult>;
+public record UpdateProductCommand(
+    Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
+    bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
+    int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<UpdateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
 public record ListProductsQuery(Guid? CustomerId, string? Search) : IRequest<IResult>;
 public record DeleteProductCommand(Guid Id) : IRequest<IResult>;
@@ -39,7 +47,13 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.BaseUnit).NotEmpty().MaximumLength(10);
         RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
+        RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
+
+        // Travas WMS de Negócio
+        RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
+        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultInbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de recebimento.");
+        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultOutbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de expedição.");
     }
 }
 
@@ -52,7 +66,12 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.BaseUnit).NotEmpty().MaximumLength(10);
         RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
+        RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
+
+        RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
+        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultInbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de recebimento.");
+        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultOutbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de expedição.");
     }
 }
 
@@ -81,10 +100,12 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
             await _db.Products.AnyAsync(p => p.CompanyId == companyId && p.CustomerId == request.CustomerId && p.BaseBarcode == request.BaseBarcode, ct))
             return Results.BadRequest(new { Message = "Este Código de Barras Base (GTIN) já está em uso por outro produto deste Depositante." });
 
-        var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit, (PickingStrategy)request.PickingStrategy);
+        var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit);
 
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
-        product.UpdateRules(request.RequireBatchControl, request.RequireManufactureDate, request.RequireExpirationDate, request.RequireSerialControl, (PickingStrategy)request.PickingStrategy, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
+        product.UpdateRules(
+            request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
+            (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
 
         foreach (var pack in request.Packagings)
         {
@@ -124,18 +145,22 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
 
         product.UpdateBasicInfo(request.Description, request.BaseUnit);
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
-        product.UpdateRules(request.RequireBatchControl, request.RequireManufactureDate, request.RequireExpirationDate, request.RequireSerialControl, (PickingStrategy)request.PickingStrategy, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
+        product.UpdateRules(
+            request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
+            (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
 
-        // 1. Excluir as embalagens que o usuário removeu da tela
         var requestPackIds = request.Packagings.Where(x => x.Id.HasValue).Select(x => x.Id!.Value).ToList();
         var packsToRemove = product.Packagings.Where(p => !requestPackIds.Contains(p.Id)).ToList();
 
         if (packsToRemove.Any())
         {
-            _db.ProductPackagings.RemoveRange(packsToRemove);
+            foreach (var pack in packsToRemove)
+            {
+                product.Packagings.Remove(pack);
+                _db.ProductPackagings.Remove(pack);
+            }
         }
 
-        // 2. Adicionar ou Atualizar embalagens
         foreach (var packReq in request.Packagings)
         {
             if (packReq.Id.HasValue)
@@ -191,8 +216,8 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
 
         var dtos = products.Select(p => new ProductDto(
             p.Id, p.CustomerId, p.Customer.CorporateName, p.Sku, p.Description, p.BaseUnit, p.BaseBarcode, p.Ncm, p.Cest, p.Origin, p.MaxStacking,
-            p.RequireBatchControl, p.RequireManufactureDate, p.RequireExpirationDate, p.RequireSerialControl, (int)p.PickingStrategy,
-            p.InboundShelfLifeToleranceDays, p.OutboundShelfLifeToleranceDays, p.IsActive,
+            p.TracksBatch, p.StrictBatch, p.TracksManufacture, p.StrictManufacture, p.TracksExpiration, p.StrictExpiration, p.TracksSerial, p.StrictSerial,
+            (int)p.PickingStrategy, (int)p.PickingBaseDate, p.InboundShelfLifeToleranceDays, p.OutboundShelfLifeToleranceDays, p.IsActive,
             p.Packagings.Select(pp => new ProductPackagingDto(
                 pp.Id, pp.PackagingTypeId, pp.PackagingType.Code, pp.ConversionFactor, pp.IsDefaultInbound, pp.IsDefaultOutbound,
                 pp.AllowFractionalPicking, pp.GrossWeight, pp.NetWeight, pp.LengthMm, pp.WidthMm, pp.HeightMm, pp.CubageM3, pp.Barcode
@@ -220,7 +245,7 @@ public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, IResul
 
         try
         {
-            _db.Products.Remove(product); // A constraint Cascade apagará os ProductPackagings atrelados
+            _db.Products.Remove(product);
             await _db.SaveChangesAsync(ct);
         }
         catch (DbUpdateException)

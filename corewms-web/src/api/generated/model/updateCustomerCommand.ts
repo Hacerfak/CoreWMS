@@ -13,6 +13,7 @@ export interface UpdateCustomerCommand {
   tradeName?: string | null;
   /** @nullable */
   stateRegistration?: string | null;
+  ieIndicator?: number;
   /** @nullable */
   municipalRegistration?: string | null;
   crt?: number;
@@ -37,9 +38,25 @@ export interface UpdateCustomerCommand {
   email?: string | null;
   /** @nullable */
   phone?: string | null;
-  requireBatchControl?: boolean;
-  requireExpirationControl?: boolean;
-  requireSerialControl?: boolean;
-  allowNegativeStock?: boolean;
-  autoApproveReceiving?: boolean;
+  tracksBatch?: boolean;
+  strictBatch?: boolean;
+  tracksManufacture?: boolean;
+  strictManufacture?: boolean;
+  tracksExpiration?: boolean;
+  strictExpiration?: boolean;
+  tracksSerial?: boolean;
+  strictSerial?: boolean;
+  defaultPickingStrategy?: number;
+  defaultPickingBaseDate?: number;
+  /** @nullable */
+  maxDailyInboundOrders?: number | null;
+  /** @nullable */
+  maxDailyOutboundOrders?: number | null;
+  /** @nullable */
+  minStockVolume?: number | null;
+  /** @nullable */
+  maxStockVolume?: number | null;
+  requiresBlindInbound?: boolean;
+  requiresBlindOutbound?: boolean;
+  returnInvoicePerReferencedInvoice?: boolean;
 }

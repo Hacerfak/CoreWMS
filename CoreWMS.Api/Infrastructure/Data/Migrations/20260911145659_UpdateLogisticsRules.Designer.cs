@@ -3,6 +3,7 @@ using System;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CoreWMS.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911145659_UpdateLogisticsRules")]
+    partial class UpdateLogisticsRules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -27,6 +30,12 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowNegativeStock")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("AutoApproveReceiving")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("CityCode")
                         .HasColumnType("integer");
@@ -68,23 +77,8 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
-                    b.Property<int>("IeIndicator")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
-
-                    b.Property<int?>("MaxDailyInboundOrders")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MaxDailyOutboundOrders")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MaxStockVolume")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("MinStockVolume")
-                        .HasColumnType("integer");
 
                     b.Property<string>("MunicipalRegistration")
                         .HasMaxLength(20)
@@ -98,15 +92,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.Property<string>("Phone")
                         .HasColumnType("text");
-
-                    b.Property<bool>("RequiresBlindInbound")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("RequiresBlindOutbound")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("ReturnInvoicePerReferencedInvoice")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("State")
                         .IsRequired()

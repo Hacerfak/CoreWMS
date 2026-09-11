@@ -22,11 +22,16 @@ export interface CreateProductCommand {
   cest?: string | null;
   origin?: number;
   maxStacking?: number;
-  requireBatchControl?: boolean;
-  requireManufactureDate?: boolean;
-  requireExpirationDate?: boolean;
-  requireSerialControl?: boolean;
+  tracksBatch?: boolean;
+  strictBatch?: boolean;
+  tracksManufacture?: boolean;
+  strictManufacture?: boolean;
+  tracksExpiration?: boolean;
+  strictExpiration?: boolean;
+  tracksSerial?: boolean;
+  strictSerial?: boolean;
   pickingStrategy?: number;
+  pickingBaseDate?: number;
   /** @nullable */
   inboundShelfLifeToleranceDays?: number | null;
   /** @nullable */
