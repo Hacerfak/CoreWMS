@@ -8,7 +8,7 @@
 export interface CreateStorageTypeCommand {
   /** @nullable */
   name?: string | null;
-  isVirtual?: boolean;
+  role?: number;
   allowMixedProducts?: boolean;
   allowMixedBatches?: boolean;
   capacityStrategy?: number;

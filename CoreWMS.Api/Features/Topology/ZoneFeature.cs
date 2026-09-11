@@ -4,6 +4,7 @@ using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using Mapster;
 using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Topology;
@@ -11,16 +12,21 @@ namespace CoreWMS.Api.Features.Topology;
 // ==============================================================================
 // 1. DTOs & CONTRATOS
 // ==============================================================================
-public record ZoneDto(Guid Id, Guid WarehouseId, string Code, string Name, bool IsActive);
+
+// NOVO: Adicionados totais base e estimados
+public record ZoneDto(Guid Id, Guid WarehouseId, string Code, string Name, bool IsActive, int TotalBaseCapacity, int TotalEstimatedCapacity);
 
 public record CreateZoneCommand(Guid WarehouseId, string Code, string Name) : IRequest<IResult>;
 public record UpdateZoneCommand(Guid Id, string Name) : IRequest<IResult>;
 public record DeleteZoneCommand(Guid Id) : IRequest<IResult>;
-public record ListZonesQuery(Guid WarehouseId) : IRequest<IResult>; // Lista zonas POR armazém
+
+// NOVO: Recebe a altura do palete do simulador
+public record ListZonesQuery(Guid WarehouseId, decimal PalletHeight) : IRequest<IResult>;
 
 // ==============================================================================
 // 2. VALIDADORES
 // ==============================================================================
+
 public class CreateZoneCommandValidator : AbstractValidator<CreateZoneCommand>
 {
     public CreateZoneCommandValidator()
@@ -43,6 +49,7 @@ public class UpdateZoneCommandValidator : AbstractValidator<UpdateZoneCommand>
 // ==============================================================================
 // 3. HANDLERS
 // ==============================================================================
+
 public class CreateZoneHandler : IRequestHandler<CreateZoneCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -60,7 +67,7 @@ public class CreateZoneHandler : IRequestHandler<CreateZoneCommand, IResult>
         _db.Zones.Add(zone);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Created($"/api/topology/zones/{zone.Id}", zone.Adapt<ZoneDto>());
+        return Results.Created($"/api/topology/zones/{zone.Id}", new ZoneDto(zone.Id, zone.WarehouseId, zone.Code, zone.Name, zone.IsActive, 0, 0));
     }
 }
 
@@ -76,10 +83,12 @@ public class UpdateZoneHandler : IRequestHandler<UpdateZoneCommand, IResult>
 
         zone.Update(request.Name);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
 
+// CÁLCULO INTELIGENTE DA ZONA
 public class ListZonesHandler : IRequestHandler<ListZonesQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -87,13 +96,38 @@ public class ListZonesHandler : IRequestHandler<ListZonesQuery, IResult>
 
     public async Task<IResult> Handle(ListZonesQuery request, CancellationToken ct)
     {
+        var safePalletHeight = request.PalletHeight <= 0 ? 1.5m : request.PalletHeight;
+
         var zones = await _db.Zones
             .AsNoTracking()
+            .Include(z => z.Warehouse)
+            .Include(z => z.Locations)
+                .ThenInclude(l => l.StorageType)
             .Where(z => z.WarehouseId == request.WarehouseId)
-            .ProjectToType<ZoneDto>()
             .ToListAsync(ct);
 
-        return Results.Ok(zones);
+        var dtos = zones.Select(z =>
+        {
+            int totalBase = 0;
+            int totalEst = 0;
+            var clearance = z.Warehouse.ClearanceHeight;
+
+            foreach (var l in z.Locations)
+            {
+                totalBase += l.BaseCapacity;
+                int locMax = l.BaseCapacity;
+                if (l.StorageType.CapacityStrategy == Enums.StorageCapacityStrategy.DynamicStacking)
+                {
+                    var maxStacking = (int)Math.Max(1, Math.Floor(clearance / safePalletHeight));
+                    locMax = l.BaseCapacity * maxStacking;
+                }
+                totalEst += locMax;
+            }
+
+            return new ZoneDto(z.Id, z.WarehouseId, z.Code, z.Name, z.IsActive, totalBase, totalEst);
+        }).OrderBy(z => z.Code).ToList();
+
+        return Results.Ok(dtos);
     }
 }
 
@@ -124,15 +158,19 @@ public class DeleteZoneHandler : IRequestHandler<DeleteZoneCommand, IResult>
 // ==============================================================================
 // 4. ENDPOINTS
 // ==============================================================================
+
 public static class ZoneEndpoints
 {
     public static void MapZoneEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/topology/zones").WithTags("Topology").RequireAuthorization();
 
-        group.MapPost("/", async (CreateZoneCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission("topology:manage");
-        group.MapPut("/{id:guid}", async (Guid id, UpdateZoneCommand cmd, IMediator mediator) => await mediator.Send(cmd with { Id = id })).RequirePermission("topology:manage");
-        group.MapGet("/{warehouseId:guid}", async (Guid warehouseId, IMediator mediator) => await mediator.Send(new ListZonesQuery(warehouseId))).RequirePermission("topology:manage");
-        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteZoneCommand(id))).RequirePermission("topology:manage");
+        group.MapPost("/", async (CreateZoneCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission(Identity.Constants.Permissions.Topology.Manage);
+        group.MapPut("/{id:guid}", async (Guid id, UpdateZoneCommand cmd, IMediator mediator) => await mediator.Send(cmd with { Id = id })).RequirePermission(Identity.Constants.Permissions.Topology.Manage);
+
+        // Recebe do Front a altura de simulação via Query Parameter
+        group.MapGet("/{warehouseId:guid}", async (Guid warehouseId, [FromQuery] decimal? palletHeight, IMediator mediator) => await mediator.Send(new ListZonesQuery(warehouseId, palletHeight ?? 1.5m))).RequirePermission(Identity.Constants.Permissions.Topology.Manage);
+
+        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteZoneCommand(id))).RequirePermission(Identity.Constants.Permissions.Topology.Manage);
     }
 }

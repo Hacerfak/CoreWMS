@@ -8,7 +8,7 @@ import {
     usePostApiTopologyStorageTypes,
     usePutApiTopologyStorageTypesId,
     useDeleteApiTopologyStorageTypesId
-} from '@/api/generated/topology/topology'; // Verifique o caminho correto gerado pelo Orval
+} from '@/api/generated/topology/topology';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -23,14 +23,15 @@ import { toast } from 'sonner';
 
 const storageTypeSchema = z.object({
     name: z.string().min(3, 'O nome deve ter no mínimo 3 caracteres.'),
+    role: z.coerce.number().min(1),
     capacityStrategy: z.coerce.number().min(1),
-    isVirtual: z.boolean().default(false),
     allowMixedProducts: z.boolean().default(false),
     allowMixedBatches: z.boolean().default(false),
 });
 
 export default function StorageTypesTab() {
     const queryClient = useQueryClient();
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedType, setSelectedType] = useState(null);
     const [typeToDelete, setTypeToDelete] = useState(null);
@@ -39,12 +40,12 @@ export default function StorageTypesTab() {
 
     const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(storageTypeSchema),
-        defaultValues: { name: '', capacityStrategy: 1, isVirtual: false, allowMixedProducts: false, allowMixedBatches: false }
+        defaultValues: { name: '', role: 1, capacityStrategy: 1, allowMixedProducts: false, allowMixedBatches: false }
     });
 
     useEffect(() => {
         if (isModalOpen) {
-            reset(selectedType || { name: '', capacityStrategy: 1, isVirtual: false, allowMixedProducts: false, allowMixedBatches: false });
+            reset(selectedType || { name: '', role: 1, capacityStrategy: 1, allowMixedProducts: false, allowMixedBatches: false });
         }
     }, [isModalOpen, selectedType, reset]);
 
@@ -88,6 +89,16 @@ export default function StorageTypesTab() {
 
     const isSaving = isCreating || isUpdating;
 
+    const getRoleBadge = (role) => {
+        switch (role) {
+            case 1: return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Armazenamento</Badge>;
+            case 2: return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Doca</Badge>;
+            case 3: return <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">Qualidade</Badge>;
+            case 4: return <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">Virtual</Badge>;
+            default: return <Badge variant="outline">Desconhecido</Badge>;
+        }
+    };
+
     return (
         <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -101,7 +112,7 @@ export default function StorageTypesTab() {
                 <Table>
                     <TableHeader className="bg-slate-50/50 sticky top-0 z-10">
                         <TableRow>
-                            <TableHead>Nome do Tipo</TableHead>
+                            <TableHead>Nome e Finalidade</TableHead>
                             <TableHead>Estratégia de Capacidade</TableHead>
                             <TableHead>Regras de Restrição</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
@@ -117,14 +128,16 @@ export default function StorageTypesTab() {
                                 <TableCell>
                                     <div className="flex items-center gap-3">
                                         <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center"><Layers size={16} /></div>
-                                        <div className="flex flex-col">
+                                        <div className="flex flex-col gap-1">
                                             <span className="font-semibold text-slate-900">{type.name}</span>
-                                            {type.isVirtual && <span className="text-[10px] text-amber-600 font-medium">Virtual (Não conta capacidade)</span>}
+                                            <div className="flex items-center gap-2">
+                                                {getRoleBadge(type.role)}
+                                            </div>
                                         </div>
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    {type.capacityStrategy === 1 ? <Badge variant="outline" className="bg-slate-100">Unitária (1 Vão = 1 Pallet)</Badge> : <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Dinâmica (Empilhamento Blocado)</Badge>}
+                                    {type.capacityStrategy === 1 ? <Badge variant="outline" className="bg-slate-100">Unitária</Badge> : <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Dinâmica</Badge>}
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex gap-2">
@@ -149,10 +162,27 @@ export default function StorageTypesTab() {
                         <DialogTitle>{selectedType ? 'Editar Tipo' : 'Novo Tipo de Armazenamento'}</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 py-2">
+
                         <div className="space-y-1.5">
                             <Label>Nome (Ex: Blocado Padrão) *</Label>
                             <Input {...register('name')} className={errors.name ? 'border-rose-500' : ''} />
                             {errors.name && <p className="text-xs text-rose-500">{errors.name.message}</p>}
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label>Finalidade de Sistema (Role) *</Label>
+                            <Select value={String(watch('role') || '1')} onValueChange={(v) => setValue('role', Number(v))}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione a finalidade" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="1">Armazenamento (Físico)</SelectItem>
+                                    <SelectItem value="2">Doca (Recebimento / Expedição)</SelectItem>
+                                    <SelectItem value="3">Qualidade</SelectItem>
+                                    <SelectItem value="4">Virtual / Lógico</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-slate-500">Essa regra dita os bloqueios operacionais da máquina de estados do WMS.</p>
                         </div>
 
                         <div className="space-y-1.5">
@@ -162,17 +192,13 @@ export default function StorageTypesTab() {
                                     <SelectValue placeholder="Selecione a estratégia" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="1">Capacidade Unitária (Porta-Pallets)</SelectItem>
-                                    <SelectItem value="2">Capacidade Dinâmica (Blocado - Multiplica Empilhamento)</SelectItem>
+                                    <SelectItem value="1">Capacidade Unitária</SelectItem>
+                                    <SelectItem value="2">Capacidade Dinâmica (Empilhamento)</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
 
                         <div className="space-y-4 pt-2 border-t">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-slate-600">Área Virtual (Ex: Doca, Quarentena)</Label>
-                                <Switch checked={watch('isVirtual')} onCheckedChange={(v) => setValue('isVirtual', v)} />
-                            </div>
                             <div className="flex items-center justify-between">
                                 <Label className="text-slate-600">Permitir SKUs misturados no mesmo endereço</Label>
                                 <Switch checked={watch('allowMixedProducts')} onCheckedChange={(v) => setValue('allowMixedProducts', v)} />

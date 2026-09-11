@@ -11,12 +11,4 @@ export interface CreateLocationCommand {
   /** @nullable */
   code?: string | null;
   baseCapacity?: number;
-  /** @nullable */
-  aisle?: string | null;
-  /** @nullable */
-  building?: string | null;
-  /** @nullable */
-  level?: string | null;
-  /** @nullable */
-  slot?: string | null;
 }

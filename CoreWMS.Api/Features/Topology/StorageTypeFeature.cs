@@ -13,23 +13,28 @@ namespace CoreWMS.Api.Features.Topology;
 // ==============================================================================
 // 1. DTOs & CONTRATOS
 // ==============================================================================
-public record StorageTypeDto(Guid Id, string Name, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy, bool IsActive);
 
-public record CreateStorageTypeCommand(string Name, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
-public record UpdateStorageTypeCommand(Guid Id, string Name, bool IsVirtual, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
+public record StorageTypeDto(Guid Id, string Name, int Role, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy, bool IsActive);
+
+public record CreateStorageTypeCommand(string Name, int Role, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
+
+public record UpdateStorageTypeCommand(Guid Id, string Name, int Role, bool AllowMixedProducts, bool AllowMixedBatches, int CapacityStrategy) : IRequest<IResult>;
+
 public record DeleteStorageTypeCommand(Guid Id) : IRequest<IResult>;
+
 public record ListStorageTypesQuery() : IRequest<IResult>;
 
 // ==============================================================================
 // 2. VALIDADORES
 // ==============================================================================
+
 public class CreateStorageTypeCommandValidator : AbstractValidator<CreateStorageTypeCommand>
 {
     public CreateStorageTypeCommandValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.CapacityStrategy).Must(x => Enum.IsDefined(typeof(StorageCapacityStrategy), x))
-            .WithMessage("Estratégia de capacidade inválida.");
+        RuleFor(x => x.Role).Must(x => Enum.IsDefined(typeof(StorageRole), x)).WithMessage("Finalidade (Role) inválida.");
+        RuleFor(x => x.CapacityStrategy).Must(x => Enum.IsDefined(typeof(StorageCapacityStrategy), x)).WithMessage("Estratégia de capacidade inválida.");
     }
 }
 
@@ -39,14 +44,15 @@ public class UpdateStorageTypeCommandValidator : AbstractValidator<UpdateStorage
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.CapacityStrategy).Must(x => Enum.IsDefined(typeof(StorageCapacityStrategy), x))
-            .WithMessage("Estratégia de capacidade inválida.");
+        RuleFor(x => x.Role).Must(x => Enum.IsDefined(typeof(StorageRole), x)).WithMessage("Finalidade (Role) inválida.");
+        RuleFor(x => x.CapacityStrategy).Must(x => Enum.IsDefined(typeof(StorageCapacityStrategy), x)).WithMessage("Estratégia de capacidade inválida.");
     }
 }
 
 // ==============================================================================
 // 3. HANDLERS
 // ==============================================================================
+
 public class CreateStorageTypeHandler : IRequestHandler<CreateStorageTypeCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -57,7 +63,7 @@ public class CreateStorageTypeHandler : IRequestHandler<CreateStorageTypeCommand
         if (await _db.StorageTypes.AnyAsync(s => s.Name.ToLower() == request.Name.ToLower(), ct))
             return Results.BadRequest(new { Message = "Já existe um Tipo de Armazenamento com este nome." });
 
-        var storageType = new StorageType(request.Name, request.IsVirtual, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
+        var storageType = new StorageType(request.Name, (StorageRole)request.Role, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
 
         _db.StorageTypes.Add(storageType);
         await _db.SaveChangesAsync(ct);
@@ -79,7 +85,7 @@ public class UpdateStorageTypeHandler : IRequestHandler<UpdateStorageTypeCommand
         if (await _db.StorageTypes.AnyAsync(s => s.Name.ToLower() == request.Name.ToLower() && s.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "Já existe outro Tipo de Armazenamento com este nome." });
 
-        storageType.Update(request.Name, request.IsVirtual, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
+        storageType.Update(request.Name, (StorageRole)request.Role, request.AllowMixedProducts, request.AllowMixedBatches, (StorageCapacityStrategy)request.CapacityStrategy);
         await _db.SaveChangesAsync(ct);
 
         return Results.NoContent();
@@ -108,12 +114,12 @@ public class DeleteStorageTypeHandler : IRequestHandler<DeleteStorageTypeCommand
         var storageType = await _db.StorageTypes.FindAsync(new object[] { request.Id }, ct);
         if (storageType == null) return Results.NotFound();
 
-        // Bloqueio de segurança: não pode apagar se existirem endereços atrelados
         if (await _db.Locations.AnyAsync(l => l.StorageTypeId == request.Id, ct))
             return Results.BadRequest(new { Message = "Não é possível excluir este Tipo pois existem endereços físicos atrelados a ele." });
 
         _db.StorageTypes.Remove(storageType);
         await _db.SaveChangesAsync(ct);
+
         return Results.NoContent();
     }
 }
@@ -121,15 +127,16 @@ public class DeleteStorageTypeHandler : IRequestHandler<DeleteStorageTypeCommand
 // ==============================================================================
 // 4. ENDPOINTS
 // ==============================================================================
+
 public static class StorageTypeEndpoints
 {
     public static void MapStorageTypeEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/topology/storage-types").WithTags("Topology").RequireAuthorization();
 
-        group.MapPost("/", async (CreateStorageTypeCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission("topology:manage");
-        group.MapPut("/{id:guid}", async (Guid id, UpdateStorageTypeCommand cmd, IMediator mediator) => await mediator.Send(cmd with { Id = id })).RequirePermission("topology:manage");
-        group.MapGet("/", async (IMediator mediator) => await mediator.Send(new ListStorageTypesQuery())).RequirePermission("topology:manage");
-        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteStorageTypeCommand(id))).RequirePermission("topology:manage");
+        group.MapPost("/", async (CreateStorageTypeCommand cmd, IMediator mediator) => await mediator.Send(cmd)).RequirePermission(Permissions.Topology.Manage);
+        group.MapPut("/{id:guid}", async (Guid id, UpdateStorageTypeCommand cmd, IMediator mediator) => await mediator.Send(cmd with { Id = id })).RequirePermission(Permissions.Topology.Manage);
+        group.MapGet("/", async (IMediator mediator) => await mediator.Send(new ListStorageTypesQuery())).RequirePermission(Permissions.Topology.Manage);
+        group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeleteStorageTypeCommand(id))).RequirePermission(Permissions.Topology.Manage);
     }
 }

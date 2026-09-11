@@ -203,10 +203,6 @@ public class ApplicationDbContext : DbContext
             b.HasKey(l => l.Id);
             b.Property(l => l.Code).IsRequired().HasMaxLength(50);
             b.Property(l => l.FullPath).IsRequired().HasMaxLength(100);
-            b.Property(l => l.Aisle).HasMaxLength(10);
-            b.Property(l => l.Building).HasMaxLength(10);
-            b.Property(l => l.Level).HasMaxLength(10);
-            b.Property(l => l.Slot).HasMaxLength(10);
 
             b.HasIndex(l => l.FullPath).IsUnique(); // O código de barras lido pelo coletor (P1-C1-B1) é chave única global
 

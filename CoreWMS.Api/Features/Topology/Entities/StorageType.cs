@@ -6,7 +6,7 @@ namespace CoreWMS.Api.Features.Topology.Entities;
 public class StorageType : AuditableEntity
 {
     public string Name { get; private set; } = string.Empty;
-    public bool IsVirtual { get; private set; }
+    public StorageRole Role { get; private set; }
     public bool AllowMixedProducts { get; private set; }
     public bool AllowMixedBatches { get; private set; }
     public StorageCapacityStrategy CapacityStrategy { get; private set; }
@@ -14,19 +14,19 @@ public class StorageType : AuditableEntity
 
     protected StorageType() { }
 
-    public StorageType(string name, bool isVirtual, bool allowMixedProducts, bool allowMixedBatches, StorageCapacityStrategy capacityStrategy)
+    public StorageType(string name, StorageRole role, bool allowMixedProducts, bool allowMixedBatches, StorageCapacityStrategy capacityStrategy)
     {
         Name = name;
-        IsVirtual = isVirtual;
+        Role = role;
         AllowMixedProducts = allowMixedProducts;
         AllowMixedBatches = allowMixedBatches;
         CapacityStrategy = capacityStrategy;
     }
 
-    public void Update(string name, bool isVirtual, bool allowMixedProducts, bool allowMixedBatches, StorageCapacityStrategy capacityStrategy)
+    public void Update(string name, StorageRole role, bool allowMixedProducts, bool allowMixedBatches, StorageCapacityStrategy capacityStrategy)
     {
         Name = name;
-        IsVirtual = isVirtual;
+        Role = role;
         AllowMixedProducts = allowMixedProducts;
         AllowMixedBatches = allowMixedBatches;
         CapacityStrategy = capacityStrategy;

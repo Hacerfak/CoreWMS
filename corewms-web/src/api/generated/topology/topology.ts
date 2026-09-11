@@ -28,6 +28,10 @@ import type {
   CreateStorageTypeCommand,
   CreateWarehouseCommand,
   CreateZoneCommand,
+  GetApiTopologyLocationsZoneIdParams,
+  GetApiTopologyWarehousesParams,
+  GetApiTopologyZonesWarehouseIdParams,
+  PostApiTopologyLocationsImportBody,
   UpdateLocationCommand,
   UpdateStorageTypeCommand,
   UpdateWarehouseCommand,
@@ -238,12 +242,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     }
     export const getApiTopologyLocationsZoneId = (
     zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/topology/locations/${zoneId}`, method: 'GET', signal
+      {url: `/api/topology/locations/${zoneId}`, method: 'GET',
+        params, signal
     },
       options);
     }
@@ -251,23 +257,25 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiTopologyLocationsZoneIdQueryKey = (zoneId: string,) => {
+export const getGetApiTopologyLocationsZoneIdQueryKey = (zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams,) => {
     return [
-    `/api/topology/locations/${zoneId}`
+    `/api/topology/locations/${zoneId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiTopologyLocationsZoneIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(zoneId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiTopologyLocationsZoneIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsZoneIdQueryKey(zoneId);
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsZoneIdQueryKey(zoneId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>> = ({ signal }) => getApiTopologyLocationsZoneId(zoneId, requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>> = ({ signal }) => getApiTopologyLocationsZoneId(zoneId,params, requestOptions, signal);
 
 
 
@@ -281,7 +289,8 @@ export type GetApiTopologyLocationsZoneIdQueryError = unknown
 
 
 export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
+ zoneId: string,
+    params: undefined |  GetApiTopologyLocationsZoneIdParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>,
           TError,
@@ -291,7 +300,8 @@ export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<type
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
+ zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>,
           TError,
@@ -301,16 +311,18 @@ export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<type
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiTopologyLocationsZoneIdQueryOptions(zoneId,options)
+  const queryOptions = getGetApiTopologyLocationsZoneIdQueryOptions(zoneId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -322,7 +334,328 @@ export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<type
 
 
 
-export const postApiTopologyStorageTypes = (
+export const getApiTopologyLocationsDocks = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/locations/docks`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiTopologyLocationsDocksQueryKey = () => {
+    return [
+    `/api/topology/locations/docks`
+    ] as const;
+    }
+
+
+export const getGetApiTopologyLocationsDocksQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsDocksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>> = ({ signal }) => getApiTopologyLocationsDocks(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTopologyLocationsDocksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>>
+export type GetApiTopologyLocationsDocksQueryError = unknown
+
+
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTopologyLocationsDocksQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiTopologyLocationsStorage = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/locations/storage`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiTopologyLocationsStorageQueryKey = () => {
+    return [
+    `/api/topology/locations/storage`
+    ] as const;
+    }
+
+
+export const getGetApiTopologyLocationsStorageQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsStorageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>> = ({ signal }) => getApiTopologyLocationsStorage(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTopologyLocationsStorageQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>>
+export type GetApiTopologyLocationsStorageQueryError = unknown
+
+
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTopologyLocationsStorageQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiTopologyLocationsTemplate = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/locations/template`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiTopologyLocationsTemplateQueryKey = () => {
+    return [
+    `/api/topology/locations/template`
+    ] as const;
+    }
+
+
+export const getGetApiTopologyLocationsTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>> = ({ signal }) => getApiTopologyLocationsTemplate(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTopologyLocationsTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>>
+export type GetApiTopologyLocationsTemplateQueryError = unknown
+
+
+export function useGetApiTopologyLocationsTemplate<TData = Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyLocationsTemplate<TData = Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyLocationsTemplate<TData = Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiTopologyLocationsTemplate<TData = Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTopologyLocationsTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiTopologyLocationsImport = (
+    postApiTopologyLocationsImportBody?: PostApiTopologyLocationsImportBody,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+      const formData = new FormData();
+if(postApiTopologyLocationsImportBody?.file !== undefined) {
+ formData.append(`file`, postApiTopologyLocationsImportBody.file);
+ }
+
+      return customInstance<void>(
+      {url: `/api/topology/locations/import`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiTopologyLocationsImportMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>, TError,PostApiTopologyLocationsImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>, TError,PostApiTopologyLocationsImportMutationVariables, TContext> => {
+
+const mutationKey = ['postApiTopologyLocationsImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>, PostApiTopologyLocationsImportMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiTopologyLocationsImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiTopologyLocationsImportMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>>
+    export type PostApiTopologyLocationsImportMutationBody = PostApiTopologyLocationsImportBody | undefined
+    export type PostApiTopologyLocationsImportMutationError = unknown
+    export type PostApiTopologyLocationsImportMutationVariables = {data?: PostApiTopologyLocationsImportBody}
+
+    export const usePostApiTopologyLocationsImport = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>, TError,PostApiTopologyLocationsImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiTopologyLocationsImport>>,
+        TError,
+        PostApiTopologyLocationsImportMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiTopologyLocationsImportMutationOptions(options), queryClient);
+    }
+    export const postApiTopologyStorageTypes = (
     createStorageTypeCommand: CreateStorageTypeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -644,13 +977,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getPostApiTopologyWarehousesMutationOptions(options), queryClient);
     }
     export const getApiTopologyWarehouses = (
-
+    params?: GetApiTopologyWarehousesParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/topology/warehouses`, method: 'GET', signal
+      {url: `/api/topology/warehouses`, method: 'GET',
+        params, signal
     },
       options);
     }
@@ -658,23 +992,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiTopologyWarehousesQueryKey = () => {
+export const getGetApiTopologyWarehousesQueryKey = (params?: GetApiTopologyWarehousesParams,) => {
     return [
-    `/api/topology/warehouses`
+    `/api/topology/warehouses`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiTopologyWarehousesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiTopologyWarehousesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyWarehousesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyWarehousesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyWarehouses>>> = ({ signal }) => getApiTopologyWarehouses(requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyWarehouses>>> = ({ signal }) => getApiTopologyWarehouses(params, requestOptions, signal);
 
 
 
@@ -688,7 +1022,7 @@ export type GetApiTopologyWarehousesQueryError = unknown
 
 
 export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
+ params: undefined |  GetApiTopologyWarehousesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiTopologyWarehouses>>,
           TError,
@@ -698,7 +1032,7 @@ export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof ge
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
+ params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiTopologyWarehouses>>,
           TError,
@@ -708,16 +1042,16 @@ export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof ge
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiTopologyWarehousesQueryOptions(options)
+  const queryOptions = getGetApiTopologyWarehousesQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -1024,12 +1358,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     }
     export const getApiTopologyZonesWarehouseId = (
     warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/topology/zones/${warehouseId}`, method: 'GET', signal
+      {url: `/api/topology/zones/${warehouseId}`, method: 'GET',
+        params, signal
     },
       options);
     }
@@ -1037,23 +1373,25 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiTopologyZonesWarehouseIdQueryKey = (warehouseId: string,) => {
+export const getGetApiTopologyZonesWarehouseIdQueryKey = (warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams,) => {
     return [
-    `/api/topology/zones/${warehouseId}`
+    `/api/topology/zones/${warehouseId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiTopologyZonesWarehouseIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(warehouseId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiTopologyZonesWarehouseIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyZonesWarehouseIdQueryKey(warehouseId);
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyZonesWarehouseIdQueryKey(warehouseId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>> = ({ signal }) => getApiTopologyZonesWarehouseId(warehouseId, requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>> = ({ signal }) => getApiTopologyZonesWarehouseId(warehouseId,params, requestOptions, signal);
 
 
 
@@ -1067,7 +1405,8 @@ export type GetApiTopologyZonesWarehouseIdQueryError = unknown
 
 
 export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
+ warehouseId: string,
+    params: undefined |  GetApiTopologyZonesWarehouseIdParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>,
           TError,
@@ -1077,7 +1416,8 @@ export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typ
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
+ warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>,
           TError,
@@ -1087,16 +1427,18 @@ export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typ
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiTopologyZonesWarehouseIdQueryOptions(warehouseId,options)
+  const queryOptions = getGetApiTopologyZonesWarehouseIdQueryOptions(warehouseId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
