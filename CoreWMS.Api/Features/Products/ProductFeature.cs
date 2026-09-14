@@ -15,24 +15,28 @@ namespace CoreWMS.Api.Features.Products;
 // 1. DTOs & CONTRATOS
 // ==========================================
 public record ProductPackagingDto(Guid Id, Guid PackagingTypeId, string PackagingTypeCode, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, decimal CubageM3, string? Barcode);
+
 public record ProductDto(
     Guid Id, Guid CustomerId, string CustomerName, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, bool IsActive, List<ProductPackagingDto> Packagings);
 
 public record CreateProductPackagingCommand(Guid PackagingTypeId, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, string? Barcode);
+
 public record CreateProductCommand(
     Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<CreateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
 public record UpdateProductPackagingCommand(Guid? Id, Guid PackagingTypeId, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, string? Barcode);
+
 public record UpdateProductCommand(
     Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<UpdateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
 public record ListProductsQuery(Guid? CustomerId, string? Search, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+
 public record DeleteProductCommand(Guid Id) : IRequest<IResult>;
 
 // ==========================================
@@ -77,7 +81,6 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
-
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
         RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultInbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de recebimento.");
@@ -109,8 +112,17 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
             await _db.Products.AnyAsync(p => p.CompanyId == companyId && p.CustomerId == request.CustomerId && p.BaseBarcode == request.BaseBarcode, ct))
             return Results.BadRequest(new { Message = "Este Código de Barras Base (GTIN) já está em uso por outro produto deste Depositante." });
 
-        var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit);
+        // Validação Proativa do Código de Barras da Embalagem (Global para a CompanyId)
+        foreach (var packReq in request.Packagings)
+        {
+            if (!string.IsNullOrWhiteSpace(packReq.Barcode) &&
+                await _db.ProductPackagings.AnyAsync(pp => pp.Product.CompanyId == companyId && pp.Barcode == packReq.Barcode, ct))
+            {
+                return Results.BadRequest(new { Message = $"O código de barras de embalagem {packReq.Barcode} já está em uso no sistema." });
+            }
+        }
 
+        var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit);
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
         product.UpdateRules(
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
@@ -150,6 +162,16 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
         if (!string.IsNullOrWhiteSpace(request.BaseBarcode) &&
             await _db.Products.AnyAsync(p => p.CompanyId == companyId && p.CustomerId == product.CustomerId && p.BaseBarcode == request.BaseBarcode && p.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "Este Código de Barras Base (GTIN) já está em uso por outro produto deste Depositante." });
+
+        // Validação Proativa do Código de Barras da Embalagem
+        foreach (var packReq in request.Packagings)
+        {
+            if (!string.IsNullOrWhiteSpace(packReq.Barcode) &&
+                await _db.ProductPackagings.AnyAsync(pp => pp.Product.CompanyId == companyId && pp.Barcode == packReq.Barcode && pp.Id != packReq.Id, ct))
+            {
+                return Results.BadRequest(new { Message = $"O código de barras de embalagem {packReq.Barcode} já está em uso no sistema." });
+            }
+        }
 
         product.UpdateBasicInfo(request.Description, request.BaseUnit);
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
@@ -223,10 +245,10 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var s = request.Search.ToLower();
-            query = query.Where(p => p.Sku.ToLower().Contains(s) ||
-                                     p.Description.ToLower().Contains(s) ||
-                                     (p.BaseBarcode != null && p.BaseBarcode.ToLower().Contains(s)));
+            var s = $"%{request.Search.Trim()}%"; // <-- Ajustado para o ILike
+            query = query.Where(p => EF.Functions.ILike(p.Sku, s) ||
+                                     EF.Functions.ILike(p.Description, s) ||
+                                     (p.BaseBarcode != null && EF.Functions.ILike(p.BaseBarcode, s)));
         }
 
         // Execução Paralela: Count e Paginação

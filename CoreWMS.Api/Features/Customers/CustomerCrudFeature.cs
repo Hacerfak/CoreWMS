@@ -41,7 +41,9 @@ public record UpdateCustomerCommand(
     bool RequiresBlindInbound, bool RequiresBlindOutbound, bool ReturnInvoicePerReferencedInvoice) : IRequest<IResult>;
 
 public record ListCustomersQuery(string? Search, bool OnlyActive = true, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+
 public record DeleteCustomerCommand(Guid Id) : IRequest<IResult>;
+
 public record ConsultCustomerSefazQuery(string Cnpj, string Uf) : IRequest<IResult>;
 
 // ==========================================
@@ -173,8 +175,10 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var s = request.Search.Trim().ToLower();
-            q = q.Where(c => c.CorporateName.ToLower().Contains(s) || c.Cnpj.Contains(s) || (c.TradeName != null && c.TradeName.ToLower().Contains(s)));
+            var s = $"%{request.Search.Trim()}%";
+            q = q.Where(c => EF.Functions.ILike(c.CorporateName, s) ||
+                             EF.Functions.ILike(c.Cnpj, s) ||
+                             (c.TradeName != null && EF.Functions.ILike(c.TradeName, s)));
         }
 
         // 2. Execução em Paralelo (Performance)
@@ -215,7 +219,6 @@ public class DeleteCustomerHandler : IRequestHandler<DeleteCustomerCommand, IRes
 
         customer.Deactivate();
         await _db.SaveChangesAsync(ct);
-
         return Results.NoContent();
     }
 }
@@ -244,6 +247,7 @@ public class ConsultCustomerSefazHandler : IRequestHandler<ConsultCustomerSefazQ
             return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado na Matriz." });
 
         var certPassword = CryptoService.Decrypt(company.CertificatePassword);
+
         var sefazData = _sefazService.Consultar(company.CertificateBytes, certPassword, request.Uf, request.Cnpj);
 
         return Results.Ok(sefazData);
