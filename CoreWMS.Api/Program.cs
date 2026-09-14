@@ -7,6 +7,7 @@ using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Extensions;
+using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
@@ -120,6 +121,8 @@ builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>()
 builder.Services.AddSingleton<KardexChannel>();
 builder.Services.AddHostedService<KardexWorker>();
 builder.Services.AddSingleton<MasterDataCacheService>();
+
+builder.Services.AddSingleton<INfeParserService, NfeParserService>();
 
 builder.Services.AddScoped<IDbConnection>(sp =>
     new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
