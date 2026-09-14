@@ -5,6 +5,7 @@ using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Features.Billing.Entities;
+using CoreWMS.Api.Features.CycleCount.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -62,6 +63,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<CustomerTariff> CustomerTariffs => Set<CustomerTariff>();
     public DbSet<BillingCycle> BillingCycles => Set<BillingCycle>();
     public DbSet<BillingItem> BillingItems => Set<BillingItem>();
+    public DbSet<CycleCountPlan> CycleCountPlans => Set<CycleCountPlan>();
+    public DbSet<CycleCountTask> CycleCountTasks => Set<CycleCountTask>();
+    public DbSet<CycleCountRecord> CycleCountRecords => Set<CycleCountRecord>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -443,6 +447,39 @@ public class ApplicationDbContext : DbContext
 
             b.HasOne(x => x.BillingService).WithMany().HasForeignKey(x => x.BillingServiceId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne<BillingCycle>().WithMany(x => x.Items).HasForeignKey(x => x.BillingCycleId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==========================================
+        // MÓDULO DE INVENTÁRIO (CYCLE COUNT)
+        // ==========================================
+        builder.Entity<CycleCountPlan>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Name).IsRequired().HasMaxLength(150);
+
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Zone).WithMany().HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CycleCountTask>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.HasOne(x => x.CycleCountPlan).WithMany(x => x.Tasks).HasForeignKey(x => x.CycleCountPlanId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<CycleCountRecord>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.HasOne<CycleCountTask>().WithMany(x => x.Records).HasForeignKey(x => x.CycleCountTaskId).OnDelete(DeleteBehavior.Cascade);
+
+            // Relacionamento com a HU escaneada (opcional, só para Rodada 3+)
+            b.HasOne<HandlingUnit>().WithMany().HasForeignKey(x => x.ScannedHandlingUnitId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 
