@@ -46,14 +46,13 @@ public class UpdatePackagingTypeCommandValidator : AbstractValidator<UpdatePacka
 public class CreatePackagingTypeHandler : IRequestHandler<CreatePackagingTypeCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public CreatePackagingTypeHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public CreatePackagingTypeHandler(ApplicationDbContext db, ITenantProvider tenant) { _db = db; _tenant = tenant; }
 
     public async Task<IResult> Handle(CreatePackagingTypeCommand request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         if (await _db.PackagingTypes.AnyAsync(p => p.CompanyId == companyId && p.Code.ToUpper() == request.Code.ToUpper(), ct))
             return Results.BadRequest(new { Message = "Já existe um Tipo de Embalagem com este código para esta Empresa." });
@@ -69,14 +68,13 @@ public class CreatePackagingTypeHandler : IRequestHandler<CreatePackagingTypeCom
 public class UpdatePackagingTypeHandler : IRequestHandler<UpdatePackagingTypeCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public UpdatePackagingTypeHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public UpdatePackagingTypeHandler(ApplicationDbContext db, ITenantProvider tenant) { _db = db; _tenant = tenant; }
 
     public async Task<IResult> Handle(UpdatePackagingTypeCommand request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         var pt = await _db.PackagingTypes.FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == companyId, ct);
         if (pt == null) return Results.NotFound();
@@ -91,19 +89,23 @@ public class UpdatePackagingTypeHandler : IRequestHandler<UpdatePackagingTypeCom
 public class ListPackagingTypesHandler : IRequestHandler<ListPackagingTypesQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public ListPackagingTypesHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public ListPackagingTypesHandler(ApplicationDbContext db, ITenantProvider tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     public async Task<IResult> Handle(ListPackagingTypesQuery request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         var list = await _db.PackagingTypes
+            .AsNoTracking() // Já garante alta performance
             .Where(p => p.CompanyId == companyId)
-            .AsNoTracking()
-            .ProjectToType<PackagingTypeDto>()
+            .OrderBy(p => p.Code)
+            .ProjectToType<PackagingTypeDto>() // Projeção direta com Mapster
             .ToListAsync(ct);
 
         return Results.Ok(list);
@@ -113,14 +115,13 @@ public class ListPackagingTypesHandler : IRequestHandler<ListPackagingTypesQuery
 public class DeletePackagingTypeHandler : IRequestHandler<DeletePackagingTypeCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public DeletePackagingTypeHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public DeletePackagingTypeHandler(ApplicationDbContext db, ITenantProvider tenant) { _db = db; _tenant = tenant; }
 
     public async Task<IResult> Handle(DeletePackagingTypeCommand request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         var pt = await _db.PackagingTypes.FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == companyId, ct);
         if (pt == null) return Results.NotFound();

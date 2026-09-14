@@ -4,6 +4,7 @@ using Npgsql;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
+using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Extensions;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
@@ -35,7 +36,9 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
+
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 
 // 2. Política Estrita de CORS
 builder.Services.AddCors(options =>
@@ -117,8 +120,6 @@ builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>()
 builder.Services.AddSingleton<KardexChannel>();
 builder.Services.AddHostedService<KardexWorker>();
 builder.Services.AddSingleton<MasterDataCacheService>();
-
-builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<IDbConnection>(sp =>
     new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));

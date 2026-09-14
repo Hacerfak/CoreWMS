@@ -3,6 +3,7 @@ using CoreWMS.Api.Features.Products.Entities;
 using CoreWMS.Api.Features.Products.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Core.Models;
 using FluentValidation;
 using Mapster;
 using MediatR;
@@ -31,7 +32,7 @@ public record UpdateProductCommand(
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<UpdateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
-public record ListProductsQuery(Guid? CustomerId, string? Search) : IRequest<IResult>;
+public record ListProductsQuery(Guid? CustomerId, string? Search, int Page = 1, int PageSize = 20) : IRequest<IResult>;
 public record DeleteProductCommand(Guid Id) : IRequest<IResult>;
 
 // ==========================================
@@ -54,6 +55,15 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
         RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultInbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de recebimento.");
         RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultOutbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de expedição.");
+    }
+}
+
+public class ListProductsQueryValidator : AbstractValidator<ListProductsQuery>
+{
+    public ListProductsQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
     }
 }
 
@@ -81,14 +91,13 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
 public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public CreateProductHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public CreateProductHandler(ApplicationDbContext db, ITenantProvider tenant) { _db = db; _tenant = tenant; }
 
     public async Task<IResult> Handle(CreateProductCommand request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         if (!await _db.Customers.AnyAsync(c => c.Id == request.CustomerId && c.CompanyId == companyId, ct))
             return Results.BadRequest(new { Message = "Depositante inválido ou não pertence a esta empresa." });
@@ -124,14 +133,13 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
 public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public UpdateProductHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public UpdateProductHandler(ApplicationDbContext db, ITenantProvider tenant) { _db = db; _tenant = tenant; }
 
     public async Task<IResult> Handle(UpdateProductCommand request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         var product = await _db.Products
             .Include(p => p.Packagings)
@@ -188,15 +196,20 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
 public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public ListProductsHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public ListProductsHandler(ApplicationDbContext db, ITenantProvider tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     public async Task<IResult> Handle(ListProductsQuery request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        // Extração limpa do Tenant
+        var companyId = _tenant.GetCompanyId();
 
+        // Query Base com AsNoTracking e Includes otimizados
         var query = _db.Products
             .AsNoTracking()
             .Include(p => p.Customer)
@@ -204,17 +217,31 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
                 .ThenInclude(pp => pp.PackagingType)
             .Where(p => p.CompanyId == companyId);
 
-        if (request.CustomerId.HasValue) query = query.Where(p => p.CustomerId == request.CustomerId);
+        // Filtros
+        if (request.CustomerId.HasValue)
+            query = query.Where(p => p.CustomerId == request.CustomerId);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var s = request.Search.ToLower();
-            query = query.Where(p => p.Sku.ToLower().Contains(s) || p.Description.ToLower().Contains(s) || (p.BaseBarcode != null && p.BaseBarcode.ToLower().Contains(s)));
+            query = query.Where(p => p.Sku.ToLower().Contains(s) ||
+                                     p.Description.ToLower().Contains(s) ||
+                                     (p.BaseBarcode != null && p.BaseBarcode.ToLower().Contains(s)));
         }
 
-        var products = await query.ToListAsync(ct);
+        // Execução Paralela: Count e Paginação
+        var totalTask = query.CountAsync(ct);
 
-        var dtos = products.Select(p => new ProductDto(
+        var itemsTask = query
+            .OrderBy(p => p.Sku) // Ordenação explícita essencial para paginação
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(ct);
+
+        await Task.WhenAll(totalTask, itemsTask);
+
+        // Projeção na memória (Mapster/DTO)
+        var dtos = itemsTask.Result.Select(p => new ProductDto(
             p.Id, p.CustomerId, p.Customer.CorporateName, p.Sku, p.Description, p.BaseUnit, p.BaseBarcode, p.Ncm, p.Cest, p.Origin, p.MaxStacking,
             p.TracksBatch, p.StrictBatch, p.TracksManufacture, p.StrictManufacture, p.TracksExpiration, p.StrictExpiration, p.TracksSerial, p.StrictSerial,
             (int)p.PickingStrategy, (int)p.PickingBaseDate, p.InboundShelfLifeToleranceDays, p.OutboundShelfLifeToleranceDays, p.IsActive,
@@ -224,21 +251,21 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
             )).ToList()
         )).ToList();
 
-        return Results.Ok(dtos);
+        var response = new PaginatedResult<ProductDto>(dtos, totalTask.Result, request.Page, request.PageSize);
+        return Results.Ok(response);
     }
 }
 
 public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
+    private readonly ITenantProvider _tenant;
 
-    public DeleteProductHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    public DeleteProductHandler(ApplicationDbContext db, ITenantProvider tenant) { _db = db; _tenant = tenant; }
 
     public async Task<IResult> Handle(DeleteProductCommand request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "X-Company-Id obrigatório." });
+        var companyId = _tenant.GetCompanyId();
 
         var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == companyId, ct);
         if (product == null) return Results.NotFound();

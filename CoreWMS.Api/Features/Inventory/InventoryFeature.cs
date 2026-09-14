@@ -4,6 +4,7 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Core.Models;
 using FluentValidation;
 using Mapster;
 using MediatR;
@@ -19,9 +20,17 @@ public record InventoryBalanceDto(Guid ProductId, string ProductSku, string Cust
 public record InventoryTransactionDto(Guid Id, DateTime CreatedAt, string ProductSku, string? Lpn, string Type, decimal QuantityChange, decimal BalanceAfter, string? SourceDocumentNumber);
 
 // Queries
-public record ListHandlingUnitsQuery(Guid? CustomerId, Guid? ProductId, string? Lpn, Guid? LocationId, int? Status) : IRequest<IResult>;
-public record GetInventoryBalanceQuery(Guid? CustomerId, Guid? ProductId) : IRequest<IResult>;
-public record ListKardexQuery(Guid? ProductId, string? Lpn, DateTime? StartDate, DateTime? EndDate) : IRequest<IResult>;
+public record ListHandlingUnitsQuery(
+    Guid? CustomerId, Guid? ProductId, string? Lpn, Guid? LocationId, int? Status,
+    int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record GetInventoryBalanceQuery(Guid? CustomerId, Guid? ProductId, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record ListKardexQuery(
+    Guid? ProductId,
+    string? Lpn,
+    DateTime? StartDate,
+    DateTime? EndDate,
+    int Page = 1,
+    int PageSize = 20) : IRequest<IResult>;
 
 // Commands (Operações)
 public record UpdateHandlingUnitCommand(Guid Id, string? Batch, DateTime? ManufactureDate, DateTime? ExpirationDate, string? SerialNumber) : IRequest<IResult>;
@@ -40,6 +49,15 @@ public class MoveHandlingUnitCommandValidator : AbstractValidator<MoveHandlingUn
     }
 }
 
+public class GetInventoryBalanceQueryValidator : AbstractValidator<GetInventoryBalanceQuery>
+{
+    public GetInventoryBalanceQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
+    }
+}
+
 public class ChangeQualityCommandValidator : AbstractValidator<ChangeQualityCommand>
 {
     public ChangeQualityCommandValidator()
@@ -49,97 +67,184 @@ public class ChangeQualityCommandValidator : AbstractValidator<ChangeQualityComm
     }
 }
 
+public class ListHandlingUnitsQueryValidator : AbstractValidator<ListHandlingUnitsQuery>
+{
+    public ListHandlingUnitsQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
+    }
+}
+
+public class ListKardexQueryValidator : AbstractValidator<ListKardexQuery>
+{
+    public ListKardexQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
+    }
+}
+
 // ==========================================
 // 3. HANDLERS DE CONSULTA (READ)
 // ==========================================
 public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
-    public ListHandlingUnitsHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    private readonly ITenantProvider _tenant;
+
+    public ListHandlingUnitsHandler(ApplicationDbContext db, ITenantProvider tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     public async Task<IResult> Handle(ListHandlingUnitsQuery request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId)) return Results.BadRequest();
+        // 1. Extração limpa e segura do CompanyId
+        var companyId = _tenant.GetCompanyId();
 
+        // 2. Query Base sempre com AsNoTracking()
         var q = _db.HandlingUnits.AsNoTracking()
-            .Include(h => h.Customer).Include(h => h.Product).Include(h => h.PackagingType).Include(h => h.CurrentLocation)
             .Where(h => h.CompanyId == companyId);
 
+        // 3. Aplicação dos Filtros Dinâmicos
         if (request.CustomerId.HasValue) q = q.Where(h => h.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(h => h.ProductId == request.ProductId);
         if (request.LocationId.HasValue) q = q.Where(h => h.CurrentLocationId == request.LocationId);
         if (request.Status.HasValue) q = q.Where(h => h.Status == (HuStatus)request.Status.Value);
         if (!string.IsNullOrWhiteSpace(request.Lpn)) q = q.Where(h => h.Lpn.Contains(request.Lpn.Trim().ToUpper()));
 
-        var result = await q.Select(h => new HandlingUnitDto(
-            h.Id, h.Lpn, h.Customer.CorporateName, h.Product.Sku, h.PackagingType.Code,
-            h.CurrentLocationId, h.CurrentLocation != null ? h.CurrentLocation.FullPath : null,
-            h.Batch, h.ManufactureDate, h.ExpirationDate, h.SerialNumber,
-            h.InitialQuantity, h.CurrentQuantity, h.Status.ToString(), h.QualityStatus.ToString()
-        )).ToListAsync(ct);
+        // 4. Contagem Total para o Frontend montar os botões de página (Otimizado)
+        var totalTask = q.CountAsync(ct);
 
-        return Results.Ok(result);
+        // 5. Query Paginada com Projeção (Includes limitados ao que é projetado)
+        var skip = (request.Page - 1) * request.PageSize;
+
+        var itemsTask = q
+            .OrderByDescending(h => h.UpdatedAt ?? h.CreatedAt) // Sempre ordene antes do Skip/Take
+            .Skip(skip)
+            .Take(request.PageSize)
+            .Select(h => new HandlingUnitDto(
+                h.Id, h.Lpn, h.Customer.CorporateName, h.Product.Sku, h.PackagingType.Code,
+                h.CurrentLocationId, h.CurrentLocation != null ? h.CurrentLocation.FullPath : null,
+                h.Batch, h.ManufactureDate, h.ExpirationDate, h.SerialNumber,
+                h.InitialQuantity, h.CurrentQuantity, h.Status.ToString(), h.QualityStatus.ToString()
+            )).ToListAsync(ct);
+
+        // Executa Count e Select simultaneamente no banco
+        await Task.WhenAll(totalTask, itemsTask);
+
+        // 6. Retorna a resposta envelopada
+        var response = new PaginatedResult<HandlingUnitDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        return Results.Ok(response);
     }
 }
 
 public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
-    public GetInventoryBalanceHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    private readonly ITenantProvider _tenant;
+
+    public GetInventoryBalanceHandler(ApplicationDbContext db, ITenantProvider tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     public async Task<IResult> Handle(GetInventoryBalanceQuery request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId)) return Results.BadRequest();
+        var companyId = _tenant.GetCompanyId();
 
         var q = _db.InventoryBalances.AsNoTracking()
-            .Include(b => b.Product).Include(b => b.Customer)
+            .Include(b => b.Product)
+            .Include(b => b.Customer)
             .Where(b => b.CompanyId == companyId);
 
         if (request.CustomerId.HasValue) q = q.Where(b => b.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(b => b.ProductId == request.ProductId);
 
-        var result = await q.Select(b => new InventoryBalanceDto(
-            b.ProductId, b.Product.Sku, b.Customer.CorporateName,
-            b.TotalExpected, b.TotalAvailable, b.TotalAllocated, b.TotalQuarantine, b.TotalPhysical
-        )).ToListAsync(ct);
+        var totalTask = q.CountAsync(ct);
 
-        return Results.Ok(result);
+        var itemsTask = q
+            .OrderBy(b => b.Product.Sku)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(b => new InventoryBalanceDto(
+                b.ProductId, b.Product.Sku, b.Customer.CorporateName,
+                b.TotalExpected, b.TotalAvailable, b.TotalAllocated, b.TotalQuarantine, b.TotalPhysical
+            )).ToListAsync(ct);
+
+        await Task.WhenAll(totalTask, itemsTask);
+
+        var response = new PaginatedResult<InventoryBalanceDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        return Results.Ok(response);
     }
 }
 
 public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _http;
-    public ListKardexHandler(ApplicationDbContext db, IHttpContextAccessor http) { _db = db; _http = http; }
+    private readonly ITenantProvider _tenant;
+
+    public ListKardexHandler(ApplicationDbContext db, ITenantProvider tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
 
     public async Task<IResult> Handle(ListKardexQuery request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_http.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId)) return Results.BadRequest();
+        // 1. Captura Segura do Tenant
+        var companyId = _tenant.GetCompanyId();
 
-        var q = _db.InventoryTransactions.AsNoTracking().Where(t => t.CompanyId == companyId);
+        // 2. Monta o JOIN nativo de alta performance no EF Core
+        var query = from t in _db.InventoryTransactions.AsNoTracking()
+                    where t.CompanyId == companyId
+                    join p in _db.Products.AsNoTracking() on t.ProductId equals p.Id
+                    // Left Join na HU (pois alguns ajustes de estoque não têm HU vinculada)
+                    join h in _db.HandlingUnits.AsNoTracking() on t.HandlingUnitId equals h.Id into hGroup
+                    from hu in hGroup.DefaultIfEmpty()
+                    select new { Transaction = t, ProductSku = p.Sku, HandlingUnitLpn = hu != null ? hu.Lpn : null };
 
-        if (request.ProductId.HasValue) q = q.Where(t => t.ProductId == request.ProductId);
-        if (request.StartDate.HasValue) q = q.Where(t => t.CreatedAt >= request.StartDate.Value.ToUniversalTime());
-        if (request.EndDate.HasValue) q = q.Where(t => t.CreatedAt <= request.EndDate.Value.ToUniversalTime());
+        // 3. Filtros Dinâmicos
+        if (request.ProductId.HasValue)
+            query = query.Where(q => q.Transaction.ProductId == request.ProductId);
+
+        if (request.StartDate.HasValue)
+            query = query.Where(q => q.Transaction.CreatedAt >= request.StartDate.Value.ToUniversalTime());
+
+        if (request.EndDate.HasValue)
+            query = query.Where(q => q.Transaction.CreatedAt <= request.EndDate.Value.ToUniversalTime());
 
         if (!string.IsNullOrWhiteSpace(request.Lpn))
-        {
-            var lpnId = await _db.HandlingUnits.Where(h => h.Lpn == request.Lpn).Select(h => h.Id).FirstOrDefaultAsync(ct);
-            q = q.Where(t => t.HandlingUnitId == lpnId);
-        }
+            query = query.Where(q => q.HandlingUnitLpn == request.Lpn.Trim().ToUpper());
 
-        var result = await q.OrderByDescending(t => t.CreatedAt)
-            .Take(500) // Limite de segurança para não explodir a memória em consultas muito amplas
-            .Select(t => new InventoryTransactionDto(
-                t.Id, t.CreatedAt, _db.Products.First(p => p.Id == t.ProductId).Sku,
-                t.HandlingUnitId != null ? _db.HandlingUnits.First(h => h.Id == t.HandlingUnitId).Lpn : null,
-                t.Type.ToString(), t.QuantityChange, t.BalanceAfter, t.SourceDocumentNumber
+        // 4. Execução Paralela (Count e Select)
+        var totalTask = query.CountAsync(ct);
+
+        var skip = (request.Page - 1) * request.PageSize;
+
+        var itemsTask = query
+            .OrderByDescending(q => q.Transaction.CreatedAt)
+            .Skip(skip)
+            .Take(request.PageSize)
+            .Select(q => new InventoryTransactionDto(
+                q.Transaction.Id,
+                q.Transaction.CreatedAt,
+                q.ProductSku,
+                q.HandlingUnitLpn,
+                q.Transaction.Type.ToString(),
+                q.Transaction.QuantityChange,
+                q.Transaction.BalanceAfter,
+                q.Transaction.SourceDocumentNumber
             )).ToListAsync(ct);
 
-        return Results.Ok(result);
+        await Task.WhenAll(totalTask, itemsTask);
+
+        // 5. Retorna o Objeto Paginado Padrão
+        var response = new PaginatedResult<InventoryTransactionDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        return Results.Ok(response);
     }
 }
 

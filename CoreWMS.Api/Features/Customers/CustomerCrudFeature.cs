@@ -4,6 +4,7 @@ using CoreWMS.Api.Features.Products.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Core.Models;
 using FluentValidation;
 using Mapster;
 using MediatR;
@@ -39,7 +40,7 @@ public record UpdateCustomerCommand(
     int? MaxDailyInboundOrders, int? MaxDailyOutboundOrders, int? MinStockVolume, int? MaxStockVolume,
     bool RequiresBlindInbound, bool RequiresBlindOutbound, bool ReturnInvoicePerReferencedInvoice) : IRequest<IResult>;
 
-public record ListCustomersQuery(string? Search, bool OnlyActive = true) : IRequest<IResult>;
+public record ListCustomersQuery(string? Search, bool OnlyActive = true, int Page = 1, int PageSize = 20) : IRequest<IResult>;
 public record DeleteCustomerCommand(Guid Id) : IRequest<IResult>;
 public record ConsultCustomerSefazQuery(string Cnpj, string Uf) : IRequest<IResult>;
 
@@ -56,6 +57,15 @@ public class CreateCustomerCommandValidator : AbstractValidator<CreateCustomerCo
         RuleFor(x => x.IeIndicator).InclusiveBetween(1, 9).WithMessage("Indicador de IE inválido.");
         RuleFor(x => x.DefaultPickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.DefaultPickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
+    }
+}
+
+public class ListCustomersQueryValidator : AbstractValidator<ListCustomersQuery>
+{
+    public ListCustomersQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
     }
 }
 
@@ -144,18 +154,18 @@ public class UpdateCustomerHandler : IRequestHandler<UpdateCustomerCommand, IRes
 public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ITenantProvider _tenant;
 
-    public ListCustomersHandler(ApplicationDbContext db, IHttpContextAccessor httpContextAccessor)
+    public ListCustomersHandler(ApplicationDbContext db, ITenantProvider tenant)
     {
         _db = db;
-        _httpContextAccessor = httpContextAccessor;
+        _tenant = tenant;
     }
 
     public async Task<IResult> Handle(ListCustomersQuery request, CancellationToken ct)
     {
-        if (!Guid.TryParse(_httpContextAccessor.HttpContext?.Request.Headers["X-Company-Id"].ToString(), out var companyId))
-            return Results.BadRequest(new { Message = "Cabeçalho X-Company-Id é obrigatório." });
+        // 1. Uso seguro do TenantProvider
+        var companyId = _tenant.GetCompanyId();
 
         var q = _db.Customers.AsNoTracking().Where(c => c.CompanyId == companyId);
 
@@ -167,8 +177,20 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
             q = q.Where(c => c.CorporateName.ToLower().Contains(s) || c.Cnpj.Contains(s) || (c.TradeName != null && c.TradeName.ToLower().Contains(s)));
         }
 
-        var list = await q.ProjectToType<CustomerDto>().ToListAsync(ct);
-        return Results.Ok(list);
+        // 2. Execução em Paralelo (Performance)
+        var totalTask = q.CountAsync(ct);
+
+        var itemsTask = q
+            .OrderBy(c => c.CorporateName) // Ordenação antes de paginar
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ProjectToType<CustomerDto>() // Otimizado com Mapster direto no IQueryable
+            .ToListAsync(ct);
+
+        await Task.WhenAll(totalTask, itemsTask);
+
+        var response = new PaginatedResult<CustomerDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        return Results.Ok(response);
     }
 }
 
