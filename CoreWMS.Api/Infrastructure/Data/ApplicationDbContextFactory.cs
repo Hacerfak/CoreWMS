@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
+using System.IO;
 
 namespace CoreWMS.Api.Infrastructure.Data;
 
@@ -10,19 +11,19 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
-        var basePath = AppDomain.CurrentDomain.BaseDirectory;
+        // Usa o diretório atual de onde o comando CLI está sendo executado (raiz do projeto)
+        var basePath = Directory.GetCurrentDirectory();
 
-        // Constrói a configuração para ler as credenciais reais no CLI do EF Core
         var configuration = new ConfigurationBuilder()
             .SetBasePath(basePath)
             .AddJsonFile("appsettings.json", optional: false)
             .AddJsonFile("appsettings.Development.json", optional: true)
-            .AddJsonFile("appsettings.Local.json", optional: true)
+            .AddJsonFile("appsettings.Local.json", optional: true) // Vai ler daqui com sucesso
             .AddEnvironmentVariables()
             .Build();
 
         var connectionString = configuration.GetConnectionString("Postgres")
-            ?? "Host=localhost;Database=corewms_db;Username=postgres;Password=SuaSenhaPostgresSegura123!";
+            ?? throw new InvalidOperationException("A ConnectionString 'Postgres' não foi encontrada. Verifique o appsettings.Local.json na raiz do projeto.");
 
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
         optionsBuilder.UseNpgsql(connectionString);

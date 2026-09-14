@@ -55,15 +55,15 @@ public class BillingEngineService
         foreach (var row in resultRows)
         {
             var dict = (IDictionary<string, object>)row;
-            extractList.Add(dict);
 
-            if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj != null)
-                totalQty += Convert.ToDecimal(qtyObj);
+            // Converte de forma segura testando os tipos nativos do Postgres
+            if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull)
+                totalQty += Convert.ToDecimal(qtyObj, System.Globalization.CultureInfo.InvariantCulture);
 
-            if (dict.TryGetValue("VALOR_DIARIA", out var valObj) && valObj != null)
-                totalAmount += Convert.ToDecimal(valObj);
-            else if (dict.TryGetValue("service_total", out var sTotalObj) && sTotalObj != null)
-                totalAmount += Convert.ToDecimal(sTotalObj);
+            if (dict.TryGetValue("VALOR_DIARIA", out var valObj) && valObj is not DBNull)
+                totalAmount += Convert.ToDecimal(valObj, System.Globalization.CultureInfo.InvariantCulture);
+            else if (dict.TryGetValue("service_total", out var sTotalObj) && sTotalObj is not DBNull)
+                totalAmount += Convert.ToDecimal(sTotalObj, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         var jsonOptions = new JsonSerializerOptions { WriteIndented = false };

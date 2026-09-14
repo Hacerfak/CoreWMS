@@ -290,9 +290,9 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.Barcode).HasMaxLength(50);
 
             // Precisão (18 dígitos totais, 4 ou 2 casas decimais)
-            b.Property(x => x.ConversionFactor).HasPrecision(18, 4);
-            b.Property(x => x.GrossWeight).HasPrecision(18, 4);
-            b.Property(x => x.NetWeight).HasPrecision(18, 4);
+            b.Property(x => x.ConversionFactor).HasPrecision(18, 10);
+            b.Property(x => x.GrossWeight).HasPrecision(18, 10);
+            b.Property(x => x.NetWeight).HasPrecision(18, 10);
             b.Property(x => x.LengthMm).HasPrecision(18, 2);
             b.Property(x => x.WidthMm).HasPrecision(18, 2);
             b.Property(x => x.HeightMm).HasPrecision(18, 2);
@@ -323,9 +323,9 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.Batch).HasMaxLength(50);
             b.Property(x => x.SerialNumber).HasMaxLength(100);
 
-            b.Property(x => x.InitialQuantity).HasPrecision(18, 4);
-            b.Property(x => x.CurrentQuantity).HasPrecision(18, 4);
-            b.Property(x => x.UnitValue).HasPrecision(18, 4);
+            b.Property(x => x.InitialQuantity).HasPrecision(18, 10);
+            b.Property(x => x.CurrentQuantity).HasPrecision(18, 10);
+            b.Property(x => x.UnitValue).HasPrecision(18, 10);
             b.Property(x => x.Version).IsConcurrencyToken();
 
             b.HasIndex(x => new { x.CompanyId, x.Lpn }).IsUnique();
@@ -345,8 +345,8 @@ public class ApplicationDbContext : DbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.SourceDocumentNumber).HasMaxLength(100);
 
-            b.Property(x => x.QuantityChange).HasPrecision(18, 4);
-            b.Property(x => x.BalanceAfter).HasPrecision(18, 4);
+            b.Property(x => x.QuantityChange).HasPrecision(18, 10);
+            b.Property(x => x.BalanceAfter).HasPrecision(18, 10);
 
             b.HasIndex(x => new { x.CompanyId, x.CustomerId, x.Type, x.CreatedAt });
             b.HasIndex(x => new { x.ProductId, x.HandlingUnitId });
@@ -357,10 +357,10 @@ public class ApplicationDbContext : DbContext
         {
             b.HasKey(x => x.Id);
 
-            b.Property(x => x.TotalExpected).HasPrecision(18, 4);
-            b.Property(x => x.TotalAvailable).HasPrecision(18, 4);
-            b.Property(x => x.TotalAllocated).HasPrecision(18, 4);
-            b.Property(x => x.TotalQuarantine).HasPrecision(18, 4);
+            b.Property(x => x.TotalExpected).HasPrecision(18, 10);
+            b.Property(x => x.TotalAvailable).HasPrecision(18, 10);
+            b.Property(x => x.TotalAllocated).HasPrecision(18, 10);
+            b.Property(x => x.TotalQuarantine).HasPrecision(18, 10);
             b.Property(x => x.Version).IsConcurrencyToken();
 
             // A chave de ouro da performance: Consulta por produto é instantânea e única
@@ -420,7 +420,7 @@ public class ApplicationDbContext : DbContext
         builder.Entity<CustomerTariff>(b =>
         {
             b.HasKey(x => x.Id);
-            b.Property(x => x.UnitValue).HasPrecision(18, 4);
+            b.Property(x => x.UnitValue).HasPrecision(18, 10);
 
             b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.BillingService).WithMany().HasForeignKey(x => x.BillingServiceId).OnDelete(DeleteBehavior.Restrict);
@@ -442,8 +442,8 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.Description).IsRequired().HasMaxLength(200);
             b.Property(x => x.ManualNotes).HasMaxLength(1000);
 
-            b.Property(x => x.QuantityTotal).HasPrecision(18, 4);
-            b.Property(x => x.ServiceTotal).HasPrecision(18, 4);
+            b.Property(x => x.QuantityTotal).HasPrecision(18, 10);
+            b.Property(x => x.ServiceTotal).HasPrecision(18, 10);
 
             // O pulo do gato: Armazenamento otimizado de JSON no PostgreSQL
             b.Property(x => x.StatementDataJson).HasColumnType("jsonb");
