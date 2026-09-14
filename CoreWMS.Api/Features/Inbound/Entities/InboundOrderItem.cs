@@ -120,4 +120,14 @@ public class InboundOrderItem : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
         Version = Guid.NewGuid();
     }
+
+    public void ResetForRollback()
+    {
+        ReceivedQuantity = 0;
+        Status = InboundOrderItemStatus.Ready_To_Receive;
+        LockedByUserId = null;
+        LockedAt = null;
+        UpdatedAt = DateTime.UtcNow;
+        Version = Guid.NewGuid();
+    }
 }

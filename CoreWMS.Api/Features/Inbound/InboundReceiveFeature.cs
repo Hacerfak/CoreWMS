@@ -33,7 +33,7 @@ public record ReceiveVolumeDto(
 // 2. COMMANDS
 // ==========================================v
 
-public record ReceiveLoteCommand(Guid OrderItemId, List<ReceiveVolumeDto> Volumes) : IRequest<IResult>;
+public record ReceiveLoteCommand(Guid OrderItemId, Guid? BillingServiceId, List<ReceiveVolumeDto> Volumes) : IRequest<IResult>;
 public record StartReceivingCommand(Guid OrderItemId, Guid DockLocationId) : IRequest<IResult>;
 public record ReleaseItemCommand(Guid OrderItemId) : IRequest<IResult>;
 
@@ -190,7 +190,53 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             orderItem.InboundOrder.UpdateStatus(InboundOrderStatus.Completed);
         }
 
-        // 5. Commit na base de dados (Tudo ou Nada)
+        // ==========================================
+        // B. FATURAMENTO TRANSACIONAL (NOVIDADE)
+        // ==========================================
+        if (request.BillingServiceId.HasValue)
+        {
+            var activeCycle = await _db.BillingCycles
+    .FirstOrDefaultAsync(c =>
+        c.CustomerId == orderItem.InboundOrder.CustomerId &&
+        c.Status == CoreWMS.Api.Features.Billing.Entities.BillingStatus.Draft, ct);
+
+            var tariff = await _db.CustomerTariffs
+                .Include(t => t.BillingService)
+                .FirstOrDefaultAsync(t =>
+                    t.CustomerId == orderItem.InboundOrder.CustomerId &&
+                    t.BillingServiceId == request.BillingServiceId.Value, ct);
+
+            if (activeCycle != null && tariff != null)
+            {
+                // Calcula o faturamento pela quantidade de volumes (Ex: 5 Paletes descarregados)
+                var totalVolumes = request.Volumes.Sum(v => v.VolumeCount);
+                var totalAmount = totalVolumes * tariff.UnitValue;
+
+                // Gera o extrato descritivo para a fatura
+                var extractData = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    InboundOrderId = orderItem.InboundOrderId,
+                    AccessKey = orderItem.InboundOrder.AccessKey,
+                    GeneratedHus = husToInsert.Select(h => h.Lpn).ToList()
+                });
+
+                var billingItem = new CoreWMS.Api.Features.Billing.Entities.BillingItem(
+                    activeCycle.Id,
+                    tariff.BillingServiceId,
+                    $"{tariff.BillingService.Name} - NF {orderItem.InboundOrder.AccessKey}",
+                    totalVolumes,
+                    totalAmount,
+                    extractData,
+                    null
+                );
+
+                _db.BillingItems.Add(billingItem);
+            }
+        }
+
+        // ==========================================
+        // C. COMMIT TRANSACIONAL (Tudo ou nada)
+        // ==========================================
         try
         {
             await _db.SaveChangesAsync(ct);

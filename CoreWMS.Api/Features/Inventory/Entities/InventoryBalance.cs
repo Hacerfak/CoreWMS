@@ -83,4 +83,24 @@ public class InventoryBalance : AuditableEntity
         TotalAvailable += quantity;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void Ship(decimal quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("A quantidade deve ser maior que zero.");
+        if (TotalAvailable < quantity) throw new InvalidOperationException("Saldo disponível insuficiente para esta operação.");
+
+        TotalAvailable -= quantity;
+        // O TotalPhysical não precisa ser alterado, ele se calcula sozinho!
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void RemoveQuarantine(decimal quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("A quantidade deve ser maior que zero.");
+        if (TotalQuarantine < quantity) throw new InvalidOperationException("Saldo bloqueado/virtual insuficiente para esta operação.");
+
+        TotalQuarantine -= quantity;
+        // O TotalPhysical não precisa ser alterado, ele se calcula sozinho!
+        UpdatedAt = DateTime.UtcNow;
+    }
 }
