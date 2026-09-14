@@ -66,4 +66,22 @@ public static class Permissions
         public const string View = "Permissions.Billing.View";
         public const string Manage = "Permissions.Billing.Manage";
     }
+
+    public static class Inbound
+    {
+        // Visualização da tela de Inbound e acompanhamento do progresso (Todos)
+        public const string View = "inbound:view";
+
+        // Importação de arquivos XML (Gestão/Administração)
+        public const string Import = "inbound:import";
+
+        // Revisão de pré-cadastros de produtos gerados pelo XML (Gestão)
+        public const string Review = "inbound:review";
+
+        // Ação de bipar, conferir e dar checkout no carrinho gerando HUs (Operação/Gestão)
+        public const string Receive = "inbound:receive";
+
+        // Cancelamento de ordens, forçar fechamento com falta, estornos (Administração/Gestão)
+        public const string Manage = "inbound:manage";
+    }
 }

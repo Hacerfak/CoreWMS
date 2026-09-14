@@ -6,6 +6,7 @@ using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.CycleCount.Entities;
+using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -66,6 +67,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<CycleCountPlan> CycleCountPlans => Set<CycleCountPlan>();
     public DbSet<CycleCountTask> CycleCountTasks => Set<CycleCountTask>();
     public DbSet<CycleCountRecord> CycleCountRecords => Set<CycleCountRecord>();
+    public DbSet<InboundOrder> InboundOrders => Set<InboundOrder>();
+    public DbSet<InboundOrderItem> InboundOrderItems => Set<InboundOrderItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -480,6 +483,53 @@ public class ApplicationDbContext : DbContext
 
             // Relacionamento com a HU escaneada (opcional, só para Rodada 3+)
             b.HasOne<HandlingUnit>().WithMany().HasForeignKey(x => x.ScannedHandlingUnitId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==========================================
+        // MÓDULO DE INBOUND (RECEBIMENTO E NF-e)
+        // ==========================================
+        builder.Entity<InboundOrder>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.IssuerCnpj).IsRequired().HasMaxLength(14);
+            b.Property(x => x.IssuerName).IsRequired().HasMaxLength(150);
+            b.Property(x => x.AccessKey).IsRequired().HasMaxLength(44);
+
+            // Gravação do XML sem limite rígido de tamanho (PostgreSQL text)
+            b.Property(x => x.RawXml).IsRequired().HasColumnType("text");
+
+            // Uma chave de acesso de NF-e não pode ser recebida duas vezes na mesma empresa
+            b.HasIndex(x => new { x.CompanyId, x.AccessKey }).IsUnique();
+
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<InboundOrderItem>(b =>
+        {
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.RawSkuCode).IsRequired().HasMaxLength(50);
+            b.Property(x => x.RawBarcode).HasMaxLength(50);
+            b.Property(x => x.RawDescription).IsRequired().HasMaxLength(200);
+            b.Property(x => x.RawNcm).IsRequired().HasMaxLength(10);
+            b.Property(x => x.ExpectedBatch).HasMaxLength(50);
+
+            // Regra de Negócio: Alta precisão (28 dígitos totais, 10 casas decimais)
+            b.Property(x => x.ExpectedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.ExpectedUnitValue).HasPrecision(28, 10);
+            b.Property(x => x.ReceivedQuantity).HasPrecision(28, 10);
+
+            // Trava de Concorrência (Lock Optimista contra multi-recebimento)
+            b.Property(x => x.Version).IsConcurrencyToken();
+
+            b.HasOne(x => x.InboundOrder).WithMany(o => o.Items).HasForeignKey(x => x.InboundOrderId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.DockLocation).WithMany().HasForeignKey(x => x.DockLocationId).OnDelete(DeleteBehavior.Restrict);
+
+            // Índices de performance para carregar a nota rapidamente no front
+            b.HasIndex(x => new { x.InboundOrderId, x.Status });
         });
     }
 

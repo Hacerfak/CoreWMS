@@ -4,5 +4,6 @@ public enum QualityStatus
 {
     Available = 1,  // Livre para uso e expedição
     Quarantine = 2, // Bloqueio lógico pela Qualidade
-    Damaged = 3     // Avaria física reportada
+    Damaged = 3,     // Avaria física reportada
+    Virtual_Shortage = 4
 }
