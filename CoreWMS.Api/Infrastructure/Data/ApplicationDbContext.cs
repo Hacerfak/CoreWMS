@@ -3,6 +3,7 @@ using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Inventory.Entities;
+using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -53,6 +54,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<HandlingUnit> HandlingUnits => Set<HandlingUnit>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<InventoryBalance> InventoryBalances => Set<InventoryBalance>();
+    public DbSet<QualityReason> QualityReasons => Set<QualityReason>();
+    public DbSet<QualityEvent> QualityEvents => Set<QualityEvent>();
+    public DbSet<QualityEventImage> QualityEventImages => Set<QualityEventImage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -353,6 +357,42 @@ public class ApplicationDbContext : DbContext
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==========================================
+        // MÓDULO DE QUALIDADE
+        // ==========================================
+        builder.Entity<QualityReason>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Code).IsRequired().HasMaxLength(50);
+            b.Property(x => x.Description).IsRequired().HasMaxLength(200);
+            b.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+        });
+
+        builder.Entity<QualityEvent>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.HoldNotes).HasMaxLength(1000);
+            b.Property(x => x.ReleaseNotes).HasMaxLength(1000);
+
+            b.HasIndex(x => x.HandlingUnitId);
+            b.HasIndex(x => new { x.CompanyId, x.IsResolved });
+
+            b.HasOne(x => x.HandlingUnit).WithMany().HasForeignKey(x => x.HandlingUnitId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.HoldReason).WithMany().HasForeignKey(x => x.HoldReasonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.ReleaseReason).WithMany().HasForeignKey(x => x.ReleaseReasonId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.OriginalLocation).WithMany().HasForeignKey(x => x.OriginalLocationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<QualityEventImage>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.FileName).HasMaxLength(200);
+
+            // O EF Core já mapeia string sem tamanho para TEXT/varchar(max) no PostgreSQL, ideal para Base64
+            // Cascade Delete: Se o evento for apagado (raro, mas possível via DB), apaga as imagens junto
+            b.HasOne<QualityEvent>().WithMany(x => x.Images).HasForeignKey(x => x.QualityEventId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
