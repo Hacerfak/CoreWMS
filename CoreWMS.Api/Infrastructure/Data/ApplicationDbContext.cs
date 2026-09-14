@@ -4,6 +4,7 @@ using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Quality.Entities;
+using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -57,6 +58,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<QualityReason> QualityReasons => Set<QualityReason>();
     public DbSet<QualityEvent> QualityEvents => Set<QualityEvent>();
     public DbSet<QualityEventImage> QualityEventImages => Set<QualityEventImage>();
+    public DbSet<BillingService> BillingServices => Set<BillingService>();
+    public DbSet<CustomerTariff> CustomerTariffs => Set<CustomerTariff>();
+    public DbSet<BillingCycle> BillingCycles => Set<BillingCycle>();
+    public DbSet<BillingItem> BillingItems => Set<BillingItem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -393,6 +398,51 @@ public class ApplicationDbContext : DbContext
             // O EF Core já mapeia string sem tamanho para TEXT/varchar(max) no PostgreSQL, ideal para Base64
             // Cascade Delete: Se o evento for apagado (raro, mas possível via DB), apaga as imagens junto
             b.HasOne<QualityEvent>().WithMany(x => x.Images).HasForeignKey(x => x.QualityEventId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==========================================
+        // MÓDULO DE FATURAMENTO (BILLING)
+        // ==========================================
+        builder.Entity<BillingService>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Name).IsRequired().HasMaxLength(150);
+            b.HasIndex(x => new { x.CompanyId, x.Name }).IsUnique();
+        });
+
+        builder.Entity<CustomerTariff>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.UnitValue).HasPrecision(18, 4);
+
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.BillingService).WithMany().HasForeignKey(x => x.BillingServiceId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<BillingCycle>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ReferenceMonth).IsRequired().HasMaxLength(20);
+
+            b.HasIndex(x => new { x.CompanyId, x.CustomerId, x.ReferenceMonth }).IsUnique();
+
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<BillingItem>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Description).IsRequired().HasMaxLength(200);
+            b.Property(x => x.ManualNotes).HasMaxLength(1000);
+
+            b.Property(x => x.QuantityTotal).HasPrecision(18, 4);
+            b.Property(x => x.ServiceTotal).HasPrecision(18, 4);
+
+            // O pulo do gato: Armazenamento otimizado de JSON no PostgreSQL
+            b.Property(x => x.StatementDataJson).HasColumnType("jsonb");
+
+            b.HasOne(x => x.BillingService).WithMany().HasForeignKey(x => x.BillingServiceId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne<BillingCycle>().WithMany(x => x.Items).HasForeignKey(x => x.BillingCycleId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 

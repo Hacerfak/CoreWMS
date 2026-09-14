@@ -1,9 +1,11 @@
 using System.Text;
+using System.Data;
+using Npgsql;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Data;
-using CoreWMS.Api.Infrastructure.Extensions; // NOVO USING do Mapeador Automático
+using CoreWMS.Api.Infrastructure.Extensions;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
@@ -117,6 +119,11 @@ builder.Services.AddHostedService<KardexWorker>();
 builder.Services.AddSingleton<MasterDataCacheService>();
 
 builder.Services.AddMemoryCache();
+
+builder.Services.AddScoped<IDbConnection>(sp =>
+    new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddScoped<CoreWMS.Api.Infrastructure.Services.Billing.BillingEngineService>();
 
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)

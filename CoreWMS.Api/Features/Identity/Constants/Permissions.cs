@@ -60,4 +60,10 @@ public static class Permissions
         public const string ManageQuality = "Permissions.Inventory.ManageQuality";
         public const string EditTraceability = "Permissions.Inventory.EditTraceability";
     }
+
+    public static class Billing
+    {
+        public const string View = "Permissions.Billing.View";
+        public const string Manage = "Permissions.Billing.Manage";
+    }
 }
