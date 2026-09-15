@@ -8,6 +8,7 @@ using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.CycleCount.Entities;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Outbound.Entities;
+using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -74,6 +75,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<OutboundOrder> OutboundOrders => Set<OutboundOrder>();
     public DbSet<OutboundOrderItem> OutboundOrderItems => Set<OutboundOrderItem>();
     public DbSet<OutboundAllocation> OutboundAllocations => Set<OutboundAllocation>();
+    public DbSet<FiscalOperationRule> FiscalOperationRules => Set<FiscalOperationRule>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -603,6 +605,26 @@ public class ApplicationDbContext : DbContext
             b.HasOne(x => x.OutboundOrder).WithMany().HasForeignKey(x => x.OutboundOrderId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.OutboundOrderItem).WithMany().HasForeignKey(x => x.OutboundOrderItemId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.HandlingUnit).WithMany().HasForeignKey(x => x.HandlingUnitId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==========================================
+        // MÓDULO FISCAL E FATURADOR
+        // ==========================================
+        builder.Entity<FiscalOperationRule>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Description).IsRequired().HasMaxLength(150);
+            b.Property(x => x.CfopStateInternal).IsRequired().HasMaxLength(4);
+            b.Property(x => x.CfopInterstate).IsRequired().HasMaxLength(4);
+            b.Property(x => x.CstCsosnIcms).IsRequired().HasMaxLength(3);
+            b.Property(x => x.CstPisCofins).IsRequired().HasMaxLength(2);
+            b.Property(x => x.CstIpi).IsRequired().HasMaxLength(2);
+            b.Property(x => x.SpecificDestinationState).HasMaxLength(2);
+            b.Property(x => x.SpecificNcmStart).HasMaxLength(10);
+            b.Property(x => x.AdditionalNotes).HasMaxLength(2000);
+
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.SpecificCustomer).WithMany().HasForeignKey(x => x.SpecificCustomerId).OnDelete(DeleteBehavior.Cascade);
         });
     }
 
