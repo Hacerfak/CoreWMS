@@ -239,6 +239,12 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
                 .ThenInclude(pp => pp.PackagingType)
             .Where(p => p.CompanyId == companyId);
 
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedIds = _tenant.GetAllowedCustomerIds();
+            query = query.Where(p => allowedIds.Contains(p.CustomerId));
+        }
+
         // Filtros
         if (request.CustomerId.HasValue)
             query = query.Where(p => p.CustomerId == request.CustomerId);

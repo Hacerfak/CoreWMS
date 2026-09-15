@@ -3,6 +3,7 @@ using System;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CoreWMS.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915002738_AddOutboundModule")]
+    partial class AddOutboundModule
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1039,45 +1042,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.HasIndex("CompanyId", "CustomerId", "Type", "CreatedAt");
 
                     b.ToTable("InventoryTransactions");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundAllocation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("HandlingUnitId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsPicked")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid>("OutboundOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("OutboundOrderItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Quantity")
-                        .HasPrecision(28, 10)
-                        .HasColumnType("numeric(28,10)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HandlingUnitId");
-
-                    b.HasIndex("OutboundOrderId");
-
-                    b.HasIndex("OutboundOrderItemId");
-
-                    b.ToTable("OutboundAllocations");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", b =>
@@ -2106,33 +2070,6 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Product");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundAllocation", b =>
-                {
-                    b.HasOne("CoreWMS.Api.Features.Inventory.Entities.HandlingUnit", "HandlingUnit")
-                        .WithMany()
-                        .HasForeignKey("HandlingUnitId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", "OutboundOrder")
-                        .WithMany()
-                        .HasForeignKey("OutboundOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrderItem", "OutboundOrderItem")
-                        .WithMany()
-                        .HasForeignKey("OutboundOrderItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("HandlingUnit");
-
-                    b.Navigation("OutboundOrder");
-
-                    b.Navigation("OutboundOrderItem");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", b =>

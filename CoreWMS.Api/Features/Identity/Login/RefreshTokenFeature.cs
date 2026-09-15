@@ -52,14 +52,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     {
         var emailLower = request.Email.Trim().ToLower();
 
+        // NOVO: Include no UserCustomers para manter a viseira no refresh
         var user = await _db.Users
             .Include(u => u.UserCompanyRoles)
                 .ThenInclude(ucr => ucr.Company)
+            .Include(u => u.UserCustomers)
             .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
 
         if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
         {
-            // Lança a exceção que será perfeitamente capturada e convertida em 401 pelo GlobalExceptionHandler
             throw new UnauthorizedAccessException("Refresh token inválido ou expirado.");
         }
 
@@ -67,10 +68,12 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
             ? await _db.Companies.Select(c => c.Id).ToListAsync(ct)
             : user.UserCompanyRoles.Select(ucr => ucr.CompanyId).ToList();
 
-        var newAccessToken = _jwt.GenerateToken(user, allowedCompanyIds);
+        // NOVO: Extrai a lista de Depositantes
+        var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
+
+        var newAccessToken = _jwt.GenerateToken(user, allowedCompanyIds, allowedCustomerIds);
         var newRefreshToken = _jwt.GenerateRefreshToken();
 
-        // Mutação de estado encapsulada (DDD)
         user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));
 
         await _db.SaveChangesAsync(ct);

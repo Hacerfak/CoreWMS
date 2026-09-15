@@ -29,6 +29,7 @@ public class NfeParserService : INfeParserService
 
         var emit = infNfe.Element(Ns + "emit") ?? throw new ArgumentException("Tag <emit> não encontrada.");
         var dest = infNfe.Element(Ns + "dest") ?? throw new ArgumentException("Tag <dest> não encontrada.");
+        var enderDest = dest.Element(Ns + "enderDest");
 
         var items = new List<NfeParsedItem>();
 
@@ -81,10 +82,13 @@ public class NfeParserService : INfeParserService
         return new NfeParsedData(
             accessKey,
             issueDate,
-            emit.Element(Ns + "CNPJ")?.Value ?? "",
+            emit.Element(Ns + "CNPJ")?.Value ?? emit.Element(Ns + "CPF")?.Value ?? "",
             emit.Element(Ns + "xNome")?.Value ?? "",
-            dest.Element(Ns + "CNPJ")?.Value ?? "",
+            dest.Element(Ns + "CNPJ")?.Value ?? dest.Element(Ns + "CPF")?.Value ?? "",
             dest.Element(Ns + "xNome")?.Value ?? "",
+            enderDest?.Element(Ns + "xMun")?.Value ?? "NÃO INFORMADO",
+            enderDest?.Element(Ns + "UF")?.Value ?? "EX",
+            enderDest?.Element(Ns + "CEP")?.Value,
             items
         );
     }

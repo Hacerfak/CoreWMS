@@ -14,6 +14,7 @@ public class User : AuditableEntity
     // Relação com as empresas e perfis
     private readonly List<UserCompanyRole> _userCompanyRoles = new();
     public IReadOnlyCollection<UserCompanyRole> UserCompanyRoles => _userCompanyRoles.AsReadOnly();
+    public ICollection<UserCustomer> UserCustomers { get; private set; } = new List<UserCustomer>();
 
     protected User() { }
 

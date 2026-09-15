@@ -15,27 +15,34 @@ public class JwtTokenGenerator
         _configuration = configuration;
     }
 
-    public string GenerateToken(User user, List<Guid> allowedCompanyIds)
+    // Atualize a assinatura do método para receber também os clientes:
+    public string GenerateToken(User user, List<Guid> allowedCompanyIds, List<Guid> allowedCustomerIds)
     {
         var secret = _configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        var isPartner = allowedCustomerIds.Any();
+
         var claims = new List<Claim>
-        {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Name),
-            new Claim("name", user.Name),
-            new Claim("isMaster", user.IsMaster.ToString()),
-            new Claim("companies", string.Join(",", allowedCompanyIds))
-        };
+    {
+        new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+        new Claim(JwtRegisteredClaimNames.Email, user.Email),
+        new Claim(ClaimTypes.Name, user.Name),
+        new Claim("name", user.Name),
+        new Claim("isMaster", user.IsMaster.ToString()),
+        new Claim("companies", string.Join(",", allowedCompanyIds)),
+        
+        // Novas claims de segurança de Depositante
+        new Claim("isPartner", isPartner.ToString()),
+        new Claim("customers", string.Join(",", allowedCustomerIds))
+    };
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddMinutes(1), // Diminuímos o tempo de vida!
+            Expires = DateTime.UtcNow.AddMinutes(5),
             SigningCredentials = credentials,
             Issuer = "CoreWMS",
             Audience = "CoreWMS.Users"

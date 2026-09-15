@@ -1,8 +1,12 @@
+using System.Security.Claims;
+
 namespace CoreWMS.Api.Infrastructure.Security;
 
 public interface ITenantProvider
 {
     Guid GetCompanyId();
+    bool IsPartnerUser();
+    List<Guid> GetAllowedCustomerIds();
 }
 
 public class TenantProvider : ITenantProvider
@@ -24,5 +28,21 @@ public class TenantProvider : ITenantProvider
         }
 
         return companyId;
+    }
+
+    public bool IsPartnerUser()
+    {
+        var claim = _httpContextAccessor.HttpContext?.User?.FindFirst("isPartner")?.Value;
+        return claim == "True";
+    }
+
+    public List<Guid> GetAllowedCustomerIds()
+    {
+        var claim = _httpContextAccessor.HttpContext?.User?.FindFirst("customers")?.Value;
+        if (string.IsNullOrWhiteSpace(claim)) return new List<Guid>();
+
+        return claim.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(Guid.Parse)
+                    .ToList();
     }
 }

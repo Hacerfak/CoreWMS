@@ -7,6 +7,7 @@ using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.CycleCount.Entities;
 using CoreWMS.Api.Features.Inbound.Entities;
+using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
@@ -69,6 +70,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<CycleCountRecord> CycleCountRecords => Set<CycleCountRecord>();
     public DbSet<InboundOrder> InboundOrders => Set<InboundOrder>();
     public DbSet<InboundOrderItem> InboundOrderItems => Set<InboundOrderItem>();
+    public DbSet<UserCustomer> UserCustomers => Set<UserCustomer>();
+    public DbSet<OutboundOrder> OutboundOrders => Set<OutboundOrder>();
+    public DbSet<OutboundOrderItem> OutboundOrderItems => Set<OutboundOrderItem>();
+    public DbSet<OutboundAllocation> OutboundAllocations => Set<OutboundAllocation>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -530,6 +535,74 @@ public class ApplicationDbContext : DbContext
 
             // Índices de performance para carregar a nota rapidamente no front
             b.HasIndex(x => new { x.InboundOrderId, x.Status });
+        });
+
+        builder.Entity<UserCustomer>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.UserId, x.CustomerId }).IsUnique();
+
+            b.HasOne(x => x.User)
+             .WithMany(u => u.UserCustomers)
+             .HasForeignKey(x => x.UserId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.Customer)
+             .WithMany()
+             .HasForeignKey(x => x.CustomerId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==========================================
+        // MÓDULO DE OUTBOUND (EXPEDIÇÃO)
+        // ==========================================
+        builder.Entity<OutboundOrder>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.OrderNumber).IsRequired().HasMaxLength(50);
+            b.Property(x => x.AccessKey).HasMaxLength(44);
+
+            b.Property(x => x.DestinationCnpjCpf).IsRequired().HasMaxLength(14);
+            b.Property(x => x.DestinationName).IsRequired().HasMaxLength(150);
+
+            // Gravação do XML longo (PostgreSQL text)
+            b.Property(x => x.RawXml).HasColumnType("text");
+
+            // O Número do Pedido não pode repetir dentro da mesma empresa
+            b.HasIndex(x => new { x.CompanyId, x.OrderNumber }).IsUnique();
+
+            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.DockLocation).WithMany().HasForeignKey(x => x.DockLocationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<OutboundOrderItem>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.SkuCode).IsRequired().HasMaxLength(50);
+
+            // Regra de Ouro: Alta precisão (28 dígitos totais, 10 casas decimais) em todos os "Baldes"
+            b.Property(x => x.ExpectedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.AllocatedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.PickedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.PackedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.UnitValue).HasPrecision(28, 10);
+
+            // Trava de Concorrência Otimista (Dois operadores bipando o mesmo item)
+            b.Property(x => x.Version).IsConcurrencyToken();
+
+            b.HasOne(x => x.OutboundOrder).WithMany(o => o.Items).HasForeignKey(x => x.OutboundOrderId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<OutboundAllocation>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Quantity).HasPrecision(28, 10);
+
+            b.HasOne(x => x.OutboundOrder).WithMany().HasForeignKey(x => x.OutboundOrderId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.OutboundOrderItem).WithMany().HasForeignKey(x => x.OutboundOrderItemId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.HandlingUnit).WithMany().HasForeignKey(x => x.HandlingUnitId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 

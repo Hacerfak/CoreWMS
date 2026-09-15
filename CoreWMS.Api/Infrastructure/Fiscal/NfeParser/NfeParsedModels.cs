@@ -20,7 +20,10 @@ public record NfeParsedData(
     DateTime IssueDate,     // dhEmi
     string IssuerCnpj,      // emit > CNPJ
     string IssuerName,      // emit > xNome
-    string DestCnpj,        // dest > CNPJ
+    string DestCnpj,        // dest > CNPJ ou CPF
     string DestName,        // dest > xNome
+    string DestCity,        // dest > enderDest > xMun
+    string DestState,       // dest > enderDest > UF
+    string? DestZipCode,    // dest > enderDest > CEP
     List<NfeParsedItem> Items
 );

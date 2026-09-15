@@ -51,7 +51,10 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken ct)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+        // NOVO: Já trazemos o relacionamento com os Depositantes (Partner Users)
+        var user = await _db.Users
+            .Include(u => u.UserCustomers)
+            .FirstOrDefaultAsync(u => u.Email == request.Email, ct);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
@@ -76,10 +79,13 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
         var allowedCompanyIds = userCompanies.Select(c => c.Id).ToList();
 
-        var token = _jwt.GenerateToken(user, allowedCompanyIds);
+        // NOVO: Extrai os clientes vinculados
+        var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
+
+        // NOVO: Passa as duas listas pro gerador
+        var token = _jwt.GenerateToken(user, allowedCompanyIds, allowedCustomerIds);
         var refreshToken = _jwt.GenerateRefreshToken();
 
-        // Mutação de estado encapsulada (DDD)
         user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7));
         await _db.SaveChangesAsync(ct);
 

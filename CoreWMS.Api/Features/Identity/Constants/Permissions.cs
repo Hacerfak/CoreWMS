@@ -84,4 +84,16 @@ public static class Permissions
         // Cancelamento de ordens, forçar fechamento com falta, estornos (Administração/Gestão)
         public const string Manage = "inbound:manage";
     }
+
+    public static class Outbound
+    {
+        // Visualização da tela de Outbound e acompanhamento do progresso (Todos)
+        public const string View = "outbound:view";
+
+        // Importação de arquivos XML (Gestão/Administração)
+        public const string Import = "outbound:import";
+
+        // (Administração/Gestão)
+        public const string Manage = "outbound:manage";
+    }
 }
