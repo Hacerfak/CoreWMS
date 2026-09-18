@@ -12,6 +12,7 @@
     <PackageReference Include="FastReport.OpenSource" Version="2026.2.8" />
     <PackageReference Include="FastReport.OpenSource.Export.PdfSimple" Version="2026.2.8" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Google.Apis.Gmail.v1" Version="1.75.0.4225" />
     <PackageReference Include="Hercules.NET.NFe.NFCe" Version="2026.9.13.2130" />
     <PackageReference Include="Mapster" Version="10.0.12" />
     <PackageReference Include="MediatR" Version="14.2.0" />
@@ -21,6 +22,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="MimeKit" Version="4.18.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.11.2" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
