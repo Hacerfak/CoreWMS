@@ -1,5 +1,8 @@
+using System;
 using System.Text.RegularExpressions;
 using DFe.Classes.Entidades;
+using DFe.Classes.Flags;
+using DFe.Utils;
 using NFe.Classes.Servicos.ConsultaCadastro;
 using NFe.Servicos;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
@@ -37,7 +40,9 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
         if (!Enum.TryParse<Estado>(uf.ToUpper(), out var estadoEnum))
             throw new ArgumentException($"UF '{uf}' é inválida.");
 
-        var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, DFe.Classes.Flags.TipoAmbiente.Producao);
+        // Consulta cadastro ocorre sempre em ambiente de Produção na SEFAZ
+        var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, TipoAmbiente.Producao, certBytes, certPassword);
+
         using var servicoSefaz = new ServicosNFe(cfg, certificado);
         var retornoSefaz = servicoSefaz.NfeConsultaCadastro(uf.ToUpper(), ConsultaCadastroTipoDocumento.Cnpj, cnpjConsulta);
 
@@ -54,7 +59,7 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
             CorporateName: cad.xNome ?? "",
             TradeName: cad.xFant,
             StateRegistration: cad.IE,
-            Crt: ResolverCrt(cad.xRegApur), // <-- Mapeamento inteligente de texto para CRT
+            Crt: ResolverCrt(cad.xRegApur),
             Cnae: cad.CNAE?.ToString(),
             Street: cad.ender?.xLgr,
             Number: cad.ender?.nro,
@@ -68,31 +73,26 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
         );
     }
 
-    /// <summary>
-    /// Mapeia a descrição textual do regime de apuração retornado pela SEFAZ para o código numérico CRT.
-    /// </summary>
     private static int ResolverCrt(string? xRegApur)
     {
         if (string.IsNullOrWhiteSpace(xRegApur)) return 1;
 
         var reg = xRegApur.Trim().ToUpper();
 
-        // Se por acaso a SEFAZ retornar o dígito numérico direto
         if (int.TryParse(reg, out var crt) && crt >= 1 && crt <= 4)
             return crt;
 
-        // Mapeamento por palavras-chave do retorno fiscal
         if (reg.Contains("NORMAL") || reg.Contains("REAL") || reg.Contains("PRESUMIDO") || reg.Contains("CONVENCIONAL") || reg.Contains("PERIÓDICO") || reg.Contains("PERIODICO"))
-            return 3; // 3 - Regime Normal
+            return 3;
 
         if (reg.Contains("SUBLIMITE"))
-            return 2; // 2 - Simples Nacional (Excesso Sublimite)
+            return 2;
 
         if (reg.Contains("MEI"))
-            return 4; // 4 - MEI
+            return 4;
 
         if (reg.Contains("SIMPLES"))
-            return 1; // 1 - Simples Nacional
+            return 1;
 
         return 1;
     }

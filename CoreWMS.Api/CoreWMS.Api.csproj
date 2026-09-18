@@ -9,6 +9,8 @@
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Dapper" Version="2.1.86" />
+    <PackageReference Include="FastReport.OpenSource" Version="2026.2.8" />
+    <PackageReference Include="FastReport.OpenSource.Export.PdfSimple" Version="2026.2.8" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageReference Include="Hercules.NET.NFe.NFCe" Version="2026.9.13.2130" />
     <PackageReference Include="Mapster" Version="10.0.12" />

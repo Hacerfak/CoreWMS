@@ -76,6 +76,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<OutboundOrderItem> OutboundOrderItems => Set<OutboundOrderItem>();
     public DbSet<OutboundAllocation> OutboundAllocations => Set<OutboundAllocation>();
     public DbSet<FiscalOperationRule> FiscalOperationRules => Set<FiscalOperationRule>();
+    public DbSet<OutboundFiscalDocument> OutboundFiscalDocuments => Set<OutboundFiscalDocument>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -625,6 +626,45 @@ public class ApplicationDbContext : DbContext
 
             b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.SpecificCustomer).WithMany().HasForeignKey(x => x.SpecificCustomerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ==========================================
+        // DOCUMENTOS FISCAIS DE SAÍDA (1:N com OutboundOrder)
+        // ==========================================
+        builder.Entity<OutboundFiscalDocument>(b =>
+        {
+            b.ToTable("OutboundFiscalDocuments");
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.Type)
+                .IsRequired();
+
+            b.Property(x => x.Status)
+                .IsRequired();
+
+            b.Property(x => x.AccessKey)
+                .HasMaxLength(44);
+
+            b.Property(x => x.Protocol)
+                .HasMaxLength(30);
+
+            b.Property(x => x.ReturnMessage)
+                .HasMaxLength(1000);
+
+            // Mapeamento para armazenar o XML completo sem limite de tamanho
+            b.Property(x => x.RawXml)
+                .HasColumnType("text");
+
+            // Relacionamento 1:N com OutboundOrder
+            b.HasOne(x => x.OutboundOrder)
+                .WithMany() // ou .WithMany(x => x.FiscalDocuments) se tiver a coleção mapeada no OutboundOrder
+                .HasForeignKey(x => x.OutboundOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Índices estratégicos para performance
+            b.HasIndex(x => x.OutboundOrderId);
+            b.HasIndex(x => x.AccessKey);
+            b.HasIndex(x => x.Status);
         });
     }
 

@@ -1,5 +1,7 @@
+using System;
 using DFe.Classes.Entidades;
 using DFe.Classes.Flags;
+using DFe.Utils;
 using NFe.Servicos;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 
@@ -28,7 +30,7 @@ public class SefazStatusServicoService : ISefazStatusServicoService
         if (!Enum.TryParse<Estado>(uf.ToUpper(), out var estadoEnum))
             throw new ArgumentException($"UF '{uf}' é inválida.");
 
-        var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, ambiente);
+        var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, ambiente, certBytes, certPassword);
 
         using var servicoSefaz = new ServicosNFe(cfg, certificado);
         var retorno = servicoSefaz.NfeStatusServico();

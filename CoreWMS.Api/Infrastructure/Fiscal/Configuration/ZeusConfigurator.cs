@@ -1,9 +1,12 @@
+using System;
+using System.IO;
 using System.Net;
-using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
+using CoreWMS.Api.Features.Identity.Entities;
+using CoreWMS.Api.Infrastructure.Security;
 using DFe.Classes.Entidades;
 using DFe.Classes.Flags;
-using NFe.Classes.Informacoes.Identificacao.Tipos;
+using DFe.Utils;
 using NFe.Utils;
 
 namespace CoreWMS.Api.Infrastructure.Fiscal.Configuration;
@@ -11,26 +14,15 @@ namespace CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 public interface IZeusConfigurator
 {
     X509Certificate2 LoadCertificate(byte[] certBytes, string certPassword);
-    ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente = TipoAmbiente.Producao);
+    ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente, byte[] certBytes, string certPassword);
+    ConfiguracaoServico GetCompanyConfiguration(Company company);
 }
 
 public class ZeusConfigurator : IZeusConfigurator
 {
     public ZeusConfigurator()
     {
-        // Configuração de segurança TLS obrigatória para comunicação SOAP da SEFAZ no Linux
 #pragma warning disable SYSLIB0014
-        ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) =>
-        {
-            if (sslPolicyErrors == SslPolicyErrors.None) return true;
-            if (sender is HttpWebRequest req)
-            {
-                var host = req.RequestUri.Host.ToLower();
-                if (host.Contains("sefaz") || host.Contains("svrs") || host.Contains("fazenda"))
-                    return true;
-            }
-            return false;
-        };
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 #pragma warning restore SYSLIB0014
     }
@@ -39,31 +31,53 @@ public class ZeusConfigurator : IZeusConfigurator
     {
         try
         {
-            return X509CertificateLoader.LoadPkcs12(
+            return CertificadoDigitalUtils.ObterDosBytes(
                 certBytes,
                 certPassword,
-                X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable
+                X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable
             );
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw new InvalidOperationException("Senha incorreta ou certificado A1 (.pfx) inválido.");
+            throw new InvalidOperationException($"Senha incorreta ou certificado A1 (.pfx) inválido: {ex.Message}");
         }
     }
 
-    public ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente = TipoAmbiente.Producao)
+    public ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente, byte[] certBytes, string certPassword)
     {
         return new ConfiguracaoServico
         {
-            tpAmb = ambiente,
-            tpEmis = TipoEmissao.teNormal,
-            ProtocoloDeSeguranca = SecurityProtocolType.Tls12,
-            cUF = estado,
+            ValidarCertificadoDoServidor = false,
+            DiretorioSalvarXml = "",
+            SalvarXmlServicos = false,
+            ValidarSchemas = false,
+            ProtocoloDeSeguranca = ServicePointManager.SecurityProtocol,
+            RemoverAcentos = true,
+            DefineVersaoServicosAutomaticamente = true,
             VersaoLayout = VersaoServico.Versao400,
             ModeloDocumento = ModeloDocumento.NFe,
-            VersaoNfeConsultaCadastro = VersaoServico.Versao400,
-            DiretorioSchemas = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Schemas"),
-            ValidarSchemas = false
+            tpEmis = NFe.Classes.Informacoes.Identificacao.Tipos.TipoEmissao.teNormal,
+            tpAmb = ambiente,
+            cUF = estado,
+            TimeOut = 30000,
+            Certificado = new ConfiguracaoCertificado
+            {
+                TipoCertificado = TipoCertificado.A1ByteArray,
+                ArrayBytesArquivo = certBytes,
+                Senha = certPassword,
+                ManterDadosEmCache = true
+            }
         };
+    }
+
+    public ConfiguracaoServico GetCompanyConfiguration(Company company)
+    {
+        if (company.CertificateBytes == null || string.IsNullOrEmpty(company.CertificatePassword))
+            throw new InvalidOperationException("Certificado Digital A1 não configurado para esta Empresa.");
+
+        var estadoEnum = Enum.Parse<Estado>(company.State.ToUpper());
+        var certPassword = CryptoService.Decrypt(company.CertificatePassword);
+
+        return GetNfeConfiguracao(estadoEnum, TipoAmbiente.Homologacao, company.CertificateBytes, certPassword);
     }
 }
