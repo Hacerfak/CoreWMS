@@ -5,9 +5,11 @@
  * OpenAPI spec version: v1
  */
 
-export type GetApiProductsParams = {
-CustomerId?: string;
-Search?: string;
+export type GetApiInventoryKardexParams = {
+ProductId?: string;
+Lpn?: string;
+StartDate?: string;
+EndDate?: string;
 Page?: number;
 PageSize?: number;
 };

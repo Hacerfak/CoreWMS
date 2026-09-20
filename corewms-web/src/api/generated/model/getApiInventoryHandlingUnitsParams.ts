@@ -5,9 +5,12 @@
  * OpenAPI spec version: v1
  */
 
-export type GetApiProductsParams = {
+export type GetApiInventoryHandlingUnitsParams = {
 CustomerId?: string;
-Search?: string;
+ProductId?: string;
+Lpn?: string;
+LocationId?: string;
+Status?: number;
 Page?: number;
 PageSize?: number;
 };

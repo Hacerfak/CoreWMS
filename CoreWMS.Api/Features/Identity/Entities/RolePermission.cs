@@ -1,8 +1,9 @@
+using CoreWMS.Api.Core.Entities;
+
 namespace CoreWMS.Api.Features.Identity.Entities;
 
-public class RolePermission
+public class RolePermission : AuditableEntity
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
     public Guid RoleId { get; private set; }
     public Role Role { get; private set; } = null!;
     public string Permission { get; private set; } = string.Empty;

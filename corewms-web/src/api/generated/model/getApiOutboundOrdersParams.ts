@@ -5,9 +5,10 @@
  * OpenAPI spec version: v1
  */
 
-export type GetApiProductsParams = {
+export type GetApiOutboundOrdersParams = {
 CustomerId?: string;
 Search?: string;
+Status?: string;
 Page?: number;
 PageSize?: number;
 };

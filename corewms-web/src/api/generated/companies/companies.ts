@@ -141,7 +141,78 @@ export function useGetApiCompaniesList<TData = Awaited<ReturnType<typeof getApiC
 
 
 
-export const getApiCompanies = (
+export const postApiCompanies = (
+    postApiCompaniesBody?: PostApiCompaniesBody,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+      const formData = new FormData();
+if(postApiCompaniesBody?.certificateFile !== undefined) {
+ formData.append(`certificateFile`, postApiCompaniesBody.certificateFile);
+ }
+if(postApiCompaniesBody?.certificatePassword !== undefined) {
+ formData.append(`certificatePassword`, postApiCompaniesBody.certificatePassword);
+ }
+if(postApiCompaniesBody?.uf !== undefined) {
+ formData.append(`uf`, postApiCompaniesBody.uf);
+ }
+
+      return customInstance<void>(
+      {url: `/api/companies`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCompaniesMutationKey = () => ['postApiCompanies'] as const;
+
+export const getPostApiCompaniesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompanies>>, TError,PostApiCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCompanies>>, TError,PostApiCompaniesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCompaniesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCompanies>>, PostApiCompaniesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiCompanies(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCompaniesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCompanies>>>
+    export type PostApiCompaniesMutationBody = PostApiCompaniesBody | undefined
+    export type PostApiCompaniesMutationError = unknown
+    export type PostApiCompaniesMutationVariables = {data?: PostApiCompaniesBody}
+
+    export const usePostApiCompanies = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompanies>>, TError,PostApiCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCompanies>>,
+        TError,
+        PostApiCompaniesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCompaniesMutationOptions(options), queryClient);
+    }
+    export const getApiCompanies = (
 
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -227,136 +298,7 @@ export function useGetApiCompanies<TData = Awaited<ReturnType<typeof getApiCompa
 
 
 
-export const postApiCompanies = (
-    postApiCompaniesBody?: PostApiCompaniesBody,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-      const formData = new FormData();
-if(postApiCompaniesBody?.certificateFile !== undefined) {
- formData.append(`certificateFile`, postApiCompaniesBody.certificateFile);
- }
-if(postApiCompaniesBody?.certificatePassword !== undefined) {
- formData.append(`certificatePassword`, postApiCompaniesBody.certificatePassword);
- }
-if(postApiCompaniesBody?.uf !== undefined) {
- formData.append(`uf`, postApiCompaniesBody.uf);
- }
-
-      return customInstance<void>(
-      {url: `/api/companies`, method: 'POST',
-      headers: {'Content-Type': 'multipart/form-data', },
-       data: formData, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiCompaniesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompanies>>, TError,PostApiCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiCompanies>>, TError,PostApiCompaniesMutationVariables, TContext> => {
-
-const mutationKey = ['postApiCompanies'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCompanies>>, PostApiCompaniesMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiCompanies(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiCompaniesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCompanies>>>
-    export type PostApiCompaniesMutationBody = PostApiCompaniesBody | undefined
-    export type PostApiCompaniesMutationError = unknown
-    export type PostApiCompaniesMutationVariables = {data?: PostApiCompaniesBody}
-
-    export const usePostApiCompanies = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompanies>>, TError,PostApiCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiCompanies>>,
-        TError,
-        PostApiCompaniesMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiCompaniesMutationOptions(options), queryClient);
-    }
-    export const putApiCompaniesId = (
-    id: string,
-    updateCompanyCommand: UpdateCompanyCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/companies/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateCompanyCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiCompaniesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesId>>, TError,PutApiCompaniesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesId>>, TError,PutApiCompaniesIdMutationVariables, TContext> => {
-
-const mutationKey = ['putApiCompaniesId'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiCompaniesId>>, PutApiCompaniesIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiCompaniesId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiCompaniesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiCompaniesId>>>
-    export type PutApiCompaniesIdMutationBody = UpdateCompanyCommand
-    export type PutApiCompaniesIdMutationError = unknown
-    export type PutApiCompaniesIdMutationVariables = {id: string;data: UpdateCompanyCommand}
-
-    export const usePutApiCompaniesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesId>>, TError,PutApiCompaniesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiCompaniesId>>,
-        TError,
-        PutApiCompaniesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiCompaniesIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiCompaniesId = (
+export const deleteApiCompaniesId = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -371,11 +313,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiCompaniesIdMutationKey = () => ['deleteApiCompaniesId'] as const;
+
 export const getDeleteApiCompaniesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCompaniesId>>, TError,DeleteApiCompaniesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiCompaniesId>>, TError,DeleteApiCompaniesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiCompaniesId'];
+const mutationKey = getDeleteApiCompaniesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -413,24 +357,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiCompaniesIdMutationOptions(options), queryClient);
     }
-    export const putApiCompaniesIdCertificate = (
+    export const putApiCompaniesId = (
     id: string,
-    putApiCompaniesIdCertificateBody?: PutApiCompaniesIdCertificateBody,
+    updateCompanyCommand: UpdateCompanyCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
-if(putApiCompaniesIdCertificateBody?.certificateFile !== undefined) {
- formData.append(`certificateFile`, putApiCompaniesIdCertificateBody.certificateFile);
- }
-if(putApiCompaniesIdCertificateBody?.certificatePassword !== undefined) {
- formData.append(`certificatePassword`, putApiCompaniesIdCertificateBody.certificatePassword);
- }
 
       return customInstance<void>(
-      {url: `/api/companies/${id}/certificate`, method: 'PUT',
-      headers: {'Content-Type': 'multipart/form-data', },
-       data: formData, signal
+      {url: `/api/companies/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateCompanyCommand, signal
     },
       options);
     }
@@ -438,11 +375,13 @@ if(putApiCompaniesIdCertificateBody?.certificatePassword !== undefined) {
 
 
 
-export const getPutApiCompaniesIdCertificateMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext> => {
+export const getPutApiCompaniesIdMutationKey = () => ['putApiCompaniesId'] as const;
 
-const mutationKey = ['putApiCompaniesIdCertificate'];
+export const getPutApiCompaniesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesId>>, TError,PutApiCompaniesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesId>>, TError,PutApiCompaniesIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiCompaniesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -452,10 +391,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, PutApiCompaniesIdCertificateMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiCompaniesId>>, PutApiCompaniesIdMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
-          return  putApiCompaniesIdCertificate(id,data,requestOptions)
+          return  putApiCompaniesId(id,data,requestOptions)
         }
 
 
@@ -465,20 +404,20 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PutApiCompaniesIdCertificateMutationResult = NonNullable<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>>
-    export type PutApiCompaniesIdCertificateMutationBody = PutApiCompaniesIdCertificateBody | undefined
-    export type PutApiCompaniesIdCertificateMutationError = unknown
-    export type PutApiCompaniesIdCertificateMutationVariables = {id: string;data?: PutApiCompaniesIdCertificateBody}
+    export type PutApiCompaniesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiCompaniesId>>>
+    export type PutApiCompaniesIdMutationBody = UpdateCompanyCommand
+    export type PutApiCompaniesIdMutationError = unknown
+    export type PutApiCompaniesIdMutationVariables = {id: string;data: UpdateCompanyCommand}
 
-    export const usePutApiCompaniesIdCertificate = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePutApiCompaniesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesId>>, TError,PutApiCompaniesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>,
+        Awaited<ReturnType<typeof putApiCompaniesId>>,
         TError,
-        PutApiCompaniesIdCertificateMutationVariables,
+        PutApiCompaniesIdMutationVariables,
         TContext
       > => {
-      return useMutation(getPutApiCompaniesIdCertificateMutationOptions(options), queryClient);
+      return useMutation(getPutApiCompaniesIdMutationOptions(options), queryClient);
     }
     export const postApiCompaniesIdSyncSefaz = (
     id: string,
@@ -495,11 +434,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiCompaniesIdSyncSefazMutationKey = () => ['postApiCompaniesIdSyncSefaz'] as const;
+
 export const getPostApiCompaniesIdSyncSefazMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>, TError,PostApiCompaniesIdSyncSefazMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdSyncSefaz>>, TError,PostApiCompaniesIdSyncSefazMutationVariables, TContext> => {
 
-const mutationKey = ['postApiCompaniesIdSyncSefaz'];
+const mutationKey = getPostApiCompaniesIdSyncSefazMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -536,4 +477,73 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiCompaniesIdSyncSefazMutationOptions(options), queryClient);
+    }
+    export const putApiCompaniesIdCertificate = (
+    id: string,
+    putApiCompaniesIdCertificateBody?: PutApiCompaniesIdCertificateBody,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+      const formData = new FormData();
+if(putApiCompaniesIdCertificateBody?.certificateFile !== undefined) {
+ formData.append(`certificateFile`, putApiCompaniesIdCertificateBody.certificateFile);
+ }
+if(putApiCompaniesIdCertificateBody?.certificatePassword !== undefined) {
+ formData.append(`certificatePassword`, putApiCompaniesIdCertificateBody.certificatePassword);
+ }
+
+      return customInstance<void>(
+      {url: `/api/companies/${id}/certificate`, method: 'PUT',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiCompaniesIdCertificateMutationKey = () => ['putApiCompaniesIdCertificate'] as const;
+
+export const getPutApiCompaniesIdCertificateMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext> => {
+
+const mutationKey = getPutApiCompaniesIdCertificateMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, PutApiCompaniesIdCertificateMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiCompaniesIdCertificate(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiCompaniesIdCertificateMutationResult = NonNullable<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>>
+    export type PutApiCompaniesIdCertificateMutationBody = PutApiCompaniesIdCertificateBody | undefined
+    export type PutApiCompaniesIdCertificateMutationError = unknown
+    export type PutApiCompaniesIdCertificateMutationVariables = {id: string;data?: PutApiCompaniesIdCertificateBody}
+
+    export const usePutApiCompaniesIdCertificate = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>, TError,PutApiCompaniesIdCertificateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiCompaniesIdCertificate>>,
+        TError,
+        PutApiCompaniesIdCertificateMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiCompaniesIdCertificateMutationOptions(options), queryClient);
     }

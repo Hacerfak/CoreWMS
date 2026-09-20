@@ -71,11 +71,13 @@ export const postApiRoles = (
 
 
 
+export const getPostApiRolesMutationKey = () => ['postApiRoles'] as const;
+
 export const getPostApiRolesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiRoles>>, TError,PostApiRolesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiRoles>>, TError,PostApiRolesMutationVariables, TContext> => {
 
-const mutationKey = ['postApiRoles'];
+const mutationKey = getPostApiRolesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -199,67 +201,7 @@ export function useGetApiRoles<TData = Awaited<ReturnType<typeof getApiRoles>>, 
 
 
 
-export const putApiRolesId = (
-    id: string,
-    updateRoleRequest: UpdateRoleRequest,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/roles/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateRoleRequest, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiRolesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRolesId>>, TError,PutApiRolesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiRolesId>>, TError,PutApiRolesIdMutationVariables, TContext> => {
-
-const mutationKey = ['putApiRolesId'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiRolesId>>, PutApiRolesIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiRolesId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiRolesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiRolesId>>>
-    export type PutApiRolesIdMutationBody = UpdateRoleRequest
-    export type PutApiRolesIdMutationError = unknown
-    export type PutApiRolesIdMutationVariables = {id: string;data: UpdateRoleRequest}
-
-    export const usePutApiRolesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRolesId>>, TError,PutApiRolesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiRolesId>>,
-        TError,
-        PutApiRolesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiRolesIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiRolesId = (
+export const deleteApiRolesId = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -274,11 +216,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiRolesIdMutationKey = () => ['deleteApiRolesId'] as const;
+
 export const getDeleteApiRolesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiRolesId>>, TError,DeleteApiRolesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiRolesId>>, TError,DeleteApiRolesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiRolesId'];
+const mutationKey = getDeleteApiRolesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -315,4 +259,66 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getDeleteApiRolesIdMutationOptions(options), queryClient);
+    }
+    export const putApiRolesId = (
+    id: string,
+    updateRoleRequest: UpdateRoleRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/roles/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateRoleRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiRolesIdMutationKey = () => ['putApiRolesId'] as const;
+
+export const getPutApiRolesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRolesId>>, TError,PutApiRolesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiRolesId>>, TError,PutApiRolesIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiRolesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiRolesId>>, PutApiRolesIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiRolesId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiRolesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiRolesId>>>
+    export type PutApiRolesIdMutationBody = UpdateRoleRequest
+    export type PutApiRolesIdMutationError = unknown
+    export type PutApiRolesIdMutationVariables = {id: string;data: UpdateRoleRequest}
+
+    export const usePutApiRolesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiRolesId>>, TError,PutApiRolesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiRolesId>>,
+        TError,
+        PutApiRolesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiRolesIdMutationOptions(options), queryClient);
     }

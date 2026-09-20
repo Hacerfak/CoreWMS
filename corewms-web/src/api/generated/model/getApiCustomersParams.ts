@@ -8,4 +8,6 @@
 export type GetApiCustomersParams = {
 Search?: string;
 OnlyActive?: boolean;
+Page?: number;
+PageSize?: number;
 };

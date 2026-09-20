@@ -81,11 +81,13 @@ export const postApiTopologyLocations = (
 
 
 
+export const getPostApiTopologyLocationsMutationKey = () => ['postApiTopologyLocations'] as const;
+
 export const getPostApiTopologyLocationsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocations>>, TError,PostApiTopologyLocationsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocations>>, TError,PostApiTopologyLocationsMutationVariables, TContext> => {
 
-const mutationKey = ['postApiTopologyLocations'];
+const mutationKey = getPostApiTopologyLocationsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -141,11 +143,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPutApiTopologyLocationsIdMutationKey = () => ['putApiTopologyLocationsId'] as const;
+
 export const getPutApiTopologyLocationsIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyLocationsId>>, TError,PutApiTopologyLocationsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyLocationsId>>, TError,PutApiTopologyLocationsIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiTopologyLocationsId'];
+const mutationKey = getPutApiTopologyLocationsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -198,11 +202,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiTopologyLocationsIdMutationKey = () => ['deleteApiTopologyLocationsId'] as const;
+
 export const getDeleteApiTopologyLocationsIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiTopologyLocationsId'];
+const mutationKey = getDeleteApiTopologyLocationsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -613,11 +619,13 @@ if(postApiTopologyLocationsImportBody?.file !== undefined) {
 
 
 
+export const getPostApiTopologyLocationsImportMutationKey = () => ['postApiTopologyLocationsImport'] as const;
+
 export const getPostApiTopologyLocationsImportMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>, TError,PostApiTopologyLocationsImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyLocationsImport>>, TError,PostApiTopologyLocationsImportMutationVariables, TContext> => {
 
-const mutationKey = ['postApiTopologyLocationsImport'];
+const mutationKey = getPostApiTopologyLocationsImportMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -672,11 +680,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiTopologyStorageTypesMutationKey = () => ['postApiTopologyStorageTypes'] as const;
+
 export const getPostApiTopologyStorageTypesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext> => {
 
-const mutationKey = ['postApiTopologyStorageTypes'];
+const mutationKey = getPostApiTopologyStorageTypesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -818,11 +828,13 @@ export const putApiTopologyStorageTypesId = (
 
 
 
+export const getPutApiTopologyStorageTypesIdMutationKey = () => ['putApiTopologyStorageTypesId'] as const;
+
 export const getPutApiTopologyStorageTypesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiTopologyStorageTypesId'];
+const mutationKey = getPutApiTopologyStorageTypesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -875,11 +887,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiTopologyStorageTypesIdMutationKey = () => ['deleteApiTopologyStorageTypesId'] as const;
+
 export const getDeleteApiTopologyStorageTypesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiTopologyStorageTypesId'];
+const mutationKey = getDeleteApiTopologyStorageTypesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -934,11 +948,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiTopologyWarehousesMutationKey = () => ['postApiTopologyWarehouses'] as const;
+
 export const getPostApiTopologyWarehousesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext> => {
 
-const mutationKey = ['postApiTopologyWarehouses'];
+const mutationKey = getPostApiTopologyWarehousesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1081,11 +1097,13 @@ export const putApiTopologyWarehousesId = (
 
 
 
+export const getPutApiTopologyWarehousesIdMutationKey = () => ['putApiTopologyWarehousesId'] as const;
+
 export const getPutApiTopologyWarehousesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiTopologyWarehousesId'];
+const mutationKey = getPutApiTopologyWarehousesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1138,11 +1156,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiTopologyWarehousesIdMutationKey = () => ['deleteApiTopologyWarehousesId'] as const;
+
 export const getDeleteApiTopologyWarehousesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiTopologyWarehousesId'];
+const mutationKey = getDeleteApiTopologyWarehousesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1197,11 +1217,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiTopologyZonesMutationKey = () => ['postApiTopologyZones'] as const;
+
 export const getPostApiTopologyZonesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext> => {
 
-const mutationKey = ['postApiTopologyZones'];
+const mutationKey = getPostApiTopologyZonesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1257,11 +1279,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPutApiTopologyZonesIdMutationKey = () => ['putApiTopologyZonesId'] as const;
+
 export const getPutApiTopologyZonesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiTopologyZonesId'];
+const mutationKey = getPutApiTopologyZonesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1314,11 +1338,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiTopologyZonesIdMutationKey = () => ['deleteApiTopologyZonesId'] as const;
+
 export const getDeleteApiTopologyZonesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiTopologyZonesId'];
+const mutationKey = getDeleteApiTopologyZonesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options

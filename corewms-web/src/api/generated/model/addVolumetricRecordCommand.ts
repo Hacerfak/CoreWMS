@@ -5,6 +5,7 @@
  * OpenAPI spec version: v1
  */
 
-export type PostApiTopologyLocationsImportBody = {
-  file: Blob | File;
-};
+export interface AddVolumetricRecordCommand {
+  taskId?: string;
+  countedQuantity?: number;
+}

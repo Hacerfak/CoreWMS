@@ -50,11 +50,13 @@ export const postApiIdentityLogin = (
 
 
 
+export const getPostApiIdentityLoginMutationKey = () => ['postApiIdentityLogin'] as const;
+
 export const getPostApiIdentityLoginMutationOptions = <TError = ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityLogin>>, TError,PostApiIdentityLoginMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityLogin>>, TError,PostApiIdentityLoginMutationVariables, TContext> => {
 
-const mutationKey = ['postApiIdentityLogin'];
+const mutationKey = getPostApiIdentityLoginMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -109,11 +111,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiIdentityRefreshMutationKey = () => ['postApiIdentityRefresh'] as const;
+
 export const getPostApiIdentityRefreshMutationOptions = <TError = ProblemDetails,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityRefresh>>, TError,PostApiIdentityRefreshMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiIdentityRefresh>>, TError,PostApiIdentityRefreshMutationVariables, TContext> => {
 
-const mutationKey = ['postApiIdentityRefresh'];
+const mutationKey = getPostApiIdentityRefreshMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options

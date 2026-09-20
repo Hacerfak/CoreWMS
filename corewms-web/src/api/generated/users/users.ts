@@ -57,102 +57,17 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getMyPermissions = (
-
+export const postApiUsersUserIdCompanies = (
+    userId: string,
+    assignUserRequest: AssignUserRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/users/me/permissions`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetMyPermissionsQueryKey = () => {
-    return [
-    `/api/users/me/permissions`
-    ] as const;
-    }
-
-
-export const getGetMyPermissionsQueryOptions = <TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetMyPermissionsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyPermissions>>> = ({ signal }) => getMyPermissions(requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetMyPermissionsQueryResult = NonNullable<Awaited<ReturnType<typeof getMyPermissions>>>
-export type GetMyPermissionsQueryError = unknown
-
-
-export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getMyPermissions>>,
-          TError,
-          Awaited<ReturnType<typeof getMyPermissions>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getMyPermissions>>,
-          TError,
-          Awaited<ReturnType<typeof getMyPermissions>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetMyPermissionsQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const putApiUsersMe = (
-    updateProfileRequest: UpdateProfileRequest,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/users/me`, method: 'PUT',
+      {url: `/api/users/${userId}/companies`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: updateProfileRequest, signal
+      data: assignUserRequest, signal
     },
       options);
     }
@@ -160,11 +75,13 @@ export const putApiUsersMe = (
 
 
 
-export const getPutApiUsersMeMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext> => {
+export const getPostApiUsersUserIdCompaniesMutationKey = () => ['postApiUsersUserIdCompanies'] as const;
 
-const mutationKey = ['putApiUsersMe'];
+export const getPostApiUsersUserIdCompaniesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, TError,PostApiUsersUserIdCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, TError,PostApiUsersUserIdCompaniesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiUsersUserIdCompaniesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -174,10 +91,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiUsersMe>>, PutApiUsersMeMutationVariables> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, PostApiUsersUserIdCompaniesMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
 
-          return  putApiUsersMe(data,requestOptions)
+          return  postApiUsersUserIdCompanies(userId,data,requestOptions)
         }
 
 
@@ -187,20 +104,80 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PutApiUsersMeMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersMe>>>
-    export type PutApiUsersMeMutationBody = UpdateProfileRequest
-    export type PutApiUsersMeMutationError = unknown
-    export type PutApiUsersMeMutationVariables = {data: UpdateProfileRequest}
+    export type PostApiUsersUserIdCompaniesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>>
+    export type PostApiUsersUserIdCompaniesMutationBody = AssignUserRequest
+    export type PostApiUsersUserIdCompaniesMutationError = unknown
+    export type PostApiUsersUserIdCompaniesMutationVariables = {userId: string;data: AssignUserRequest}
 
-    export const usePutApiUsersMe = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiUsersUserIdCompanies = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, TError,PostApiUsersUserIdCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiUsersMe>>,
+        Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>,
         TError,
-        PutApiUsersMeMutationVariables,
+        PostApiUsersUserIdCompaniesMutationVariables,
         TContext
       > => {
-      return useMutation(getPutApiUsersMeMutationOptions(options), queryClient);
+      return useMutation(getPostApiUsersUserIdCompaniesMutationOptions(options), queryClient);
+    }
+    export const deleteApiUsersUserIdCompaniesCompanyId = (
+    userId: string,
+    companyId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/users/${userId}/companies/${companyId}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiUsersUserIdCompaniesCompanyIdMutationKey = () => ['deleteApiUsersUserIdCompaniesCompanyId'] as const;
+
+export const getDeleteApiUsersUserIdCompaniesCompanyIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, TError,DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, TError,DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiUsersUserIdCompaniesCompanyIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables> = (props) => {
+          const {userId,companyId} = props ?? {};
+
+          return  deleteApiUsersUserIdCompaniesCompanyId(userId,companyId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiUsersUserIdCompaniesCompanyIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>>
+
+    export type DeleteApiUsersUserIdCompaniesCompanyIdMutationError = unknown
+    export type DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables = {userId: string;companyId: string}
+
+    export const useDeleteApiUsersUserIdCompaniesCompanyId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, TError,DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>,
+        TError,
+        DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiUsersUserIdCompaniesCompanyIdMutationOptions(options), queryClient);
     }
     export const postApiUsers = (
     createUserCommand: CreateUserCommand,
@@ -219,11 +196,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiUsersMutationKey = () => ['postApiUsers'] as const;
+
 export const getPostApiUsersMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsers>>, TError,PostApiUsersMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiUsers>>, TError,PostApiUsersMutationVariables, TContext> => {
 
-const mutationKey = ['postApiUsers'];
+const mutationKey = getPostApiUsersMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -347,67 +326,7 @@ export function useGetApiUsers<TData = Awaited<ReturnType<typeof getApiUsers>>, 
 
 
 
-export const putApiUsersId = (
-    id: string,
-    updateUserRequest: UpdateUserRequest,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/users/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateUserRequest, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiUsersIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersId>>, TError,PutApiUsersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersId>>, TError,PutApiUsersIdMutationVariables, TContext> => {
-
-const mutationKey = ['putApiUsersId'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiUsersId>>, PutApiUsersIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiUsersId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiUsersIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersId>>>
-    export type PutApiUsersIdMutationBody = UpdateUserRequest
-    export type PutApiUsersIdMutationError = unknown
-    export type PutApiUsersIdMutationVariables = {id: string;data: UpdateUserRequest}
-
-    export const usePutApiUsersId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersId>>, TError,PutApiUsersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiUsersId>>,
-        TError,
-        PutApiUsersIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiUsersIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiUsersId = (
+export const deleteApiUsersId = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -422,11 +341,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiUsersIdMutationKey = () => ['deleteApiUsersId'] as const;
+
 export const getDeleteApiUsersIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersId>>, TError,DeleteApiUsersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersId>>, TError,DeleteApiUsersIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiUsersId'];
+const mutationKey = getDeleteApiUsersIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -464,7 +385,155 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiUsersIdMutationOptions(options), queryClient);
     }
-    export const putApiUsersIdPassword = (
+    export const putApiUsersId = (
+    id: string,
+    updateUserRequest: UpdateUserRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/users/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateUserRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiUsersIdMutationKey = () => ['putApiUsersId'] as const;
+
+export const getPutApiUsersIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersId>>, TError,PutApiUsersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersId>>, TError,PutApiUsersIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiUsersIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiUsersId>>, PutApiUsersIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiUsersId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiUsersIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersId>>>
+    export type PutApiUsersIdMutationBody = UpdateUserRequest
+    export type PutApiUsersIdMutationError = unknown
+    export type PutApiUsersIdMutationVariables = {id: string;data: UpdateUserRequest}
+
+    export const usePutApiUsersId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersId>>, TError,PutApiUsersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiUsersId>>,
+        TError,
+        PutApiUsersIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiUsersIdMutationOptions(options), queryClient);
+    }
+    export const getMyPermissions = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/users/me/permissions`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetMyPermissionsQueryKey = () => {
+    return [
+    `/api/users/me/permissions`
+    ] as const;
+    }
+
+
+export const getGetMyPermissionsQueryOptions = <TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyPermissionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyPermissions>>> = ({ signal }) => getMyPermissions(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMyPermissionsQueryResult = NonNullable<Awaited<ReturnType<typeof getMyPermissions>>>
+export type GetMyPermissionsQueryError = unknown
+
+
+export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMyPermissions>>,
+          TError,
+          Awaited<ReturnType<typeof getMyPermissions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMyPermissions>>,
+          TError,
+          Awaited<ReturnType<typeof getMyPermissions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetMyPermissionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const putApiUsersIdPassword = (
     id: string,
     resetUserPasswordRequest: ResetUserPasswordRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -482,11 +551,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPutApiUsersIdPasswordMutationKey = () => ['putApiUsersIdPassword'] as const;
+
 export const getPutApiUsersIdPasswordMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersIdPassword>>, TError,PutApiUsersIdPasswordMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersIdPassword>>, TError,PutApiUsersIdPasswordMutationVariables, TContext> => {
 
-const mutationKey = ['putApiUsersIdPassword'];
+const mutationKey = getPutApiUsersIdPasswordMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -524,17 +595,16 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiUsersIdPasswordMutationOptions(options), queryClient);
     }
-    export const postApiUsersUserIdCompanies = (
-    userId: string,
-    assignUserRequest: AssignUserRequest,
+    export const putApiUsersMe = (
+    updateProfileRequest: UpdateProfileRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/users/${userId}/companies`, method: 'POST',
+      {url: `/api/users/me`, method: 'PUT',
       headers: {'Content-Type': 'application/json', },
-      data: assignUserRequest, signal
+      data: updateProfileRequest, signal
     },
       options);
     }
@@ -542,11 +612,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiUsersUserIdCompaniesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, TError,PostApiUsersUserIdCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, TError,PostApiUsersUserIdCompaniesMutationVariables, TContext> => {
+export const getPutApiUsersMeMutationKey = () => ['putApiUsersMe'] as const;
 
-const mutationKey = ['postApiUsersUserIdCompanies'];
+export const getPutApiUsersMeMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext> => {
+
+const mutationKey = getPutApiUsersMeMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -556,10 +628,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, PostApiUsersUserIdCompaniesMutationVariables> = (props) => {
-          const {userId,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiUsersMe>>, PutApiUsersMeMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-          return  postApiUsersUserIdCompanies(userId,data,requestOptions)
+          return  putApiUsersMe(data,requestOptions)
         }
 
 
@@ -569,76 +641,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiUsersUserIdCompaniesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>>
-    export type PostApiUsersUserIdCompaniesMutationBody = AssignUserRequest
-    export type PostApiUsersUserIdCompaniesMutationError = unknown
-    export type PostApiUsersUserIdCompaniesMutationVariables = {userId: string;data: AssignUserRequest}
+    export type PutApiUsersMeMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersMe>>>
+    export type PutApiUsersMeMutationBody = UpdateProfileRequest
+    export type PutApiUsersMeMutationError = unknown
+    export type PutApiUsersMeMutationVariables = {data: UpdateProfileRequest}
 
-    export const usePostApiUsersUserIdCompanies = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>, TError,PostApiUsersUserIdCompaniesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePutApiUsersMe = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiUsersUserIdCompanies>>,
+        Awaited<ReturnType<typeof putApiUsersMe>>,
         TError,
-        PostApiUsersUserIdCompaniesMutationVariables,
+        PutApiUsersMeMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiUsersUserIdCompaniesMutationOptions(options), queryClient);
-    }
-    export const deleteApiUsersUserIdCompaniesCompanyId = (
-    userId: string,
-    companyId: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/users/${userId}/companies/${companyId}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiUsersUserIdCompaniesCompanyIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, TError,DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, TError,DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables, TContext> => {
-
-const mutationKey = ['deleteApiUsersUserIdCompaniesCompanyId'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables> = (props) => {
-          const {userId,companyId} = props ?? {};
-
-          return  deleteApiUsersUserIdCompaniesCompanyId(userId,companyId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiUsersUserIdCompaniesCompanyIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>>
-
-    export type DeleteApiUsersUserIdCompaniesCompanyIdMutationError = unknown
-    export type DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables = {userId: string;companyId: string}
-
-    export const useDeleteApiUsersUserIdCompaniesCompanyId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>, TError,DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiUsersUserIdCompaniesCompanyId>>,
-        TError,
-        DeleteApiUsersUserIdCompaniesCompanyIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiUsersUserIdCompaniesCompanyIdMutationOptions(options), queryClient);
+      return useMutation(getPutApiUsersMeMutationOptions(options), queryClient);
     }

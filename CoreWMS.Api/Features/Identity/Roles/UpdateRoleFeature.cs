@@ -1,4 +1,5 @@
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -36,10 +37,8 @@ public class UpdateRoleHandler : IRequestHandler<UpdateRoleCommand, IResult>
 
     public async Task<IResult> Handle(UpdateRoleCommand request, CancellationToken ct)
     {
-        // Carrega a Role já com as permissões para utilizar os métodos de domínio nativos
-        var role = await _db.Roles
-            .Include(r => r.Permissions)
-            .FirstOrDefaultAsync(r => r.Id == request.Id, ct);
+        // 1. Carrega APENAS a Role (Sem .Include para manter o Change Tracker leve e não bugar coleções)
+        var role = await _db.Roles.FirstOrDefaultAsync(r => r.Id == request.Id, ct);
 
         if (role == null)
             return Results.NotFound(new { Message = "Perfil não encontrado." });
@@ -47,16 +46,40 @@ public class UpdateRoleHandler : IRequestHandler<UpdateRoleCommand, IResult>
         if (await _db.Roles.AnyAsync(r => r.Name == request.Name && r.Id != request.Id, ct))
             return Results.BadRequest(new { Message = "Já existe outro perfil com este nome." });
 
-        // Atualização via DDD
         role.UpdateName(request.Name);
 
-        // Deixa o EF Core calcular as diferenças automaticamente (Tracking)
-        role.ClearPermissions();
-        foreach (var p in request.Permissions)
+        // 2. Sincronização explícita: Busca as permissões diretamente do banco
+        var currentPermissions = await _db.RolePermissions
+            .Where(rp => rp.RoleId == role.Id)
+            .ToListAsync(ct);
+
+        // 3. Remove o que foi desmarcado na tela
+        var toRemove = currentPermissions
+            .Where(p => !request.Permissions.Contains(p.Permission))
+            .ToList();
+
+        if (toRemove.Any())
         {
-            role.AddPermission(p);
+            _db.RolePermissions.RemoveRange(toRemove);
         }
 
+        // 4. Adiciona apenas as opções novas que foram marcadas
+        var currentNames = currentPermissions.Select(p => p.Permission).ToList();
+        var toAdd = request.Permissions
+            .Where(p => !currentNames.Contains(p))
+            .Select(p => new RolePermission(role.Id, p))
+            .ToList();
+
+        if (toAdd.Any())
+        {
+            _db.RolePermissions.AddRange(toAdd);
+        }
+
+        // NOVO: Força o EF Core a entender que o Perfil (Aggregate Root) foi modificado.
+        // Isso vai disparar o gatilho do seu AuditableEntity e jogar o log no MongoDB!
+        _db.Entry(role).State = EntityState.Modified;
+
+        // 5. Agora o EF Core dispara as querys exatas de DELETE e INSERT sem se perder!
         await _db.SaveChangesAsync(ct);
 
         // Força todos os usuários a revalidarem as permissões instantaneamente
@@ -67,7 +90,7 @@ public class UpdateRoleHandler : IRequestHandler<UpdateRoleCommand, IResult>
 }
 
 // 4. Endpoint
-public static class UpdateRoleEndpoint
+public static class UpdateRoleEndpoints
 {
     public static void MapUpdateRoleEndpoints(this IEndpointRouteBuilder app)
     {

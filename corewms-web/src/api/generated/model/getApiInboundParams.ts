@@ -4,9 +4,11 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
+import type { InboundOrderStatus } from './inboundOrderStatus';
 
-export type GetApiProductsParams = {
+export type GetApiInboundParams = {
 CustomerId?: string;
+Status?: InboundOrderStatus;
 Search?: string;
 Page?: number;
 PageSize?: number;

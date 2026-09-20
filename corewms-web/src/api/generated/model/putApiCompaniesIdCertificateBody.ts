@@ -6,6 +6,6 @@
  */
 
 export type PutApiCompaniesIdCertificateBody = {
-  certificateFile: Blob;
+  certificateFile: Blob | File;
   certificatePassword: string;
 };

@@ -6,7 +6,7 @@
  */
 
 export type PostApiCompaniesBody = {
-  certificateFile: Blob;
+  certificateFile: Blob | File;
   certificatePassword: string;
   uf: string;
 };

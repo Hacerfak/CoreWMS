@@ -5,9 +5,9 @@
  * OpenAPI spec version: v1
  */
 
-export type GetApiProductsParams = {
+export type GetApiInventoryBalancesParams = {
 CustomerId?: string;
-Search?: string;
+ProductId?: string;
 Page?: number;
 PageSize?: number;
 };

@@ -76,11 +76,13 @@ export const postApiPrintingAgents = (
 
 
 
+export const getPostApiPrintingAgentsMutationKey = () => ['postApiPrintingAgents'] as const;
+
 export const getPostApiPrintingAgentsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingAgents>>, TError,PostApiPrintingAgentsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingAgents>>, TError,PostApiPrintingAgentsMutationVariables, TContext> => {
 
-const mutationKey = ['postApiPrintingAgents'];
+const mutationKey = getPostApiPrintingAgentsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -222,11 +224,13 @@ export const putApiPrintingAgentsId = (
 
 
 
+export const getPutApiPrintingAgentsIdMutationKey = () => ['putApiPrintingAgentsId'] as const;
+
 export const getPutApiPrintingAgentsIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingAgentsId>>, TError,PutApiPrintingAgentsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingAgentsId>>, TError,PutApiPrintingAgentsIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiPrintingAgentsId'];
+const mutationKey = getPutApiPrintingAgentsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -279,11 +283,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiPrintingAgentsIdMutationKey = () => ['deleteApiPrintingAgentsId'] as const;
+
 export const getDeleteApiPrintingAgentsIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>, TError,DeleteApiPrintingAgentsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingAgentsId>>, TError,DeleteApiPrintingAgentsIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiPrintingAgentsId'];
+const mutationKey = getDeleteApiPrintingAgentsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -338,11 +344,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiPrintingPrintersMutationKey = () => ['postApiPrintingPrinters'] as const;
+
 export const getPostApiPrintingPrintersMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingPrinters>>, TError,PostApiPrintingPrintersMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingPrinters>>, TError,PostApiPrintingPrintersMutationVariables, TContext> => {
 
-const mutationKey = ['postApiPrintingPrinters'];
+const mutationKey = getPostApiPrintingPrintersMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -398,11 +406,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPutApiPrintingPrintersIdMutationKey = () => ['putApiPrintingPrintersId'] as const;
+
 export const getPutApiPrintingPrintersIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingPrintersId>>, TError,PutApiPrintingPrintersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingPrintersId>>, TError,PutApiPrintingPrintersIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiPrintingPrintersId'];
+const mutationKey = getPutApiPrintingPrintersIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -455,11 +465,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiPrintingPrintersIdMutationKey = () => ['deleteApiPrintingPrintersId'] as const;
+
 export const getDeleteApiPrintingPrintersIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>, TError,DeleteApiPrintingPrintersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingPrintersId>>, TError,DeleteApiPrintingPrintersIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiPrintingPrintersId'];
+const mutationKey = getDeleteApiPrintingPrintersIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -514,11 +526,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiPrintingTemplatesMutationKey = () => ['postApiPrintingTemplates'] as const;
+
 export const getPostApiPrintingTemplatesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingTemplates>>, TError,PostApiPrintingTemplatesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintingTemplates>>, TError,PostApiPrintingTemplatesMutationVariables, TContext> => {
 
-const mutationKey = ['postApiPrintingTemplates'];
+const mutationKey = getPostApiPrintingTemplatesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -660,11 +674,13 @@ export const putApiPrintingTemplatesId = (
 
 
 
+export const getPutApiPrintingTemplatesIdMutationKey = () => ['putApiPrintingTemplatesId'] as const;
+
 export const getPutApiPrintingTemplatesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>, TError,PutApiPrintingTemplatesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiPrintingTemplatesId>>, TError,PutApiPrintingTemplatesIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiPrintingTemplatesId'];
+const mutationKey = getPutApiPrintingTemplatesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -717,11 +733,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiPrintingTemplatesIdMutationKey = () => ['deleteApiPrintingTemplatesId'] as const;
+
 export const getDeleteApiPrintingTemplatesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>, TError,DeleteApiPrintingTemplatesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiPrintingTemplatesId>>, TError,DeleteApiPrintingTemplatesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiPrintingTemplatesId'];
+const mutationKey = getDeleteApiPrintingTemplatesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -776,11 +794,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiPrintSendTestMutationKey = () => ['postApiPrintSendTest'] as const;
+
 export const getPostApiPrintSendTestMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintSendTest>>, TError,PostApiPrintSendTestMutationVariables, TContext> => {
 
-const mutationKey = ['postApiPrintSendTest'];
+const mutationKey = getPostApiPrintSendTestMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options

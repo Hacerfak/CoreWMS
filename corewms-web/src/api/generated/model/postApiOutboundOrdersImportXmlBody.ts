@@ -5,6 +5,6 @@
  * OpenAPI spec version: v1
  */
 
-export type PostApiTopologyLocationsImportBody = {
+export type PostApiOutboundOrdersImportXmlBody = {
   file: Blob | File;
 };

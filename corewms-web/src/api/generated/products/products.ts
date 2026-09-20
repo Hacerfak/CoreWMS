@@ -74,11 +74,13 @@ export const postApiProductsPackagingTypes = (
 
 
 
+export const getPostApiProductsPackagingTypesMutationKey = () => ['postApiProductsPackagingTypes'] as const;
+
 export const getPostApiProductsPackagingTypesMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProductsPackagingTypes>>, TError,PostApiProductsPackagingTypesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiProductsPackagingTypes>>, TError,PostApiProductsPackagingTypesMutationVariables, TContext> => {
 
-const mutationKey = ['postApiProductsPackagingTypes'];
+const mutationKey = getPostApiProductsPackagingTypesMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -220,11 +222,13 @@ export const putApiProductsPackagingTypesId = (
 
 
 
+export const getPutApiProductsPackagingTypesIdMutationKey = () => ['putApiProductsPackagingTypesId'] as const;
+
 export const getPutApiProductsPackagingTypesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiProductsPackagingTypesId>>, TError,PutApiProductsPackagingTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiProductsPackagingTypesId>>, TError,PutApiProductsPackagingTypesIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiProductsPackagingTypesId'];
+const mutationKey = getPutApiProductsPackagingTypesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -277,11 +281,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiProductsPackagingTypesIdMutationKey = () => ['deleteApiProductsPackagingTypesId'] as const;
+
 export const getDeleteApiProductsPackagingTypesIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiProductsPackagingTypesId>>, TError,DeleteApiProductsPackagingTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiProductsPackagingTypesId>>, TError,DeleteApiProductsPackagingTypesIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiProductsPackagingTypesId'];
+const mutationKey = getDeleteApiProductsPackagingTypesIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -336,11 +342,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getPostApiProductsMutationKey = () => ['postApiProducts'] as const;
+
 export const getPostApiProductsMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiProducts>>, TError,PostApiProductsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiProducts>>, TError,PostApiProductsMutationVariables, TContext> => {
 
-const mutationKey = ['postApiProducts'];
+const mutationKey = getPostApiProductsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -483,11 +491,13 @@ export const putApiProductsId = (
 
 
 
+export const getPutApiProductsIdMutationKey = () => ['putApiProductsId'] as const;
+
 export const getPutApiProductsIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiProductsId>>, TError,PutApiProductsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof putApiProductsId>>, TError,PutApiProductsIdMutationVariables, TContext> => {
 
-const mutationKey = ['putApiProductsId'];
+const mutationKey = getPutApiProductsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -540,11 +550,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
+export const getDeleteApiProductsIdMutationKey = () => ['deleteApiProductsId'] as const;
+
 export const getDeleteApiProductsIdMutationOptions = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiProductsId>>, TError,DeleteApiProductsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteApiProductsId>>, TError,DeleteApiProductsIdMutationVariables, TContext> => {
 
-const mutationKey = ['deleteApiProductsId'];
+const mutationKey = getDeleteApiProductsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
