@@ -51,10 +51,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken ct)
     {
-        // NOVO: Já trazemos o relacionamento com os Depositantes (Partner Users)
+        var emailLower = request.Email.Trim().ToLower();
+
         var user = await _db.Users
             .Include(u => u.UserCustomers)
-            .FirstOrDefaultAsync(u => u.Email == request.Email, ct);
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
@@ -62,15 +64,18 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         }
 
         List<CompanyLoginDto> userCompanies;
+
         if (user.IsMaster)
         {
             userCompanies = await _db.Companies
+                .AsNoTracking()
                 .Select(c => new CompanyLoginDto(c.Id, c.Cnpj, c.CorporateName))
                 .ToListAsync(ct);
         }
         else
         {
             userCompanies = await _db.UserCompanyRoles
+                .AsNoTracking()
                 .Where(ucr => ucr.UserId == user.Id)
                 .Select(ucr => new CompanyLoginDto(ucr.Company.Id, ucr.Company.Cnpj, ucr.Company.CorporateName))
                 .Distinct()
@@ -78,11 +83,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         }
 
         var allowedCompanyIds = userCompanies.Select(c => c.Id).ToList();
-
-        // NOVO: Extrai os clientes vinculados
         var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
 
-        // NOVO: Passa as duas listas pro gerador
         var token = _jwt.GenerateToken(user, allowedCompanyIds, allowedCustomerIds);
         var refreshToken = _jwt.GenerateRefreshToken();
 
@@ -115,6 +117,7 @@ public static class LoginEndpoint
         })
         .WithTags("Identity")
         .AllowAnonymous()
+        .RequireRateLimiting("loginPolicy")
         .Produces<LoginResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status401Unauthorized);

@@ -52,11 +52,12 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     {
         var emailLower = request.Email.Trim().ToLower();
 
-        // NOVO: Include no UserCustomers para manter a viseira no refresh
+        // NOVO: AsSplitQuery adicionado para evitar produto cartesiano na memória.
         var user = await _db.Users
             .Include(u => u.UserCompanyRoles)
                 .ThenInclude(ucr => ucr.Company)
             .Include(u => u.UserCustomers)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
 
         if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
@@ -65,17 +66,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         }
 
         var allowedCompanyIds = user.IsMaster
-            ? await _db.Companies.Select(c => c.Id).ToListAsync(ct)
+            ? await _db.Companies.AsNoTracking().Select(c => c.Id).ToListAsync(ct) // NOVO: AsNoTracking() na consulta extra
             : user.UserCompanyRoles.Select(ucr => ucr.CompanyId).ToList();
 
-        // NOVO: Extrai a lista de Depositantes
         var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
 
         var newAccessToken = _jwt.GenerateToken(user, allowedCompanyIds, allowedCustomerIds);
         var newRefreshToken = _jwt.GenerateRefreshToken();
 
         user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));
-
         await _db.SaveChangesAsync(ct);
 
         return new RefreshTokenResponse(newAccessToken, newRefreshToken);
@@ -97,6 +96,7 @@ public static class RefreshTokenEndpoint
         })
         .WithTags("Identity")
         .AllowAnonymous()
+        .RequireRateLimiting("refreshPolicy") // NOVO: Proteção contra flood de tokens ativada
         .Produces<RefreshTokenResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status401Unauthorized);
