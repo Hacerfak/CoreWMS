@@ -1,36 +1,35 @@
+using CoreWMS.Api.Core.Models;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
 
 namespace CoreWMS.Api.Features.Audit;
 
-// 1. CONTRATOS & DTOs
+// 1. Request
 public record AuditLogFilterQuery(string? EntityName, string? EntityId, string? UserId, DateTime? StartDate, DateTime? EndDate, int Page = 1, int PageSize = 20) : IRequest<IResult>;
-public record PaginatedResult<T>(List<T> Items, long TotalCount, int Page, int PageSize);
 
-// 2. VALIDADOR
+// 2. Validator
 public class AuditLogFilterQueryValidator : AbstractValidator<AuditLogFilterQuery>
 {
     public AuditLogFilterQueryValidator()
     {
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).GreaterThan(0).LessThanOrEqualTo(100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
     }
 }
 
-// 3. HANDLER
+// 3. Handler
 public class ListAuditLogsHandler : IRequestHandler<AuditLogFilterQuery, IResult>
 {
     private readonly IMongoCollection<AuditLog> _auditCollection;
 
-    public ListAuditLogsHandler(IConfiguration configuration)
+    // A injeção agora espera o IMongoClient, que deve ser Singleton!
+    public ListAuditLogsHandler(IMongoClient mongoClient)
     {
-        var client = new MongoClient(configuration.GetConnectionString("MongoDb"));
-        _auditCollection = client.GetDatabase("corewms_audit").GetCollection<AuditLog>("audit_logs");
+        _auditCollection = mongoClient.GetDatabase("corewms_audit").GetCollection<AuditLog>("audit_logs");
     }
 
     public async Task<IResult> Handle(AuditLogFilterQuery request, CancellationToken ct)
@@ -38,7 +37,6 @@ public class ListAuditLogsHandler : IRequestHandler<AuditLogFilterQuery, IResult
         var builder = Builders<AuditLog>.Filter;
         var filter = builder.Empty;
 
-        // Alterado de Eq para Regex (Busca parcial e ignorando maiúsculas/minúsculas)
         if (!string.IsNullOrWhiteSpace(request.EntityName))
             filter &= builder.Regex(x => x.EntityName, new MongoDB.Bson.BsonRegularExpression(request.EntityName, "i"));
 
@@ -57,6 +55,7 @@ public class ListAuditLogsHandler : IRequestHandler<AuditLogFilterQuery, IResult
         var skip = (request.Page - 1) * request.PageSize;
 
         var totalTask = _auditCollection.CountDocumentsAsync(filter, cancellationToken: ct);
+
         var itemsTask = _auditCollection.Find(filter)
             .SortByDescending(x => x.Timestamp)
             .Skip(skip)
@@ -65,18 +64,22 @@ public class ListAuditLogsHandler : IRequestHandler<AuditLogFilterQuery, IResult
 
         await Task.WhenAll(totalTask, itemsTask);
 
-        var response = new PaginatedResult<AuditLog>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        // Usando o PaginatedResult base do Core
+        var response = new PaginatedResult<AuditLog>(itemsTask.Result, (int)totalTask.Result, request.Page, request.PageSize);
+
         return Results.Ok(response);
     }
 }
 
-// 4. ENDPOINT
-public static class AuditLogEndpoints
+// 4. Endpoint
+public static class ListAuditLogsEndpoints
 {
-    public static void MapAuditLogEndpoints(this IEndpointRouteBuilder app)
+    public static void MapListAuditLogsEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/audit-logs", async ([AsParameters] AuditLogFilterQuery query, IMediator mediator) =>
             await mediator.Send(query))
-        .WithTags("Audit").RequireAuthorization().RequirePermission(Permissions.Audit.View);
+        .WithTags("Audit")
+        .RequireAuthorization()
+        .RequirePermission(Permissions.Audit.View);
     }
 }

@@ -12,16 +12,16 @@ public class MongoAuditWorker : BackgroundService
     private const int MaxBatchSize = 50;
     private static readonly TimeSpan MaxIdleTime = TimeSpan.FromMinutes(1);
 
-    public MongoAuditWorker(AuditChannel auditChannel, IConfiguration config, ILogger<MongoAuditWorker> logger)
+    // MODIFICADO: Agora injetamos o IMongoClient Singleton!
+    public MongoAuditWorker(AuditChannel auditChannel, IMongoClient mongoClient, ILogger<MongoAuditWorker> logger)
     {
         _auditChannel = auditChannel;
         _logger = logger;
 
-        var connectionString = config.GetConnectionString("MongoDb");
-        var client = new MongoClient(connectionString);
-        var database = client.GetDatabase("corewms_audit");
+        var database = mongoClient.GetDatabase("corewms_audit");
         _collection = database.GetCollection<AuditLog>("audit_logs");
 
+        // Cria o índice de expiração automática (TTL de 90 dias)
         var indexKeys = Builders<AuditLog>.IndexKeys.Ascending(x => x.Timestamp);
         var indexOptions = new CreateIndexOptions { ExpireAfter = TimeSpan.FromDays(90) };
         _collection.Indexes.CreateOne(new CreateIndexModel<AuditLog>(indexKeys, indexOptions));
@@ -50,17 +50,18 @@ public class MongoAuditWorker : BackgroundService
                         if (batch.Count >= MaxBatchSize)
                         {
                             await FlushBatchAsync(batch, stoppingToken);
+                            // Otimização: Se já enviamos o lote, renovamos o tempo de espera
+                            timerCts.CancelAfter(MaxIdleTime);
                         }
                     }
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
             {
-                // Cai aqui suavemente quando o 1 minuto estourar
+                // Cai aqui suavemente quando o 1 minuto estourar (Timeout normal)
             }
 
-            // REGRA 2: Passou 1 minuto (ou a API está desligando). 
-            // Se tiver qualquer coisa na fila (mesmo que seja 1 registro), manda pro banco.
+            // REGRA 2: Passou 1 minuto. Se tiver qualquer coisa na fila, manda pro banco.
             if (batch.Any())
             {
                 await FlushBatchAsync(batch, stoppingToken);
@@ -75,7 +76,7 @@ public class MongoAuditWorker : BackgroundService
         try
         {
             await _collection.InsertManyAsync(batch, cancellationToken: ct);
-            _logger.LogInformation("Auditoria: Lote de {Count} registros gravados no MongoDB com sucesso.", batch.Count);
+            _logger.LogInformation("Auditoria: Lote de {Count} registros gravados no MongoDB.", batch.Count);
         }
         catch (Exception ex)
         {
