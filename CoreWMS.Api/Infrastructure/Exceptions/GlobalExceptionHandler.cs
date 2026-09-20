@@ -7,10 +7,12 @@ namespace CoreWMS.Api.Infrastructure.Exceptions;
 public class GlobalExceptionHandler : IExceptionHandler
 {
     private readonly ILogger<GlobalExceptionHandler> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
+    public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger, IWebHostEnvironment env)
     {
         _logger = logger;
+        _env = env;
     }
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
@@ -22,7 +24,6 @@ public class GlobalExceptionHandler : IExceptionHandler
             Instance = httpContext.Request.Path
         };
 
-        // Mapeamento semântico das exceções para os Status Codes HTTP
         switch (exception)
         {
             case ValidationException fluentException:
@@ -33,31 +34,29 @@ public class GlobalExceptionHandler : IExceptionHandler
                     .GroupBy(x => x.PropertyName, x => x.ErrorMessage)
                     .ToDictionary(x => x.Key, x => x.ToArray());
                 break;
-
             case UnauthorizedAccessException:
                 problemDetails.Title = "Não Autorizado";
                 problemDetails.Status = StatusCodes.Status401Unauthorized;
-                problemDetails.Detail = exception.Message; // Ex: "E-mail ou senha inválidos."
+                problemDetails.Detail = exception.Message;
                 break;
-
             case KeyNotFoundException:
                 problemDetails.Title = "Não Encontrado";
                 problemDetails.Status = StatusCodes.Status404NotFound;
                 problemDetails.Detail = exception.Message;
                 break;
-
             case InvalidOperationException:
             case ArgumentException:
                 problemDetails.Title = "Requisição Inválida";
                 problemDetails.Status = StatusCodes.Status400BadRequest;
                 problemDetails.Detail = exception.Message;
                 break;
-
             default:
                 problemDetails.Title = "Erro Interno do Servidor";
                 problemDetails.Status = StatusCodes.Status500InternalServerError;
-                // Ocultar em prod se necessário, mas útil no desenvolvimento
-                problemDetails.Detail = exception.Message;
+                // Proteção contra vazamento de dados em Produção
+                problemDetails.Detail = _env.IsDevelopment()
+                    ? exception.Message
+                    : "Ocorreu um erro inesperado no servidor. A equipa técnica foi notificada.";
                 break;
         }
 

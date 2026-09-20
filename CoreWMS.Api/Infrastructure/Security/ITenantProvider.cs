@@ -1,5 +1,3 @@
-using System.Security.Claims;
-
 namespace CoreWMS.Api.Infrastructure.Security;
 
 public interface ITenantProvider
@@ -20,7 +18,11 @@ public class TenantProvider : ITenantProvider
 
     public Guid GetCompanyId()
     {
-        var header = _httpContextAccessor.HttpContext?.Request.Headers["X-Company-Id"].ToString();
+        var context = _httpContextAccessor.HttpContext;
+        if (context == null)
+            throw new InvalidOperationException("Não é possível obter o Tenant fora de um contexto HTTP válido.");
+
+        var header = context.Request.Headers["X-Company-Id"].ToString();
 
         if (string.IsNullOrWhiteSpace(header) || !Guid.TryParse(header, out var companyId))
         {

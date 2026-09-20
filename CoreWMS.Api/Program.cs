@@ -99,6 +99,7 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
 
 // Serviços de Segurança e Cache
 builder.Services.AddScoped<JwtTokenGenerator>();
+builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IPermissionCacheService, PermissionCacheService>();

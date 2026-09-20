@@ -5,9 +5,9 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace CoreWMS.Api.Infrastructure.Caching;
 
-// DTOs de Cache (Leves e Imutáveis)
 public record PackagingCacheModel(Guid Id, string Code, decimal ConversionFactor, bool AllowFractional);
 public record CustomerSlaCacheModel(bool RequiresBlindInbound, bool RequiresBlindOutbound);
+
 public record ProductMasterDataCacheModel(
     Guid ProductId, Guid CustomerId, string Sku, int MaxStacking,
     bool StrictBatch, bool StrictExpiration, bool StrictManufacture, bool StrictSerial,
@@ -17,14 +17,12 @@ public record ProductMasterDataCacheModel(
 
 public interface IMasterDataCacheService
 {
-    // Catálogo e Produtos
     Task<ProductMasterDataCacheModel?> GetProductRulesAsync(Guid companyId, Guid productId, CancellationToken ct = default);
     Task<ProductMasterDataCacheModel?> ResolveBarcodeAsync(Guid companyId, Guid customerId, string barcode, CancellationToken ct = default);
     void InvalidateProduct(Guid companyId, Guid productId);
 
-    // Topologia e Endereços
-    Task<Guid?> GetLocationIdAsync(Guid companyId, string fullPath, CancellationToken ct = default);
-    void InvalidateLocation(Guid companyId, string fullPath);
+    Task<Guid?> GetLocationIdAsync(string fullPath, CancellationToken ct = default);
+    void InvalidateLocation(string fullPath);
 }
 
 public class MasterDataCacheService : IMasterDataCacheService
@@ -38,17 +36,12 @@ public class MasterDataCacheService : IMasterDataCacheService
         _scopeFactory = scopeFactory;
     }
 
-    // ==========================================
-    // CACHE DE PRODUTOS E CLIENTES
-    // ==========================================
     public async Task<ProductMasterDataCacheModel?> GetProductRulesAsync(Guid companyId, Guid productId, CancellationToken ct = default)
     {
         var cacheKey = $"MasterData_Product_{companyId}_{productId}";
 
         return await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12);
-
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
@@ -76,7 +69,13 @@ public class MasterDataCacheService : IMasterDataCacheService
                 })
                 .FirstOrDefaultAsync(ct);
 
-            if (data == null) return null;
+            if (data == null)
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1); // Negative Caching
+                return null;
+            }
+
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12);
 
             var packagingsDict = new Dictionary<string, PackagingCacheModel>(StringComparer.OrdinalIgnoreCase);
             foreach (var pack in data.Packagings.Where(p => !string.IsNullOrWhiteSpace(p.Barcode)))
@@ -99,19 +98,27 @@ public class MasterDataCacheService : IMasterDataCacheService
 
     public async Task<ProductMasterDataCacheModel?> ResolveBarcodeAsync(Guid companyId, Guid customerId, string barcode, CancellationToken ct = default)
     {
-        var barcodeKey = $"BarcodeMap_{companyId}_{customerId}_{barcode.ToUpper()}";
+        var safeBarcode = barcode.Trim().ToUpper();
+        var barcodeKey = $"BarcodeMap_{companyId}_{customerId}_{safeBarcode}";
 
         var productId = await _cache.GetOrCreateAsync(barcodeKey, async entry =>
         {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12);
-
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            return await db.ProductPackagings
-                .Where(pp => pp.Product.CompanyId == companyId && pp.Product.CustomerId == customerId && pp.Barcode == barcode.ToUpper())
+            var id = await db.ProductPackagings
+                .Where(pp => pp.Product.CompanyId == companyId && pp.Product.CustomerId == customerId && pp.Barcode == safeBarcode)
                 .Select(pp => pp.ProductId)
                 .FirstOrDefaultAsync(ct);
+
+            if (id == Guid.Empty)
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1); // Proteção contra scans falsos sucessivos
+                return Guid.Empty;
+            }
+
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12);
+            return id;
         });
 
         if (productId == Guid.Empty) return null;
@@ -127,28 +134,35 @@ public class MasterDataCacheService : IMasterDataCacheService
     // ==========================================
     // CACHE DE TOPOLOGIA (LOCALIZAÇÕES)
     // ==========================================
-    public async Task<Guid?> GetLocationIdAsync(Guid companyId, string fullPath, CancellationToken ct = default)
+    public async Task<Guid?> GetLocationIdAsync(string fullPath, CancellationToken ct = default)
     {
-        var cacheKey = $"Location_{companyId}_{fullPath.ToUpper()}";
+        var safePath = fullPath.Trim().ToUpper();
+        var cacheKey = $"Location_Global_{safePath}"; // Cache partilhado!
 
         return await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12);
-
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
+            // Query original restituída
             var locationId = await db.Locations
-                .Where(l => l.FullPath == fullPath.ToUpper() && l.Zone.Warehouse.Code != "") // O Code do warehouse é garantido pela navegação
+                .Where(l => l.FullPath == safePath && l.Zone.Warehouse.Code != "")
                 .Select(l => l.Id)
                 .FirstOrDefaultAsync(ct);
 
-            return locationId == Guid.Empty ? (Guid?)null : locationId;
+            if (locationId == Guid.Empty)
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1); // Negative Caching
+                return (Guid?)null;
+            }
+
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12);
+            return locationId;
         });
     }
 
-    public void InvalidateLocation(Guid companyId, string fullPath)
+    public void InvalidateLocation(string fullPath)
     {
-        _cache.Remove($"Location_{companyId}_{fullPath.ToUpper()}");
+        _cache.Remove($"Location_Global_{fullPath.Trim().ToUpper()}");
     }
 }

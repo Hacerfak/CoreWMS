@@ -1,12 +1,19 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using CoreWMS.Api.Features.Identity.Entities;
 using Microsoft.IdentityModel.Tokens;
 
 namespace CoreWMS.Api.Infrastructure.Auth;
 
-public class JwtTokenGenerator
+public interface IJwtTokenGenerator
+{
+    string GenerateToken(User user, List<Guid> allowedCompanyIds, List<Guid> allowedCustomerIds);
+    string GenerateRefreshToken();
+}
+
+public class JwtTokenGenerator : IJwtTokenGenerator
 {
     private readonly IConfiguration _configuration;
 
@@ -15,37 +22,38 @@ public class JwtTokenGenerator
         _configuration = configuration;
     }
 
-    // Atualize a assinatura do método para receber também os clientes:
     public string GenerateToken(User user, List<Guid> allowedCompanyIds, List<Guid> allowedCustomerIds)
     {
         var secret = _configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
+        var issuer = _configuration["JwtSettings:Issuer"] ?? "CoreWMS";
+        var audience = _configuration["JwtSettings:Audience"] ?? "CoreWMS.Users";
+        var expirationMinutes = _configuration.GetValue<int?>("JwtSettings:ExpirationMinutes") ?? 5;
+
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var isPartner = allowedCustomerIds.Any();
 
         var claims = new List<Claim>
-    {
-        new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-        new Claim(JwtRegisteredClaimNames.Email, user.Email),
-        new Claim(ClaimTypes.Name, user.Name),
-        new Claim("name", user.Name),
-        new Claim("isMaster", user.IsMaster.ToString()),
-        new Claim("companies", string.Join(",", allowedCompanyIds)),
-        
-        // Novas claims de segurança de Depositante
-        new Claim("isPartner", isPartner.ToString()),
-        new Claim("customers", string.Join(",", allowedCustomerIds))
-    };
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email),
+            new Claim(ClaimTypes.Name, user.Name),
+            new Claim("name", user.Name),
+            new Claim("isMaster", user.IsMaster.ToString()),
+            new Claim("companies", string.Join(",", allowedCompanyIds)),
+            new Claim("isPartner", isPartner.ToString()),
+            new Claim("customers", string.Join(",", allowedCustomerIds))
+        };
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),
-            Expires = DateTime.UtcNow.AddMinutes(5),
+            Expires = DateTime.UtcNow.AddMinutes(expirationMinutes),
             SigningCredentials = credentials,
-            Issuer = "CoreWMS",
-            Audience = "CoreWMS.Users"
+            Issuer = issuer,
+            Audience = audience
         };
 
         var tokenHandler = new JwtSecurityTokenHandler();
@@ -57,8 +65,9 @@ public class JwtTokenGenerator
     public string GenerateRefreshToken()
     {
         var randomNumber = new byte[64];
-        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+        using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(randomNumber);
+
         return Convert.ToBase64String(randomNumber);
     }
 }

@@ -1,7 +1,5 @@
 using System.Security.Claims;
 using CoreWMS.Api.Infrastructure.Data;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -21,33 +19,43 @@ public class RequirePermissionFilter : IEndpointFilter
         var httpContext = context.HttpContext;
         var user = httpContext.User;
 
-        // Master possui acesso irrestrito global
-        if (user.FindFirst("isMaster")?.Value == "True")
-        {
-            return await next(context);
-        }
-
-        // Exige o cabeçalho de isolamento de empresa
+        // 1. Exige o cabeçalho de isolamento de empresa (Tenant)
         if (!httpContext.Request.Headers.TryGetValue("X-Company-Id", out var companyIdHeader) ||
             !Guid.TryParse(companyIdHeader, out var companyId))
         {
             return Results.BadRequest(new { Message = "O cabeçalho 'X-Company-Id' é obrigatório para esta operação." });
         }
 
+        // 2. Master possui acesso irrestrito global (Ignora o resto)
+        if (user.FindFirst("isMaster")?.Value == "True")
+        {
+            return await next(context);
+        }
+
+        // 3. Validação de Escopo do Token (O utilizador pertence a esta empresa?)
+        var allowedCompaniesClaim = user.FindFirst("companies")?.Value ?? "";
+        var allowedCompanies = allowedCompaniesClaim.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        if (!allowedCompanies.Contains(companyId.ToString()))
+        {
+            return Results.Forbid();
+        }
+
+        // 4. Identificação do Utilizador
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
             return Results.Unauthorized();
         }
 
-        // Busca o IMemoryCache para evitar consultas repetidas ao banco (Submilissegundo)
+        // 5. Verificação de Permissão Específica no Banco (Com Cache Otimizado)
         var cache = httpContext.RequestServices.GetRequiredService<IMemoryCache>();
         var cacheKey = $"perm:{userId}:{companyId}";
 
         if (!cache.TryGetValue(cacheKey, out HashSet<string>? userPermissions) || userPermissions == null)
         {
             var db = httpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
-
             var permissionsList = await db.UserCompanyRoles
                 .Where(ucr => ucr.UserId == userId && ucr.CompanyId == companyId)
                 .SelectMany(ucr => ucr.Role.Permissions)
@@ -56,10 +64,9 @@ public class RequirePermissionFilter : IEndpointFilter
 
             userPermissions = new HashSet<string>(permissionsList);
 
-            // Armazena na memória da API
             var cacheOptions = new MemoryCacheEntryOptions()
-            .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-            .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
+                .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
 
             cache.Set(cacheKey, userPermissions, cacheOptions);
         }
