@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="CoreWMS.Api/CoreWMS.Api.csproj" />
+  <Project Path="CoreWMS.PrintAgent/CoreWMS.PrintAgent.csproj" />
 </Solution>

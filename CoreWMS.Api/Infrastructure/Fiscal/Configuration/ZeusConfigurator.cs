@@ -51,7 +51,7 @@ public class ZeusConfigurator : IZeusConfigurator
             DiretorioSalvarXml = "",
             SalvarXmlServicos = false,
             ValidarSchemas = false,
-            ProtocoloDeSeguranca = ServicePointManager.SecurityProtocol,
+            ProtocoloDeSeguranca = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13,
             RemoverAcentos = true,
             DefineVersaoServicosAutomaticamente = true,
             VersaoLayout = VersaoServico.Versao400,

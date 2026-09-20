@@ -1,7 +1,7 @@
 services:
   # 1. Banco de Dados Relacional (Operacional)
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-trixie
     container_name: corewms_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -16,7 +16,7 @@ services:
 
   # 2. Banco de Dados NoSQL (Logs de Auditoria)
   mongodb:
-    image: mongo:7.0
+    image: mongo:latest
     container_name: corewms_mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}

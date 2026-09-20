@@ -8,6 +8,7 @@ using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Extensions;
 using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
+using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
@@ -25,6 +26,8 @@ using FluentValidation;
 using CoreWMS.Api.Infrastructure.Behaviors;
 using CoreWMS.Api.Infrastructure.Exceptions;
 using CoreWMS.Api.Infrastructure.Swagger;
+
+AppContext.SetSwitch("Npgsql.EnableGSS", false);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -120,12 +123,13 @@ builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>()
 // Módulo de Performance e Inventário (Infraestrutura)
 builder.Services.AddSingleton<KardexChannel>();
 builder.Services.AddHostedService<KardexWorker>();
-builder.Services.AddSingleton<MasterDataCacheService>();
+builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
 
 builder.Services.AddSingleton<INfeParserService, NfeParserService>();
+builder.Services.AddScoped<NfeBuilderService>();
 
 builder.Services.AddScoped<IDbConnection>(sp =>
-    new NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
+    new NpgsqlConnection(builder.Configuration.GetConnectionString("Postgres")));
 
 builder.Services.AddScoped<CoreWMS.Api.Infrastructure.Services.Billing.BillingEngineService>();
 

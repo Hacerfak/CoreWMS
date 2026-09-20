@@ -368,9 +368,6 @@ public static class InboundReceiveEndpoints
     {
         var group = app.MapGroup("/api/inbound/receive").WithTags("Inbound").RequireAuthorization();
 
-        group.MapPost("/checkout", async (ReceiveLoteCommand cmd, IMediator mediator) => await mediator.Send(cmd))
-             .RequirePermission(Permissions.Inbound.Receive);
-
         // 1. Trava o item e inicia a conferência
         group.MapPost("/start", async (StartReceivingCommand cmd, IMediator mediator) => await mediator.Send(cmd))
              .RequirePermission(Permissions.Inbound.Receive);

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:26-trixie AS build
 WORKDIR /app
 
 COPY package*.json ./
@@ -11,7 +11,7 @@ ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginx:trixie
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist /usr/share/nginx/html
 
