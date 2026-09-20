@@ -63,17 +63,26 @@ Um Worker Service (Instalável via Windows Service ou Linux Systemd) que roda na
 
 Para manter a base de código escalável e limpa, a equipe deve seguir estes preceitos inegociáveis:
 
-1.  **Geração de API Front-end (Orval):**
+1.  **Isolamento VSA (Vertical Slice Architecture):**
+    O padrão ouro do projeto. Cada funcionalidade (Feature) deve ter seu próprio arquivo físico isolado, contendo estritamente o *Request/Query*, o *Handler* com a regra de negócio e o *Endpoint* de mapeamento. É terminantemente proibido espalhar lógicas de uma mesma feature em pastas genéricas de `Controllers` ou `Services`. Lógicas compartilhadas devem ser extraídas para serviços de domínio estritos.
+
+2.  **Performance de Dados (EF Core):**
+    O uso de `.AsNoTracking()` é **obrigatório** em todas as rotas de leitura pura (Queries). O desenvolvedor deve garantir a prevenção de *N+1 queries* utilizando `Include`/`SplitQuery` adequadamente, além de certificar que buscas pesadas e paginações estão cobertas por índices no banco de dados.
+
+3.  **Segurança e Multi-Tenant:**
+    O isolamento de dados é vital. O `Tenant ID` deve ser injetado e respeitado em todas as transações, garantindo que nenhuma empresa veja dados de outra. Todo e qualquer novo endpoint REST deve ser explicitamente blindado com o filtro de extensão `.RequirePermission(Permissions.Modulo.Acao)`.
+
+4.  **Geração de API Front-end (Orval):**
     Nunca crie requisições Axios/Fetch manualmente. Sempre que o Backend sofrer alterações (novos endpoints ou mudanças de DTOs), compile a API e rode o gerador no frontend:
     ```bash
     npm run generate:api
     ```
-2.  **Encapsulamento de Entidades (DDD):**
+
+5.  **Encapsulamento de Entidades (DDD):**
     As entidades do CoreWMS (ex: `Printer.cs`, `Company.cs`) possuem `private set;` em suas propriedades. Atualizações de estado **devem** ser feitas através de métodos de domínio (ex: `Update(...)`, `RegenerateApiKey(...)`), nunca por atribuição direta nos Handlers.
-3.  **Validações Duplas (Front + Back):**
+
+6.  **Validações Duplas (Front + Back):**
     Toda regra de negócio ou obrigatoriedade de campo deve existir em dois lugares: no esquema do `Zod` (para UX imediata no frontend) e no `FluentValidation` (para proteção real do backend).
-4.  **Uso de Permissões:**
-    Todo novo endpoint REST no backend deve ser explicitamente mapeado com a exigência de permissão usando `[RequirePermission(Permissions.Modulo.Acao)]` ou mapeado fluentemente nas rotas do .NET Minimal API.
 
 ---
 
