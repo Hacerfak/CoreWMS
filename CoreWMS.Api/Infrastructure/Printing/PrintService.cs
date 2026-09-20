@@ -1,4 +1,5 @@
 using CoreWMS.Api.Features.Printing;
+using Microsoft.AspNetCore.SignalR;
 
 namespace CoreWMS.Api.Infrastructure.Printing;
 
@@ -9,9 +10,9 @@ public interface IPrintService
 
 public class PrintService : IPrintService
 {
-    private readonly Microsoft.AspNetCore.SignalR.IHubContext<PrintHub, IPrintClient> _hubContext;
+    private readonly IHubContext<PrintHub, IPrintClient> _hubContext;
 
-    public PrintService(Microsoft.AspNetCore.SignalR.IHubContext<PrintHub, IPrintClient> hubContext)
+    public PrintService(IHubContext<PrintHub, IPrintClient> hubContext)
     {
         _hubContext = hubContext;
     }

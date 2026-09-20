@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Data;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Printing;
 
@@ -24,8 +24,8 @@ public class PrintHub : Hub<IPrintClient>
     public override async Task OnConnectedAsync()
     {
         var httpContext = Context.GetHttpContext();
-
         var apiKey = httpContext?.Request.Headers["X-Api-Key"].ToString();
+
         if (string.IsNullOrEmpty(apiKey))
         {
             apiKey = httpContext?.Request.Query["apiKey"].ToString();
@@ -36,11 +36,12 @@ public class PrintHub : Hub<IPrintClient>
             // 1. Registra no rastreador para dar o status "Online" no painel
             _connectionManager.AddConnection(Context.ConnectionId, apiKey);
 
-            // 2. RECUPERA O ERRO: Coloca o Agente de volta no Grupo de impressão!
+            // 2. RECUPERA O ERRO: Coloca o Agente de volta no Grupo de impressão de forma assíncrona!
             using var scope = _serviceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            var agent = db.PrintAgents.FirstOrDefault(a => a.ApiKey == apiKey);
+            var agent = await db.PrintAgents.FirstOrDefaultAsync(a => a.ApiKey == apiKey);
+
             if (agent != null)
             {
                 var agentGroup = $"agent:{agent.Name.ToLower()}";
@@ -61,7 +62,7 @@ public class PrintHub : Hub<IPrintClient>
 
     public async Task ConfirmPrintJob(string jobId, bool success, string? errorMessage)
     {
-        // Apenas aguarda, sem fazer nada por enquanto.
+        // Ponto de entrada futuro para o frontend saber se a zebra cuspiu a etiqueta com sucesso.
         await Task.CompletedTask;
     }
 }

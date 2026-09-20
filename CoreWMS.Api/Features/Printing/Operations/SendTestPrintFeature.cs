@@ -1,18 +1,16 @@
+using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Features.Identity.Constants;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace CoreWMS.Api.Features.Printing;
+namespace CoreWMS.Api.Features.Printing.Operations;
 
-// 1. CONTRATOS
 public record SendTestPrintCommand(string StationName, string PrinterName, string? CustomZpl) : IRequest<IResult>;
 
-// 2. VALIDADOR
 public class SendTestPrintCommandValidator : AbstractValidator<SendTestPrintCommand>
 {
     public SendTestPrintCommandValidator()
@@ -22,7 +20,6 @@ public class SendTestPrintCommandValidator : AbstractValidator<SendTestPrintComm
     }
 }
 
-// 3. HANDLER
 public class SendTestPrintHandler : IRequestHandler<SendTestPrintCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -36,20 +33,16 @@ public class SendTestPrintHandler : IRequestHandler<SendTestPrintCommand, IResul
 
     public async Task<IResult> Handle(SendTestPrintCommand request, CancellationToken ct)
     {
-        // 1. Busca a impressora no PostgreSQL pelo Nome do Agente e Nome da Impressora
         var printer = await _db.Printers
             .Include(p => p.PrintAgent)
             .FirstOrDefaultAsync(p => p.PrintAgent.Name == request.StationName && p.Name == request.PrinterName, ct);
 
-        // Se encontrou no banco, usa o Target (ex: "192.168.1.20:9100"). Se não, usa o que foi enviado no comando.
         var targetHardware = printer?.Target ?? request.PrinterName;
 
-        // ZPL de teste padrão caso não seja enviado um customizado
         var zpl = string.IsNullOrWhiteSpace(request.CustomZpl)
             ? "^XA^FO50,50^A0N,40,40^FDCoreWMS - Teste de Impressao^FS^FO50,110^BY3^BCN,100,Y,N,N^FDTEST-123456^FS^XZ"
             : request.CustomZpl;
 
-        // 2. Dispara o Target real para o Agente via SignalR
         var jobId = await _printService.SendPrintJobAsync(request.StationName, targetHardware, zpl);
 
         return Results.Ok(new
@@ -62,14 +55,14 @@ public class SendTestPrintHandler : IRequestHandler<SendTestPrintCommand, IResul
     }
 }
 
-// 4. ENDPOINT
-public static class PrintEndpoints
+public static class SendTestPrintEndpoints
 {
-    public static void MapPrintEndpoints(this IEndpointRouteBuilder app)
+    public static void MapSendTestPrintEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/print/send-test", async ([FromBody] SendTestPrintCommand command, IMediator mediator) =>
             await mediator.Send(command))
         .WithTags("Printing")
-        .RequirePermission(Permissions.Printing.Manage); // Se precisar, pode adicionar o .RequirePermission(...) aqui no futuro
+        .RequireAuthorization()
+        .RequirePermission(Permissions.Printing.Manage);
     }
 }
