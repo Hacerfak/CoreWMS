@@ -53,6 +53,11 @@ public static class Permissions
         public const string Delete = "products:delete";
     }
 
+    public static class Packing
+    {
+        public const string Manage = "packing:manage";
+    }
+
     public static class Inventory
     {
         public const string View = "Permissions.Inventory.View";
