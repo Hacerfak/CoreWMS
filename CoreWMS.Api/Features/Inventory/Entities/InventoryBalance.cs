@@ -57,6 +57,18 @@ public class InventoryBalance : AuditableEntity
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
+    public void UnallocateForPicking(decimal quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("A quantidade a ser estornada deve ser maior que zero.");
+        if (quantity > TotalAllocated) throw new InvalidOperationException("Tentativa de estornar quantidade maior que o saldo alocado atual.");
+
+        TotalAllocated -= quantity;
+        TotalAvailable += quantity;
+
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
     public void ShipAllocated(decimal quantity)
     {
         if (quantity > TotalAllocated) throw new InvalidOperationException("Tentativa de expedir acima do alocado.");

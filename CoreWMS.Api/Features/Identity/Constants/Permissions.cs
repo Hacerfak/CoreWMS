@@ -60,16 +60,16 @@ public static class Permissions
 
     public static class Inventory
     {
-        public const string View = "Permissions.Inventory.View";
-        public const string Move = "Permissions.Inventory.Move";
-        public const string ManageQuality = "Permissions.Inventory.ManageQuality";
-        public const string EditTraceability = "Permissions.Inventory.EditTraceability";
+        public const string View = "inventory:view";
+        public const string Move = "inventory:move";
+        public const string ManageQuality = "inventory:managequality";
+        public const string EditTraceability = "inventory:edittraceability";
     }
 
     public static class Billing
     {
-        public const string View = "Permissions.Billing.View";
-        public const string Manage = "Permissions.Billing.Manage";
+        public const string View = "billing:view";
+        public const string Manage = "billing:manage";
     }
 
     public static class Inbound

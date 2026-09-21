@@ -18,31 +18,61 @@ import {
 import { Search, Plus, Shield, Loader2, Edit, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Matriz de permissões atualizada com Topologia e Produtos granulados
+// Matriz Completa do CoreWMS mapeada exata com o Permissions.cs atualizado
 const MODULE_PERMISSIONS = [
     {
-        module: 'Clientes Depositantes',
+        module: 'Inbound (Recebimento)',
         permissions: [
-            { id: 'customers:view', label: 'Visualizar Clientes' },
-            { id: 'customers:create', label: 'Cadastrar Cliente' },
-            { id: 'customers:edit', label: 'Editar Cliente' },
-            { id: 'customers:delete', label: 'Inativar Cliente' },
+            { id: 'inbound:view', label: 'Visualizar Ordens' },
+            { id: 'inbound:import', label: 'Importar XML' },
+            { id: 'inbound:review', label: 'Revisar e Vincular Produtos' },
+            { id: 'inbound:receive', label: 'Operar Recebimento (Coletor)' },
+            { id: 'inbound:manage', label: 'Gerenciar / Cancelar / Estornar' },
         ]
     },
     {
-        module: 'Catálogo de Produtos',
+        module: 'Outbound (Expedição)',
         permissions: [
-            { id: 'products:view', label: 'Visualizar Catálogo e Embalagens' },
-            { id: 'products:create', label: 'Cadastrar Produtos e Embalagens' },
-            { id: 'products:edit', label: 'Editar Produtos e Embalagens' },
-            { id: 'products:delete', label: 'Excluir Produtos e Embalagens' },
+            { id: 'outbound:view', label: 'Visualizar Pedidos' },
+            { id: 'outbound:import', label: 'Importar XML de Saída' },
+            { id: 'outbound:manage', label: 'Gerenciar / Alocar / Separar' },
+            { id: 'packing:manage', label: 'Gerenciar Empacotamento (Packing)' },
+        ]
+    },
+    {
+        module: 'Estoque e Qualidade',
+        permissions: [
+            { id: 'inventory:view', label: 'Visualizar Estoque' },
+            { id: 'inventory:move', label: 'Movimentar Estoque (HUs)' },
+            { id: 'inventory:managequality', label: 'Gerenciar Qualidade (Bloqueios)' },
+            { id: 'inventory:edittraceability', label: 'Editar Rastreabilidade' },
+        ]
+    },
+    {
+        module: 'Faturamento',
+        permissions: [
+            { id: 'billing:view', label: 'Visualizar Faturamento' },
+            { id: 'billing:manage', label: 'Gerenciar Tarifas e Ciclos' },
+        ]
+    },
+    {
+        module: 'Cadastros Base',
+        permissions: [
+            { id: 'customers:view', label: 'Visualizar Clientes' },
+            { id: 'customers:create', label: 'Cadastrar Clientes' },
+            { id: 'customers:edit', label: 'Editar Clientes' },
+            { id: 'customers:delete', label: 'Excluir Clientes' },
+            { id: 'products:view', label: 'Visualizar Produtos' },
+            { id: 'products:create', label: 'Cadastrar Produtos' },
+            { id: 'products:edit', label: 'Editar Produtos' },
+            { id: 'products:delete', label: 'Excluir Produtos' },
         ]
     },
     {
         module: 'Logística e Infraestrutura',
         permissions: [
-            { id: 'topology:manage', label: 'Gerenciar Topologia (Armazéns, Zonas e Endereços)' },
-            { id: 'printing:manage', label: 'Gestão de Impressão e Templates ZPL' },
+            { id: 'topology:manage', label: 'Gerenciar Armazéns, Zonas e Endereços' },
+            { id: 'printing:manage', label: 'Gerenciar Agentes, Impressoras e ZPL' },
         ]
     },
     {
@@ -51,7 +81,8 @@ const MODULE_PERMISSIONS = [
             { id: 'users:manage', label: 'Gerenciar Usuários e Vínculos' },
             { id: 'roles:manage', label: 'Gerenciar Perfis de Acesso' },
             { id: 'companies:manage', label: 'Gerenciar Empresas (Multi-Tenant)' },
-            { id: 'audit:view', label: 'Consultar Auditoria (Logs)' },
+            { id: 'audit:view', label: 'Consultar Auditoria e Logs' },
+            { id: 'profile:update-self', label: 'Permitir Edição do Próprio Perfil' }
         ]
     }
 ];
@@ -213,7 +244,7 @@ export default function PerfisList() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-3xl bg-white max-h-[85vh] flex flex-col p-0">
+                <DialogContent className="sm:max-w-4xl bg-white max-h-[90vh] flex flex-col p-0">
                     <div className="p-6 border-b border-slate-100">
                         <DialogHeader>
                             <DialogTitle className="text-slate-900">{selectedRole ? 'Configurar Perfil' : 'Novo Perfil de Acesso'}</DialogTitle>
@@ -222,29 +253,28 @@ export default function PerfisList() {
                     </div>
 
                     <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0">
-                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                            <div className="space-y-1.5">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/30">
+                            <div className="space-y-1.5 max-w-md">
                                 <Label htmlFor="name" className="text-slate-700 font-medium">Nome do Perfil *</Label>
                                 <Input
                                     id="name" placeholder="Ex: Operador de Recebimento"
                                     {...register('name')}
-                                    className={`bg-slate-50 h-10 ${errors.name ? 'border-rose-500' : ''}`}
+                                    className={`bg-white h-10 ${errors.name ? 'border-rose-500' : ''}`}
                                 />
                                 {errors.name && <p className="text-xs text-rose-500">{errors.name.message}</p>}
                             </div>
 
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {MODULE_PERMISSIONS.map((group) => (
-                                    <div key={group.module} className="bg-slate-50/80 p-4 rounded-xl border border-slate-200/60 space-y-3">
-                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{group.module}</h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                    <div key={group.module} className="bg-white p-4 rounded-xl border border-slate-200/60 shadow-sm space-y-3">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 border-b pb-2">{group.module}</h4>
+                                        <div className="flex flex-col gap-2.5 pt-1">
                                             {group.permissions.map((perm) => {
                                                 const isChecked = watchedPermissions.includes(perm.id);
                                                 return (
                                                     <label
                                                         key={perm.id}
-                                                        className={`flex items-center gap-2.5 p-3 rounded-lg border text-xs font-medium cursor-pointer transition-all ${isChecked ? 'bg-blue-50/80 border-blue-200 text-blue-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100/50'
-                                                            }`}
+                                                        className={`flex items-center gap-3 p-2.5 rounded-lg border text-sm font-medium cursor-pointer transition-all ${isChecked ? 'bg-blue-50/80 border-blue-200 text-blue-900' : 'bg-transparent border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-200'}`}
                                                     >
                                                         <Checkbox
                                                             checked={isChecked}
@@ -258,12 +288,12 @@ export default function PerfisList() {
                                     </div>
                                 ))}
                             </div>
-                            {errors.permissions && <p className="text-xs text-rose-500 text-center">{errors.permissions.message}</p>}
+                            {errors.permissions && <p className="text-sm text-rose-500 text-center font-medium bg-rose-50 p-2 rounded">{errors.permissions.message}</p>}
                         </div>
 
-                        <DialogFooter className="p-6 border-t border-slate-100 bg-slate-50/50">
+                        <DialogFooter className="p-6 border-t border-slate-100 bg-white">
                             <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
-                            <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]">
+                            <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[140px]">
                                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar Perfil</>}
                             </Button>
                         </DialogFooter>

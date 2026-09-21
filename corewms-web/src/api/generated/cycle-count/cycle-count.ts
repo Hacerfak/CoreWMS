@@ -30,7 +30,69 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
-export const postApiCycleCountPlans = (
+export const postApiCycleCountTasksTaskIdRecordVolumetric = (
+    taskId: string,
+    addVolumetricRecordCommand: AddVolumetricRecordCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/tasks/${taskId}/record-volumetric`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addVolumetricRecordCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCycleCountTasksTaskIdRecordVolumetricMutationKey = () => ['postApiCycleCountTasksTaskIdRecordVolumetric'] as const;
+
+export const getPostApiCycleCountTasksTaskIdRecordVolumetricMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, TError,PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, TError,PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCycleCountTasksTaskIdRecordVolumetricMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables> = (props) => {
+          const {taskId,data} = props ?? {};
+
+          return  postApiCycleCountTasksTaskIdRecordVolumetric(taskId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>>
+    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationBody = AddVolumetricRecordCommand
+    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationError = unknown
+    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables = {taskId: string;data: AddVolumetricRecordCommand}
+
+    export const usePostApiCycleCountTasksTaskIdRecordVolumetric = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, TError,PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>,
+        TError,
+        PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCycleCountTasksTaskIdRecordVolumetricMutationOptions(options), queryClient);
+    }
+    export const postApiCycleCountPlans = (
     createCycleCountPlanCommand: CreateCycleCountPlanCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -149,66 +211,4 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiCycleCountTasksTaskIdEscalateMutationOptions(options), queryClient);
-    }
-    export const postApiCycleCountTasksTaskIdRecordVolumetric = (
-    taskId: string,
-    addVolumetricRecordCommand: AddVolumetricRecordCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/cycle-count/tasks/${taskId}/record-volumetric`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: addVolumetricRecordCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiCycleCountTasksTaskIdRecordVolumetricMutationKey = () => ['postApiCycleCountTasksTaskIdRecordVolumetric'] as const;
-
-export const getPostApiCycleCountTasksTaskIdRecordVolumetricMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, TError,PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, TError,PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables, TContext> => {
-
-const mutationKey = getPostApiCycleCountTasksTaskIdRecordVolumetricMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables> = (props) => {
-          const {taskId,data} = props ?? {};
-
-          return  postApiCycleCountTasksTaskIdRecordVolumetric(taskId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>>
-    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationBody = AddVolumetricRecordCommand
-    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationError = unknown
-    export type PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables = {taskId: string;data: AddVolumetricRecordCommand}
-
-    export const usePostApiCycleCountTasksTaskIdRecordVolumetric = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>, TError,PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdRecordVolumetric>>,
-        TError,
-        PostApiCycleCountTasksTaskIdRecordVolumetricMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiCycleCountTasksTaskIdRecordVolumetricMutationOptions(options), queryClient);
     }

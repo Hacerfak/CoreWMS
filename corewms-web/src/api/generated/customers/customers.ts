@@ -117,6 +117,67 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCustomersConsultSefazCnpjMutationOptions(options), queryClient);
     }
+    export const postApiCustomers = (
+    createCustomerCommand: CreateCustomerCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/customers`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createCustomerCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCustomersMutationKey = () => ['postApiCustomers'] as const;
+
+export const getPostApiCustomersMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCustomers>>, TError,PostApiCustomersMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCustomers>>, TError,PostApiCustomersMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCustomersMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCustomers>>, PostApiCustomersMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiCustomers(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCustomersMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCustomers>>>
+    export type PostApiCustomersMutationBody = CreateCustomerCommand
+    export type PostApiCustomersMutationError = unknown
+    export type PostApiCustomersMutationVariables = {data: CreateCustomerCommand}
+
+    export const usePostApiCustomers = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCustomers>>, TError,PostApiCustomersMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCustomers>>,
+        TError,
+        PostApiCustomersMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCustomersMutationOptions(options), queryClient);
+    }
     export const getApiCustomers = (
     params?: GetApiCustomersParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -204,16 +265,14 @@ export function useGetApiCustomers<TData = Awaited<ReturnType<typeof getApiCusto
 
 
 
-export const postApiCustomers = (
-    createCustomerCommand: CreateCustomerCommand,
+export const deleteApiCustomersId = (
+    id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/customers`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: createCustomerCommand, signal
+      {url: `/api/customers/${id}`, method: 'DELETE', signal
     },
       options);
     }
@@ -221,13 +280,13 @@ export const postApiCustomers = (
 
 
 
-export const getPostApiCustomersMutationKey = () => ['postApiCustomers'] as const;
+export const getDeleteApiCustomersIdMutationKey = () => ['deleteApiCustomersId'] as const;
 
-export const getPostApiCustomersMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCustomers>>, TError,PostApiCustomersMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiCustomers>>, TError,PostApiCustomersMutationVariables, TContext> => {
+export const getDeleteApiCustomersIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCustomersId>>, TError,DeleteApiCustomersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiCustomersId>>, TError,DeleteApiCustomersIdMutationVariables, TContext> => {
 
-const mutationKey = getPostApiCustomersMutationKey();
+const mutationKey = getDeleteApiCustomersIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -237,10 +296,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCustomers>>, PostApiCustomersMutationVariables> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiCustomersId>>, DeleteApiCustomersIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
 
-          return  postApiCustomers(data,requestOptions)
+          return  deleteApiCustomersId(id,requestOptions)
         }
 
 
@@ -250,20 +309,20 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiCustomersMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCustomers>>>
-    export type PostApiCustomersMutationBody = CreateCustomerCommand
-    export type PostApiCustomersMutationError = unknown
-    export type PostApiCustomersMutationVariables = {data: CreateCustomerCommand}
+    export type DeleteApiCustomersIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiCustomersId>>>
 
-    export const usePostApiCustomers = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCustomers>>, TError,PostApiCustomersMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export type DeleteApiCustomersIdMutationError = unknown
+    export type DeleteApiCustomersIdMutationVariables = {id: string}
+
+    export const useDeleteApiCustomersId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCustomersId>>, TError,DeleteApiCustomersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiCustomers>>,
+        Awaited<ReturnType<typeof deleteApiCustomersId>>,
         TError,
-        PostApiCustomersMutationVariables,
+        DeleteApiCustomersIdMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiCustomersMutationOptions(options), queryClient);
+      return useMutation(getDeleteApiCustomersIdMutationOptions(options), queryClient);
     }
     export const putApiCustomersId = (
     id: string,
@@ -326,63 +385,4 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiCustomersIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiCustomersId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/customers/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiCustomersIdMutationKey = () => ['deleteApiCustomersId'] as const;
-
-export const getDeleteApiCustomersIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCustomersId>>, TError,DeleteApiCustomersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiCustomersId>>, TError,DeleteApiCustomersIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiCustomersIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiCustomersId>>, DeleteApiCustomersIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiCustomersId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiCustomersIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiCustomersId>>>
-
-    export type DeleteApiCustomersIdMutationError = unknown
-    export type DeleteApiCustomersIdMutationVariables = {id: string}
-
-    export const useDeleteApiCustomersId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCustomersId>>, TError,DeleteApiCustomersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiCustomersId>>,
-        TError,
-        DeleteApiCustomersIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiCustomersIdMutationOptions(options), queryClient);
     }

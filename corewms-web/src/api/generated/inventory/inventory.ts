@@ -58,93 +58,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getApiInventoryHandlingUnits = (
-    params?: GetApiInventoryHandlingUnitsParams,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/inventory/handling-units`, method: 'GET',
-        params, signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiInventoryHandlingUnitsQueryKey = (params?: GetApiInventoryHandlingUnitsParams,) => {
-    return [
-    `/api/inventory/handling-units`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetApiInventoryHandlingUnitsQueryOptions = <TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiInventoryHandlingUnitsQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>> = ({ signal }) => getApiInventoryHandlingUnits(params, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiInventoryHandlingUnitsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>>
-export type GetApiInventoryHandlingUnitsQueryError = unknown
-
-
-export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
- params: undefined |  GetApiInventoryHandlingUnitsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>,
-          TError,
-          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
- params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>,
-          TError,
-          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
- params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
- params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiInventoryHandlingUnitsQueryOptions(params,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
 export const getApiInventoryBalances = (
     params?: GetApiInventoryBalancesParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -221,6 +134,93 @@ export function useGetApiInventoryBalances<TData = Awaited<ReturnType<typeof get
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetApiInventoryBalancesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiInventoryHandlingUnits = (
+    params?: GetApiInventoryHandlingUnitsParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/handling-units`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiInventoryHandlingUnitsQueryKey = (params?: GetApiInventoryHandlingUnitsParams,) => {
+    return [
+    `/api/inventory/handling-units`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiInventoryHandlingUnitsQueryOptions = <TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInventoryHandlingUnitsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>> = ({ signal }) => getApiInventoryHandlingUnits(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInventoryHandlingUnitsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>>
+export type GetApiInventoryHandlingUnitsQueryError = unknown
+
+
+export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
+ params: undefined |  GetApiInventoryHandlingUnitsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
+ params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
+ params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
+ params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInventoryHandlingUnitsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -319,17 +319,17 @@ export function useGetApiInventoryKardex<TData = Awaited<ReturnType<typeof getAp
 
 
 
-export const putApiInventoryHandlingUnitsIdTraceability = (
+export const postApiInventoryHandlingUnitsIdQuality = (
     id: string,
-    updateHandlingUnitCommand: UpdateHandlingUnitCommand,
+    changeQualityCommand: ChangeQualityCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/inventory/handling-units/${id}/traceability`, method: 'PUT',
+      {url: `/api/inventory/handling-units/${id}/quality`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: updateHandlingUnitCommand, signal
+      data: changeQualityCommand, signal
     },
       options);
     }
@@ -337,13 +337,13 @@ export const putApiInventoryHandlingUnitsIdTraceability = (
 
 
 
-export const getPutApiInventoryHandlingUnitsIdTraceabilityMutationKey = () => ['putApiInventoryHandlingUnitsIdTraceability'] as const;
+export const getPostApiInventoryHandlingUnitsIdQualityMutationKey = () => ['postApiInventoryHandlingUnitsIdQuality'] as const;
 
-export const getPutApiInventoryHandlingUnitsIdTraceabilityMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext> => {
+export const getPostApiInventoryHandlingUnitsIdQualityMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext> => {
 
-const mutationKey = getPutApiInventoryHandlingUnitsIdTraceabilityMutationKey();
+const mutationKey = getPostApiInventoryHandlingUnitsIdQualityMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -353,10 +353,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, PostApiInventoryHandlingUnitsIdQualityMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
-          return  putApiInventoryHandlingUnitsIdTraceability(id,data,requestOptions)
+          return  postApiInventoryHandlingUnitsIdQuality(id,data,requestOptions)
         }
 
 
@@ -366,20 +366,20 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>>
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationBody = UpdateHandlingUnitCommand
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationError = unknown
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables = {id: string;data: UpdateHandlingUnitCommand}
+    export type PostApiInventoryHandlingUnitsIdQualityMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>>
+    export type PostApiInventoryHandlingUnitsIdQualityMutationBody = ChangeQualityCommand
+    export type PostApiInventoryHandlingUnitsIdQualityMutationError = unknown
+    export type PostApiInventoryHandlingUnitsIdQualityMutationVariables = {id: string;data: ChangeQualityCommand}
 
-    export const usePutApiInventoryHandlingUnitsIdTraceability = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiInventoryHandlingUnitsIdQuality = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>,
+        Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>,
         TError,
-        PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables,
+        PostApiInventoryHandlingUnitsIdQualityMutationVariables,
         TContext
       > => {
-      return useMutation(getPutApiInventoryHandlingUnitsIdTraceabilityMutationOptions(options), queryClient);
+      return useMutation(getPostApiInventoryHandlingUnitsIdQualityMutationOptions(options), queryClient);
     }
     export const postApiInventoryHandlingUnitsIdMove = (
     id: string,
@@ -443,17 +443,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiInventoryHandlingUnitsIdMoveMutationOptions(options), queryClient);
     }
-    export const postApiInventoryHandlingUnitsIdQuality = (
+    export const putApiInventoryHandlingUnitsIdTraceability = (
     id: string,
-    changeQualityCommand: ChangeQualityCommand,
+    updateHandlingUnitCommand: UpdateHandlingUnitCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/inventory/handling-units/${id}/quality`, method: 'POST',
+      {url: `/api/inventory/handling-units/${id}/traceability`, method: 'PUT',
       headers: {'Content-Type': 'application/json', },
-      data: changeQualityCommand, signal
+      data: updateHandlingUnitCommand, signal
     },
       options);
     }
@@ -461,13 +461,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiInventoryHandlingUnitsIdQualityMutationKey = () => ['postApiInventoryHandlingUnitsIdQuality'] as const;
+export const getPutApiInventoryHandlingUnitsIdTraceabilityMutationKey = () => ['putApiInventoryHandlingUnitsIdTraceability'] as const;
 
-export const getPostApiInventoryHandlingUnitsIdQualityMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext> => {
+export const getPutApiInventoryHandlingUnitsIdTraceabilityMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext> => {
 
-const mutationKey = getPostApiInventoryHandlingUnitsIdQualityMutationKey();
+const mutationKey = getPutApiInventoryHandlingUnitsIdTraceabilityMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -477,10 +477,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, PostApiInventoryHandlingUnitsIdQualityMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
-          return  postApiInventoryHandlingUnitsIdQuality(id,data,requestOptions)
+          return  putApiInventoryHandlingUnitsIdTraceability(id,data,requestOptions)
         }
 
 
@@ -490,18 +490,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiInventoryHandlingUnitsIdQualityMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>>
-    export type PostApiInventoryHandlingUnitsIdQualityMutationBody = ChangeQualityCommand
-    export type PostApiInventoryHandlingUnitsIdQualityMutationError = unknown
-    export type PostApiInventoryHandlingUnitsIdQualityMutationVariables = {id: string;data: ChangeQualityCommand}
+    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>>
+    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationBody = UpdateHandlingUnitCommand
+    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationError = unknown
+    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables = {id: string;data: UpdateHandlingUnitCommand}
 
-    export const usePostApiInventoryHandlingUnitsIdQuality = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePutApiInventoryHandlingUnitsIdTraceability = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>,
+        Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>,
         TError,
-        PostApiInventoryHandlingUnitsIdQualityMutationVariables,
+        PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiInventoryHandlingUnitsIdQualityMutationOptions(options), queryClient);
+      return useMutation(getPutApiInventoryHandlingUnitsIdTraceabilityMutationOptions(options), queryClient);
     }

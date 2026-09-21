@@ -57,20 +57,14 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const postApiOutboundOrdersImportXml = (
-    postApiOutboundOrdersImportXmlBody?: PostApiOutboundOrdersImportXmlBody,
+export const getApiOutboundPickingOrderIdTasks = (
+    orderId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
-if(postApiOutboundOrdersImportXmlBody?.file !== undefined) {
- formData.append(`file`, postApiOutboundOrdersImportXmlBody.file);
- }
 
       return customInstance<void>(
-      {url: `/api/outbound/orders/import-xml`, method: 'POST',
-      headers: {'Content-Type': 'multipart/form-data', },
-       data: formData, signal
+      {url: `/api/outbound/picking/${orderId}/tasks`, method: 'GET', signal
     },
       options);
     }
@@ -78,13 +72,101 @@ if(postApiOutboundOrdersImportXmlBody?.file !== undefined) {
 
 
 
-export const getPostApiOutboundOrdersImportXmlMutationKey = () => ['postApiOutboundOrdersImportXml'] as const;
+export const getGetApiOutboundPickingOrderIdTasksQueryKey = (orderId: string,) => {
+    return [
+    `/api/outbound/picking/${orderId}/tasks`
+    ] as const;
+    }
 
-export const getPostApiOutboundOrdersImportXmlMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, TError,PostApiOutboundOrdersImportXmlMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, TError,PostApiOutboundOrdersImportXmlMutationVariables, TContext> => {
 
-const mutationKey = getPostApiOutboundOrdersImportXmlMutationKey();
+export const getGetApiOutboundPickingOrderIdTasksQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundPickingOrderIdTasksQueryKey(orderId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>> = ({ signal }) => getApiOutboundPickingOrderIdTasks(orderId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orderId !== null && orderId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiOutboundPickingOrderIdTasksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>>
+export type GetApiOutboundPickingOrderIdTasksQueryError = unknown
+
+
+export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiOutboundPickingOrderIdTasksQueryOptions(orderId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiOutboundPickingScan = (
+    pickItemCommand: PickItemCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/picking/scan`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: pickItemCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundPickingScanMutationKey = () => ['postApiOutboundPickingScan'] as const;
+
+export const getPostApiOutboundPickingScanMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, TError,PostApiOutboundPickingScanMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, TError,PostApiOutboundPickingScanMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundPickingScanMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -94,10 +176,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, PostApiOutboundOrdersImportXmlMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, PostApiOutboundPickingScanMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  postApiOutboundOrdersImportXml(data,requestOptions)
+          return  postApiOutboundPickingScan(data,requestOptions)
         }
 
 
@@ -107,29 +189,90 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiOutboundOrdersImportXmlMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>>
-    export type PostApiOutboundOrdersImportXmlMutationBody = PostApiOutboundOrdersImportXmlBody | undefined
-    export type PostApiOutboundOrdersImportXmlMutationError = unknown
-    export type PostApiOutboundOrdersImportXmlMutationVariables = {data?: PostApiOutboundOrdersImportXmlBody}
+    export type PostApiOutboundPickingScanMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundPickingScan>>>
+    export type PostApiOutboundPickingScanMutationBody = PickItemCommand
+    export type PostApiOutboundPickingScanMutationError = unknown
+    export type PostApiOutboundPickingScanMutationVariables = {data: PickItemCommand}
 
-    export const usePostApiOutboundOrdersImportXml = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, TError,PostApiOutboundOrdersImportXmlMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiOutboundPickingScan = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, TError,PostApiOutboundPickingScanMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>,
+        Awaited<ReturnType<typeof postApiOutboundPickingScan>>,
         TError,
-        PostApiOutboundOrdersImportXmlMutationVariables,
+        PostApiOutboundPickingScanMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiOutboundOrdersImportXmlMutationOptions(options), queryClient);
+      return useMutation(getPostApiOutboundPickingScanMutationOptions(options), queryClient);
     }
-    export const postApiOutboundOrdersIdAllocate = (
+    export const postApiOutboundPackingPack = (
+    packOrderCommand: PackOrderCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/packing/pack`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: packOrderCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundPackingPackMutationKey = () => ['postApiOutboundPackingPack'] as const;
+
+export const getPostApiOutboundPackingPackMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, TError,PostApiOutboundPackingPackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, TError,PostApiOutboundPackingPackMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundPackingPackMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, PostApiOutboundPackingPackMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiOutboundPackingPack(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundPackingPackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundPackingPack>>>
+    export type PostApiOutboundPackingPackMutationBody = PackOrderCommand
+    export type PostApiOutboundPackingPackMutationError = unknown
+    export type PostApiOutboundPackingPackMutationVariables = {data: PackOrderCommand}
+
+    export const usePostApiOutboundPackingPack = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, TError,PostApiOutboundPackingPackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundPackingPack>>,
+        TError,
+        PostApiOutboundPackingPackMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundPackingPackMutationOptions(options), queryClient);
+    }
+    export const deleteApiOutboundOrdersIdCancel = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/outbound/orders/${id}/allocate`, method: 'POST', signal
+      {url: `/api/outbound/orders/${id}/cancel`, method: 'DELETE', signal
     },
       options);
     }
@@ -137,13 +280,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiOutboundOrdersIdAllocateMutationKey = () => ['postApiOutboundOrdersIdAllocate'] as const;
+export const getDeleteApiOutboundOrdersIdCancelMutationKey = () => ['deleteApiOutboundOrdersIdCancel'] as const;
 
-export const getPostApiOutboundOrdersIdAllocateMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, TError,PostApiOutboundOrdersIdAllocateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, TError,PostApiOutboundOrdersIdAllocateMutationVariables, TContext> => {
+export const getDeleteApiOutboundOrdersIdCancelMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>, TError,DeleteApiOutboundOrdersIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>, TError,DeleteApiOutboundOrdersIdCancelMutationVariables, TContext> => {
 
-const mutationKey = getPostApiOutboundOrdersIdAllocateMutationKey();
+const mutationKey = getDeleteApiOutboundOrdersIdCancelMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -153,10 +296,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, PostApiOutboundOrdersIdAllocateMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>, DeleteApiOutboundOrdersIdCancelMutationVariables> = (props) => {
           const {id} = props ?? {};
 
-          return  postApiOutboundOrdersIdAllocate(id,requestOptions)
+          return  deleteApiOutboundOrdersIdCancel(id,requestOptions)
         }
 
 
@@ -166,20 +309,20 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiOutboundOrdersIdAllocateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>>
+    export type DeleteApiOutboundOrdersIdCancelMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>>
 
-    export type PostApiOutboundOrdersIdAllocateMutationError = unknown
-    export type PostApiOutboundOrdersIdAllocateMutationVariables = {id: string}
+    export type DeleteApiOutboundOrdersIdCancelMutationError = unknown
+    export type DeleteApiOutboundOrdersIdCancelMutationVariables = {id: string}
 
-    export const usePostApiOutboundOrdersIdAllocate = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, TError,PostApiOutboundOrdersIdAllocateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const useDeleteApiOutboundOrdersIdCancel = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>, TError,DeleteApiOutboundOrdersIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>,
+        Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>,
         TError,
-        PostApiOutboundOrdersIdAllocateMutationVariables,
+        DeleteApiOutboundOrdersIdCancelMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiOutboundOrdersIdAllocateMutationOptions(options), queryClient);
+      return useMutation(getDeleteApiOutboundOrdersIdCancelMutationOptions(options), queryClient);
     }
     export const postApiOutboundOrders = (
     createOutboundOrderCommand: CreateOutboundOrderCommand,
@@ -415,16 +558,20 @@ export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getA
 
 
 
-export const postApiOutboundPackingPack = (
-    packOrderCommand: PackOrderCommand,
+export const postApiOutboundOrdersImportXml = (
+    postApiOutboundOrdersImportXmlBody?: PostApiOutboundOrdersImportXmlBody,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
+      const formData = new FormData();
+if(postApiOutboundOrdersImportXmlBody?.file !== undefined) {
+ formData.append(`file`, postApiOutboundOrdersImportXmlBody.file);
+ }
 
       return customInstance<void>(
-      {url: `/api/outbound/packing/pack`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: packOrderCommand, signal
+      {url: `/api/outbound/orders/import-xml`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
     },
       options);
     }
@@ -432,13 +579,13 @@ export const postApiOutboundPackingPack = (
 
 
 
-export const getPostApiOutboundPackingPackMutationKey = () => ['postApiOutboundPackingPack'] as const;
+export const getPostApiOutboundOrdersImportXmlMutationKey = () => ['postApiOutboundOrdersImportXml'] as const;
 
-export const getPostApiOutboundPackingPackMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, TError,PostApiOutboundPackingPackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, TError,PostApiOutboundPackingPackMutationVariables, TContext> => {
+export const getPostApiOutboundOrdersImportXmlMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, TError,PostApiOutboundOrdersImportXmlMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, TError,PostApiOutboundOrdersImportXmlMutationVariables, TContext> => {
 
-const mutationKey = getPostApiOutboundPackingPackMutationKey();
+const mutationKey = getPostApiOutboundOrdersImportXmlMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -448,10 +595,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, PostApiOutboundPackingPackMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, PostApiOutboundOrdersImportXmlMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  postApiOutboundPackingPack(data,requestOptions)
+          return  postApiOutboundOrdersImportXml(data,requestOptions)
         }
 
 
@@ -461,29 +608,29 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiOutboundPackingPackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundPackingPack>>>
-    export type PostApiOutboundPackingPackMutationBody = PackOrderCommand
-    export type PostApiOutboundPackingPackMutationError = unknown
-    export type PostApiOutboundPackingPackMutationVariables = {data: PackOrderCommand}
+    export type PostApiOutboundOrdersImportXmlMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>>
+    export type PostApiOutboundOrdersImportXmlMutationBody = PostApiOutboundOrdersImportXmlBody | undefined
+    export type PostApiOutboundOrdersImportXmlMutationError = unknown
+    export type PostApiOutboundOrdersImportXmlMutationVariables = {data?: PostApiOutboundOrdersImportXmlBody}
 
-    export const usePostApiOutboundPackingPack = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPackingPack>>, TError,PostApiOutboundPackingPackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiOutboundOrdersImportXml = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>, TError,PostApiOutboundOrdersImportXmlMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiOutboundPackingPack>>,
+        Awaited<ReturnType<typeof postApiOutboundOrdersImportXml>>,
         TError,
-        PostApiOutboundPackingPackMutationVariables,
+        PostApiOutboundOrdersImportXmlMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiOutboundPackingPackMutationOptions(options), queryClient);
+      return useMutation(getPostApiOutboundOrdersImportXmlMutationOptions(options), queryClient);
     }
-    export const getApiOutboundPickingOrderIdTasks = (
-    orderId: string,
+    export const postApiOutboundOrdersIdAllocate = (
+    id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/outbound/picking/${orderId}/tasks`, method: 'GET', signal
+      {url: `/api/outbound/orders/${id}/allocate`, method: 'POST', signal
     },
       options);
     }
@@ -491,101 +638,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiOutboundPickingOrderIdTasksQueryKey = (orderId: string,) => {
-    return [
-    `/api/outbound/picking/${orderId}/tasks`
-    ] as const;
-    }
+export const getPostApiOutboundOrdersIdAllocateMutationKey = () => ['postApiOutboundOrdersIdAllocate'] as const;
 
+export const getPostApiOutboundOrdersIdAllocateMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, TError,PostApiOutboundOrdersIdAllocateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, TError,PostApiOutboundOrdersIdAllocateMutationVariables, TContext> => {
 
-export const getGetApiOutboundPickingOrderIdTasksQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundPickingOrderIdTasksQueryKey(orderId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>> = ({ signal }) => getApiOutboundPickingOrderIdTasks(orderId, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: orderId !== null && orderId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiOutboundPickingOrderIdTasksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>>
-export type GetApiOutboundPickingOrderIdTasksQueryError = unknown
-
-
-export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
- orderId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>,
-          TError,
-          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
- orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>,
-          TError,
-          Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
- orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
- orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiOutboundPickingOrderIdTasksQueryOptions(orderId,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const postApiOutboundPickingScan = (
-    pickItemCommand: PickItemCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/outbound/picking/scan`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: pickItemCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiOutboundPickingScanMutationKey = () => ['postApiOutboundPickingScan'] as const;
-
-export const getPostApiOutboundPickingScanMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, TError,PostApiOutboundPickingScanMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, TError,PostApiOutboundPickingScanMutationVariables, TContext> => {
-
-const mutationKey = getPostApiOutboundPickingScanMutationKey();
+const mutationKey = getPostApiOutboundOrdersIdAllocateMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -595,10 +654,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, PostApiOutboundPickingScanMutationVariables> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, PostApiOutboundOrdersIdAllocateMutationVariables> = (props) => {
+          const {id} = props ?? {};
 
-          return  postApiOutboundPickingScan(data,requestOptions)
+          return  postApiOutboundOrdersIdAllocate(id,requestOptions)
         }
 
 
@@ -608,18 +667,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiOutboundPickingScanMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundPickingScan>>>
-    export type PostApiOutboundPickingScanMutationBody = PickItemCommand
-    export type PostApiOutboundPickingScanMutationError = unknown
-    export type PostApiOutboundPickingScanMutationVariables = {data: PickItemCommand}
+    export type PostApiOutboundOrdersIdAllocateMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>>
 
-    export const usePostApiOutboundPickingScan = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingScan>>, TError,PostApiOutboundPickingScanMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export type PostApiOutboundOrdersIdAllocateMutationError = unknown
+    export type PostApiOutboundOrdersIdAllocateMutationVariables = {id: string}
+
+    export const usePostApiOutboundOrdersIdAllocate = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>, TError,PostApiOutboundOrdersIdAllocateMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiOutboundPickingScan>>,
+        Awaited<ReturnType<typeof postApiOutboundOrdersIdAllocate>>,
         TError,
-        PostApiOutboundPickingScanMutationVariables,
+        PostApiOutboundOrdersIdAllocateMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiOutboundPickingScanMutationOptions(options), queryClient);
+      return useMutation(getPostApiOutboundOrdersIdAllocateMutationOptions(options), queryClient);
     }

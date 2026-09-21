@@ -1,16 +1,24 @@
+import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHasPermission } from '@/hooks/useHasPermission';
-import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package } from 'lucide-react';
+import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package, UserCircle } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+
+// Importe o modal que acabámos de criar
+import MeuPerfilModal from '@/pages/Perfis/MeuPerfilModal';
 
 export default function MainLayout() {
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
+
+    // Controle de estado para o modal de Perfil
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
     const { user, logout, empresas, companyId } = useAuthStore();
     const empresaAtual = empresas?.find(e => e.id === companyId);
 
@@ -68,9 +76,7 @@ export default function MainLayout() {
                 </div>
                 <div className="flex-1 overflow-y-auto py-6 px-4 scrollbar-thin scrollbar-thumb-slate-200">
                     {menuGroups.map((group, index) => {
-                        // Filtra apenas itens que o usuário tem permissão para ver
                         const visibleItems = group.items.filter(item => useHasPermission(item.permission));
-
                         if (visibleItems.length === 0) return null;
 
                         return (
@@ -105,13 +111,14 @@ export default function MainLayout() {
             <main className="flex-1 flex flex-col min-w-0 bg-white">
                 <header className="h-16 flex items-center justify-between px-8 border-b border-slate-200/60 bg-white z-10">
                     <div className="flex items-center">
-                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-lg">
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-lg cursor-default">
                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
                             <span className="text-xs font-semibold text-slate-700 tracking-tight">
                                 {empresaAtual?.corporateName || 'Empresa não selecionada'}
                             </span>
                         </div>
                     </div>
+
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="relative h-9 rounded-full pl-2 pr-4 flex items-center gap-2 hover:bg-slate-50 border border-transparent hover:border-slate-200">
@@ -124,6 +131,7 @@ export default function MainLayout() {
                                 <ChevronDown size={14} className="text-slate-400" />
                             </Button>
                         </DropdownMenuTrigger>
+
                         <DropdownMenuContent align="end" className="w-56 mt-1">
                             <DropdownMenuLabel className="font-normal p-3">
                                 <div className="flex flex-col space-y-1">
@@ -132,10 +140,17 @@ export default function MainLayout() {
                                 </div>
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
+
+                            {/* NOVO: Ação de Meu Perfil */}
+                            <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)} className="cursor-pointer py-2">
+                                <UserCircle className="mr-2 h-4 w-4 text-slate-400" /> Meu Perfil
+                            </DropdownMenuItem>
+
                             <DropdownMenuItem onClick={() => navigate('/selecao-empresa')} className="cursor-pointer py-2">
                                 <Warehouse className="mr-2 h-4 w-4 text-slate-400" /> Trocar Operação
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer py-2 text-red-600 focus:text-red-600 focus:bg-red-50">
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={handleLogout} className="cursor-pointer py-2 text-rose-600 focus:text-rose-600 focus:bg-rose-50">
                                 <LogOut className="mr-2 h-4 w-4" /> Encerrar Sessão
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -146,6 +161,13 @@ export default function MainLayout() {
                     <Outlet />
                 </div>
             </main>
+
+            {/* Injeção do Modal de Perfil no escopo do Layout */}
+            <MeuPerfilModal
+                open={isProfileModalOpen}
+                onOpenChange={setIsProfileModalOpen}
+                currentUser={user}
+            />
         </div>
     );
 }

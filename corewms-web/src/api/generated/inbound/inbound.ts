@@ -58,437 +58,17 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const postApiInboundLegacyImport = (
-    postApiInboundLegacyImportBody?: PostApiInboundLegacyImportBody,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-      const formData = new FormData();
-if(postApiInboundLegacyImportBody?.file !== undefined) {
- formData.append(`file`, postApiInboundLegacyImportBody.file);
- }
-
-      return customInstance<void>(
-      {url: `/api/inbound/legacy-import`, method: 'POST',
-      headers: {'Content-Type': 'multipart/form-data', },
-       data: formData, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiInboundLegacyImportMutationKey = () => ['postApiInboundLegacyImport'] as const;
-
-export const getPostApiInboundLegacyImportMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, TError,PostApiInboundLegacyImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, TError,PostApiInboundLegacyImportMutationVariables, TContext> => {
-
-const mutationKey = getPostApiInboundLegacyImportMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, PostApiInboundLegacyImportMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiInboundLegacyImport(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiInboundLegacyImportMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundLegacyImport>>>
-    export type PostApiInboundLegacyImportMutationBody = PostApiInboundLegacyImportBody | undefined
-    export type PostApiInboundLegacyImportMutationError = unknown
-    export type PostApiInboundLegacyImportMutationVariables = {data?: PostApiInboundLegacyImportBody}
-
-    export const usePostApiInboundLegacyImport = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, TError,PostApiInboundLegacyImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInboundLegacyImport>>,
-        TError,
-        PostApiInboundLegacyImportMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiInboundLegacyImportMutationOptions(options), queryClient);
-    }
-    export const getApiInbound = (
-    params?: GetApiInboundParams,
+export const postApiInboundReviewItemIdLink = (
+    itemId: string,
+    linkProductToItemCommand: LinkProductToItemCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/inbound`, method: 'GET',
-        params, signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiInboundQueryKey = (params?: GetApiInboundParams,) => {
-    return [
-    `/api/inbound`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetApiInboundQueryOptions = <TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInbound>>> = ({ signal }) => getApiInbound(params, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiInboundQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInbound>>>
-export type GetApiInboundQueryError = unknown
-
-
-export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
- params: undefined |  GetApiInboundParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInbound>>,
-          TError,
-          Awaited<ReturnType<typeof getApiInbound>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
- params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInbound>>,
-          TError,
-          Awaited<ReturnType<typeof getApiInbound>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
- params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
- params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiInboundQueryOptions(params,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getApiInboundId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/inbound/${id}`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiInboundIdQueryKey = (id: string,) => {
-    return [
-    `/api/inbound/${id}`
-    ] as const;
-    }
-
-
-export const getGetApiInboundIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundIdQueryKey(id);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInboundId>>> = ({ signal }) => getApiInboundId(id, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiInboundIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInboundId>>>
-export type GetApiInboundIdQueryError = unknown
-
-
-export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
- id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInboundId>>,
-          TError,
-          Awaited<ReturnType<typeof getApiInboundId>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInboundId>>,
-          TError,
-          Awaited<ReturnType<typeof getApiInboundId>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiInboundIdQueryOptions(id,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const postApiInboundIdRollback = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/inbound/${id}/rollback`, method: 'POST', signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiInboundIdRollbackMutationKey = () => ['postApiInboundIdRollback'] as const;
-
-export const getPostApiInboundIdRollbackMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundIdRollback>>, TError,PostApiInboundIdRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundIdRollback>>, TError,PostApiInboundIdRollbackMutationVariables, TContext> => {
-
-const mutationKey = getPostApiInboundIdRollbackMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundIdRollback>>, PostApiInboundIdRollbackMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  postApiInboundIdRollback(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiInboundIdRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundIdRollback>>>
-
-    export type PostApiInboundIdRollbackMutationError = unknown
-    export type PostApiInboundIdRollbackMutationVariables = {id: string}
-
-    export const usePostApiInboundIdRollback = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundIdRollback>>, TError,PostApiInboundIdRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInboundIdRollback>>,
-        TError,
-        PostApiInboundIdRollbackMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiInboundIdRollbackMutationOptions(options), queryClient);
-    }
-    export const deleteApiInboundIdCancel = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/inbound/${id}/cancel`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiInboundIdCancelMutationKey = () => ['deleteApiInboundIdCancel'] as const;
-
-export const getDeleteApiInboundIdCancelMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, TError,DeleteApiInboundIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, TError,DeleteApiInboundIdCancelMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiInboundIdCancelMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, DeleteApiInboundIdCancelMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiInboundIdCancel(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiInboundIdCancelMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>>
-
-    export type DeleteApiInboundIdCancelMutationError = unknown
-    export type DeleteApiInboundIdCancelMutationVariables = {id: string}
-
-    export const useDeleteApiInboundIdCancel = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, TError,DeleteApiInboundIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiInboundIdCancel>>,
-        TError,
-        DeleteApiInboundIdCancelMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiInboundIdCancelMutationOptions(options), queryClient);
-    }
-    export const postApiInboundImport = (
-    postApiInboundImportBody?: PostApiInboundImportBody,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-      const formData = new FormData();
-if(postApiInboundImportBody?.files !== undefined) {
- postApiInboundImportBody?.files.forEach(value => formData.append(`files`, value));
- }
-
-      return customInstance<void>(
-      {url: `/api/inbound/import`, method: 'POST',
-      headers: {'Content-Type': 'multipart/form-data', },
-       data: formData, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiInboundImportMutationKey = () => ['postApiInboundImport'] as const;
-
-export const getPostApiInboundImportMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImport>>, TError,PostApiInboundImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImport>>, TError,PostApiInboundImportMutationVariables, TContext> => {
-
-const mutationKey = getPostApiInboundImportMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundImport>>, PostApiInboundImportMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiInboundImport(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiInboundImportMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundImport>>>
-    export type PostApiInboundImportMutationBody = PostApiInboundImportBody | undefined
-    export type PostApiInboundImportMutationError = unknown
-    export type PostApiInboundImportMutationVariables = {data?: PostApiInboundImportBody}
-
-    export const usePostApiInboundImport = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImport>>, TError,PostApiInboundImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInboundImport>>,
-        TError,
-        PostApiInboundImportMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiInboundImportMutationOptions(options), queryClient);
-    }
-    export const postApiInboundReceiveStart = (
-    startReceivingCommand: StartReceivingCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/inbound/receive/start`, method: 'POST',
+      {url: `/api/inbound/review/${itemId}/link`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: startReceivingCommand, signal
+      data: linkProductToItemCommand, signal
     },
       options);
     }
@@ -496,13 +76,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiInboundReceiveStartMutationKey = () => ['postApiInboundReceiveStart'] as const;
+export const getPostApiInboundReviewItemIdLinkMutationKey = () => ['postApiInboundReviewItemIdLink'] as const;
 
-export const getPostApiInboundReceiveStartMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, TError,PostApiInboundReceiveStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, TError,PostApiInboundReceiveStartMutationVariables, TContext> => {
+export const getPostApiInboundReviewItemIdLinkMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, TError,PostApiInboundReviewItemIdLinkMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, TError,PostApiInboundReviewItemIdLinkMutationVariables, TContext> => {
 
-const mutationKey = getPostApiInboundReceiveStartMutationKey();
+const mutationKey = getPostApiInboundReviewItemIdLinkMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -512,10 +92,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, PostApiInboundReceiveStartMutationVariables> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, PostApiInboundReviewItemIdLinkMutationVariables> = (props) => {
+          const {itemId,data} = props ?? {};
 
-          return  postApiInboundReceiveStart(data,requestOptions)
+          return  postApiInboundReviewItemIdLink(itemId,data,requestOptions)
         }
 
 
@@ -525,22 +105,108 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiInboundReceiveStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundReceiveStart>>>
-    export type PostApiInboundReceiveStartMutationBody = StartReceivingCommand
-    export type PostApiInboundReceiveStartMutationError = unknown
-    export type PostApiInboundReceiveStartMutationVariables = {data: StartReceivingCommand}
+    export type PostApiInboundReviewItemIdLinkMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>>
+    export type PostApiInboundReviewItemIdLinkMutationBody = LinkProductToItemCommand
+    export type PostApiInboundReviewItemIdLinkMutationError = unknown
+    export type PostApiInboundReviewItemIdLinkMutationVariables = {itemId: string;data: LinkProductToItemCommand}
 
-    export const usePostApiInboundReceiveStart = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, TError,PostApiInboundReceiveStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiInboundReviewItemIdLink = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, TError,PostApiInboundReviewItemIdLinkMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInboundReceiveStart>>,
+        Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>,
         TError,
-        PostApiInboundReceiveStartMutationVariables,
+        PostApiInboundReviewItemIdLinkMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiInboundReceiveStartMutationOptions(options), queryClient);
+      return useMutation(getPostApiInboundReviewItemIdLinkMutationOptions(options), queryClient);
     }
-    export const postApiInboundReceiveCheckout = (
+    export const getApiInboundReview = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/review`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiInboundReviewQueryKey = () => {
+    return [
+    `/api/inbound/review`
+    ] as const;
+    }
+
+
+export const getGetApiInboundReviewQueryOptions = <TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundReviewQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInboundReview>>> = ({ signal }) => getApiInboundReview(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInboundReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInboundReview>>>
+export type GetApiInboundReviewQueryError = unknown
+
+
+export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInboundReview>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInboundReview>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInboundReview>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInboundReview>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInboundReviewQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiInboundReceiveCheckout = (
     receiveLoteCommand: ReceiveLoteCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -660,14 +326,16 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiInboundReceiveOrderItemIdReleaseMutationOptions(options), queryClient);
     }
-    export const getApiInboundReview = (
-
+    export const postApiInboundReceiveStart = (
+    startReceivingCommand: StartReceivingCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/inbound/review`, method: 'GET', signal
+      {url: `/api/inbound/receive/start`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: startReceivingCommand, signal
     },
       options);
     }
@@ -675,66 +343,184 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiInboundReviewQueryKey = () => {
+export const getPostApiInboundReceiveStartMutationKey = () => ['postApiInboundReceiveStart'] as const;
+
+export const getPostApiInboundReceiveStartMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, TError,PostApiInboundReceiveStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, TError,PostApiInboundReceiveStartMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundReceiveStartMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, PostApiInboundReceiveStartMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundReceiveStart(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundReceiveStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundReceiveStart>>>
+    export type PostApiInboundReceiveStartMutationBody = StartReceivingCommand
+    export type PostApiInboundReceiveStartMutationError = unknown
+    export type PostApiInboundReceiveStartMutationVariables = {data: StartReceivingCommand}
+
+    export const usePostApiInboundReceiveStart = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveStart>>, TError,PostApiInboundReceiveStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundReceiveStart>>,
+        TError,
+        PostApiInboundReceiveStartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundReceiveStartMutationOptions(options), queryClient);
+    }
+    export const deleteApiInboundIdCancel = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/${id}/cancel`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiInboundIdCancelMutationKey = () => ['deleteApiInboundIdCancel'] as const;
+
+export const getDeleteApiInboundIdCancelMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, TError,DeleteApiInboundIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, TError,DeleteApiInboundIdCancelMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiInboundIdCancelMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, DeleteApiInboundIdCancelMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiInboundIdCancel(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiInboundIdCancelMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>>
+
+    export type DeleteApiInboundIdCancelMutationError = unknown
+    export type DeleteApiInboundIdCancelMutationVariables = {id: string}
+
+    export const useDeleteApiInboundIdCancel = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundIdCancel>>, TError,DeleteApiInboundIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiInboundIdCancel>>,
+        TError,
+        DeleteApiInboundIdCancelMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiInboundIdCancelMutationOptions(options), queryClient);
+    }
+    export const getApiInboundId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/${id}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiInboundIdQueryKey = (id: string,) => {
     return [
-    `/api/inbound/review`
+    `/api/inbound/${id}`
     ] as const;
     }
 
 
-export const getGetApiInboundReviewQueryOptions = <TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiInboundIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundReviewQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundIdQueryKey(id);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInboundReview>>> = ({ signal }) => getApiInboundReview(requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInboundId>>> = ({ signal }) => getApiInboundId(id, requestOptions, signal);
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetApiInboundReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInboundReview>>>
-export type GetApiInboundReviewQueryError = unknown
+export type GetApiInboundIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInboundId>>>
+export type GetApiInboundIdQueryError = unknown
 
 
-export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>> & Pick<
+export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInboundReview>>,
+          Awaited<ReturnType<typeof getApiInboundId>>,
           TError,
-          Awaited<ReturnType<typeof getApiInboundReview>>
+          Awaited<ReturnType<typeof getApiInboundId>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>> & Pick<
+export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiInboundReview>>,
+          Awaited<ReturnType<typeof getApiInboundId>>,
           TError,
-          Awaited<ReturnType<typeof getApiInboundReview>>
+          Awaited<ReturnType<typeof getApiInboundId>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiInboundReviewQueryOptions(options)
+  const queryOptions = getGetApiInboundIdQueryOptions(id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -746,17 +532,15 @@ export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiI
 
 
 
-export const postApiInboundReviewItemIdLink = (
-    itemId: string,
-    linkProductToItemCommand: LinkProductToItemCommand,
+export const getApiInbound = (
+    params?: GetApiInboundParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/inbound/review/${itemId}/link`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: linkProductToItemCommand, signal
+      {url: `/api/inbound`, method: 'GET',
+        params, signal
     },
       options);
     }
@@ -764,13 +548,99 @@ export const postApiInboundReviewItemIdLink = (
 
 
 
-export const getPostApiInboundReviewItemIdLinkMutationKey = () => ['postApiInboundReviewItemIdLink'] as const;
+export const getGetApiInboundQueryKey = (params?: GetApiInboundParams,) => {
+    return [
+    `/api/inbound`, ...(params ? [params] : [])
+    ] as const;
+    }
 
-export const getPostApiInboundReviewItemIdLinkMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, TError,PostApiInboundReviewItemIdLinkMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, TError,PostApiInboundReviewItemIdLinkMutationVariables, TContext> => {
 
-const mutationKey = getPostApiInboundReviewItemIdLinkMutationKey();
+export const getGetApiInboundQueryOptions = <TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInboundQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInbound>>> = ({ signal }) => getApiInbound(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInboundQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInbound>>>
+export type GetApiInboundQueryError = unknown
+
+
+export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
+ params: undefined |  GetApiInboundParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInbound>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInbound>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
+ params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInbound>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInbound>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
+ params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
+ params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInboundQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiInboundOrderIdRollback = (
+    orderId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/${orderId}/rollback`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundOrderIdRollbackMutationKey = () => ['postApiInboundOrderIdRollback'] as const;
+
+export const getPostApiInboundOrderIdRollbackMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundOrderIdRollback>>, TError,PostApiInboundOrderIdRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundOrderIdRollback>>, TError,PostApiInboundOrderIdRollbackMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundOrderIdRollbackMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -780,10 +650,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, PostApiInboundReviewItemIdLinkMutationVariables> = (props) => {
-          const {itemId,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundOrderIdRollback>>, PostApiInboundOrderIdRollbackMutationVariables> = (props) => {
+          const {orderId} = props ?? {};
 
-          return  postApiInboundReviewItemIdLink(itemId,data,requestOptions)
+          return  postApiInboundOrderIdRollback(orderId,requestOptions)
         }
 
 
@@ -793,18 +663,148 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiInboundReviewItemIdLinkMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>>
-    export type PostApiInboundReviewItemIdLinkMutationBody = LinkProductToItemCommand
-    export type PostApiInboundReviewItemIdLinkMutationError = unknown
-    export type PostApiInboundReviewItemIdLinkMutationVariables = {itemId: string;data: LinkProductToItemCommand}
+    export type PostApiInboundOrderIdRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundOrderIdRollback>>>
 
-    export const usePostApiInboundReviewItemIdLink = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>, TError,PostApiInboundReviewItemIdLinkMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export type PostApiInboundOrderIdRollbackMutationError = unknown
+    export type PostApiInboundOrderIdRollbackMutationVariables = {orderId: string}
+
+    export const usePostApiInboundOrderIdRollback = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundOrderIdRollback>>, TError,PostApiInboundOrderIdRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInboundReviewItemIdLink>>,
+        Awaited<ReturnType<typeof postApiInboundOrderIdRollback>>,
         TError,
-        PostApiInboundReviewItemIdLinkMutationVariables,
+        PostApiInboundOrderIdRollbackMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiInboundReviewItemIdLinkMutationOptions(options), queryClient);
+      return useMutation(getPostApiInboundOrderIdRollbackMutationOptions(options), queryClient);
+    }
+    export const postApiInboundLegacyImport = (
+    postApiInboundLegacyImportBody?: PostApiInboundLegacyImportBody,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+      const formData = new FormData();
+if(postApiInboundLegacyImportBody?.file !== undefined) {
+ formData.append(`file`, postApiInboundLegacyImportBody.file);
+ }
+
+      return customInstance<void>(
+      {url: `/api/inbound/legacy-import`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundLegacyImportMutationKey = () => ['postApiInboundLegacyImport'] as const;
+
+export const getPostApiInboundLegacyImportMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, TError,PostApiInboundLegacyImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, TError,PostApiInboundLegacyImportMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundLegacyImportMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, PostApiInboundLegacyImportMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundLegacyImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundLegacyImportMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundLegacyImport>>>
+    export type PostApiInboundLegacyImportMutationBody = PostApiInboundLegacyImportBody | undefined
+    export type PostApiInboundLegacyImportMutationError = unknown
+    export type PostApiInboundLegacyImportMutationVariables = {data?: PostApiInboundLegacyImportBody}
+
+    export const usePostApiInboundLegacyImport = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundLegacyImport>>, TError,PostApiInboundLegacyImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundLegacyImport>>,
+        TError,
+        PostApiInboundLegacyImportMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundLegacyImportMutationOptions(options), queryClient);
+    }
+    export const postApiInboundImport = (
+    postApiInboundImportBody?: PostApiInboundImportBody,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+      const formData = new FormData();
+if(postApiInboundImportBody?.files !== undefined) {
+ postApiInboundImportBody?.files.forEach(value => formData.append(`files`, value));
+ }
+
+      return customInstance<void>(
+      {url: `/api/inbound/import`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundImportMutationKey = () => ['postApiInboundImport'] as const;
+
+export const getPostApiInboundImportMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImport>>, TError,PostApiInboundImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImport>>, TError,PostApiInboundImportMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundImportMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundImport>>, PostApiInboundImportMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundImport(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundImportMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundImport>>>
+    export type PostApiInboundImportMutationBody = PostApiInboundImportBody | undefined
+    export type PostApiInboundImportMutationError = unknown
+    export type PostApiInboundImportMutationVariables = {data?: PostApiInboundImportBody}
+
+    export const usePostApiInboundImport = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImport>>, TError,PostApiInboundImportMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundImport>>,
+        TError,
+        PostApiInboundImportMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundImportMutationOptions(options), queryClient);
     }

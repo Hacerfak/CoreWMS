@@ -64,7 +64,820 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const postApiTopologyLocations = (
+export const postApiTopologyZones = (
+    createZoneCommand: CreateZoneCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/zones`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createZoneCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiTopologyZonesMutationKey = () => ['postApiTopologyZones'] as const;
+
+export const getPostApiTopologyZonesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiTopologyZonesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyZones>>, PostApiTopologyZonesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiTopologyZones(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiTopologyZonesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyZones>>>
+    export type PostApiTopologyZonesMutationBody = CreateZoneCommand
+    export type PostApiTopologyZonesMutationError = unknown
+    export type PostApiTopologyZonesMutationVariables = {data: CreateZoneCommand}
+
+    export const usePostApiTopologyZones = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiTopologyZones>>,
+        TError,
+        PostApiTopologyZonesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiTopologyZonesMutationOptions(options), queryClient);
+    }
+    export const deleteApiTopologyZonesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/zones/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiTopologyZonesIdMutationKey = () => ['deleteApiTopologyZonesId'] as const;
+
+export const getDeleteApiTopologyZonesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiTopologyZonesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, DeleteApiTopologyZonesIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiTopologyZonesId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiTopologyZonesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>>
+
+    export type DeleteApiTopologyZonesIdMutationError = unknown
+    export type DeleteApiTopologyZonesIdMutationVariables = {id: string}
+
+    export const useDeleteApiTopologyZonesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiTopologyZonesId>>,
+        TError,
+        DeleteApiTopologyZonesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiTopologyZonesIdMutationOptions(options), queryClient);
+    }
+    export const putApiTopologyZonesId = (
+    id: string,
+    updateZoneCommand: UpdateZoneCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/zones/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateZoneCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiTopologyZonesIdMutationKey = () => ['putApiTopologyZonesId'] as const;
+
+export const getPutApiTopologyZonesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiTopologyZonesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiTopologyZonesId>>, PutApiTopologyZonesIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiTopologyZonesId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiTopologyZonesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiTopologyZonesId>>>
+    export type PutApiTopologyZonesIdMutationBody = UpdateZoneCommand
+    export type PutApiTopologyZonesIdMutationError = unknown
+    export type PutApiTopologyZonesIdMutationVariables = {id: string;data: UpdateZoneCommand}
+
+    export const usePutApiTopologyZonesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiTopologyZonesId>>,
+        TError,
+        PutApiTopologyZonesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiTopologyZonesIdMutationOptions(options), queryClient);
+    }
+    export const getApiTopologyZonesWarehouseId = (
+    warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/zones/${warehouseId}`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiTopologyZonesWarehouseIdQueryKey = (warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams,) => {
+    return [
+    `/api/topology/zones/${warehouseId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiTopologyZonesWarehouseIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyZonesWarehouseIdQueryKey(warehouseId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>> = ({ signal }) => getApiTopologyZonesWarehouseId(warehouseId,params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: warehouseId !== null && warehouseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTopologyZonesWarehouseIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>>
+export type GetApiTopologyZonesWarehouseIdQueryError = unknown
+
+
+export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
+ warehouseId: string,
+    params: undefined |  GetApiTopologyZonesWarehouseIdParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
+ warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
+ warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
+ warehouseId: string,
+    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTopologyZonesWarehouseIdQueryOptions(warehouseId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiTopologyWarehouses = (
+    createWarehouseCommand: CreateWarehouseCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/warehouses`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createWarehouseCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiTopologyWarehousesMutationKey = () => ['postApiTopologyWarehouses'] as const;
+
+export const getPostApiTopologyWarehousesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiTopologyWarehousesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, PostApiTopologyWarehousesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiTopologyWarehouses(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiTopologyWarehousesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyWarehouses>>>
+    export type PostApiTopologyWarehousesMutationBody = CreateWarehouseCommand
+    export type PostApiTopologyWarehousesMutationError = unknown
+    export type PostApiTopologyWarehousesMutationVariables = {data: CreateWarehouseCommand}
+
+    export const usePostApiTopologyWarehouses = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiTopologyWarehouses>>,
+        TError,
+        PostApiTopologyWarehousesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiTopologyWarehousesMutationOptions(options), queryClient);
+    }
+    export const getApiTopologyWarehouses = (
+    params?: GetApiTopologyWarehousesParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/warehouses`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiTopologyWarehousesQueryKey = (params?: GetApiTopologyWarehousesParams,) => {
+    return [
+    `/api/topology/warehouses`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiTopologyWarehousesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyWarehousesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyWarehouses>>> = ({ signal }) => getApiTopologyWarehouses(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTopologyWarehousesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyWarehouses>>>
+export type GetApiTopologyWarehousesQueryError = unknown
+
+
+export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
+ params: undefined |  GetApiTopologyWarehousesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyWarehouses>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyWarehouses>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
+ params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyWarehouses>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyWarehouses>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
+ params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
+ params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTopologyWarehousesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const deleteApiTopologyWarehousesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/warehouses/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiTopologyWarehousesIdMutationKey = () => ['deleteApiTopologyWarehousesId'] as const;
+
+export const getDeleteApiTopologyWarehousesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiTopologyWarehousesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, DeleteApiTopologyWarehousesIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiTopologyWarehousesId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiTopologyWarehousesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>>
+
+    export type DeleteApiTopologyWarehousesIdMutationError = unknown
+    export type DeleteApiTopologyWarehousesIdMutationVariables = {id: string}
+
+    export const useDeleteApiTopologyWarehousesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>,
+        TError,
+        DeleteApiTopologyWarehousesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiTopologyWarehousesIdMutationOptions(options), queryClient);
+    }
+    export const putApiTopologyWarehousesId = (
+    id: string,
+    updateWarehouseCommand: UpdateWarehouseCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/warehouses/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateWarehouseCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiTopologyWarehousesIdMutationKey = () => ['putApiTopologyWarehousesId'] as const;
+
+export const getPutApiTopologyWarehousesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiTopologyWarehousesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, PutApiTopologyWarehousesIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiTopologyWarehousesId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiTopologyWarehousesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>>
+    export type PutApiTopologyWarehousesIdMutationBody = UpdateWarehouseCommand
+    export type PutApiTopologyWarehousesIdMutationError = unknown
+    export type PutApiTopologyWarehousesIdMutationVariables = {id: string;data: UpdateWarehouseCommand}
+
+    export const usePutApiTopologyWarehousesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiTopologyWarehousesId>>,
+        TError,
+        PutApiTopologyWarehousesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiTopologyWarehousesIdMutationOptions(options), queryClient);
+    }
+    export const postApiTopologyStorageTypes = (
+    createStorageTypeCommand: CreateStorageTypeCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/storage-types`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createStorageTypeCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiTopologyStorageTypesMutationKey = () => ['postApiTopologyStorageTypes'] as const;
+
+export const getPostApiTopologyStorageTypesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiTopologyStorageTypesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, PostApiTopologyStorageTypesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiTopologyStorageTypes(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiTopologyStorageTypesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>>
+    export type PostApiTopologyStorageTypesMutationBody = CreateStorageTypeCommand
+    export type PostApiTopologyStorageTypesMutationError = unknown
+    export type PostApiTopologyStorageTypesMutationVariables = {data: CreateStorageTypeCommand}
+
+    export const usePostApiTopologyStorageTypes = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiTopologyStorageTypes>>,
+        TError,
+        PostApiTopologyStorageTypesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiTopologyStorageTypesMutationOptions(options), queryClient);
+    }
+    export const getApiTopologyStorageTypes = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/storage-types`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiTopologyStorageTypesQueryKey = () => {
+    return [
+    `/api/topology/storage-types`
+    ] as const;
+    }
+
+
+export const getGetApiTopologyStorageTypesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyStorageTypesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>> = ({ signal }) => getApiTopologyStorageTypes(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiTopologyStorageTypesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>>
+export type GetApiTopologyStorageTypesQueryError = unknown
+
+
+export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>,
+          TError,
+          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiTopologyStorageTypesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const deleteApiTopologyStorageTypesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/storage-types/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiTopologyStorageTypesIdMutationKey = () => ['deleteApiTopologyStorageTypesId'] as const;
+
+export const getDeleteApiTopologyStorageTypesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiTopologyStorageTypesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, DeleteApiTopologyStorageTypesIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiTopologyStorageTypesId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiTopologyStorageTypesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>>
+
+    export type DeleteApiTopologyStorageTypesIdMutationError = unknown
+    export type DeleteApiTopologyStorageTypesIdMutationVariables = {id: string}
+
+    export const useDeleteApiTopologyStorageTypesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>,
+        TError,
+        DeleteApiTopologyStorageTypesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiTopologyStorageTypesIdMutationOptions(options), queryClient);
+    }
+    export const putApiTopologyStorageTypesId = (
+    id: string,
+    updateStorageTypeCommand: UpdateStorageTypeCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/storage-types/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateStorageTypeCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiTopologyStorageTypesIdMutationKey = () => ['putApiTopologyStorageTypesId'] as const;
+
+export const getPutApiTopologyStorageTypesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiTopologyStorageTypesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, PutApiTopologyStorageTypesIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiTopologyStorageTypesId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiTopologyStorageTypesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>>
+    export type PutApiTopologyStorageTypesIdMutationBody = UpdateStorageTypeCommand
+    export type PutApiTopologyStorageTypesIdMutationError = unknown
+    export type PutApiTopologyStorageTypesIdMutationVariables = {id: string;data: UpdateStorageTypeCommand}
+
+    export const usePutApiTopologyStorageTypesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>,
+        TError,
+        PutApiTopologyStorageTypesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiTopologyStorageTypesIdMutationOptions(options), queryClient);
+    }
+    export const postApiTopologyLocations = (
     createLocationCommand: CreateLocationCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -124,6 +937,65 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiTopologyLocationsMutationOptions(options), queryClient);
+    }
+    export const deleteApiTopologyLocationsId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/topology/locations/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiTopologyLocationsIdMutationKey = () => ['deleteApiTopologyLocationsId'] as const;
+
+export const getDeleteApiTopologyLocationsIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiTopologyLocationsIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, DeleteApiTopologyLocationsIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiTopologyLocationsId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiTopologyLocationsIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>>
+
+    export type DeleteApiTopologyLocationsIdMutationError = unknown
+    export type DeleteApiTopologyLocationsIdMutationVariables = {id: string}
+
+    export const useDeleteApiTopologyLocationsId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>,
+        TError,
+        DeleteApiTopologyLocationsIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiTopologyLocationsIdMutationOptions(options), queryClient);
     }
     export const putApiTopologyLocationsId = (
     id: string,
@@ -187,332 +1059,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiTopologyLocationsIdMutationOptions(options), queryClient);
     }
-    export const deleteApiTopologyLocationsId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/locations/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiTopologyLocationsIdMutationKey = () => ['deleteApiTopologyLocationsId'] as const;
-
-export const getDeleteApiTopologyLocationsIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiTopologyLocationsIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, DeleteApiTopologyLocationsIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiTopologyLocationsId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiTopologyLocationsIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>>
-
-    export type DeleteApiTopologyLocationsIdMutationError = unknown
-    export type DeleteApiTopologyLocationsIdMutationVariables = {id: string}
-
-    export const useDeleteApiTopologyLocationsId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>, TError,DeleteApiTopologyLocationsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiTopologyLocationsId>>,
-        TError,
-        DeleteApiTopologyLocationsIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiTopologyLocationsIdMutationOptions(options), queryClient);
-    }
-    export const getApiTopologyLocationsZoneId = (
-    zoneId: string,
-    params?: GetApiTopologyLocationsZoneIdParams,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/locations/${zoneId}`, method: 'GET',
-        params, signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiTopologyLocationsZoneIdQueryKey = (zoneId: string,
-    params?: GetApiTopologyLocationsZoneIdParams,) => {
-    return [
-    `/api/topology/locations/${zoneId}`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetApiTopologyLocationsZoneIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(zoneId: string,
-    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsZoneIdQueryKey(zoneId,params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>> = ({ signal }) => getApiTopologyLocationsZoneId(zoneId,params, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: zoneId !== null && zoneId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiTopologyLocationsZoneIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>>
-export type GetApiTopologyLocationsZoneIdQueryError = unknown
-
-
-export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string,
-    params: undefined |  GetApiTopologyLocationsZoneIdParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>,
-          TError,
-          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string,
-    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>,
-          TError,
-          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string,
-    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
- zoneId: string,
-    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiTopologyLocationsZoneIdQueryOptions(zoneId,params,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getApiTopologyLocationsDocks = (
-
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/locations/docks`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiTopologyLocationsDocksQueryKey = () => {
-    return [
-    `/api/topology/locations/docks`
-    ] as const;
-    }
-
-
-export const getGetApiTopologyLocationsDocksQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsDocksQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>> = ({ signal }) => getApiTopologyLocationsDocks(requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiTopologyLocationsDocksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>>
-export type GetApiTopologyLocationsDocksQueryError = unknown
-
-
-export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>,
-          TError,
-          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>,
-          TError,
-          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiTopologyLocationsDocksQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getApiTopologyLocationsStorage = (
-
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/locations/storage`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiTopologyLocationsStorageQueryKey = () => {
-    return [
-    `/api/topology/locations/storage`
-    ] as const;
-    }
-
-
-export const getGetApiTopologyLocationsStorageQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsStorageQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>> = ({ signal }) => getApiTopologyLocationsStorage(requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiTopologyLocationsStorageQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>>
-export type GetApiTopologyLocationsStorageQueryError = unknown
-
-
-export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>,
-          TError,
-          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>,
-          TError,
-          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiTopologyLocationsStorageQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getApiTopologyLocationsTemplate = (
+    export const getApiTopologyLocationsTemplate = (
 
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -663,16 +1210,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiTopologyLocationsImportMutationOptions(options), queryClient);
     }
-    export const postApiTopologyStorageTypes = (
-    createStorageTypeCommand: CreateStorageTypeCommand,
+    export const getApiTopologyLocationsDocks = (
+
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/topology/storage-types`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: createStorageTypeCommand, signal
+      {url: `/api/topology/locations/docks`, method: 'GET', signal
     },
       options);
     }
@@ -680,125 +1225,66 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiTopologyStorageTypesMutationKey = () => ['postApiTopologyStorageTypes'] as const;
-
-export const getPostApiTopologyStorageTypesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext> => {
-
-const mutationKey = getPostApiTopologyStorageTypesMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, PostApiTopologyStorageTypesMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiTopologyStorageTypes(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiTopologyStorageTypesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>>
-    export type PostApiTopologyStorageTypesMutationBody = CreateStorageTypeCommand
-    export type PostApiTopologyStorageTypesMutationError = unknown
-    export type PostApiTopologyStorageTypesMutationVariables = {data: CreateStorageTypeCommand}
-
-    export const usePostApiTopologyStorageTypes = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyStorageTypes>>, TError,PostApiTopologyStorageTypesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiTopologyStorageTypes>>,
-        TError,
-        PostApiTopologyStorageTypesMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiTopologyStorageTypesMutationOptions(options), queryClient);
-    }
-    export const getApiTopologyStorageTypes = (
-
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/storage-types`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiTopologyStorageTypesQueryKey = () => {
+export const getGetApiTopologyLocationsDocksQueryKey = () => {
     return [
-    `/api/topology/storage-types`
+    `/api/topology/locations/docks`
     ] as const;
     }
 
 
-export const getGetApiTopologyStorageTypesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiTopologyLocationsDocksQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyStorageTypesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsDocksQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>> = ({ signal }) => getApiTopologyStorageTypes(requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>> = ({ signal }) => getApiTopologyLocationsDocks(requestOptions, signal);
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetApiTopologyStorageTypesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>>
-export type GetApiTopologyStorageTypesQueryError = unknown
+export type GetApiTopologyLocationsDocksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>>
+export type GetApiTopologyLocationsDocksQueryError = unknown
 
 
-export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>> & Pick<
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>,
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>,
           TError,
-          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>> & Pick<
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>,
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>,
           TError,
-          Awaited<ReturnType<typeof getApiTopologyStorageTypes>>
+          Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiTopologyStorageTypesQueryOptions(options)
+  const queryOptions = getGetApiTopologyLocationsDocksQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -810,196 +1296,15 @@ export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof 
 
 
 
-export const putApiTopologyStorageTypesId = (
-    id: string,
-    updateStorageTypeCommand: UpdateStorageTypeCommand,
+export const getApiTopologyLocationsZoneId = (
+    zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/topology/storage-types/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateStorageTypeCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiTopologyStorageTypesIdMutationKey = () => ['putApiTopologyStorageTypesId'] as const;
-
-export const getPutApiTopologyStorageTypesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext> => {
-
-const mutationKey = getPutApiTopologyStorageTypesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, PutApiTopologyStorageTypesIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiTopologyStorageTypesId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiTopologyStorageTypesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>>
-    export type PutApiTopologyStorageTypesIdMutationBody = UpdateStorageTypeCommand
-    export type PutApiTopologyStorageTypesIdMutationError = unknown
-    export type PutApiTopologyStorageTypesIdMutationVariables = {id: string;data: UpdateStorageTypeCommand}
-
-    export const usePutApiTopologyStorageTypesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>, TError,PutApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiTopologyStorageTypesId>>,
-        TError,
-        PutApiTopologyStorageTypesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiTopologyStorageTypesIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiTopologyStorageTypesId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/storage-types/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiTopologyStorageTypesIdMutationKey = () => ['deleteApiTopologyStorageTypesId'] as const;
-
-export const getDeleteApiTopologyStorageTypesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiTopologyStorageTypesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, DeleteApiTopologyStorageTypesIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiTopologyStorageTypesId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiTopologyStorageTypesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>>
-
-    export type DeleteApiTopologyStorageTypesIdMutationError = unknown
-    export type DeleteApiTopologyStorageTypesIdMutationVariables = {id: string}
-
-    export const useDeleteApiTopologyStorageTypesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>, TError,DeleteApiTopologyStorageTypesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiTopologyStorageTypesId>>,
-        TError,
-        DeleteApiTopologyStorageTypesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiTopologyStorageTypesIdMutationOptions(options), queryClient);
-    }
-    export const postApiTopologyWarehouses = (
-    createWarehouseCommand: CreateWarehouseCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/warehouses`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: createWarehouseCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiTopologyWarehousesMutationKey = () => ['postApiTopologyWarehouses'] as const;
-
-export const getPostApiTopologyWarehousesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext> => {
-
-const mutationKey = getPostApiTopologyWarehousesMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, PostApiTopologyWarehousesMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiTopologyWarehouses(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiTopologyWarehousesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyWarehouses>>>
-    export type PostApiTopologyWarehousesMutationBody = CreateWarehouseCommand
-    export type PostApiTopologyWarehousesMutationError = unknown
-    export type PostApiTopologyWarehousesMutationVariables = {data: CreateWarehouseCommand}
-
-    export const usePostApiTopologyWarehouses = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyWarehouses>>, TError,PostApiTopologyWarehousesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiTopologyWarehouses>>,
-        TError,
-        PostApiTopologyWarehousesMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiTopologyWarehousesMutationOptions(options), queryClient);
-    }
-    export const getApiTopologyWarehouses = (
-    params?: GetApiTopologyWarehousesParams,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/warehouses`, method: 'GET',
+      {url: `/api/topology/locations/${zoneId}`, method: 'GET',
         params, signal
     },
       options);
@@ -1008,66 +1313,72 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiTopologyWarehousesQueryKey = (params?: GetApiTopologyWarehousesParams,) => {
+export const getGetApiTopologyLocationsZoneIdQueryKey = (zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams,) => {
     return [
-    `/api/topology/warehouses`, ...(params ? [params] : [])
+    `/api/topology/locations/${zoneId}`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiTopologyWarehousesQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiTopologyLocationsZoneIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyWarehousesQueryKey(params);
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsZoneIdQueryKey(zoneId,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyWarehouses>>> = ({ signal }) => getApiTopologyWarehouses(params, requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>> = ({ signal }) => getApiTopologyLocationsZoneId(zoneId,params, requestOptions, signal);
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: zoneId !== null && zoneId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetApiTopologyWarehousesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyWarehouses>>>
-export type GetApiTopologyWarehousesQueryError = unknown
+export type GetApiTopologyLocationsZoneIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>>
+export type GetApiTopologyLocationsZoneIdQueryError = unknown
 
 
-export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
- params: undefined |  GetApiTopologyWarehousesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
+export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
+ zoneId: string,
+    params: undefined |  GetApiTopologyLocationsZoneIdParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyWarehouses>>,
+          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>,
           TError,
-          Awaited<ReturnType<typeof getApiTopologyWarehouses>>
+          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
- params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>> & Pick<
+export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
+ zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyWarehouses>>,
+          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>,
           TError,
-          Awaited<ReturnType<typeof getApiTopologyWarehouses>>
+          Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
- params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
+ zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
- params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
+ zoneId: string,
+    params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiTopologyWarehousesQueryOptions(params,options)
+  const queryOptions = getGetApiTopologyLocationsZoneIdQueryOptions(zoneId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -1079,17 +1390,14 @@ export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof ge
 
 
 
-export const putApiTopologyWarehousesId = (
-    id: string,
-    updateWarehouseCommand: UpdateWarehouseCommand,
+export const getApiTopologyLocationsStorage = (
+
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/topology/warehouses/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateWarehouseCommand, signal
+      {url: `/api/topology/locations/storage`, method: 'GET', signal
     },
       options);
     }
@@ -1097,374 +1405,66 @@ export const putApiTopologyWarehousesId = (
 
 
 
-export const getPutApiTopologyWarehousesIdMutationKey = () => ['putApiTopologyWarehousesId'] as const;
-
-export const getPutApiTopologyWarehousesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext> => {
-
-const mutationKey = getPutApiTopologyWarehousesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, PutApiTopologyWarehousesIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiTopologyWarehousesId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiTopologyWarehousesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>>
-    export type PutApiTopologyWarehousesIdMutationBody = UpdateWarehouseCommand
-    export type PutApiTopologyWarehousesIdMutationError = unknown
-    export type PutApiTopologyWarehousesIdMutationVariables = {id: string;data: UpdateWarehouseCommand}
-
-    export const usePutApiTopologyWarehousesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyWarehousesId>>, TError,PutApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiTopologyWarehousesId>>,
-        TError,
-        PutApiTopologyWarehousesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiTopologyWarehousesIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiTopologyWarehousesId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/warehouses/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiTopologyWarehousesIdMutationKey = () => ['deleteApiTopologyWarehousesId'] as const;
-
-export const getDeleteApiTopologyWarehousesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiTopologyWarehousesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, DeleteApiTopologyWarehousesIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiTopologyWarehousesId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiTopologyWarehousesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>>
-
-    export type DeleteApiTopologyWarehousesIdMutationError = unknown
-    export type DeleteApiTopologyWarehousesIdMutationVariables = {id: string}
-
-    export const useDeleteApiTopologyWarehousesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>, TError,DeleteApiTopologyWarehousesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiTopologyWarehousesId>>,
-        TError,
-        DeleteApiTopologyWarehousesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiTopologyWarehousesIdMutationOptions(options), queryClient);
-    }
-    export const postApiTopologyZones = (
-    createZoneCommand: CreateZoneCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/zones`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: createZoneCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiTopologyZonesMutationKey = () => ['postApiTopologyZones'] as const;
-
-export const getPostApiTopologyZonesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext> => {
-
-const mutationKey = getPostApiTopologyZonesMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiTopologyZones>>, PostApiTopologyZonesMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiTopologyZones(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiTopologyZonesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiTopologyZones>>>
-    export type PostApiTopologyZonesMutationBody = CreateZoneCommand
-    export type PostApiTopologyZonesMutationError = unknown
-    export type PostApiTopologyZonesMutationVariables = {data: CreateZoneCommand}
-
-    export const usePostApiTopologyZones = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiTopologyZones>>, TError,PostApiTopologyZonesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiTopologyZones>>,
-        TError,
-        PostApiTopologyZonesMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiTopologyZonesMutationOptions(options), queryClient);
-    }
-    export const putApiTopologyZonesId = (
-    id: string,
-    updateZoneCommand: UpdateZoneCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/zones/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateZoneCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiTopologyZonesIdMutationKey = () => ['putApiTopologyZonesId'] as const;
-
-export const getPutApiTopologyZonesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext> => {
-
-const mutationKey = getPutApiTopologyZonesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiTopologyZonesId>>, PutApiTopologyZonesIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiTopologyZonesId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiTopologyZonesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiTopologyZonesId>>>
-    export type PutApiTopologyZonesIdMutationBody = UpdateZoneCommand
-    export type PutApiTopologyZonesIdMutationError = unknown
-    export type PutApiTopologyZonesIdMutationVariables = {id: string;data: UpdateZoneCommand}
-
-    export const usePutApiTopologyZonesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiTopologyZonesId>>, TError,PutApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiTopologyZonesId>>,
-        TError,
-        PutApiTopologyZonesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiTopologyZonesIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiTopologyZonesId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/zones/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiTopologyZonesIdMutationKey = () => ['deleteApiTopologyZonesId'] as const;
-
-export const getDeleteApiTopologyZonesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiTopologyZonesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, DeleteApiTopologyZonesIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiTopologyZonesId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiTopologyZonesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>>
-
-    export type DeleteApiTopologyZonesIdMutationError = unknown
-    export type DeleteApiTopologyZonesIdMutationVariables = {id: string}
-
-    export const useDeleteApiTopologyZonesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiTopologyZonesId>>, TError,DeleteApiTopologyZonesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiTopologyZonesId>>,
-        TError,
-        DeleteApiTopologyZonesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiTopologyZonesIdMutationOptions(options), queryClient);
-    }
-    export const getApiTopologyZonesWarehouseId = (
-    warehouseId: string,
-    params?: GetApiTopologyZonesWarehouseIdParams,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/topology/zones/${warehouseId}`, method: 'GET',
-        params, signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiTopologyZonesWarehouseIdQueryKey = (warehouseId: string,
-    params?: GetApiTopologyZonesWarehouseIdParams,) => {
+export const getGetApiTopologyLocationsStorageQueryKey = () => {
     return [
-    `/api/topology/zones/${warehouseId}`, ...(params ? [params] : [])
+    `/api/topology/locations/storage`
     ] as const;
     }
 
 
-export const getGetApiTopologyZonesWarehouseIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(warehouseId: string,
-    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiTopologyLocationsStorageQueryOptions = <TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyZonesWarehouseIdQueryKey(warehouseId,params);
+  const queryKey =  queryOptions?.queryKey ?? getGetApiTopologyLocationsStorageQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>> = ({ signal }) => getApiTopologyZonesWarehouseId(warehouseId,params, requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>> = ({ signal }) => getApiTopologyLocationsStorage(requestOptions, signal);
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: warehouseId !== null && warehouseId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetApiTopologyZonesWarehouseIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>>
-export type GetApiTopologyZonesWarehouseIdQueryError = unknown
+export type GetApiTopologyLocationsStorageQueryResult = NonNullable<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>>
+export type GetApiTopologyLocationsStorageQueryError = unknown
 
 
-export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string,
-    params: undefined |  GetApiTopologyZonesWarehouseIdParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>,
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>,
           TError,
-          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string,
-    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>> & Pick<
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>,
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>,
           TError,
-          Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>
+          Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string,
-    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
- warehouseId: string,
-    params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiTopologyZonesWarehouseIdQueryOptions(warehouseId,params,options)
+  const queryOptions = getGetApiTopologyLocationsStorageQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

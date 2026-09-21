@@ -8,6 +8,7 @@ export * from './identity/identity';
 export * from './inbound/inbound';
 export * from './inventory/inventory';
 export * from './outbound/outbound';
+export * from './packaging-types/packaging-types';
 export * from './printing/printing';
 export * from './products/products';
 export * from './quality/quality';
