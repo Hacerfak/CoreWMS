@@ -15,6 +15,10 @@ import EmpresasPage from './pages/Empresas/EmpresasPage';
 import TopologiaPage from '@/pages/Topologia/TopologiaPage';
 import ProdutosPage from '@/pages/Produtos/ProdutosPage';
 
+// NOVOS IMPORTS DO INBOUND
+import InboundList from '@/pages/Inbound/InboundList';
+import ReviewInbound from '@/pages/Inbound/ReviewInbound';
+
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
@@ -30,7 +34,6 @@ const PublicRoute = () => {
   return isAuthenticated ? <Navigate to="/selecao-empresa" replace /> : <Outlet />;
 };
 
-// NOVO: Guardião de Rota Baseado em Permissões
 const PermissionGuard = ({ requiredPermission }) => {
   const hasAccess = useHasPermission(requiredPermission);
   return hasAccess ? <Outlet /> : <Navigate to="/dashboard" replace />;
@@ -87,6 +90,17 @@ export default function App() {
 
               <Route element={<PermissionGuard requiredPermission="products:view" />}>
                 <Route path="/produtos" element={<ProdutosPage />} />
+              </Route>
+
+              {/* ROTAS DO INBOUND */}
+              <Route element={<PermissionGuard requiredPermission="inbound:view" />}>
+                <Route path="/inbound" element={<InboundList />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="inbound:review" />}>
+                {/* Permite tanto a entrada sem ID (todas as pendências) quanto focada numa ordem específica */}
+                <Route path="/inbound/revisao" element={<ReviewInbound />} />
+                <Route path="/inbound/revisao/:id" element={<ReviewInbound />} />
               </Route>
 
             </Route>

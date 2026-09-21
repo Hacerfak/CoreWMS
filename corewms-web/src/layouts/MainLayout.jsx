@@ -3,12 +3,12 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHasPermission } from '@/hooks/useHasPermission';
-import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package, UserCircle } from 'lucide-react';
+// ADICIONADO O ÍCONE ArrowDownToLine
+import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 
-// Importe o modal que acabámos de criar
 import MeuPerfilModal from '@/pages/Perfis/MeuPerfilModal';
 
 export default function MainLayout() {
@@ -16,7 +16,6 @@ export default function MainLayout() {
     const location = useLocation();
     const queryClient = useQueryClient();
 
-    // Controle de estado para o modal de Perfil
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
     const { user, logout, empresas, companyId } = useAuthStore();
@@ -45,6 +44,8 @@ export default function MainLayout() {
         {
             scope: 'Logística',
             items: [
+                // ADICIONADO AQUI:
+                { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
             ]
         },
@@ -141,7 +142,6 @@ export default function MainLayout() {
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
 
-                            {/* NOVO: Ação de Meu Perfil */}
                             <DropdownMenuItem onClick={() => setIsProfileModalOpen(true)} className="cursor-pointer py-2">
                                 <UserCircle className="mr-2 h-4 w-4 text-slate-400" /> Meu Perfil
                             </DropdownMenuItem>
@@ -162,7 +162,6 @@ export default function MainLayout() {
                 </div>
             </main>
 
-            {/* Injeção do Modal de Perfil no escopo do Layout */}
             <MeuPerfilModal
                 open={isProfileModalOpen}
                 onOpenChange={setIsProfileModalOpen}

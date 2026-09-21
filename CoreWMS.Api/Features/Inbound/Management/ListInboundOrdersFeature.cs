@@ -49,8 +49,11 @@ public class ListInboundOrdersHandler : IRequestHandler<ListInboundOrdersQuery, 
             q = q.Where(o => o.AccessKey.Contains(s) || o.IssuerName.ToLower().Contains(s) || o.IssuerCnpj.Contains(s));
         }
 
-        var totalTask = q.CountAsync(ct);
-        var itemsTask = q
+        // 1. Executa a contagem primeiro
+        var totalCount = await q.CountAsync(ct);
+
+        // 2. Busca os itens sequencialmente na mesma conexão
+        var items = await q
             .OrderByDescending(o => o.IssueDate)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -59,9 +62,7 @@ public class ListInboundOrdersHandler : IRequestHandler<ListInboundOrdersQuery, 
                 o.IssuerCnpj, o.IssuerName, o.AccessKey, o.IssueDate, o.Status.ToString()
             )).ToListAsync(ct);
 
-        await Task.WhenAll(totalTask, itemsTask);
-
-        var response = new PaginatedResult<InboundOrderDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        var response = new PaginatedResult<InboundOrderDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

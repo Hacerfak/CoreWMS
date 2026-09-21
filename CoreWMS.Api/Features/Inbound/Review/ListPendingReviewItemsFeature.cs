@@ -31,9 +31,18 @@ public class ListPendingReviewItemsHandler : IRequestHandler<ListPendingReviewIt
             .OrderBy(i => i.InboundOrder.IssueDate)
             .ThenBy(i => i.LineNumber)
             .Select(i => new PendingReviewItemDto(
-                i.Id, i.InboundOrderId, i.InboundOrder.AccessKey, i.InboundOrder.IssuerName, i.LineNumber,
-                i.RawSkuCode, i.RawBarcode, i.RawDescription, i.RawNcm,
-                i.ExpectedQuantity, i.ExpectedBatch
+                i.Id,
+                i.InboundOrderId,
+                i.InboundOrder.CustomerId!.Value, // <-- PASSANDO O CUSTOMER ID AQUI
+                i.InboundOrder.AccessKey,
+                i.InboundOrder.IssuerName,
+                i.LineNumber,
+                i.RawSkuCode,
+                i.RawBarcode,
+                i.RawDescription,
+                i.RawNcm,
+                i.ExpectedQuantity,
+                i.ExpectedBatch
             ))
             .ToListAsync(ct);
 
