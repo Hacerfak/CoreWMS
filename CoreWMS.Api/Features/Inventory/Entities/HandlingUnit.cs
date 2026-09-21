@@ -4,6 +4,7 @@ using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Products.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
+using SecurityDriven;
 
 namespace CoreWMS.Api.Features.Inventory.Entities;
 
@@ -35,7 +36,7 @@ public class HandlingUnit : AuditableEntity
     public QualityStatus QualityStatus { get; private set; }
 
     // Trava de Concorrência Otimista (Anti-Race Condition)
-    public Guid Version { get; private set; } = Guid.NewGuid();
+    public Guid Version { get; private set; } = FastGuid.NewPostgreSqlGuid();
 
     protected HandlingUnit() { }
 
@@ -50,7 +51,7 @@ public class HandlingUnit : AuditableEntity
         CurrentLocationId = dockLocationId;
         Status = HuStatus.Received;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void MoveTo(Guid newLocationId)
@@ -58,14 +59,14 @@ public class HandlingUnit : AuditableEntity
         CurrentLocationId = newLocationId;
         if (Status == HuStatus.Received || Status == HuStatus.Picking) Status = HuStatus.Stored;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void ChangeQuality(QualityStatus newStatus)
     {
         QualityStatus = newStatus;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void Consume(decimal quantityToConsume)
@@ -80,7 +81,7 @@ public class HandlingUnit : AuditableEntity
         }
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void UpdateTraceability(string? batch, DateTime? mfgDate, DateTime? expDate, string? serialNumber)
@@ -91,6 +92,6 @@ public class HandlingUnit : AuditableEntity
         SerialNumber = serialNumber?.ToUpper().Trim();
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid(); // Dispara a trava de concorrência
+        Version = FastGuid.NewPostgreSqlGuid(); // Dispara a trava de concorrência
     }
 }

@@ -2,6 +2,7 @@ using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Products.Entities;
+using SecurityDriven;
 
 namespace CoreWMS.Api.Features.Inventory.Entities;
 
@@ -22,7 +23,7 @@ public class InventoryBalance : AuditableEntity
 
     // Saldo Físico Real (Tudo que ocupa espaço no prédio)
     public decimal TotalPhysical => TotalAvailable + TotalAllocated + TotalQuarantine;
-    public Guid Version { get; private set; } = Guid.NewGuid();
+    public Guid Version { get; private set; } = FastGuid.NewPostgreSqlGuid();
 
     protected InventoryBalance() { }
 
@@ -36,7 +37,7 @@ public class InventoryBalance : AuditableEntity
     {
         TotalExpected += quantity;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void Receive(decimal quantity)
@@ -44,7 +45,7 @@ public class InventoryBalance : AuditableEntity
         if (TotalExpected >= quantity) TotalExpected -= quantity;
         TotalAvailable += quantity;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void AllocateForPicking(decimal quantity)
@@ -53,7 +54,7 @@ public class InventoryBalance : AuditableEntity
         TotalAvailable -= quantity;
         TotalAllocated += quantity;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void ShipAllocated(decimal quantity)
@@ -61,7 +62,7 @@ public class InventoryBalance : AuditableEntity
         if (quantity > TotalAllocated) throw new InvalidOperationException("Tentativa de expedir acima do alocado.");
         TotalAllocated -= quantity;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void Quarantine(decimal quantity)

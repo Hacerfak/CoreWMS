@@ -2,6 +2,7 @@ using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Products.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
+using SecurityDriven;
 
 namespace CoreWMS.Api.Features.Inbound.Entities;
 
@@ -39,7 +40,7 @@ public class InboundOrderItem : AuditableEntity
     public Location? DockLocation { get; private set; }
 
     // Trava para evitar double-checkouts
-    public Guid Version { get; private set; } = Guid.NewGuid();
+    public Guid Version { get; private set; } = FastGuid.NewPostgreSqlGuid();
 
     protected InboundOrderItem() { }
 
@@ -71,7 +72,7 @@ public class InboundOrderItem : AuditableEntity
         ProductId = productId;
         Status = InboundOrderItemStatus.Ready_To_Receive;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void LockForReceiving(Guid userId, Guid dockLocationId)
@@ -91,7 +92,7 @@ public class InboundOrderItem : AuditableEntity
         Status = InboundOrderItemStatus.Receiving;
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void Unlock()
@@ -101,7 +102,7 @@ public class InboundOrderItem : AuditableEntity
         Status = ReceivedQuantity > 0 ? InboundOrderItemStatus.Receiving : InboundOrderItemStatus.Ready_To_Receive;
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void AddReceivedQuantity(decimal quantity)
@@ -118,7 +119,7 @@ public class InboundOrderItem : AuditableEntity
         }
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void ResetForRollback()
@@ -128,6 +129,6 @@ public class InboundOrderItem : AuditableEntity
         LockedByUserId = null;
         LockedAt = null;
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 }

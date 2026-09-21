@@ -1,6 +1,7 @@
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Features.Products.Entities;
+using SecurityDriven;
 
 namespace CoreWMS.Api.Features.Outbound.Entities;
 
@@ -27,7 +28,7 @@ public class OutboundOrderItem : AuditableEntity
     public OutboundOrderItemStatus Status { get; private set; }
 
     // Concorrência Otimista (Dois operadores tentando faturar o mesmo item)
-    public Guid Version { get; private set; } = Guid.NewGuid();
+    public Guid Version { get; private set; } = FastGuid.NewPostgreSqlGuid();
 
     protected OutboundOrderItem() { }
 
@@ -57,7 +58,7 @@ public class OutboundOrderItem : AuditableEntity
             Status = OutboundOrderItemStatus.Allocated;
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void AddPickedQuantity(decimal quantity)
@@ -69,7 +70,7 @@ public class OutboundOrderItem : AuditableEntity
         Status = PickedQuantity == AllocatedQuantity ? OutboundOrderItemStatus.Picked : OutboundOrderItemStatus.Picking;
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void AddPackedQuantity(decimal quantity)
@@ -83,6 +84,6 @@ public class OutboundOrderItem : AuditableEntity
             Status = OutboundOrderItemStatus.Packed;
 
         UpdatedAt = DateTime.UtcNow;
-        Version = Guid.NewGuid();
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 }
