@@ -1,37 +1,30 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Text;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using Google.Apis.Auth.OAuth2; // O namespace base da Auth
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using MimeKit;
+using Microsoft.AspNetCore.Mvc;
 
 namespace CoreWMS.Api.Features.Fiscal.Emissao;
 
-// 1. O Request (Command)
 public record SendNfeEmailGoogleCommand(Guid DocumentId, string DestinationEmail) : IRequest<IResult>;
 
-// 2. O Handler (Regra de Negócio)
 public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<SendNfeEmailGoogleHandler> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public SendNfeEmailGoogleHandler(ApplicationDbContext db, ILogger<SendNfeEmailGoogleHandler> logger)
+    public SendNfeEmailGoogleHandler(ApplicationDbContext db, ILogger<SendNfeEmailGoogleHandler> logger, IWebHostEnvironment env)
     {
         _db = db;
         _logger = logger;
+        _env = env;
     }
 
     public async Task<IResult> Handle(SendNfeEmailGoogleCommand request, CancellationToken ct)
@@ -48,50 +41,44 @@ public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleComma
 
         try
         {
-            // 1. Localizar os ficheiros gerados
-            string diretorioBase = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "NFePdf");
+            string diretorioBase = Path.Combine(_env.ContentRootPath, "uploads", "NFePdf");
             string caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
-            string caminhoXml = Path.Combine(diretorioBase, $"{doc.AccessKey}.xml");
 
             if (!File.Exists(caminhoPdf))
                 return Results.BadRequest(new { Message = "O PDF da DANFE não foi encontrado. Gere o PDF primeiro." });
 
-            await File.WriteAllTextAsync(caminhoXml, doc.RawXml, ct);
-
-            // =================================================================
-            // 2. CONSTRUIR A MENSAGEM COM MIMEKIT
-            // =================================================================
             var mimeMessage = new MimeMessage();
-            var remetenteEmail = "faturacao@a-sua-empresa.com"; // TODO: Puxar do BD
+            var remetenteEmail = "faturacao@a-sua-empresa.com";
             var remetenteNome = doc.OutboundOrder.Company.TradeName ?? "Faturação CoreWMS";
 
             mimeMessage.From.Add(new MailboxAddress(remetenteNome, remetenteEmail));
             mimeMessage.To.Add(new MailboxAddress("", request.DestinationEmail));
-            mimeMessage.Subject = $"Nota Fiscal Eletrónica - Pedido #{doc.OutboundOrder.Id}";
+            mimeMessage.Subject = $"Nota Fiscal Eletrônica - Pedido #{doc.OutboundOrder.Id}";
 
             var builder = new BodyBuilder
             {
                 TextBody = $"Olá!\n\nEm anexo, enviamos a sua Nota Fiscal (XML e PDF) referente ao seu pedido.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!"
             };
 
+            // Anexa o PDF a partir do disco
             builder.Attachments.Add(caminhoPdf);
-            builder.Attachments.Add(caminhoXml);
+
+            // CORREÇÃO: Cria o XML diretamente na memória sem tocar no disco para evitar colisões
+            var xmlBytes = Encoding.UTF8.GetBytes(doc.RawXml);
+            using var xmlStream = new MemoryStream(xmlBytes);
+            builder.Attachments.Add($"{doc.AccessKey}.xml", xmlStream, ContentType.Parse("text/xml"));
+
             mimeMessage.Body = builder.ToMessageBody();
 
-            // =================================================================
-            // 3. AUTENTICAÇÃO OAUTH 2.0 SEGURA (Google Workspace Service Account)
-            // =================================================================
-            string credPath = Path.Combine(Directory.GetCurrentDirectory(), "google-credentials.json");
+            string credPath = Path.Combine(_env.ContentRootPath, "google-credentials.json");
             if (!File.Exists(credPath))
                 return Results.Problem("Ficheiro de credenciais do Google Workspace não encontrado no servidor.");
 
-            // 1. Lemos o arquivo informando explicitamente que é uma Service Account
             var serviceAccountCred = CredentialFactory.FromFile<ServiceAccountCredential>(credPath);
 
-            // 2. Convertê-la com segurança para o formato padrão do SDK
             var credential = serviceAccountCred.ToGoogleCredential()
                 .CreateScoped(GmailService.Scope.GmailSend)
-                .CreateWithUser(remetenteEmail); // Impersonation (Domain-Wide Delegation)
+                .CreateWithUser(remetenteEmail);
 
             var gmailService = new GmailService(new BaseClientService.Initializer
             {
@@ -99,13 +86,9 @@ public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleComma
                 ApplicationName = "CoreWMS"
             });
 
-            // =================================================================
-            // 4. CONVERSÃO E ENVIO (Raw Base64Url Format exigido pela Google)
-            // =================================================================
             using var memoryStream = new MemoryStream();
             await mimeMessage.WriteToAsync(memoryStream, ct);
 
-            // A Google exige um Base64 URL-safe
             string rawMessage = Convert.ToBase64String(memoryStream.ToArray())
                 .Replace('+', '-')
                 .Replace('/', '_')
@@ -113,13 +96,9 @@ public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleComma
 
             var gmailMessage = new Message { Raw = rawMessage };
 
-            _logger.LogInformation("[GMAIL API] A disparar a mensagem de forma segura via REST...");
-
-            // "me" indica que quem envia é o e-mail impersonado no CreateWithUser
             await gmailService.Users.Messages.Send(gmailMessage, "me").ExecuteAsync(ct);
 
             _logger.LogInformation("[GMAIL API] SUCESSO! E-mail enviado com anexos para {Email}", request.DestinationEmail);
-
             return Results.Ok(new { Message = "E-mail enviado com sucesso via Google Workspace!" });
         }
         catch (Exception ex)
@@ -130,7 +109,6 @@ public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleComma
     }
 }
 
-// 3. O Endpoint (Exposição da Rota)
 public static class SendNfeEmailGoogleEndpoint
 {
     public static void MapSendNfeEmailGoogleEndpoint(this IEndpointRouteBuilder app)

@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using CoreWMS.Api.Features.Identity.Entities;
@@ -15,7 +13,9 @@ public interface IZeusConfigurator
 {
     X509Certificate2 LoadCertificate(byte[] certBytes, string certPassword);
     ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente, byte[] certBytes, string certPassword);
-    ConfiguracaoServico GetCompanyConfiguration(Company company);
+
+    // CORREÇÃO: Receber o ambiente dinamicamente
+    ConfiguracaoServico GetCompanyConfiguration(Company company, TipoAmbiente ambiente);
 }
 
 public class ZeusConfigurator : IZeusConfigurator
@@ -70,7 +70,7 @@ public class ZeusConfigurator : IZeusConfigurator
         };
     }
 
-    public ConfiguracaoServico GetCompanyConfiguration(Company company)
+    public ConfiguracaoServico GetCompanyConfiguration(Company company, TipoAmbiente ambiente)
     {
         if (company.CertificateBytes == null || string.IsNullOrEmpty(company.CertificatePassword))
             throw new InvalidOperationException("Certificado Digital A1 não configurado para esta Empresa.");
@@ -78,6 +78,6 @@ public class ZeusConfigurator : IZeusConfigurator
         var estadoEnum = Enum.Parse<Estado>(company.State.ToUpper());
         var certPassword = CryptoService.Decrypt(company.CertificatePassword);
 
-        return GetNfeConfiguracao(estadoEnum, TipoAmbiente.Homologacao, company.CertificateBytes, certPassword);
+        return GetNfeConfiguracao(estadoEnum, ambiente, company.CertificateBytes, certPassword);
     }
 }

@@ -1,25 +1,34 @@
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using NFe.Utils.Email;
 
 namespace CoreWMS.Api.Features.Fiscal.Emissao;
 
-// 1. O Request (Command)
 public record SendNfeEmailCommand(Guid DocumentId, string DestinationEmail) : IRequest<IResult>;
 
-// 2. O Handler (Regra de Negócio)
 public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<SendNfeEmailHandler> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public SendNfeEmailHandler(ApplicationDbContext db, ILogger<SendNfeEmailHandler> logger)
+    public SendNfeEmailHandler(ApplicationDbContext db, ILogger<SendNfeEmailHandler> logger, IWebHostEnvironment env)
     {
         _db = db;
         _logger = logger;
+        _env = env;
     }
 
     public async Task<IResult> Handle(SendNfeEmailCommand request, CancellationToken ct)
@@ -34,11 +43,17 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
         if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "XML autorizado não está disponível." });
 
+        string caminhoXmlTemporario = string.Empty;
+
         try
         {
-            string diretorioBase = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "NFePdf");
+            // Usa o IWebHostEnvironment para apontar para a pasta persistente de uploads
+            string diretorioBase = Path.Combine(_env.ContentRootPath, "uploads", "NFePdf");
             string caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
-            string caminhoXml = Path.Combine(diretorioBase, $"{doc.AccessKey}.xml");
+
+            // Para evitar colisões (Concurrency Locks) caso 2 utilizadores enviem a mesma nota ao mesmo tempo,
+            // geramos um XML temporário e depois apagamos.
+            caminhoXmlTemporario = Path.Combine(diretorioBase, $"{doc.AccessKey}_{Guid.NewGuid():N}.xml");
 
             if (!File.Exists(caminhoPdf))
             {
@@ -46,13 +61,13 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
             }
 
             // O EmailBuilder do Zeus exige o caminho físico do ficheiro
-            await File.WriteAllTextAsync(caminhoXml, doc.RawXml, ct);
+            await File.WriteAllTextAsync(caminhoXmlTemporario, doc.RawXml, ct);
 
-            // TODO: No futuro, puxar estes dados do IOptions ou do cadastro da Company
+            // @TODO: No futuro, puxar estes dados do IOptions ou do cadastro da Company
             var configEmail = new ConfiguracaoEmail(
                 email: "faturacao@a-sua-empresa.com",
                 senha: "senha-app-ou-smtp",
-                assunto: $"Nota Fiscal Eletrónica - Pedido #{doc.OutboundOrder.Id}",
+                assunto: $"Nota Fiscal Eletrônica - Pedido #{doc.OutboundOrder.Id}",
                 mensagem: $"Olá!\n\nEm anexo, enviamos a sua Nota Fiscal (XML e PDF) referente à sua solicitação.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!",
                 servidorSmtp: "smtp.a-sua-empresa.com",
                 porta: 587,
@@ -62,18 +77,20 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
                 assincrono: false
             )
             {
-                Nome = doc.OutboundOrder.Company.TradeName ?? "Departamento de Faturação"
+                Nome = doc.OutboundOrder.Company.TradeName ?? "Departamento de Faturamento"
             };
 
             var emailBuilder = new EmailBuilder(configEmail);
             emailBuilder.AdicionarDestinatario(request.DestinationEmail);
             emailBuilder.AdicionarAnexo(caminhoPdf);
-            emailBuilder.AdicionarAnexo(caminhoXml);
 
-            _logger.LogInformation("[EMAIL] A disparar a mensagem via SMTP (Síncrono)...");
+            // Força o nome do anexo no e-mail para não incluir o Guid feio do ficheiro temporário
+            emailBuilder.AdicionarAnexo(caminhoXmlTemporario);
+
+            _logger.LogInformation("[EMAIL] A disparar a mensagem via SMTP...");
             emailBuilder.Enviar();
-            _logger.LogInformation("[EMAIL] SUCESSO! E-mail enviado para {Email}", request.DestinationEmail);
 
+            _logger.LogInformation("[EMAIL] SUCESSO! E-mail enviado para {Email}", request.DestinationEmail);
             return Results.Ok(new { Message = "E-mail enviado com sucesso com PDF e XML em anexo!" });
         }
         catch (Exception ex)
@@ -81,10 +98,17 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
             _logger.LogError(ex, "[EMAIL - ERRO] Falha no envio via SMTP: {Message}", ex.Message);
             return Results.Problem(statusCode: 500, title: "Erro ao enviar E-mail", detail: ex.Message);
         }
+        finally
+        {
+            // Limpeza: Apaga o XML temporário para não entulhar o servidor
+            if (!string.IsNullOrEmpty(caminhoXmlTemporario) && File.Exists(caminhoXmlTemporario))
+            {
+                try { File.Delete(caminhoXmlTemporario); } catch { /* Ignora falha na limpeza */ }
+            }
+        }
     }
 }
 
-// 3. O Endpoint (Exposição da Rota)
 public static class SendNfeEmailEndpoint
 {
     public static void MapSendNfeEmailEndpoint(this IEndpointRouteBuilder app)

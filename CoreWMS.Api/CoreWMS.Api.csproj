@@ -48,4 +48,10 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Assets\Fiscal\**\*.frx">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

@@ -32,21 +32,25 @@ public class NfeBuilderService
     public async Task<NFe.Classes.NFe> BuildOutboundNfeAsync(Guid outboundOrderId, FiscalOperationType operationType, CancellationToken ct)
     {
         var order = await _db.OutboundOrders
-            .Include(o => o.Company)
-            .Include(o => o.Customer)
-            .Include(o => o.Items).ThenInclude(i => i.Product)
-            .Include(o => o.Volumes)
-            .FirstOrDefaultAsync(o => o.Id == outboundOrderId, ct)
-            ?? throw new InvalidOperationException("Pedido de saída não encontrado.");
+    .AsNoTracking() // CORREÇÃO: Extremamente importante para consultas em massa de itens
+    .Include(o => o.Company)
+    .Include(o => o.Customer)
+    .Include(o => o.Items).ThenInclude(i => i.Product)
+    .Include(o => o.Volumes)
+    .FirstOrDefaultAsync(o => o.Id == outboundOrderId, ct)
+    ?? throw new InvalidOperationException("Pedido de saída não encontrado.");
 
         var isInterstate = order.Company.State.ToUpper() != order.DestinationState.ToUpper();
 
-        // 1. Busca das NF-es de Entrada que geraram as HUs separadas neste pedido
+        // 1. Busca das NF-es de Entrada otimizada e blindada pelo Tenant
         var originAccessKeys = await _db.OutboundAllocations
+            .AsNoTracking()
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
-            .Join(_db.HandlingUnits, a => a.HandlingUnitId, h => h.Id, (a, h) => h.ReceiptDocumentId)
+            .Join(_db.HandlingUnits.AsNoTracking().Where(h => h.CompanyId == order.CompanyId),
+                a => a.HandlingUnitId, h => h.Id, (a, h) => h.ReceiptDocumentId)
             .Where(docId => docId.HasValue)
-            .Join(_db.InboundOrders, docId => docId, o => o.Id, (docId, o) => o.AccessKey)
+            .Join(_db.InboundOrders.AsNoTracking(),
+                docId => docId, o => o.Id, (docId, o) => o.AccessKey)
             .Distinct()
             .ToListAsync(ct);
 
