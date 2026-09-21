@@ -1,0 +1,73 @@
+using CoreWMS.Api.Core.Models;
+using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Security;
+using FluentValidation;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace CoreWMS.Api.Features.Inventory.Queries;
+
+public record GetInventoryBalanceQuery(Guid? CustomerId, Guid? ProductId, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+
+public class GetInventoryBalanceQueryValidator : AbstractValidator<GetInventoryBalanceQuery>
+{
+    public GetInventoryBalanceQueryValidator()
+    {
+        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
+    }
+}
+
+public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQuery, IResult>
+{
+    private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
+
+    public GetInventoryBalanceHandler(ApplicationDbContext db, ITenantProvider tenant)
+    {
+        _db = db;
+        _tenant = tenant;
+    }
+
+    public async Task<IResult> Handle(GetInventoryBalanceQuery request, CancellationToken ct)
+    {
+        var companyId = _tenant.GetCompanyId();
+
+        var q = _db.InventoryBalances.AsNoTracking()
+            .Include(b => b.Product)
+            .Include(b => b.Customer)
+            .Where(b => b.CompanyId == companyId);
+
+        if (request.CustomerId.HasValue) q = q.Where(b => b.CustomerId == request.CustomerId);
+        if (request.ProductId.HasValue) q = q.Where(b => b.ProductId == request.ProductId);
+
+        var totalTask = q.CountAsync(ct);
+
+        var itemsTask = q
+            .OrderBy(b => b.Product.Sku)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(b => new InventoryBalanceDto(
+                b.ProductId, b.Product.Sku, b.Customer.CorporateName,
+                b.TotalExpected, b.TotalAvailable, b.TotalAllocated, b.TotalQuarantine, b.TotalPhysical
+            )).ToListAsync(ct);
+
+        await Task.WhenAll(totalTask, itemsTask);
+
+        var response = new PaginatedResult<InventoryBalanceDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        return Results.Ok(response);
+    }
+}
+
+public static class GetInventoryBalanceEndpoints
+{
+    public static void MapGetInventoryBalanceEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/inventory/balances", async ([AsParameters] GetInventoryBalanceQuery query, IMediator mediator) =>
+            await mediator.Send(query))
+           .WithTags("Inventory")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Inventory.View);
+    }
+}

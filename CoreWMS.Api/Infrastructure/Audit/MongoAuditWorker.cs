@@ -8,11 +8,9 @@ public class MongoAuditWorker : BackgroundService
     private readonly IMongoCollection<AuditLog> _collection;
     private readonly ILogger<MongoAuditWorker> _logger;
 
-    // Regras de negócio da fila
-    private const int MaxBatchSize = 50;
-    private static readonly TimeSpan MaxIdleTime = TimeSpan.FromMinutes(1);
+    // Subimos o lote de 50 para 500 para aproveitar o desempenho do InsertManyAsync
+    private const int MaxBatchSize = 500;
 
-    // MODIFICADO: Agora injetamos o IMongoClient Singleton!
     public MongoAuditWorker(AuditChannel auditChannel, IMongoClient mongoClient, ILogger<MongoAuditWorker> logger)
     {
         _auditChannel = auditChannel;
@@ -29,62 +27,70 @@ public class MongoAuditWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var batch = new List<AuditLog>(MaxBatchSize);
-
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Cria um cronômetro que vai "estourar" em 1 minuto
-            using var timerCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            timerCts.CancelAfter(MaxIdleTime);
+            var batch = new List<AuditLog>();
 
             try
             {
-                // Espera por novos itens na fila OU até passar 1 minuto
-                while (await _auditChannel.Reader.WaitToReadAsync(timerCts.Token))
+                // Espera de forma passiva sem consumir CPU e reage instantaneamente ao primeiro log
+                if (await _auditChannel.Reader.WaitToReadAsync(stoppingToken))
                 {
-                    while (_auditChannel.Reader.TryRead(out var log))
+                    // Consome o primeiro
+                    if (_auditChannel.Reader.TryRead(out var firstItem))
                     {
-                        batch.Add(log);
+                        batch.Add(firstItem);
+                    }
 
-                        // REGRA 1: Bateu 50 registros, manda para o banco
-                        if (batch.Count >= MaxBatchSize)
-                        {
-                            await FlushBatchAsync(batch, stoppingToken);
-                            // Otimização: Se já enviamos o lote, renovamos o tempo de espera
-                            timerCts.CancelAfter(MaxIdleTime);
-                        }
+                    // Tenta recolher rapidamente os logs que vieram logo atrás (até 500)
+                    while (batch.Count < MaxBatchSize && _auditChannel.Reader.TryRead(out var item))
+                    {
+                        batch.Add(item);
                     }
                 }
-            }
-            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
-            {
-                // Cai aqui suavemente quando o 1 minuto estourar (Timeout normal)
-            }
 
-            // REGRA 2: Passou 1 minuto. Se tiver qualquer coisa na fila, manda pro banco.
-            if (batch.Any())
+                // Grava no Mongo independentemente de ter 1 ou 500 registos no lote
+                if (batch.Any())
+                {
+                    await FlushBatchWithRetryAsync(batch, stoppingToken);
+                }
+            }
+            catch (OperationCanceledException)
             {
-                await FlushBatchAsync(batch, stoppingToken);
+                // O serviço está a ser encerrado graciosamente
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, "[MongoAuditWorker] Falha catastrófica no loop principal de auditoria.");
+                await Task.Delay(5000, stoppingToken);
             }
         }
     }
 
-    private async Task FlushBatchAsync(List<AuditLog> batch, CancellationToken ct)
+    private async Task FlushBatchWithRetryAsync(List<AuditLog> batch, CancellationToken ct)
     {
-        if (batch.Count == 0) return;
+        bool success = false;
+        int attempts = 0;
 
-        try
+        // Fica retendo os dados em memória até conseguir acesso ao MongoDB
+        while (!success && !ct.IsCancellationRequested)
         {
-            await _collection.InsertManyAsync(batch, cancellationToken: ct);
-            _logger.LogInformation("Auditoria: Lote de {Count} registros gravados no MongoDB.", batch.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Erro ao gravar lote de auditoria no MongoDB em segundo plano.");
-        }
-        finally
-        {
-            batch.Clear(); // Limpa o lote atual para começar a acumular novamente
+            try
+            {
+                attempts++;
+
+                // IsOrdered = false otimiza o driver do Mongo para inserção paralela em disco
+                await _collection.InsertManyAsync(batch, new InsertManyOptions { IsOrdered = false }, cancellationToken: ct);
+                success = true;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                var delayMs = Math.Min(2000 * attempts, 30000); // Backoff de até 30 segundos
+                _logger.LogError(ex, "[MongoAuditWorker] Erro ao gravar lote de auditoria no MongoDB. Tentativa {Attempt}. Retentando em {Delay}ms...", attempts, delayMs);
+
+                await Task.Delay(delayMs, ct);
+            }
         }
     }
 }
