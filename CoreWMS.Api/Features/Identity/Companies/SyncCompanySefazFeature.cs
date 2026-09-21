@@ -32,7 +32,7 @@ public class SyncCompanySefazHandler : IRequestHandler<SyncCompanySefazCommand, 
         try
         {
             var password = CryptoService.Decrypt(company.CertificatePassword);
-            var sefazData = _sefazService.Consultar(company.CertificateBytes, password, company.State, company.Cnpj);
+            var sefazData = await _sefazService.ConsultarAsync(company.CertificateBytes, password, company.State, company.Cnpj);
 
             // Sugestão futura: Utilizar os dados para invocar o company.UpdateDetails(...) aqui
             return Results.Ok(sefazData);

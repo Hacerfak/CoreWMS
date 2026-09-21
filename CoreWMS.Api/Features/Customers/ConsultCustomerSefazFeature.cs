@@ -34,7 +34,7 @@ public class ConsultCustomerSefazHandler : IRequestHandler<ConsultCustomerSefazQ
             return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado na Matriz." });
 
         var certPassword = CryptoService.Decrypt(company.CertificatePassword);
-        var sefazData = _sefazService.Consultar(company.CertificateBytes, certPassword, request.Uf, request.Cnpj);
+        var sefazData = await _sefazService.ConsultarAsync(company.CertificateBytes, certPassword, request.Uf, request.Cnpj);
 
         return Results.Ok(sefazData);
     }

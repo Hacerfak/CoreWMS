@@ -12,6 +12,7 @@ using Microsoft.Extensions.Caching.Memory;
 using NFe.Servicos;
 using NFe.Utils.NFe;
 using NFe.Classes.Servicos.Tipos;
+using DFe.Classes.Flags;
 
 namespace CoreWMS.Api.Features.Fiscal.Emissao;
 
@@ -47,7 +48,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             return Results.BadRequest(new { Message = "O pedido precisa estar pronto na doca para emitir a NF-e." });
 
         // 1. Cria a configuração Thread-Safe do Zeus
-        var cfgServico = _zeusConfigurator.GetCompanyConfiguration(order.Company);
+        var cfgServico = _zeusConfigurator.GetCompanyConfiguration(order.Company, TipoAmbiente.Homologacao);
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
             cfgServico.Certificado.ArrayBytesArquivo,

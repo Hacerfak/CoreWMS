@@ -40,7 +40,7 @@ public class CreateCompanyHandler : IRequestHandler<CreateCompanyCommand, IResul
 
     public async Task<IResult> Handle(CreateCompanyCommand request, CancellationToken ct)
     {
-        var sefazData = _consultaCadastroService.Consultar(request.CertBytes, request.Password, request.Uf);
+        var sefazData = await _consultaCadastroService.ConsultarAsync(request.CertBytes, request.Password, request.Uf);
 
         if (await _db.Companies.AnyAsync(c => c.Cnpj == sefazData.Cnpj, ct))
             return Results.BadRequest(new { Message = $"Empresa com CNPJ {sefazData.Cnpj} já cadastrada." });
