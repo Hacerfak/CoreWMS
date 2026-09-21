@@ -7,6 +7,7 @@ using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Extensions;
+using CoreWMS.Api.Infrastructure.Storage;
 using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
@@ -130,6 +131,9 @@ builder.Services.AddSingleton<KardexChannel>();
 builder.Services.AddHostedService<KardexWorker>();
 builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
 
+builder.Services.AddHostedService<ImageStorageCleanupWorker>();
+builder.Services.AddScoped<ILocalImageStorageService, LocalImageStorageService>();
+
 builder.Services.AddSingleton<INfeParserService, NfeParserService>();
 builder.Services.AddScoped<NfeBuilderService>();
 
@@ -179,6 +183,13 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 await DatabaseSeeder.SeedAsync(app.Services);
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
+        Path.Combine(builder.Environment.ContentRootPath, "uploads")),
+    RequestPath = "/uploads"
+});
 
 // 5. Middleware de Security Headers
 app.Use(async (context, next) =>

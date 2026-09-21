@@ -42,11 +42,7 @@ public class QualityEvent : AuditableEntity
         IsResolved = false;
     }
 
-    public void AddImage(string fileName, string base64Data)
-    {
-        _images.Add(new QualityEventImage(Id, fileName, base64Data));
-        UpdatedAt = DateTime.UtcNow;
-    }
+    public void AddImage(string fileName, string filePath, long fileSizeBytes) { _images.Add(new QualityEventImage(Id, fileName, filePath, fileSizeBytes)); UpdatedAt = DateTime.UtcNow; }
 
     public void Resolve(Guid releaseReasonId, string releaseNotes)
     {
