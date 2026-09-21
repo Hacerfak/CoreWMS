@@ -11,16 +11,10 @@ using CoreWMS.Api.Infrastructure.Services.Inventory;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace CoreWMS.Api.Features.Inbound;
+namespace CoreWMS.Api.Features.Inbound.Legacy;
 
-// ==========================================
-// 1. COMMAND
-// ==========================================
 public record ImportLegacyInventoryCommand(byte[] FileBytes) : IRequest<IResult>;
 
-// ==========================================
-// 2. HANDLER DA MIGRAÇÃO
-// ==========================================
 public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventoryCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -38,17 +32,13 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Carrega CSV
         var content = Encoding.UTF8.GetString(request.FileBytes);
         var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-
         if (lines.Length <= 1) return Results.BadRequest(new { Message = "Planilha vazia." });
 
-        // 2. Pré-carregamento em memória (Melhora drástica de performance)
         var customers = await _db.Customers.Where(c => c.CompanyId == companyId).ToDictionaryAsync(c => c.Cnpj, c => c.Id, ct);
         var locations = await _db.Locations.Where(l => l.Zone.Warehouse.Code != "").ToDictionaryAsync(l => l.FullPath.ToUpper(), l => l.Id, ct);
 
-        // Busca Ordens Abertas e Itens já vinculados (Ready_To_Receive)
         var openOrders = await _db.InboundOrders
             .Include(o => o.Items)
             .Where(o => o.CompanyId == companyId && o.Status != InboundOrderStatus.Canceled && o.Status != InboundOrderStatus.Completed)
@@ -61,26 +51,23 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         var errors = new List<string>();
         var husToInsert = new List<HandlingUnit>();
 
-        // 3. Processamento linha a linha
         for (int i = 1; i < lines.Length; i++)
         {
             var cols = lines[i].Split(';');
-            if (cols.Length < 21) continue; // Pula linhas quebradas
+            if (cols.Length < 21) continue;
 
-            var lpn = cols[0].Trim().ToUpper().Replace("\"", ""); // HU
-            var sku = cols[1].Trim().ToUpper().Replace("\"", ""); // Item
-            var lote = cols[5].Trim().Replace("\"", ""); // Pode ser vazio
-            var quantity = ParseBrDecimal(cols[7]); // Quantidade
-            var locationPath = cols[10].Trim().ToUpper().Replace("\"", ""); // Endereço
-            var nfNumero = cols[11].Trim().Replace("\"", ""); // NF
-            var nfSerie = cols[12].Trim().Replace("\"", ""); // Série
-            var depositanteCnpj = cols[14].Trim().Replace("\"", ""); // CNPJ
-
-            // Bloqueio = Quarentena
+            var lpn = cols[0].Trim().ToUpper().Replace("\"", "");
+            var sku = cols[1].Trim().ToUpper().Replace("\"", "");
+            var lote = cols[5].Trim().Replace("\"", "");
+            var quantity = ParseBrDecimal(cols[7]);
+            var locationPath = cols[10].Trim().ToUpper().Replace("\"", "");
+            var nfNumero = cols[11].Trim().Replace("\"", "");
+            var nfSerie = cols[12].Trim().Replace("\"", "");
+            var depositanteCnpj = cols[14].Trim().Replace("\"", "");
             var isBlocked = !string.IsNullOrWhiteSpace(cols[16].Replace("\"", ""));
             var qualityStatus = isBlocked ? QualityStatus.Quarantine : QualityStatus.Available;
 
-            if (existingHus.Contains(lpn)) continue; // Evita dupla importação da mesma etiqueta
+            if (existingHus.Contains(lpn)) continue;
 
             if (!customers.TryGetValue(depositanteCnpj, out var customerId))
             {
@@ -94,42 +81,38 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 continue;
             }
 
-            // Mágica do Match Fiscal: Busca a ordem pendente cruzando CNPJ, NF e Série da Chave de Acesso!
             var orderItem = FindOrderItem(openOrders, customerId, nfNumero, nfSerie, sku);
             if (orderItem == null)
             {
-                errors.Add($"Linha {i + 1}: Item {sku} da NF {nfNumero} (Série {nfSerie}) não encontrado nas importações pendentes de recebimento.");
+                errors.Add($"Linha {i + 1}: Item {sku} da NF {nfNumero} (Série {nfSerie}) não encontrado nas importações.");
                 continue;
             }
 
             if (!orderItem.ProductId.HasValue)
             {
-                errors.Add($"Linha {i + 1}: O produto {sku} da NF {nfNumero} precisa ser aprovado/revisado na tela de Inbound antes de receber o estoque.");
+                errors.Add($"Linha {i + 1}: O produto {sku} da NF {nfNumero} precisa ser aprovado na tela de Inbound.");
                 continue;
             }
 
-            // Descobre o tipo de embalagem padrão de Inbound do produto
             var productPack = await _db.ProductPackagings.FirstOrDefaultAsync(p => p.ProductId == orderItem.ProductId.Value && p.IsDefaultInbound, ct);
             if (productPack == null)
             {
-                errors.Add($"Linha {i + 1}: Produto {sku} não possui uma embalagem padrão de recebimento cadastrada.");
+                errors.Add($"Linha {i + 1}: Produto {sku} não possui uma embalagem padrão de recebimento.");
                 continue;
             }
 
-            // 4. Criação Física
             var hu = new HandlingUnit(
                 lpn, companyId, customerId, orderItem.ProductId.Value, productPack.PackagingTypeId,
                 orderItem.InboundOrderId, string.IsNullOrWhiteSpace(lote) ? null : lote, null, null, null,
                 quantity, orderItem.ExpectedUnitValue);
 
-            hu.ReceiveAtDock(locationId); // Já vai direto para a posição real da planilha
+            hu.ReceiveAtDock(locationId);
             if (qualityStatus != QualityStatus.Available) hu.ChangeQuality(qualityStatus);
 
             husToInsert.Add(hu);
             existingHus.Add(lpn);
             insertedHus++;
 
-            // 5. Atualização de Saldo
             var balance = balances.FirstOrDefault(b => b.ProductId == orderItem.ProductId.Value && b.CustomerId == customerId);
             if (balance == null)
             {
@@ -146,15 +129,12 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 TransactionType.Inbound_Receipt, quantity, quantity,
                 orderItem.InboundOrderId, $"MIGRAÇÃO NF {nfNumero}"), ct);
 
-            // 6. Abate da Nota Fiscal
             orderItem.AddReceivedQuantity(quantity);
         }
 
         if (husToInsert.Any())
         {
             _db.HandlingUnits.AddRange(husToInsert);
-
-            // Verifica as ordens que completaram 100% via planilha e marca como Finalizada
             foreach (var order in openOrders)
             {
                 if (order.Items.All(i => i.Status == InboundOrderItemStatus.Completed))
@@ -162,7 +142,6 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                     order.UpdateStatus(InboundOrderStatus.Completed);
                 }
             }
-
             await _db.SaveChangesAsync(ct);
         }
 
@@ -170,7 +149,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         {
             Message = $"Migração concluída.",
             HusImported = insertedHus,
-            Errors = errors.Take(50) // Retorna no máximo os 50 primeiros erros para não explodir o payload JSON
+            Errors = errors.Take(50)
         });
     }
 
@@ -178,15 +157,11 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
     {
         foreach (var order in orders.Where(o => o.CustomerId == customerId))
         {
-            // Extrai a série e o número direto da chave de acesso (Posição 22 a 24 para Série, 25 a 33 para NF)
             if (order.AccessKey.Length != 44) continue;
-
             var serieKey = int.Parse(order.AccessKey.Substring(22, 3)).ToString();
             var nfKey = int.Parse(order.AccessKey.Substring(25, 9)).ToString();
-
             if (serieKey == nfSerie && nfKey == nfNumero)
             {
-                // Achou a nota, agora acha a linha com o SKU
                 var item = order.Items.FirstOrDefault(i => i.RawSkuCode.ToUpper() == sku.ToUpper() && i.Status != InboundOrderItemStatus.Completed);
                 if (item != null) return item;
             }
@@ -198,30 +173,24 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
     {
         if (string.IsNullOrWhiteSpace(value)) return 0;
         var cleanValue = value.Replace("\"", "").Trim();
-        // Converte "12.172,5000" (Pt-Br) para Decimal no C#
         return decimal.TryParse(cleanValue, NumberStyles.Number, new CultureInfo("pt-BR"), out var result) ? result : 0;
     }
 }
 
-// ==========================================
-// 3. REGISTRO DO ENDPOINT
-// ==========================================
-public static class InboundLegacyImportEndpoints
+public static class ImportLegacyInventoryEndpoints
 {
-    public static void MapInboundLegacyImportEndpoints(this IEndpointRouteBuilder app)
+    public static void MapImportLegacyInventoryEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/inbound/legacy-import", async (IFormFile file, IMediator mediator) =>
+        app.MapPost("/api/inbound/legacy-import", async (Microsoft.AspNetCore.Http.IFormFile file, IMediator mediator) =>
         {
             if (file == null || file.Length == 0) return Results.BadRequest(new { Message = "Arquivo obrigatório." });
-
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms);
-
             return await mediator.Send(new ImportLegacyInventoryCommand(ms.ToArray()));
         })
         .WithTags("Inbound")
         .RequireAuthorization()
-        .RequirePermission(Permissions.Inbound.Manage) // Apenas Gestor pode rodar a carga
+        .RequirePermission(Permissions.Inbound.Manage)
         .DisableAntiforgery();
     }
 }
