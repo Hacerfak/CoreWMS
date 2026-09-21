@@ -25,6 +25,7 @@ public class BillingEngineService
         if (service.Type == BillingServiceType.Manual_Entry || string.IsNullOrWhiteSpace(service.SqlTemplate))
             throw new InvalidOperationException("Este serviço não é de cálculo automático.");
 
+        // Higieniza o template substituindo as tags por parâmetros Dapper reais contra SQL Injection
         var safeQuery = service.SqlTemplate
             .Replace("{armazem_id}", "@ArmazemId")
             .Replace("{depositante_id}", "@DepositanteId")
@@ -55,6 +56,9 @@ public class BillingEngineService
         foreach (var row in resultRows)
         {
             var dict = (IDictionary<string, object>)row;
+
+            // CORREÇÃO: Adiciona a linha lida à lista para montar o Extrato Detalhado (Raw JSON)
+            extractList.Add(dict);
 
             // Converte de forma segura testando os tipos nativos do Postgres
             if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull)
