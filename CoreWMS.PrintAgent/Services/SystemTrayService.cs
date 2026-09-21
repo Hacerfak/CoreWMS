@@ -98,11 +98,18 @@ try:
     import gi
     gi.require_version('Gtk', '3.0')
     try:
-        gi.require_version('AyatanaAppIndicator3', '0.1')
-        from gi.repository import AyatanaAppIndicator3 as AppIndicator
+        # 1. Tenta a versão GLib mais nova (Debian Testing/Unstable e futuros Ubuntu)
+        gi.require_version('AyatanaAppIndicatorGlib', '0.1')
+        from gi.repository import AyatanaAppIndicatorGlib as AppIndicator
     except Exception:
-        gi.require_version('AppIndicator3', '0.1')
-        from gi.repository import AppIndicator3 as AppIndicator
+        try:
+            # 2. Fallback para a versão estável atual (Debian 12 / Ubuntu 22.04+)
+            gi.require_version('AyatanaAppIndicator3', '0.1')
+            from gi.repository import AyatanaAppIndicator3 as AppIndicator
+        except Exception:
+            # 3. Fallback final para sistemas Linux legados
+            gi.require_version('AppIndicator3', '0.1')
+            from gi.repository import AppIndicator3 as AppIndicator
     from gi.repository import Gtk
 except Exception as e:
     sys.stderr.write(f'Erro de dependências no Python Tray: {{e}}\n')
@@ -169,7 +176,7 @@ Gtk.main()
                 }
             });
 
-            _logger.LogInformation("System Tray para Linux GNOME/KDE iniciado.");
+            _logger.LogInformation("System Tray para Linux GNOME/KDE iniciado com suporte Glib dinâmico.");
         }
         catch (Exception ex)
         {
