@@ -4,7 +4,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
-import { useGetApiProductsPackagingTypes, usePostApiProducts, usePutApiProductsId } from '@/api/generated/products/products';
+
+// Importa apenas os produtos daqui
+import { usePostApiProducts, usePutApiProductsId } from '@/api/generated/products/products';
+
+// Importação do hook do novo ficheiro
+import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
+
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -66,7 +72,9 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
 
     // Combos Data
     const { data: customers = [] } = useGetApiCustomers({ OnlyActive: true });
-    const { data: packagingTypes = [] } = useGetApiProductsPackagingTypes();
+
+    // Atualização da chamada do hook
+    const { data: packagingTypes = [] } = useGetApiPackagingTypes();
 
     const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(productSchema),

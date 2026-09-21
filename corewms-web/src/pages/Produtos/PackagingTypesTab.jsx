@@ -3,12 +3,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
+
+// Nova importação dos hooks de Embalagem a partir do ficheiro correto
 import {
-    useGetApiProductsPackagingTypes,
-    usePostApiProductsPackagingTypes,
-    usePutApiProductsPackagingTypesId,
-    useDeleteApiProductsPackagingTypesId
-} from '@/api/generated/products/products';
+    useGetApiPackagingTypes,
+    usePostApiPackagingTypes,
+    usePutApiPackagingTypesId,
+    useDeleteApiPackagingTypesId
+} from '@/api/generated/packaging-types/packaging-types';
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -30,7 +33,8 @@ export default function PackagingTypesTab() {
     const [selectedType, setSelectedType] = useState(null);
     const [typeToDelete, setTypeToDelete] = useState(null);
 
-    const { data: packagingTypes = [], isLoading } = useGetApiProductsPackagingTypes();
+    // Ajuste do nome do hook para o gerado pelo Orval
+    const { data: packagingTypes = [], isLoading } = useGetApiPackagingTypes();
 
     const { register, handleSubmit, reset, formState: { errors } } = useForm({
         resolver: zodResolver(packagingTypeSchema),
@@ -41,33 +45,36 @@ export default function PackagingTypesTab() {
         if (isModalOpen) reset(selectedType || { code: '', description: '' });
     }, [isModalOpen, selectedType, reset]);
 
-    const { mutate: createType, isPending: isCreating } = usePostApiProductsPackagingTypes({
+    // Ajuste do nome do hook
+    const { mutate: createType, isPending: isCreating } = usePostApiPackagingTypes({
         mutation: {
             onSuccess: () => {
                 toast.success('Tipo de Embalagem criado com sucesso!');
-                queryClient.invalidateQueries({ queryKey: ['/api/products/packaging-types'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/packaging-types'] });
                 setIsModalOpen(false);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao criar.')
         }
     });
 
-    const { mutate: updateType, isPending: isUpdating } = usePutApiProductsPackagingTypesId({
+    // Ajuste do nome do hook
+    const { mutate: updateType, isPending: isUpdating } = usePutApiPackagingTypesId({
         mutation: {
             onSuccess: () => {
                 toast.success('Tipo atualizado!');
-                queryClient.invalidateQueries({ queryKey: ['/api/products/packaging-types'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/packaging-types'] });
                 setIsModalOpen(false);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar.')
         }
     });
 
-    const { mutate: deleteType, isPending: isDeleting } = useDeleteApiProductsPackagingTypesId({
+    // Ajuste do nome do hook
+    const { mutate: deleteType, isPending: isDeleting } = useDeleteApiPackagingTypesId({
         mutation: {
             onSuccess: () => {
                 toast.success('Tipo removido!');
-                queryClient.invalidateQueries({ queryKey: ['/api/products/packaging-types'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/packaging-types'] });
                 setTypeToDelete(null);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao remover.')
