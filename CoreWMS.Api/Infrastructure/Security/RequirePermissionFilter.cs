@@ -19,34 +19,35 @@ public class RequirePermissionFilter : IEndpointFilter
         var httpContext = context.HttpContext;
         var user = httpContext.User;
 
-        // 1. Exige o cabeçalho de isolamento de empresa (Tenant)
+        // 1. Identificação básica do Utilizador
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        // 2. O PULO DO GATO: Se for Master, passa direto! (Permite operações globais como criar Empresa)
+        var isMaster = user.FindFirst("isMaster")?.Value;
+        if (string.Equals(isMaster, "True", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(isMaster, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return await next(context);
+        }
+
+        // 3. Exige o cabeçalho de isolamento de empresa (Tenant) para usuários comuns
         if (!httpContext.Request.Headers.TryGetValue("X-Company-Id", out var companyIdHeader) ||
             !Guid.TryParse(companyIdHeader, out var companyId))
         {
             return Results.BadRequest(new { Message = "O cabeçalho 'X-Company-Id' é obrigatório para esta operação." });
         }
 
-        // 2. Master possui acesso irrestrito global (Ignora o resto)
-        if (user.FindFirst("isMaster")?.Value == "True")
-        {
-            return await next(context);
-        }
-
-        // 3. Validação de Escopo do Token (O utilizador pertence a esta empresa?)
+        // 4. Validação de Escopo do Token (O utilizador pertence a esta empresa?)
         var allowedCompaniesClaim = user.FindFirst("companies")?.Value ?? "";
         var allowedCompanies = allowedCompaniesClaim.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
         if (!allowedCompanies.Contains(companyId.ToString()))
         {
             return Results.Forbid();
-        }
-
-        // 4. Identificação do Utilizador
-        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            return Results.Unauthorized();
         }
 
         // 5. Verificação de Permissão Específica no Banco (Com Cache Otimizado)
