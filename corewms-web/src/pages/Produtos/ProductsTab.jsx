@@ -17,7 +17,9 @@ export default function ProductsTab() {
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [productToDelete, setProductToDelete] = useState(null);
 
-    const { data: products = [], isLoading } = useGetApiProducts({ Search: search });
+    // MUDANÇA: Captura e extração segura
+    const { data: apiResponse, isLoading } = useGetApiProducts({ Search: search });
+    const products = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
     const { mutate: deleteProduct, isPending: isDeleting } = useDeleteApiProductsId({
         mutation: {

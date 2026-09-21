@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 
-// Nova importação dos hooks de Embalagem a partir do ficheiro correto
 import {
     useGetApiPackagingTypes,
     usePostApiPackagingTypes,
@@ -33,8 +32,9 @@ export default function PackagingTypesTab() {
     const [selectedType, setSelectedType] = useState(null);
     const [typeToDelete, setTypeToDelete] = useState(null);
 
-    // Ajuste do nome do hook para o gerado pelo Orval
-    const { data: packagingTypes = [], isLoading } = useGetApiPackagingTypes();
+    // CORREÇÃO: Prevenção absoluta contra o erro "map is not a function"
+    const { data: apiResponse, isLoading } = useGetApiPackagingTypes();
+    const packagingTypes = Array.isArray(apiResponse) ? apiResponse : (apiResponse?.items || []);
 
     const { register, handleSubmit, reset, formState: { errors } } = useForm({
         resolver: zodResolver(packagingTypeSchema),
@@ -45,7 +45,6 @@ export default function PackagingTypesTab() {
         if (isModalOpen) reset(selectedType || { code: '', description: '' });
     }, [isModalOpen, selectedType, reset]);
 
-    // Ajuste do nome do hook
     const { mutate: createType, isPending: isCreating } = usePostApiPackagingTypes({
         mutation: {
             onSuccess: () => {
@@ -57,7 +56,6 @@ export default function PackagingTypesTab() {
         }
     });
 
-    // Ajuste do nome do hook
     const { mutate: updateType, isPending: isUpdating } = usePutApiPackagingTypesId({
         mutation: {
             onSuccess: () => {
@@ -69,7 +67,6 @@ export default function PackagingTypesTab() {
         }
     });
 
-    // Ajuste do nome do hook
     const { mutate: deleteType, isPending: isDeleting } = useDeleteApiPackagingTypesId({
         mutation: {
             onSuccess: () => {

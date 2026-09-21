@@ -58,16 +58,17 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
                                      (p.BaseBarcode != null && EF.Functions.ILike(p.BaseBarcode, s)));
         }
 
-        var totalTask = query.CountAsync(ct);
-        var itemsTask = query
+        // 1. Aguarda a contagem primeiro
+        var totalCount = await query.CountAsync(ct);
+
+        // 2. Aguarda a busca dos itens depois
+        var items = await query
             .OrderBy(p => p.Sku)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(ct);
 
-        await Task.WhenAll(totalTask, itemsTask);
-
-        var dtos = itemsTask.Result.Select(p => new ProductDto(
+        var dtos = items.Select(p => new ProductDto(
             p.Id, p.CustomerId, p.Customer.CorporateName, p.Sku, p.Description, p.BaseUnit, p.BaseBarcode, p.Ncm, p.Cest, p.Origin, p.MaxStacking,
             p.TracksBatch, p.StrictBatch, p.TracksManufacture, p.StrictManufacture, p.TracksExpiration, p.StrictExpiration, p.TracksSerial, p.StrictSerial,
             (int)p.PickingStrategy, (int)p.PickingBaseDate, p.InboundShelfLifeToleranceDays, p.OutboundShelfLifeToleranceDays, p.IsActive,
@@ -77,7 +78,7 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
             )).ToList()
         )).ToList();
 
-        var response = new PaginatedResult<ProductDto>(dtos, totalTask.Result, request.Page, request.PageSize);
+        var response = new PaginatedResult<ProductDto>(dtos, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

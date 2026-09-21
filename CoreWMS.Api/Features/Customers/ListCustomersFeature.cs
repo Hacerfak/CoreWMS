@@ -50,17 +50,18 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
                              (c.TradeName != null && EF.Functions.ILike(c.TradeName, s)));
         }
 
-        var totalTask = q.CountAsync(ct);
-        var itemsTask = q
+        // 1. Aguarda a contagem
+        var totalCount = await q.CountAsync(ct);
+
+        // 2. Aguarda os itens
+        var items = await q
             .OrderBy(c => c.CorporateName)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ProjectToType<CustomerDto>()
             .ToListAsync(ct);
 
-        await Task.WhenAll(totalTask, itemsTask);
-
-        var response = new PaginatedResult<CustomerDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        var response = new PaginatedResult<CustomerDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

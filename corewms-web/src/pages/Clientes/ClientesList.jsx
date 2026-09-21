@@ -20,10 +20,10 @@ export default function ClientesList() {
     const [selectedCliente, setSelectedCliente] = useState(null);
     const [clienteToDelete, setClienteToDelete] = useState(null);
 
-    // Hook do Orval para busca de clientes
-    const { data: clientes, isLoading } = useGetApiCustomers({ Search: search });
+    // MUDANÇA: Captura a resposta completa e extrai de forma segura os items
+    const { data: apiResponse, isLoading } = useGetApiCustomers({ Search: search });
+    const clientes = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
-    // Hook do Orval para deletar/inativar cliente
     const { mutate: deleteCustomer, isPending: isDeleting } = useDeleteApiCustomersId({
         mutation: {
             onSuccess: () => {

@@ -4,11 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
-
-// Importa apenas os produtos daqui
 import { usePostApiProducts, usePutApiProductsId } from '@/api/generated/products/products';
-
-// Importação do hook do novo ficheiro
 import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
@@ -22,7 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Save, Package, Settings2, FileText, Box, PlusCircle, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Zod Schema Alinhado ao Backend
 const packagingSchema = z.object({
     id: z.string().optional().nullable(),
     packagingTypeId: z.string().min(1, 'Selecione o tipo.'),
@@ -70,11 +65,13 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     const [activeTab, setActiveTab] = useState('dados');
     const isEditing = !!productToEdit;
 
-    // Combos Data
-    const { data: customers = [] } = useGetApiCustomers({ OnlyActive: true });
+    // CORREÇÃO: Extração segura dos Customers (Paginados)
+    const { data: customersResponse } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const customers = customersResponse?.items || (Array.isArray(customersResponse) ? customersResponse : []);
 
-    // Atualização da chamada do hook
-    const { data: packagingTypes = [] } = useGetApiPackagingTypes();
+    // Extração segura das embalagens
+    const { data: packTypesResponse } = useGetApiPackagingTypes();
+    const packagingTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
 
     const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(productSchema),
@@ -119,7 +116,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     });
 
     const onSubmit = (data) => {
-        // Validações Manuais Visuais Antes de Enviar
         if (data.pickingStrategy === 2 && !data.tracksExpiration) {
             toast.error("A estratégia FEFO exige que o 'Controle de Validade' esteja habilitado nas Regras WMS.");
             setActiveTab('regras');
@@ -137,7 +133,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
         isEditing ? updateProduct({ id: productToEdit.id, data }) : createProduct({ data });
     };
 
-    // A Herança Perfeita do Depositante
     const handleCustomerChange = (customerId) => {
         setValue('customerId', customerId, { shouldValidate: true });
         if (!isEditing) {
@@ -158,7 +153,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
         }
     };
 
-    // Helper Visual
     const renderToggle = (title, desc, trackField, strictField) => (
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-3">
             <div className="flex items-center justify-between">
@@ -202,7 +196,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                         </div>
                         <div className="flex-1 overflow-y-auto p-6">
 
-                            {/* ABA BÁSICOS */}
                             <TabsContent value="dados" className="space-y-4 mt-0">
                                 <div className="space-y-1.5">
                                     <Label>Depositante (Cliente) *</Label>
@@ -233,7 +226,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                 </div>
                             </TabsContent>
 
-                            {/* ABA FISCAL */}
                             <TabsContent value="fiscal" className="space-y-4 mt-0">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
@@ -258,7 +250,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                 </div>
                             </TabsContent>
 
-                            {/* ABA WMS */}
                             <TabsContent value="regras" className="space-y-6 mt-0">
                                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-200/80 space-y-5">
                                     <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Controles de Rastreabilidade</h3>
@@ -305,7 +296,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                 </div>
                             </TabsContent>
 
-                            {/* ABA EMBALAGENS (FIELD ARRAY) */}
                             <TabsContent value="embalagens" className="space-y-4 mt-0">
                                 {errors.packagings && <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-md">{errors.packagings.root?.message || 'Verifique as informações das embalagens.'}</div>}
                                 {fields.map((item, index) => (
