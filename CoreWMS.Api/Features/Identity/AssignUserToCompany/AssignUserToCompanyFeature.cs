@@ -8,9 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Users;
 
-// 1. Request
-public record AssignUserRequest(Guid CompanyId, Guid RoleId);
-public record AssignUserCommand(Guid UserId, Guid CompanyId, Guid RoleId) : IRequest<IResult>;
+// 1. Request - Atualizado para receber uma lista de depositantes restritos
+public record AssignUserRequest(Guid CompanyId, Guid RoleId, List<Guid>? AllowedCustomerIds);
+public record AssignUserCommand(Guid UserId, Guid CompanyId, Guid RoleId, List<Guid>? AllowedCustomerIds) : IRequest<IResult>;
 
 // 2. Validator
 public class AssignUserCommandValidator : AbstractValidator<AssignUserCommand>
@@ -46,26 +46,54 @@ public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IRe
         if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct))
             return Results.BadRequest(new { Message = "Perfil não existe." });
 
+        // Validação Inteligente: Se enviou lista de depositantes, garante que todos existem e pertencem a esta empresa
+        if (request.AllowedCustomerIds != null && request.AllowedCustomerIds.Any())
+        {
+            var validCount = await _db.Customers
+                .CountAsync(c => c.CompanyId == request.CompanyId && request.AllowedCustomerIds.Contains(c.Id), ct);
+
+            if (validCount != request.AllowedCustomerIds.Count)
+                return Results.BadRequest(new { Message = "Um ou mais depositantes informados são inválidos ou não pertencem a esta empresa." });
+        }
+
+        // 1. Lógica do Vínculo de Empresa e Perfil (UserCompanyRole)
         var existingAssignment = await _db.UserCompanyRoles
             .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId, ct);
 
         if (existingAssignment != null)
         {
-            if (existingAssignment.RoleId == request.RoleId)
-                return Results.BadRequest(new { Message = "O usuário já possui este perfil nesta empresa." });
-
             _db.UserCompanyRoles.Remove(existingAssignment);
         }
 
         _db.UserCompanyRoles.Add(new UserCompanyRole(request.UserId, request.CompanyId, request.RoleId));
-        await _db.SaveChangesAsync(ct);
 
+        // 2. Lógica da Restrição B2B (UserCustomer) - Só afeta clientes desta empresa
+        var currentCustomers = await _db.Set<UserCustomer>()
+            .Include(uc => uc.Customer)
+            .Where(uc => uc.UserId == request.UserId && uc.Customer.CompanyId == request.CompanyId)
+            .ToListAsync(ct);
+
+        if (currentCustomers.Any())
+        {
+            _db.Set<UserCustomer>().RemoveRange(currentCustomers);
+        }
+
+        if (request.AllowedCustomerIds != null && request.AllowedCustomerIds.Any())
+        {
+            var newCustomerLinks = request.AllowedCustomerIds
+                .Select(customerId => new UserCustomer(request.UserId, customerId)) // Usando sua entidade real!
+                .ToList();
+
+            _db.Set<UserCustomer>().AddRange(newCustomerLinks);
+        }
+
+        await _db.SaveChangesAsync(ct);
         _cacheService.InvalidateUserCompanyCache(request.UserId, request.CompanyId);
 
         return Results.Ok(new
         {
             Message = existingAssignment != null
-            ? "Perfil atualizado com sucesso nesta empresa!"
+            ? "Perfil e vínculos de depositantes atualizados com sucesso!"
             : "Usuário vinculado com sucesso!"
         });
     }
@@ -77,7 +105,7 @@ public static class AssignUserToCompanyEndpoints
     public static void MapAssignUserToCompanyEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/users/{userId:guid}/companies", async (Guid userId, AssignUserRequest req, IMediator mediator) =>
-            await mediator.Send(new AssignUserCommand(userId, req.CompanyId, req.RoleId)))
+            await mediator.Send(new AssignUserCommand(userId, req.CompanyId, req.RoleId, req.AllowedCustomerIds)))
         .WithTags("Users")
         .RequireAuthorization()
         .RequirePermission(Permissions.Users.Manage);

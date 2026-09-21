@@ -7,13 +7,12 @@ using CoreWMS.Api.Infrastructure.Security;
 
 namespace CoreWMS.Api.Features.Identity.Users;
 
-// 1. Request
 public record ListUsersQuery(bool IsRequesterMaster) : IRequest<List<UserDto>>;
 
-// 2. Handler
 public class ListUsersHandler : IRequestHandler<ListUsersQuery, List<UserDto>>
 {
     private readonly ApplicationDbContext _db;
+
     public ListUsersHandler(ApplicationDbContext db) => _db = db;
 
     public async Task<List<UserDto>> Handle(ListUsersQuery request, CancellationToken ct)
@@ -23,8 +22,9 @@ public class ListUsersHandler : IRequestHandler<ListUsersQuery, List<UserDto>>
                 .ThenInclude(ucr => ucr.Company)
             .Include(u => u.UserCompanyRoles)
                 .ThenInclude(ucr => ucr.Role)
-            .AsSplitQuery() // Optimization for multiple includes
-            .AsNoTracking(); // Obligatory for reads
+            .Include(u => u.UserCustomers) // <--- Incluir os Depositantes do Utilizador
+            .AsSplitQuery()
+            .AsNoTracking();
 
         if (!request.IsRequesterMaster)
         {
@@ -32,18 +32,24 @@ public class ListUsersHandler : IRequestHandler<ListUsersQuery, List<UserDto>>
         }
 
         var users = await query.ToListAsync(ct);
+
         return users.Select(u => new UserDto(
             u.Id,
             u.Name,
             u.Email,
             u.IsMaster,
             u.CreatedAt,
-            u.UserCompanyRoles.Select(ucr => new UserAssignmentDto(ucr.CompanyId, ucr.Company.CorporateName, ucr.Role.Name)).ToList()
+            u.UserCompanyRoles.Select(ucr => new UserAssignmentDto(
+                ucr.CompanyId,
+                ucr.Company.CorporateName,
+                ucr.Role.Name,
+                // Extrai apenas os CustomerIds vinculados a este Utilizador
+                u.UserCustomers.Select(uc => uc.CustomerId).ToList()
+            )).ToList()
         )).ToList();
     }
 }
 
-// 3. Endpoint
 public static class ListUsersEndpoint
 {
     public static void MapListUsersEndpoints(this IEndpointRouteBuilder app)

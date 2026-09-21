@@ -8,4 +8,6 @@
 export interface AssignUserRequest {
   companyId?: string;
   roleId?: string;
+  /** @nullable */
+  allowedCustomerIds?: string[] | null;
 }
