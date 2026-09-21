@@ -1,6 +1,5 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
+using Microsoft.AspNetCore.Hosting;
 
 namespace CoreWMS.Api.Infrastructure.Storage;
 
@@ -15,7 +14,6 @@ public class LocalImageStorageService : ILocalImageStorageService
 
     public LocalImageStorageService(IWebHostEnvironment env)
     {
-        // Define a pasta raiz no disco do servidor (ex: /app/uploads/quality)
         _storageDirectory = Path.Combine(env.ContentRootPath, "uploads", "quality");
 
         if (!Directory.Exists(_storageDirectory))
@@ -27,26 +25,44 @@ public class LocalImageStorageService : ILocalImageStorageService
     public async Task<(string FilePath, long FileSizeBytes)> CompressAndSaveImageAsync(string fileName, string base64Data, CancellationToken ct = default)
     {
         // Limpa o prefixo do Base64 caso o frontend envie "data:image/jpeg;base64,..."
-        var base64Clean = base64Data.Contains(",") ? base64Data.Split(',')[1] : base64Data;
+        var base64Clean = base64Data.Contains(',') ? base64Data.Split(',')[1] : base64Data;
         var imageBytes = Convert.FromBase64String(base64Clean);
 
         var safeFileName = $"{Guid.NewGuid():N}_{Path.GetFileNameWithoutExtension(fileName)}.jpg";
         var fullPath = Path.Combine(_storageDirectory, safeFileName);
-        var relativePath = $"/uploads/quality/{safeFileName}"; // Caminho para guardar na BD e servir na API
+        var relativePath = $"/uploads/quality/{safeFileName}";
 
-        // Comprime e redimensiona a imagem para poupar espaço
-        using var image = Image.Load(imageBytes);
+        using var originalBitmap = SKBitmap.Decode(imageBytes);
 
-        // Redimensiona mantendo o aspect ratio, limitando a largura máxima a 1024px (suficiente para avarias)
-        image.Mutate(x => x.Resize(new ResizeOptions
+        // Calcula as novas dimensões mantendo o Aspect Ratio (Máximo de 1024px)
+        int maxWidth = 1024;
+        int maxHeight = 1024;
+        int newWidth = originalBitmap.Width;
+        int newHeight = originalBitmap.Height;
+
+        if (originalBitmap.Width > maxWidth || originalBitmap.Height > maxHeight)
         {
-            Size = new Size(1024, 1024),
-            Mode = ResizeMode.Max
-        }));
+            double ratioX = (double)maxWidth / originalBitmap.Width;
+            double ratioY = (double)maxHeight / originalBitmap.Height;
+            double ratio = Math.Min(ratioX, ratioY);
 
-        // Guarda em JPEG com 75% de qualidade (Equilíbrio perfeito entre tamanho e visibilidade)
-        var encoder = new JpegEncoder { Quality = 75 };
-        await image.SaveAsJpegAsync(fullPath, encoder, ct);
+            newWidth = (int)(originalBitmap.Width * ratio);
+            newHeight = (int)(originalBitmap.Height * ratio);
+        }
+
+        var imageInfo = new SKImageInfo(newWidth, newHeight);
+
+        // CORREÇÃO: Usando SKSamplingOptions com interpolação linear para alta qualidade e performance
+        using var resizedBitmap = originalBitmap.Resize(imageInfo, new SKSamplingOptions(SKFilterMode.Linear));
+
+        using var image = SKImage.FromBitmap(resizedBitmap);
+
+        // Comprime para JPEG com 75% de qualidade
+        using var data = image.Encode(SKEncodedImageFormat.Jpeg, 75);
+
+        // Salva no disco assincronamente
+        using var stream = File.OpenWrite(fullPath);
+        await stream.WriteAsync(data.AsSpan().ToArray(), ct);
 
         var fileInfo = new FileInfo(fullPath);
         return (relativePath, fileInfo.Length);
