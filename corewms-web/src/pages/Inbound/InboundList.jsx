@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useGetApiInbound, useDeleteApiInboundIdCancel } from '@/api/generated/inbound/inbound';
+import { useGetApiInbound, useDeleteApiInboundIdCancel, useDeleteApiInboundId } from '@/api/generated/inbound/inbound';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Search, Loader2, ArrowDownToLine, Upload, Eye, Ban, PackageCheck, FileCode2 } from 'lucide-react';
+import { Search, Loader2, ArrowDownToLine, Upload, Eye, Ban, PackageCheck, FileCode2, Play, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
 
@@ -22,6 +22,7 @@ export default function InboundList() {
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [orderToCancel, setOrderToCancel] = useState(null);
+    const [orderToDelete, setOrderToDelete] = useState(null);
 
     const queryParams = {
         Search: search,
@@ -35,10 +36,11 @@ export default function InboundList() {
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
+    // Cancelar Ordem
     const { mutate: cancelOrder, isPending: isCanceling } = useDeleteApiInboundIdCancel({
         mutation: {
             onSuccess: () => {
-                toast.success('Ordem de Recebimento cancelada com sucesso.');
+                toast.success('Ordem de Recebimento cancelada.');
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
                 setOrderToCancel(null);
             },
@@ -46,20 +48,32 @@ export default function InboundList() {
         }
     });
 
-    // Mapeamento exato das strings devolvidas pelo DTO do Backend
-    const renderStatusBadge = (status) => {
-        switch (status) {
-            case 'Pending':
-                return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Aguardando Revisão</Badge>;
-            case 'Receiving':
-                return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Em Recebimento</Badge>;
-            case 'Completed':
-                return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Finalizado</Badge>;
-            case 'Canceled':
-                return <Badge className="bg-rose-100 text-rose-800 border-rose-200">Cancelado</Badge>;
-            default:
-                return <Badge variant="outline">{status || 'Pendente'}</Badge>;
+    // Excluir Ordem Cancelada
+    const { mutate: deleteOrder, isPending: isDeleting } = useDeleteApiInboundId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Registro da NF-e removido com sucesso.');
+                queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
+                setOrderToDelete(null);
+            },
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao excluir o registro.')
         }
+    });
+
+    const renderStatusBadge = (order) => {
+        if (order.status === 'Canceled') {
+            return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-medium">Cancelado</Badge>;
+        }
+        if (order.status === 'Completed') {
+            return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">Finalizado</Badge>;
+        }
+        if (order.status === 'Receiving') {
+            return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-medium">Em Recebimento</Badge>;
+        }
+        if (order.hasPendingReview) {
+            return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Aguardando Revisão</Badge>;
+        }
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Aguardando Recebimento</Badge>;
     };
 
     return (
@@ -97,7 +111,7 @@ export default function InboundList() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="ALL">Todos os Status</SelectItem>
-                                <SelectItem value="Pending">Aguardando Revisão</SelectItem>
+                                <SelectItem value="Pending">Aguardando Recebimento</SelectItem>
                                 <SelectItem value="Receiving">Em Recebimento</SelectItem>
                                 <SelectItem value="Completed">Finalizado</SelectItem>
                                 <SelectItem value="Canceled">Cancelado</SelectItem>
@@ -123,7 +137,6 @@ export default function InboundList() {
                             ) : inbounds.length === 0 ? (
                                 <TableRow><TableCell colSpan={5} className="h-24 text-center text-slate-500">Nenhuma ordem de recebimento encontrada.</TableCell></TableRow>
                             ) : inbounds.map((order) => {
-                                // Extrai o número da Nota Fiscal a partir da Chave de Acesso (Dígitos 25 a 33)
                                 const documentNumber = order.accessKey && order.accessKey.length >= 34
                                     ? parseInt(order.accessKey.substring(25, 34), 10)
                                     : 'N/A';
@@ -151,24 +164,65 @@ export default function InboundList() {
                                             {order.issueDate ? new Date(order.issueDate).toLocaleDateString('pt-BR') : '-'}
                                         </TableCell>
                                         <TableCell>
-                                            {renderStatusBadge(order.status)}
+                                            {renderStatusBadge(order)}
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
-                                            {order.status === 'Pending' && (
-                                                <Button variant="ghost" size="sm" onClick={() => navigate(`/inbound/revisao/${order.id}`)} className="text-amber-600 hover:bg-amber-50">
-                                                    <Eye className="h-4 w-4 mr-1" /> Revisar NF-e
+                                            {/* 1. Ordem em estado de REVISÃO (Itens pendentes) */}
+                                            {order.status === 'Pending' && order.hasPendingReview && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => navigate(`/inbound/revisao/${order.id}`)}
+                                                    className="bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5 mr-1" /> Revisar NF-e
                                                 </Button>
                                             )}
 
+                                            {/* 2. Ordem REVISADA -> Pronta para Iniciar Recebimento nas Docas */}
+                                            {order.status === 'Pending' && !order.hasPendingReview && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => navigate(`/inbound/operacao/${order.id}`)}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                                                >
+                                                    <Play className="h-3.5 w-3.5 mr-1" /> Iniciar Recebimento
+                                                </Button>
+                                            )}
+
+                                            {/* 3. Ordem EM RECEBIMENTO (Conferência em andamento) */}
                                             {order.status === 'Receiving' && (
-                                                <Button variant="ghost" size="sm" onClick={() => navigate(`/inbound/operacao/${order.id}`)} className="text-blue-600 hover:bg-blue-50">
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => navigate(`/inbound/operacao/${order.id}`)}
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                                                >
                                                     <PackageCheck className="h-4 w-4 mr-1" /> Conferência
                                                 </Button>
                                             )}
 
+                                            {/* Botão Cancelar para ordens ativas */}
                                             {order.status !== 'Completed' && order.status !== 'Canceled' && (
-                                                <Button variant="ghost" size="sm" onClick={() => setOrderToCancel(order)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setOrderToCancel(order)}
+                                                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                    title="Cancelar Ordem"
+                                                >
                                                     <Ban className="h-4 w-4" />
+                                                </Button>
+                                            )}
+
+                                            {/* Botão Excluir Registro para ordens Canceladas */}
+                                            {order.status === 'Canceled' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setOrderToDelete(order)}
+                                                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                    title="Excluir Registro da NF-e"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             )}
                                         </TableCell>
@@ -194,6 +248,7 @@ export default function InboundList() {
 
             <ImportXmlModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
+            {/* Modal de Confirmação de Cancelamento */}
             <AlertDialog open={!!orderToCancel} onOpenChange={(open) => !open && setOrderToCancel(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -206,6 +261,24 @@ export default function InboundList() {
                         <AlertDialogCancel disabled={isCanceling}>Voltar</AlertDialogCancel>
                         <AlertDialogAction onClick={() => cancelOrder({ id: orderToCancel.id })} disabled={isCanceling} className="bg-rose-600 hover:bg-rose-700 text-white">
                             {isCanceling ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Modal de Confirmação de Exclusão Definitiva */}
+            <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Registro da NF-e?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Deseja excluir definitivamente o registro desta nota cancelada? Esta ação não afetará os cadastros de Clientes ou Produtos existentes.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Voltar</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteOrder({ id: orderToDelete.id })} disabled={isDeleting} className="bg-rose-600 hover:bg-rose-700 text-white">
+                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -14,8 +14,8 @@ import AuditoriaPage from '@/pages/Auditoria/AuditoriaPage';
 import EmpresasPage from './pages/Empresas/EmpresasPage';
 import TopologiaPage from '@/pages/Topologia/TopologiaPage';
 import ProdutosPage from '@/pages/Produtos/ProdutosPage';
-
-// NOVOS IMPORTS DO INBOUND
+import InboundOperacaoPage from '@/pages/Inbound/InboundOperacaoPage';
+import ConferenciaItemPage from '@/pages/Inbound/ConferenciaItemPage';
 import InboundList from '@/pages/Inbound/InboundList';
 import ReviewInbound from '@/pages/Inbound/ReviewInbound';
 
@@ -103,6 +103,10 @@ export default function App() {
                 <Route path="/inbound/revisao/:id" element={<ReviewInbound />} />
               </Route>
 
+              <Route element={<PermissionGuard requiredPermission="inbound:receive" />}>
+                <Route path="/inbound/operacao/:id" element={<InboundOperacaoPage />} />
+                <Route path="/inbound/operacao/:orderId/item/:itemId" element={<ConferenciaItemPage />} />
+              </Route>
             </Route>
           </Route>
         </Route>

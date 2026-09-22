@@ -93,7 +93,8 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     );
 
                     var orderItem = new InboundOrderItem(
-                        order.Id, item.LineNumber, item.SkuCode, item.Barcode, item.Description, item.Ncm,
+                        order.Id, item.LineNumber, item.SkuCode, item.Barcode, item.Description,
+                        item.Ncm, item.Cest, item.Unit,
                         item.Quantity, item.UnitValue, item.Batch, item.ManufactureDate, item.ExpirationDate
                     );
 

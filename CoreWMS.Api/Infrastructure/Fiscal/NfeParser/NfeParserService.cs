@@ -62,6 +62,7 @@ public class NfeParserService : INfeParserService
 
             var quantity = ParseDecimal(prod.Element(Ns + "qCom")?.Value);
             var unitValue = ParseDecimal(prod.Element(Ns + "vUnCom")?.Value);
+            var unit = prod.Element(Ns + "uCom")?.Value ?? prod.Element(Ns + "uTrib")?.Value ?? "UN";
 
             items.Add(new NfeParsedItem(
                 nItem,
@@ -70,7 +71,7 @@ public class NfeParserService : INfeParserService
                 prod.Element(Ns + "xProd")?.Value ?? "",
                 prod.Element(Ns + "NCM")?.Value ?? "",
                 prod.Element(Ns + "CEST")?.Value,
-                prod.Element(Ns + "uCom")?.Value ?? "",
+                unit,
                 quantity,
                 unitValue,
                 batch,

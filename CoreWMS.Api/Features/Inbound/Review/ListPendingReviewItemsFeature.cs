@@ -33,7 +33,7 @@ public class ListPendingReviewItemsHandler : IRequestHandler<ListPendingReviewIt
             .Select(i => new PendingReviewItemDto(
                 i.Id,
                 i.InboundOrderId,
-                i.InboundOrder.CustomerId!.Value, // <-- PASSANDO O CUSTOMER ID AQUI
+                i.InboundOrder.CustomerId!.Value,
                 i.InboundOrder.AccessKey,
                 i.InboundOrder.IssuerName,
                 i.LineNumber,
@@ -41,6 +41,8 @@ public class ListPendingReviewItemsHandler : IRequestHandler<ListPendingReviewIt
                 i.RawBarcode,
                 i.RawDescription,
                 i.RawNcm,
+                i.RawCest,
+                string.IsNullOrWhiteSpace(i.RawUnit) ? "UN" : i.RawUnit, // <-- Mapeando a Unidade lida do XML
                 i.ExpectedQuantity,
                 i.ExpectedBatch
             ))

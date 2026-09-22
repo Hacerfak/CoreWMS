@@ -198,13 +198,23 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
 
                             <TabsContent value="dados" className="space-y-4 mt-0">
                                 <div className="space-y-1.5">
-                                    <Label>Depositante (Cliente) *</Label>
-                                    <Select value={watch('customerId')} onValueChange={handleCustomerChange} disabled={isEditing}>
-                                        <SelectTrigger className={errors.customerId ? 'border-rose-500' : ''}><SelectValue placeholder="Selecione o dono da mercadoria" /></SelectTrigger>
-                                        <SelectContent>
-                                            {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
+                                    <Label>Depositante (Cliente)</Label>
+                                    {isEditing ? (
+                                        <Input
+                                            value={productToEdit?.customerName || 'Depositante'}
+                                            disabled
+                                            className="bg-slate-100 font-medium text-slate-700 cursor-not-allowed border-slate-200"
+                                        />
+                                    ) : (
+                                        <Select value={watch('customerId')} onValueChange={handleCustomerChange}>
+                                            <SelectTrigger className={errors.customerId ? 'border-rose-500' : ''}>
+                                                <SelectValue placeholder="Selecione o dono da mercadoria" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                 </div>
                                 <div className="grid grid-cols-3 gap-4">
                                     <div className="space-y-1.5 col-span-2">

@@ -446,6 +446,65 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiInboundIdCancelMutationOptions(options), queryClient);
     }
+    export const deleteApiInboundId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiInboundIdMutationKey = () => ['deleteApiInboundId'] as const;
+
+export const getDeleteApiInboundIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundId>>, TError,DeleteApiInboundIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundId>>, TError,DeleteApiInboundIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiInboundIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiInboundId>>, DeleteApiInboundIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiInboundId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiInboundIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiInboundId>>>
+
+    export type DeleteApiInboundIdMutationError = unknown
+    export type DeleteApiInboundIdMutationVariables = {id: string}
+
+    export const useDeleteApiInboundId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiInboundId>>, TError,DeleteApiInboundIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiInboundId>>,
+        TError,
+        DeleteApiInboundIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiInboundIdMutationOptions(options), queryClient);
+    }
     export const getApiInboundId = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

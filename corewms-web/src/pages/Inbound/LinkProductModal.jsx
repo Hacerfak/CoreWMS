@@ -13,10 +13,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Search, Link as LinkIcon, PackageCheck, AlertCircle, Plus, PlusCircle, Trash2, Sparkles } from 'lucide-react';
+import { Loader2, Search, Link as LinkIcon, PackageCheck, AlertCircle, Plus, Trash2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Schema simplificado para o Cadastro Rápido
+// Validation Schema - Apens para os campos editáveis na tela
 const quickPackagingSchema = z.object({
     packagingTypeId: z.string().min(1, 'Selecione o tipo de embalagem.'),
     conversionFactor: z.coerce.number().min(1, 'Mínimo 1.'),
@@ -35,18 +35,15 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
     const [search, setSearch] = useState(item?.rawSkuCode || '');
     const [selectedProductId, setSelectedProductId] = useState(null);
 
-    // Tipos de Embalagem disponíveis
     const { data: packTypesResponse } = useGetApiPackagingTypes();
     const packagingTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
 
-    // Busca produtos no catálogo WMS
     const { data: apiResponse, isLoading: isLoadingProducts } = useGetApiProducts(
         { Search: search, PageSize: 5 },
         { query: { enabled: open && search.length >= 2 } }
     );
     const products = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
-    // Form do Cadastro Rápido
     const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(quickProductSchema),
         defaultValues: {
@@ -62,7 +59,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
         if (open && item) {
             reset({
                 description: item.rawDescription || '',
-                baseUnit: 'UN',
+                baseUnit: item.rawUnit || 'UN',
                 packagings: [{ packagingTypeId: '', conversionFactor: 1, barcode: item.rawBarcode || '' }]
             });
             setSearch(item.rawSkuCode || '');
@@ -71,7 +68,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
         }
     }, [open, item, reset]);
 
-    // Mutação para Vincular Item Existente
+    // Mutação para Vincular Produto Existente
     const { mutate: linkProduct, isPending: isLinking } = usePostApiInboundReviewItemIdLink({
         mutation: {
             onSuccess: () => {
@@ -84,14 +81,13 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
         }
     });
 
-    // Mutação para Criar Novo Produto Rápido
+    // Mutação para Cadastro Rápido
     const { mutate: createProduct, isPending: isCreating } = usePostApiProducts({
         mutation: {
             onSuccess: (newProduct) => {
                 toast.success('Novo SKU cadastrado no WMS!');
                 queryClient.invalidateQueries({ queryKey: ['/api/products'] });
 
-                // Se a API retornar a entidade criada com ID, faz o vínculo automático
                 const createdId = newProduct?.id;
                 if (createdId) {
                     linkProduct({ itemId: item.itemId, data: { productId: createdId } });
@@ -110,12 +106,15 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
     };
 
     const handleCreateQuickProduct = (data) => {
+        // Envia todos os dados fiscais diretamente extraídos do XML da Nota Fiscal
         const fullPayload = {
-            customerId: item.customerId, // Agora o valor vem preenchido do DTO
+            customerId: item.customerId,
             sku: item.rawSkuCode,
             baseBarcode: item.rawBarcode || null,
             description: data.description,
             baseUnit: data.baseUnit,
+            ncm: item.rawNcm || null,      // Injetado do XML
+            cest: item.rawCest || null,    // Injetado do XML
             origin: 0,
             maxStacking: 1,
             pickingStrategy: 1,
@@ -163,23 +162,27 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                 </div>
 
                 <div className="p-6 pb-0 space-y-4">
-                    {/* Referência da NF-e */}
+                    {/* Referência do XML */}
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col gap-2">
                         <div className="flex items-center gap-2 text-amber-800 text-xs font-bold uppercase tracking-wider mb-1">
-                            <AlertCircle size={14} /> Dados Brutos no XML da NF-e
+                            <AlertCircle size={14} /> Dados Brutos Extraídos do XML
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-3">
                             <div>
                                 <p className="text-[10px] text-amber-700/70 font-semibold uppercase">SKU / Cód. Item</p>
-                                <p className="text-sm font-mono font-bold text-amber-900">{item?.rawSkuCode}</p>
+                                <p className="text-xs font-mono font-bold text-amber-900">{item?.rawSkuCode}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] text-amber-700/70 font-semibold uppercase">EAN Original</p>
-                                <p className="text-sm font-mono text-amber-900">{item?.rawBarcode || 'N/A'}</p>
+                                <p className="text-xs font-mono text-amber-900">{item?.rawBarcode || 'N/A'}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] text-amber-700/70 font-semibold uppercase">Descrição no XML</p>
-                                <p className="text-xs font-medium text-amber-900 truncate" title={item?.rawDescription}>{item?.rawDescription}</p>
+                                <p className="text-[10px] text-amber-700/70 font-semibold uppercase">NCM</p>
+                                <p className="text-xs font-mono text-amber-900">{item?.rawNcm || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-amber-700/70 font-semibold uppercase">CEST</p>
+                                <p className="text-xs font-mono text-amber-900">{item?.rawCest || 'N/A'}</p>
                             </div>
                         </div>
                     </div>
@@ -194,7 +197,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                             </TabsTrigger>
                         </TabsList>
 
-                        {/* ABA 1: VINCULAR EXISTENTE */}
+                        {/* BUSCAR EXISTENTE */}
                         <TabsContent value="existing" className="space-y-4 pt-4">
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -245,7 +248,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                             </div>
                         </TabsContent>
 
-                        {/* ABA 2: CADASTRO RÁPIDO */}
+                        {/* CADASTRO RÁPIDO */}
                         <TabsContent value="new" className="pt-4">
                             <form onSubmit={handleSubmit(handleCreateQuickProduct)} className="space-y-4">
                                 <div className="grid grid-cols-3 gap-3">
@@ -276,7 +279,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                                         </Button>
                                     </div>
 
-                                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                                    <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
                                         {fields.map((field, idx) => (
                                             <div key={field.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
                                                 <div className="flex-1">
