@@ -32,7 +32,6 @@ public class InboundOrderItem : AuditableEntity
     // Progresso
     public decimal ReceivedQuantity { get; private set; }
     public InboundOrderItemStatus Status { get; private set; }
-
     public Guid? LockedByUserId { get; private set; }
     public DateTime? LockedAt { get; private set; }
     public Guid? DockLocationId { get; private set; }
@@ -93,21 +92,34 @@ public class InboundOrderItem : AuditableEntity
     {
         LockedByUserId = null;
         LockedAt = null;
-        Status = ReceivedQuantity > 0 ? InboundOrderItemStatus.Receiving : InboundOrderItemStatus.Ready_To_Receive;
+        Status = InboundOrderItemStatus.Ready_To_Receive;
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void UpdateStatus(InboundOrderItemStatus newStatus)
+    {
+        Status = newStatus;
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void AddReceivedQuantity(decimal quantity)
     {
-        if (quantity <= 0) throw new ArgumentException("A quantidade recebida deve ser maior que zero.");
         ReceivedQuantity += quantity;
+        if (ReceivedQuantity < 0) ReceivedQuantity = 0;
+
         if (ReceivedQuantity >= ExpectedQuantity)
         {
             Status = InboundOrderItemStatus.Completed;
             LockedByUserId = null;
             LockedAt = null;
         }
+        else if (Status == InboundOrderItemStatus.Completed && ReceivedQuantity < ExpectedQuantity)
+        {
+            Status = InboundOrderItemStatus.Ready_To_Receive;
+        }
+
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
     }

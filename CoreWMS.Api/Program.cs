@@ -125,6 +125,7 @@ builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService
 
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();
+builder.Services.AddSingleton<IZplTemplateEngine, ZplTemplateEngine>();
 
 // Módulo de Performance e Inventário (Infraestrutura)
 builder.Services.AddSingleton<KardexChannel>();

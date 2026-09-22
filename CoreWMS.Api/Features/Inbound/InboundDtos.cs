@@ -13,14 +13,14 @@ public record InboundOrderDto(
     string AccessKey, DateTime IssueDate, string Status, bool HasPendingReview
 );
 
-// Incluído DockLocationId e DockLocationPath
+// Incluídos ExpectedBatch, ExpectedManufactureDate e ExpectedExpirationDate
 public record InboundOrderItemDto(
     Guid Id, Guid? ProductId, int LineNumber, string Sku, string Description,
     decimal ExpectedQuantity, decimal ReceivedQuantity, string Status,
-    Guid? LockedByUserId, Guid? DockLocationId, string? DockLocationPath
+    Guid? LockedByUserId, Guid? DockLocationId, string? DockLocationPath,
+    string? ExpectedBatch, DateTime? ExpectedManufactureDate, DateTime? ExpectedExpirationDate
 );
 
-// Incluído CreatedAt
 public record InboundOrderDetailsDto(
     Guid Id, Guid? CustomerId, string? CustomerName, string IssuerCnpj, string IssuerName,
     string AccessKey, string RawXml, DateTime IssueDate, DateTime CreatedAt, string Status,

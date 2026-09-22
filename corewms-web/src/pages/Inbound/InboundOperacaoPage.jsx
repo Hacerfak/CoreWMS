@@ -13,10 +13,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-    Loader2, ArrowLeft, Warehouse, Play, Unlock, PackageCheck,
-    CheckCircle2, Calendar, Clock, Building2
+    Loader2, ArrowLeft, Warehouse, Play, PauseCircle, PackageCheck,
+    CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ListInboundHusModal from './ListInboundHusModal';
 
 export default function InboundOperacaoPage() {
     const { id: orderId } = useParams();
@@ -24,6 +25,7 @@ export default function InboundOperacaoPage() {
     const queryClient = useQueryClient();
 
     const [selectedDocks, setSelectedDocks] = useState({});
+    const [isHusModalOpen, setIsHusModalOpen] = useState(false);
 
     // Detalhes da Ordem
     const { data: order, isLoading } = useGetApiInboundId(orderId);
@@ -33,10 +35,12 @@ export default function InboundOperacaoPage() {
 
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
         mutation: {
-            onSuccess: () => {
+            onSuccess: (_, variables) => {
                 toast.success('Doca atribuída e recebimento do item iniciado!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
+                // Redireciona diretamente para a conferência após dar início/continuidade
+                navigate(`/inbound/operacao/${orderId}/item/${variables.data.orderItemId}`);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao iniciar recebimento do item.')
         }
@@ -45,7 +49,7 @@ export default function InboundOperacaoPage() {
     const { mutate: releaseItem, isPending: isReleasing } = usePostApiInboundReceiveOrderItemIdRelease({
         mutation: {
             onSuccess: () => {
-                toast.success('Item liberado com sucesso. Seleção de doca disponível.');
+                toast.success('Recebimento pausado e liberado para outros operadores.');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
             },
@@ -59,7 +63,6 @@ export default function InboundOperacaoPage() {
 
     const handleStartItem = (itemId) => {
         const currentItem = order?.items?.find(i => i.id === itemId);
-        // Prioriza a doca recém-selecionada no estado local; se não houver, pega a doca prévia do item
         const dockId = selectedDocks[itemId] || currentItem?.dockLocationId;
 
         if (!dockId) {
@@ -90,19 +93,22 @@ export default function InboundOperacaoPage() {
         }
     };
 
-    const renderItemStatusBadge = (status) => {
-        switch (status) {
-            case 'Pending_Review':
-                return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Revisão Pendente</Badge>;
-            case 'Ready_To_Receive':
-                return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Aguardando Recebimento</Badge>;
-            case 'Receiving':
-                return <Badge className="bg-purple-100 text-purple-800 border-purple-200 animate-pulse">Em Recebimento</Badge>;
-            case 'Completed':
-                return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">100% Recebido</Badge>;
-            default:
-                return <Badge variant="outline">{status}</Badge>;
+    const renderItemStatusBadge = (item) => {
+        if (item.status === 'Pending_Review') {
+            return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Revisão Pendente</Badge>;
         }
+        if (item.status === 'Completed') {
+            return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">100% Recebido</Badge>;
+        }
+        // Se o status for Receiving E houver um operador preso nele
+        if (item.status === 'Receiving' && item.lockedByUserId) {
+            return <Badge className="bg-purple-100 text-purple-800 border-purple-200 animate-pulse font-medium">Em Recebimento</Badge>;
+        }
+        // Se tiver recebimento parcial e estiver destravado
+        if (item.receivedQuantity > 0) {
+            return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Parcial - Aguardando</Badge>;
+        }
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Aguardando Recebimento</Badge>;
     };
 
     if (isLoading) {
@@ -140,6 +146,14 @@ export default function InboundOperacaoPage() {
                             {renderOrderStatusBadge(order.status)}
                         </div>
                     </div>
+
+                    <Button
+                        onClick={() => setIsHusModalOpen(true)}
+                        variant="outline"
+                        className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                    >
+                        <Layers className="w-4 h-4 mr-2" /> HUs Geradas
+                    </Button>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-3 text-xs">
@@ -198,12 +212,14 @@ export default function InboundOperacaoPage() {
                         </TableHeader>
                         <TableBody>
                             {order.items?.map((item) => {
-                                const isReady = item.status === 'Ready_To_Receive';
-                                const isReceiving = item.status === 'Receiving';
                                 const isCompleted = item.status === 'Completed';
                                 const isPendingReview = item.status === 'Pending_Review';
 
-                                // Doca atual selecionada localmente ou trazida do banco
+                                // O item só está em recebimento se estiver no status Receiving E tiver uma trava de operador ativa
+                                const isReceiving = item.status === 'Receiving' && Boolean(item.lockedByUserId);
+                                // Caso contrário, está pronto para iniciar ou continuar
+                                const isReady = !isCompleted && !isPendingReview && !isReceiving;
+
                                 const currentDockValue = selectedDocks[item.id] || item.dockLocationId || '';
 
                                 return (
@@ -236,7 +252,7 @@ export default function InboundOperacaoPage() {
                                             </div>
                                         </TableCell>
 
-                                        {/* DOCA: EXIBIDA COMO BADGE APENAS SE RECEIVING OU COMPLETED */}
+                                        {/* DOCA */}
                                         <TableCell>
                                             {(isReceiving || isCompleted) ? (
                                                 <Badge variant="outline" className="bg-slate-50 text-slate-800 font-mono border-slate-300 flex items-center w-fit gap-1">
@@ -262,7 +278,7 @@ export default function InboundOperacaoPage() {
                                         </TableCell>
 
                                         <TableCell>
-                                            {renderItemStatusBadge(item.status)}
+                                            {renderItemStatusBadge(item)}
                                         </TableCell>
 
                                         <TableCell className="text-right space-x-1">
@@ -272,35 +288,43 @@ export default function InboundOperacaoPage() {
                                                 </Button>
                                             )}
 
+                                            {/* AGUARDANDO RECEBIMENTO / CONTINUIDADE */}
                                             {isReady && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => handleStartItem(item.id)}
                                                     disabled={isStarting}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-medium"
                                                 >
-                                                    {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-3.5 w-3.5 mr-1" /> Iniciar Descarga</>}
+                                                    {isStarting ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : item.receivedQuantity > 0 ? (
+                                                        <><RotateCcw className="h-3.5 w-3.5 mr-1" /> Continuar Descarga</>
+                                                    ) : (
+                                                        <><Play className="h-3.5 w-3.5 mr-1" /> Iniciar Descarga</>
+                                                    )}
                                                 </Button>
                                             )}
 
+                                            {/* EM RECEBIMENTO ATIVO */}
                                             {isReceiving && (
-                                                <div className="inline-flex gap-1">
+                                                <div className="inline-flex gap-1.5">
                                                     <Button
                                                         size="sm"
                                                         onClick={() => navigate(`/inbound/operacao/${orderId}/item/${item.id}`)}
-                                                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                                        className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-medium"
                                                     >
                                                         <PackageCheck className="h-4 w-4 mr-1" /> Conferir Item
                                                     </Button>
                                                     <Button
                                                         size="sm"
-                                                        variant="ghost"
-                                                        title="Liberar trava do operador"
+                                                        variant="outline"
+                                                        title="Pausar e liberar para outro operador"
                                                         onClick={() => releaseItem({ orderItemId: item.id })}
                                                         disabled={isReleasing}
-                                                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                                        className="border-slate-200 text-slate-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200"
                                                     >
-                                                        <Unlock size={14} />
+                                                        {isReleasing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PauseCircle className="h-4 w-4 mr-1" /> Pausar</>}
                                                     </Button>
                                                 </div>
                                             )}
@@ -318,6 +342,15 @@ export default function InboundOperacaoPage() {
                     </Table>
                 </div>
             </div>
+
+            {/* MODAL DE HUs */}
+            {isHusModalOpen && (
+                <ListInboundHusModal
+                    open={isHusModalOpen}
+                    onOpenChange={setIsHusModalOpen}
+                    orderData={order}
+                />
+            )}
         </div>
     );
 }

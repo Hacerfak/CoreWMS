@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     useGetApiInboundId,
-    usePostApiInboundReceiveCheckout
+    usePostApiInboundReceiveCheckout,
+    usePostApiInboundReceiveOrderItemIdRelease
 } from '@/api/generated/inbound/inbound';
 import { useGetApiProducts } from '@/api/generated/products/products';
 import { useGetApiBillingServices } from '@/api/generated/billing/billing';
@@ -20,11 +21,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, Loader2, PackageCheck, Plus, Trash2, CheckCircle2,
-    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, Search, ShieldAlert
+    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, Search, ShieldAlert, PauseCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import PrintHuModal from './PrintHuModal';
 
-// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES (Para milhares de endereços)
+// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES
 function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição ou Doca (ex: P1C1AB01)..." }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -95,18 +97,20 @@ export default function ConferenciaItemPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
     // 1. Dados da Ordem
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
     const item = order?.items?.find(i => i.id === itemId);
 
-    // 2. Detalhes do Produto no WMS (Regras e Embalagens)
+    // 2. Detalhes do Produto no WMS
     const { data: productsRes } = useGetApiProducts(
         { Search: item?.sku || item?.rawSkuCode, PageSize: 5 },
         { query: { enabled: !!(item?.sku || item?.rawSkuCode) } }
     );
     const productDetail = productsRes?.items?.find(p => p.id === item?.productId || p.sku === item?.sku);
 
-    // 3. Apis de Apoio (Serviços de Faturamento, Dicionário Global de Embalagens e Topologia)
+    // 3. APIs de Apoio
     const { data: billingServicesResponse } = useGetApiBillingServices();
     const billingServices = Array.isArray(billingServicesResponse) ? billingServicesResponse : (billingServicesResponse?.items || []);
 
@@ -117,7 +121,7 @@ export default function ConferenciaItemPage() {
     const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
     const targetLocations = useMemo(() => [...docks, ...storageLocations], [docks, storageLocations]);
 
-    // Lista de embalagens atreladas especificamente ao produto (ou fallback para global se necessário)
+    // Embalagens atreladas ao cadastro do produto
     const availablePackagings = useMemo(() => {
         if (productDetail?.packagings && productDetail.packagings.length > 0) {
             return productDetail.packagings.map(p => {
@@ -140,13 +144,13 @@ export default function ConferenciaItemPage() {
         }));
     }, [productDetail, globalPackTypes]);
 
-    // Regras Condicionais do Produto
-    const tracksBatch = productDetail?.tracksBatch || !!item?.expectedBatch;
-    const tracksExpiration = productDetail?.tracksExpiration || !!item?.expectedExpirationDate;
-    const tracksManufacture = productDetail?.tracksManufacture || !!item?.expectedManufactureDate;
-    const tracksSerial = productDetail?.tracksSerial;
+    // REGRAS ESTRITAS DE RASTREABILIDADE - DEPENDEM EXCLUSIVAMENTE DO CADASTRO DO PRODUTO WMS
+    const tracksBatch = Boolean(productDetail?.tracksBatch);
+    const tracksExpiration = Boolean(productDetail?.tracksExpiration);
+    const tracksManufacture = Boolean(productDetail?.tracksManufacture);
+    const tracksSerial = Boolean(productDetail?.tracksSerial);
 
-    // 4. Estados do Formulário (Sempre sem default para evitar digitação no automático)
+    // 4. Estados do Formulário
     const [selectedBillingServiceId, setSelectedBillingServiceId] = useState('');
 
     const [volumeConfig, setVolumeConfig] = useState({
@@ -158,29 +162,28 @@ export default function ConferenciaItemPage() {
         expirationDate: '',
         serialNumber: '',
         targetLocationId: '',
-        qualityStatus: '', // Força seleção explícita
+        qualityStatus: '',
         notes: '',
         images: []
     });
 
-    // Carrinho de Lotes (Staging Cart)
+    // Carrinho
     const [stagedVolumes, setStagedVolumes] = useState([]);
     const [generatedHusResult, setGeneratedHusResult] = useState(null);
 
-    // Preenche dados iniciais vindos do XML
+    // Pré-preenchimento Automático RESPEITANDO rigorosamente as travas do cadastro do produto
     useEffect(() => {
         if (item) {
             setVolumeConfig(prev => ({
                 ...prev,
-                batch: item.expectedBatch || '',
-                expirationDate: item.expectedExpirationDate ? item.expectedExpirationDate.split('T')[0] : '',
-                manufactureDate: item.expectedManufactureDate ? item.expectedManufactureDate.split('T')[0] : '',
+                batch: tracksBatch ? (item.expectedBatch || '') : '',
+                expirationDate: (tracksExpiration && item.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : '',
+                manufactureDate: (tracksManufacture && item.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : '',
                 targetLocationId: item.dockLocationId || ''
             }));
         }
-    }, [item]);
+    }, [item, tracksBatch, tracksExpiration, tracksManufacture]);
 
-    // Quando seleciona a Embalagem do Produto, altera a Qtd por Volume automaticamente
     const handlePackagingChange = (typeId) => {
         const selectedPack = availablePackagings.find(p => p.packagingTypeId === typeId);
         setVolumeConfig(prev => ({
@@ -190,7 +193,19 @@ export default function ConferenciaItemPage() {
         }));
     };
 
-    // Mutação de Checkout
+    // Mutação de Liberação/Pausa do Item
+    const { mutate: releaseItem, isPending: isReleasing } = usePostApiInboundReceiveOrderItemIdRelease({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Recebimento pausado e liberado com sucesso.');
+                queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
+                navigate(`/inbound/operacao/${orderId}`);
+            },
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao pausar/liberar item.')
+        }
+    });
+
     const { mutate: checkoutLotes, isPending: isSubmitting } = usePostApiInboundReceiveCheckout({
         mutation: {
             onSuccess: (res) => {
@@ -229,7 +244,6 @@ export default function ConferenciaItemPage() {
         }));
     };
 
-    // Validação estrita antes de adicionar ao carrinho
     const handleAddVolumeToCart = () => {
         if (!selectedBillingServiceId) {
             return toast.warning('Selecione o Serviço de Operação de Recebimento.');
@@ -252,6 +266,10 @@ export default function ConferenciaItemPage() {
 
         const newStagedItem = {
             ...volumeConfig,
+            batch: tracksBatch ? volumeConfig.batch : '',
+            expirationDate: tracksExpiration ? volumeConfig.expirationDate : '',
+            manufactureDate: tracksManufacture ? volumeConfig.manufactureDate : '',
+            serialNumber: tracksSerial ? volumeConfig.serialNumber : '',
             billingServiceId: selectedBillingServiceId,
             tempId: Date.now() + Math.random(),
             packagingCode: selectedPack?.code || 'EMB',
@@ -262,7 +280,6 @@ export default function ConferenciaItemPage() {
         setStagedVolumes(prev => [...prev, newStagedItem]);
         toast.info('Lote adicionado ao carrinho de conferência.');
 
-        // RESET DOS CAMPOS PARA FORÇAR O PREENCHIMENTO EXPLÍCITO DO PRÓXIMO LOTE
         setSelectedBillingServiceId('');
         setVolumeConfig(prev => ({
             ...prev,
@@ -271,6 +288,9 @@ export default function ConferenciaItemPage() {
             quantityPerVolume: 0,
             qualityStatus: '',
             targetLocationId: '',
+            batch: tracksBatch ? (item?.expectedBatch || '') : '',
+            expirationDate: (tracksExpiration && item?.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : '',
+            manufactureDate: (tracksManufacture && item?.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : '',
             notes: '',
             images: []
         }));
@@ -285,7 +305,6 @@ export default function ConferenciaItemPage() {
             return toast.warning('Adicione pelo menos um lote ao carrinho antes de finalizar.');
         }
 
-        // Utiliza o serviço de faturamento do primeiro item do carrinho
         const serviceId = stagedVolumes[0]?.billingServiceId !== 'none' ? stagedVolumes[0]?.billingServiceId : null;
 
         checkoutLotes({
@@ -296,15 +315,25 @@ export default function ConferenciaItemPage() {
                     packagingTypeId: v.packagingTypeId,
                     volumeCount: v.volumeCount,
                     quantityPerVolume: v.quantityPerVolume,
-                    batch: v.batch || null,
-                    manufactureDate: v.manufactureDate ? new Date(v.manufactureDate).toISOString() : null,
-                    expirationDate: v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
-                    serialNumber: v.serialNumber || null,
+                    batch: tracksBatch && v.batch ? v.batch : null,
+                    manufactureDate: tracksManufacture && v.manufactureDate ? new Date(v.manufactureDate).toISOString() : null,
+                    expirationDate: tracksExpiration && v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
+                    serialNumber: tracksSerial && v.serialNumber ? v.serialNumber : null,
                     targetLocationId: v.targetLocationId,
                     qualityStatus: Number(v.qualityStatus)
                 }))
             }
         });
+    };
+
+    const getQualityBadgeInfo = (status) => {
+        switch (String(status)) {
+            case '1': return { label: 'Liberado (Sem Avarias)', style: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+            case '2': return { label: 'Quarentena / Retido', style: 'bg-amber-50 text-amber-800 border-amber-200' };
+            case '3': return { label: 'Avariado / Danificado', style: 'bg-rose-50 text-rose-800 border-rose-200' };
+            case '4': return { label: 'Falta Virtual / Divergência', style: 'bg-purple-50 text-purple-800 border-purple-200' };
+            default: return { label: 'Status N/D', style: 'bg-slate-50 text-slate-700 border-slate-200' };
+        }
     };
 
     if (isLoadingOrder) {
@@ -328,7 +357,7 @@ export default function ConferenciaItemPage() {
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            {/* CABEÇALHO */}
+            {/* CABEÇALHO COM BOTÃO PAUSAR & LIBERAR */}
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-4">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/inbound/operacao/${orderId}`)} className="shrink-0 text-slate-500 hover:text-slate-900">
@@ -344,25 +373,36 @@ export default function ConferenciaItemPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-6 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl">
-                    <div className="text-right">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Esperado NF-e</span>
-                        <span className="text-sm font-bold font-mono text-slate-800">{item.expectedQuantity} UN</span>
-                    </div>
-                    <div className="h-8 w-px bg-slate-200" />
-                    <div className="text-right">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Já Recebido</span>
-                        <span className="text-sm font-bold font-mono text-emerald-600">{item.receivedQuantity || 0} UN</span>
-                    </div>
-                    <div className="h-8 w-px bg-slate-200" />
-                    <div className="text-right">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">No Carrinho</span>
-                        <span className="text-sm font-bold font-mono text-blue-600">{totalCartUnits} UN</span>
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="outline"
+                        onClick={() => releaseItem({ orderItemId: item.id })}
+                        disabled={isReleasing}
+                        className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 h-10 text-xs font-semibold"
+                    >
+                        {isReleasing ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PauseCircle className="h-4 w-4 mr-1.5 text-amber-600" /> Pausar e Liberar Item</>}
+                    </Button>
+
+                    <div className="flex items-center gap-6 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl">
+                        <div className="text-right">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Esperado NF-e</span>
+                            <span className="text-sm font-bold font-mono text-slate-800">{item.expectedQuantity} UN</span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200" />
+                        <div className="text-right">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Já Recebido</span>
+                            <span className="text-sm font-bold font-mono text-emerald-600">{item.receivedQuantity || 0} UN</span>
+                        </div>
+                        <div className="h-8 w-px bg-slate-200" />
+                        <div className="text-right">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">No Carrinho</span>
+                            <span className="text-sm font-bold font-mono text-blue-600">{totalCartUnits} UN</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* SUCESSO DE ETIQUETAS HUs */}
+            {/* SUCESSO DE ETIQUETAS */}
             {generatedHusResult ? (
                 <div className="bg-white border border-emerald-200 rounded-2xl p-8 text-center space-y-6 max-w-2xl mx-auto my-auto shadow-lg animate-in zoom-in-95">
                     <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
@@ -374,9 +414,9 @@ export default function ConferenciaItemPage() {
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left max-h-48 overflow-y-auto font-mono text-xs space-y-1">
-                        {generatedHusResult.map((lpn, idx) => (
+                        {generatedHusResult.map((hu, idx) => (
                             <div key={idx} className="flex justify-between items-center py-1 border-b border-slate-100 last:border-none">
-                                <span className="font-bold text-slate-800">{lpn}</span>
+                                <span className="font-bold text-slate-800">{typeof hu === 'string' ? hu : hu.lpn}</span>
                                 <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registrado</Badge>
                             </div>
                         ))}
@@ -386,7 +426,7 @@ export default function ConferenciaItemPage() {
                         <Button variant="outline" onClick={() => navigate(`/inbound/operacao/${orderId}`)}>
                             Voltar à Operação
                         </Button>
-                        <Button className="bg-slate-900 text-white">
+                        <Button onClick={() => setIsPrintModalOpen(true)} className="bg-slate-900 text-white">
                             <Printer className="w-4 h-4 mr-2" /> Imprimir Etiquetas HUs
                         </Button>
                     </div>
@@ -395,10 +435,10 @@ export default function ConferenciaItemPage() {
                 /* CONTEÚDO PRINCIPAL DEDICADO */
                 <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
 
-                    {/* FORMULÁRIO ESQUERDO (7 COLS) */}
+                    {/* COLUNA ESQUERDA (7 COLS) */}
                     <div className="col-span-7 bg-white border border-slate-200/80 rounded-xl shadow-xs p-6 overflow-y-auto flex flex-col space-y-6">
 
-                        {/* 1. SERVIÇO DE FATURAMENTO (OBRIGATÓRIO E SEM DEFAULT) */}
+                        {/* 1. SERVIÇO DE FATURAMENTO */}
                         <div className="space-y-2 border-b border-slate-100 pb-4">
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-2">
                                 <Receipt className="text-blue-600" size={16} /> 1. Serviço de Operação de Recebimento *
@@ -460,7 +500,6 @@ export default function ConferenciaItemPage() {
                                     />
                                 </div>
 
-                                {/* PESQUISA INTELIGENTE DE POSIÇÕES DE ESTOQUE / DOCAS */}
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Posição / Doca Destino *</Label>
                                     <SearchableLocationSelect
@@ -471,12 +510,12 @@ export default function ConferenciaItemPage() {
                                 </div>
                             </div>
 
-                            {/* RASTREABILIDADE CONDICIONADA ÀS REGRAS DO PRODUTO / XML */}
+                            {/* RASTREABILIDADE EXIBIDA APENAS SE HABILITADA NO CADASTRO DO PRODUTO */}
                             {(tracksBatch || tracksExpiration || tracksManufacture || tracksSerial) && (
                                 <div className="grid grid-cols-2 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
                                     {tracksBatch && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600">Lote Físico</Label>
+                                            <Label className="text-[11px] text-slate-600 font-semibold">Lote Físico</Label>
                                             <Input
                                                 value={volumeConfig.batch}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, batch: e.target.value }))}
@@ -488,31 +527,31 @@ export default function ConferenciaItemPage() {
 
                                     {tracksExpiration && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600">Data Validade</Label>
+                                            <Label className="text-[11px] text-slate-600 font-semibold">Data Validade</Label>
                                             <Input
                                                 type="date"
                                                 value={volumeConfig.expirationDate}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, expirationDate: e.target.value }))}
-                                                className="h-8 text-xs bg-white"
+                                                className="h-8 text-xs bg-white font-mono"
                                             />
                                         </div>
                                     )}
 
                                     {tracksManufacture && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600">Data Fabricação</Label>
+                                            <Label className="text-[11px] text-slate-600 font-semibold">Data Fabricação</Label>
                                             <Input
                                                 type="date"
                                                 value={volumeConfig.manufactureDate}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, manufactureDate: e.target.value }))}
-                                                className="h-8 text-xs bg-white"
+                                                className="h-8 text-xs bg-white font-mono"
                                             />
                                         </div>
                                     )}
 
                                     {tracksSerial && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600">Número de Série</Label>
+                                            <Label className="text-[11px] text-slate-600 font-semibold">Número de Série</Label>
                                             <Input
                                                 value={volumeConfig.serialNumber}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, serialNumber: e.target.value }))}
@@ -524,7 +563,7 @@ export default function ConferenciaItemPage() {
                                 </div>
                             )}
 
-                            {/* 3. QUALIDADE E CONDICIONAIS DE AVARIA, FALTA OU QUARENTENA */}
+                            {/* 3. QUALIDADE E CONDICIONAIS */}
                             <div className="space-y-3 pt-2">
                                 <Label className="text-xs font-bold text-slate-800">3. Qualidade do Lote Recebido *</Label>
                                 <Select value={String(volumeConfig.qualityStatus)} onValueChange={(v) => setVolumeConfig(p => ({ ...p, qualityStatus: v }))}>
@@ -539,7 +578,6 @@ export default function ConferenciaItemPage() {
                                     </SelectContent>
                                 </Select>
 
-                                {/* CONDICIONAL EXIBIDA PARA QUARENTENA (2), AVARIA (3) E FALTA VIRTUAL (4) */}
                                 {(volumeConfig.qualityStatus === '2' || volumeConfig.qualityStatus === '3' || volumeConfig.qualityStatus === '4') && (
                                     <div className="p-4 rounded-xl border bg-amber-50/50 border-amber-200 space-y-3 animate-in fade-in duration-300">
                                         <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
@@ -590,7 +628,6 @@ export default function ConferenciaItemPage() {
                             </div>
                         </div>
 
-                        {/* ADICIONAR AO CARRINHO */}
                         <div className="pt-4 border-t border-slate-100">
                             <Button
                                 type="button"
@@ -602,7 +639,7 @@ export default function ConferenciaItemPage() {
                         </div>
                     </div>
 
-                    {/* CARRINHO DE STAGING (5 COLS) */}
+                    {/* CARRINHO DE CONFERÊNCIA COM RASTREABILIDADE E QUALIDADE */}
                     <div className="col-span-5 bg-slate-50/50 border border-slate-200/80 rounded-xl p-6 flex flex-col min-h-0">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-3 shrink-0">
                             <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -619,31 +656,39 @@ export default function ConferenciaItemPage() {
                                     <p className="text-[10px] text-slate-400 max-w-[200px]">Configure o lote ao lado e clique em "Adicionar Lote".</p>
                                 </div>
                             ) : (
-                                stagedVolumes.map((item) => (
-                                    <div key={item.tempId} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 relative">
-                                        <button
-                                            onClick={() => removeStagedItem(item.tempId)}
-                                            className="absolute top-3 right-3 text-slate-400 hover:text-rose-600 transition-colors"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
+                                stagedVolumes.map((cartItem) => {
+                                    const qualityInfo = getQualityBadgeInfo(cartItem.qualityStatus);
 
-                                        <div className="flex items-center gap-2">
-                                            <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-mono text-[10px]">{item.packagingCode}</Badge>
-                                            <span className="font-bold text-slate-900 text-xs font-mono">{item.volumeCount} Vol x {item.quantityPerVolume} UN</span>
-                                        </div>
+                                    return (
+                                        <div key={cartItem.tempId} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 relative">
+                                            <button
+                                                onClick={() => removeStagedItem(cartItem.tempId)}
+                                                className="absolute top-3 right-3 text-slate-400 hover:text-rose-600 transition-colors"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
 
-                                        <div className="text-[10px] text-slate-500 space-y-0.5 font-mono">
-                                            <p>Destino: <strong className="text-slate-700">{item.locationPath}</strong></p>
-                                            {item.batch && <p>Lote: <strong className="text-slate-700">{item.batch}</strong></p>}
-                                            {item.qualityStatus !== '1' && (
-                                                <span className="text-amber-700 font-bold uppercase block mt-1">
-                                                    Status: {item.qualityStatus === '2' ? 'Quarentena' : item.qualityStatus === '3' ? 'Avariado' : 'Falta/Divergência'}
-                                                </span>
-                                            )}
+                                            <div className="flex items-center gap-2">
+                                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-mono text-[10px]">{cartItem.packagingCode}</Badge>
+                                                <span className="font-bold text-slate-900 text-xs font-mono">{cartItem.volumeCount} Vol x {cartItem.quantityPerVolume} UN</span>
+                                            </div>
+
+                                            <div className="text-[10px] text-slate-500 space-y-1 font-mono pt-1 border-t border-slate-100">
+                                                <p>Destino: <strong className="text-slate-800">{cartItem.locationPath}</strong></p>
+                                                {cartItem.batch && <p>Lote: <strong className="text-slate-800">{cartItem.batch}</strong></p>}
+                                                {cartItem.expirationDate && <p>Validade: <strong className="text-slate-800">{cartItem.expirationDate}</strong></p>}
+                                                {cartItem.manufactureDate && <p>Fabricação: <strong className="text-slate-800">{cartItem.manufactureDate}</strong></p>}
+                                                {cartItem.serialNumber && <p>Série: <strong className="text-slate-800">{cartItem.serialNumber}</strong></p>}
+
+                                                <div className="pt-1">
+                                                    <Badge variant="outline" className={`text-[9px] font-sans font-semibold ${qualityInfo.style}`}>
+                                                        {qualityInfo.label}
+                                                    </Badge>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
 
@@ -663,6 +708,23 @@ export default function ConferenciaItemPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isPrintModalOpen && generatedHusResult && (
+                <PrintHuModal
+                    open={isPrintModalOpen}
+                    onOpenChange={setIsPrintModalOpen}
+                    husToPrint={generatedHusResult.map(hu => ({
+                        id: typeof hu === 'object' ? hu.id : hu,
+                        lpn: typeof hu === 'object' ? hu.lpn : hu,
+                        sku: item.sku || item.rawSkuCode,
+                        productDescription: item.description || item.rawDescription,
+                        batch: item.expectedBatch,
+                        expirationDate: item.expectedExpirationDate,
+                        unit: item.rawUnit || 'UN'
+                    }))}
+                    orderData={order}
+                />
             )}
         </div>
     );

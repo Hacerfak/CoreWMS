@@ -29,6 +29,7 @@ import type {
   PostApiInboundImportBody,
   PostApiInboundLegacyImportBody,
   ReceiveLoteCommand,
+  RollbackHandlingUnitsCommand,
   StartReceivingCommand
 } from '../model';
 
@@ -325,6 +326,67 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiInboundReceiveOrderItemIdReleaseMutationOptions(options), queryClient);
+    }
+    export const postApiInboundReceiveHusRollback = (
+    rollbackHandlingUnitsCommand: RollbackHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/receive/hus/rollback`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: rollbackHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundReceiveHusRollbackMutationKey = () => ['postApiInboundReceiveHusRollback'] as const;
+
+export const getPostApiInboundReceiveHusRollbackMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveHusRollback>>, TError,PostApiInboundReceiveHusRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveHusRollback>>, TError,PostApiInboundReceiveHusRollbackMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundReceiveHusRollbackMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundReceiveHusRollback>>, PostApiInboundReceiveHusRollbackMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundReceiveHusRollback(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundReceiveHusRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundReceiveHusRollback>>>
+    export type PostApiInboundReceiveHusRollbackMutationBody = RollbackHandlingUnitsCommand
+    export type PostApiInboundReceiveHusRollbackMutationError = unknown
+    export type PostApiInboundReceiveHusRollbackMutationVariables = {data: RollbackHandlingUnitsCommand}
+
+    export const usePostApiInboundReceiveHusRollback = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundReceiveHusRollback>>, TError,PostApiInboundReceiveHusRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundReceiveHusRollback>>,
+        TError,
+        PostApiInboundReceiveHusRollbackMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundReceiveHusRollbackMutationOptions(options), queryClient);
     }
     export const postApiInboundReceiveStart = (
     startReceivingCommand: StartReceivingCommand,

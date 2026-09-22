@@ -27,6 +27,7 @@ import type {
   CreateAgentCommand,
   CreatePrinterCommand,
   CreateTemplateRequest,
+  PrintHandlingUnitsCommand,
   SendTestPrintCommand,
   UpdateAgentRequest,
   UpdatePrinterRequest,
@@ -508,6 +509,67 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiPrintingPrintersIdMutationOptions(options), queryClient);
+    }
+    export const postApiPrintHandlingUnits = (
+    printHandlingUnitsCommand: PrintHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/print/handling-units`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: printHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiPrintHandlingUnitsMutationKey = () => ['postApiPrintHandlingUnits'] as const;
+
+export const getPostApiPrintHandlingUnitsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintHandlingUnits>>, TError,PostApiPrintHandlingUnitsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintHandlingUnits>>, TError,PostApiPrintHandlingUnitsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiPrintHandlingUnitsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPrintHandlingUnits>>, PostApiPrintHandlingUnitsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiPrintHandlingUnits(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPrintHandlingUnitsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPrintHandlingUnits>>>
+    export type PostApiPrintHandlingUnitsMutationBody = PrintHandlingUnitsCommand
+    export type PostApiPrintHandlingUnitsMutationError = unknown
+    export type PostApiPrintHandlingUnitsMutationVariables = {data: PrintHandlingUnitsCommand}
+
+    export const usePostApiPrintHandlingUnits = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintHandlingUnits>>, TError,PostApiPrintHandlingUnitsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPrintHandlingUnits>>,
+        TError,
+        PostApiPrintHandlingUnitsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPrintHandlingUnitsMutationOptions(options), queryClient);
     }
     export const postApiPrintSendTest = (
     sendTestPrintCommand: SendTestPrintCommand,

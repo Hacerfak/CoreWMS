@@ -38,7 +38,7 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
                 o.AccessKey,
                 o.RawXml,
                 o.IssueDate,
-                o.CreatedAt, // Data de entrada no sistema
+                o.CreatedAt,
                 o.Status.ToString(),
                 o.Items.OrderBy(i => i.LineNumber).Select(i => new InboundOrderItemDto(
                     i.Id,
@@ -51,7 +51,10 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
                     i.Status.ToString(),
                     i.LockedByUserId,
                     i.DockLocationId,
-                    i.DockLocation != null ? i.DockLocation.FullPath : null // Nome/Caminho da Doca Alocada
+                    i.DockLocation != null ? i.DockLocation.FullPath : null,
+                    i.ExpectedBatch,             // <-- LOTE DO XML
+                    i.ExpectedManufactureDate,   // <-- DATA FABRICAÇÃO DO XML
+                    i.ExpectedExpirationDate     // <-- DATA VALIDADE DO XML
                 )).ToList()
             )).FirstOrDefaultAsync(ct);
 

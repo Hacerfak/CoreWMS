@@ -34,7 +34,6 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
     public async Task<IResult> Handle(ListHandlingUnitsQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var q = _db.HandlingUnits.AsNoTracking()
             .Where(h => h.CompanyId == companyId);
 
@@ -44,10 +43,11 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
         if (request.Status.HasValue) q = q.Where(h => h.Status == (HuStatus)request.Status.Value);
         if (!string.IsNullOrWhiteSpace(request.Lpn)) q = q.Where(h => h.Lpn.Contains(request.Lpn.Trim().ToUpper()));
 
-        var totalTask = q.CountAsync(ct);
+        // Execução sequencial para evitar concorrência de Threads no DbContext
+        var totalCount = await q.CountAsync(ct);
         var skip = (request.Page - 1) * request.PageSize;
 
-        var itemsTask = q
+        var items = await q
             .OrderByDescending(h => h.UpdatedAt ?? h.CreatedAt)
             .Skip(skip)
             .Take(request.PageSize)
@@ -58,9 +58,7 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
                 h.InitialQuantity, h.CurrentQuantity, h.Status.ToString(), h.QualityStatus.ToString()
             )).ToListAsync(ct);
 
-        await Task.WhenAll(totalTask, itemsTask);
-
-        var response = new PaginatedResult<HandlingUnitDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        var response = new PaginatedResult<HandlingUnitDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
@@ -43,7 +44,11 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
     public ReceiveLoteHandler(ApplicationDbContext db, ITenantProvider tenant, IMasterDataCacheService masterDataCache, KardexChannel kardex, IHttpContextAccessor http)
     {
-        _db = db; _tenant = tenant; _masterDataCache = masterDataCache; _kardex = kardex; _http = http;
+        _db = db;
+        _tenant = tenant;
+        _masterDataCache = masterDataCache;
+        _kardex = kardex;
+        _http = http;
     }
 
     public async Task<IResult> Handle(ReceiveLoteCommand request, CancellationToken ct)
@@ -55,11 +60,15 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             .Include(i => i.InboundOrder)
             .FirstOrDefaultAsync(i => i.Id == request.OrderItemId && i.InboundOrder.CompanyId == companyId, ct);
 
-        if (orderItem == null || !orderItem.ProductId.HasValue) return Results.BadRequest(new { Message = "Item inválido ou pendente de revisão." });
-        if (orderItem.LockedByUserId.HasValue && orderItem.LockedByUserId != userId) return Results.BadRequest(new { Message = "Este item está sendo recebido por outro operador." });
+        if (orderItem == null || !orderItem.ProductId.HasValue)
+            return Results.BadRequest(new { Message = "Item inválido ou pendente de revisão." });
+
+        if (orderItem.LockedByUserId.HasValue && orderItem.LockedByUserId != userId)
+            return Results.BadRequest(new { Message = "Este item está sendo recebido por outro operador." });
 
         var rules = await _masterDataCache.GetProductRulesAsync(companyId, orderItem.ProductId.Value, ct);
-        if (rules == null) return Results.BadRequest(new { Message = "Regras do produto não encontradas no Master Data." });
+        if (rules == null)
+            return Results.BadRequest(new { Message = "Regras do produto não encontradas no Master Data." });
 
         decimal totalToReceive = 0;
         var husToInsert = new List<HandlingUnit>();
@@ -67,14 +76,20 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         foreach (var vol in request.Volumes)
         {
-            if (rules.StrictBatch && string.IsNullOrWhiteSpace(vol.Batch)) throw new InvalidOperationException($"O produto {rules.Sku} exige lote.");
-            if (rules.StrictExpiration && !vol.ExpirationDate.HasValue) throw new InvalidOperationException($"O produto {rules.Sku} exige data de validade.");
+            if (rules.StrictBatch && string.IsNullOrWhiteSpace(vol.Batch))
+                throw new InvalidOperationException($"O produto {rules.Sku} exige lote.");
+
+            if (rules.StrictExpiration && !vol.ExpirationDate.HasValue)
+                throw new InvalidOperationException($"O produto {rules.Sku} exige data de validade.");
+
             if (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) && vol.Batch != orderItem.ExpectedBatch && vol.QualityStatus == QualityStatus.Available)
                 throw new InvalidOperationException($"Divergência Fiscal: Lote ({vol.Batch}) difere da nota fiscal ({orderItem.ExpectedBatch}).");
 
             for (int i = 0; i < vol.VolumeCount; i++)
             {
-                var lpn = $"HU{DateTime.UtcNow:yyMMddHHmmss}{Guid.NewGuid().ToString().Substring(0, 4)}".ToUpper();
+                // Geração de Código LPN Único com 10 caracteres alfanuméricos (Sem prefixo "HU")
+                var lpn = GenerateShortLpn();
+
                 var hu = new HandlingUnit(
                     lpn, companyId, orderItem.InboundOrder.CustomerId!.Value, orderItem.ProductId.Value, vol.PackagingTypeId,
                     orderItem.InboundOrderId, vol.Batch, vol.ManufactureDate, vol.ExpirationDate, vol.SerialNumber,
@@ -82,7 +97,8 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 );
 
                 hu.ReceiveAtDock(vol.TargetLocationId);
-                if (vol.QualityStatus != QualityStatus.Available) hu.ChangeQuality(vol.QualityStatus);
+                if (vol.QualityStatus != QualityStatus.Available)
+                    hu.ChangeQuality(vol.QualityStatus);
 
                 husToInsert.Add(hu);
                 totalToReceive += vol.QuantityPerVolume;
@@ -122,10 +138,21 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             }
         }
 
-        try { await _db.SaveChangesAsync(ct); }
-        catch (DbUpdateConcurrencyException) { return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." }); }
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
+        }
 
-        return Results.Ok(new { Message = "Lote recebido com sucesso.", HusGenerated = husToInsert.Select(h => h.Lpn).ToList(), OrderItemStatus = orderItem.Status.ToString() });
+        return Results.Ok(new
+        {
+            Message = "Lote recebido com sucesso.",
+            HusGenerated = husToInsert.Select(h => new { h.Id, h.Lpn }).ToList(),
+            OrderItemStatus = orderItem.Status.ToString()
+        });
     }
 
     private async Task<InventoryBalance> GetOrCreateBalanceAsync(Guid companyId, Guid customerId, Guid productId, CancellationToken ct)
@@ -137,6 +164,28 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             _db.InventoryBalances.Add(balance);
         }
         return balance;
+    }
+
+    private static string GenerateShortLpn()
+    {
+        var ticks = (DateTime.UtcNow.Ticks - 638000000000000000L) % 2176782336L; // 6 dígitos Base36
+        var randomVal = Random.Shared.Next(0, 1679616);                          // 4 dígitos Base36
+
+        return $"{ConvertToBase36(ticks, 6)}{ConvertToBase36(randomVal, 4)}".ToUpper();
+    }
+
+    private static string ConvertToBase36(long number, int minLength)
+    {
+        const string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var result = new StringBuilder();
+
+        while (number > 0)
+        {
+            result.Insert(0, chars[(int)(number % 36)]);
+            number /= 36;
+        }
+
+        return result.ToString().PadLeft(minLength, '0');
     }
 }
 
