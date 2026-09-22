@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -39,6 +40,7 @@ public class StartReceivingHandler : IRequestHandler<StartReceivingCommand, IRes
         if (!Guid.TryParse(userIdClaim, out var userId)) return Results.Unauthorized();
 
         var item = await _db.InboundOrderItems
+            .Include(i => i.InboundOrder)
             .FirstOrDefaultAsync(i => i.Id == request.OrderItemId && i.InboundOrder.CompanyId == companyId, ct);
 
         if (item == null) return Results.NotFound(new { Message = "Item não encontrado." });
@@ -46,6 +48,13 @@ public class StartReceivingHandler : IRequestHandler<StartReceivingCommand, IRes
         try
         {
             item.LockForReceiving(userId, request.DockLocationId);
+
+            // Atualiza a ordem para "Em Recebimento" caso ainda esteja em "Aguardando Recebimento"
+            if (item.InboundOrder.Status == InboundOrderStatus.Pending)
+            {
+                item.InboundOrder.UpdateStatus(InboundOrderStatus.Receiving);
+            }
+
             await _db.SaveChangesAsync(ct);
         }
         catch (InvalidOperationException ex)

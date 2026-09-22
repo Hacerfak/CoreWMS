@@ -27,17 +27,36 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
             .AsNoTracking()
             .Include(o => o.Customer)
             .Include(o => o.Items)
+                .ThenInclude(i => i.DockLocation)
             .Where(o => o.CompanyId == companyId && o.Id == request.Id)
             .Select(o => new InboundOrderDetailsDto(
-                o.Id, o.CustomerId, o.Customer != null ? o.Customer.CorporateName : null,
-                o.IssuerCnpj, o.IssuerName, o.AccessKey, o.RawXml, o.IssueDate, o.Status.ToString(),
+                o.Id,
+                o.CustomerId,
+                o.Customer != null ? o.Customer.CorporateName : null,
+                o.IssuerCnpj,
+                o.IssuerName,
+                o.AccessKey,
+                o.RawXml,
+                o.IssueDate,
+                o.CreatedAt, // Data de entrada no sistema
+                o.Status.ToString(),
                 o.Items.OrderBy(i => i.LineNumber).Select(i => new InboundOrderItemDto(
-                    i.Id, i.ProductId, i.LineNumber, i.RawSkuCode, i.RawDescription,
-                    i.ExpectedQuantity, i.ReceivedQuantity, i.Status.ToString(), i.LockedByUserId
+                    i.Id,
+                    i.ProductId,
+                    i.LineNumber,
+                    i.RawSkuCode,
+                    i.RawDescription,
+                    i.ExpectedQuantity,
+                    i.ReceivedQuantity,
+                    i.Status.ToString(),
+                    i.LockedByUserId,
+                    i.DockLocationId,
+                    i.DockLocation != null ? i.DockLocation.FullPath : null // Nome/Caminho da Doca Alocada
                 )).ToList()
             )).FirstOrDefaultAsync(ct);
 
         if (order == null) return Results.NotFound();
+
         return Results.Ok(order);
     }
 }

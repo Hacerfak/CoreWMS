@@ -6,17 +6,17 @@ import {
     usePostApiInboundReceiveStart,
     usePostApiInboundReceiveOrderItemIdRelease
 } from '@/api/generated/inbound/inbound';
-
-// Importação corrigida para o hook exato gerado pelo Orval
 import { useGetApiTopologyLocationsDocks } from '@/api/generated/topology/topology';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, ArrowLeft, Warehouse, Play, Unlock, PackageCheck, CheckCircle2 } from 'lucide-react';
+import {
+    Loader2, ArrowLeft, Warehouse, Play, Unlock, PackageCheck,
+    CheckCircle2, Calendar, Clock, Building2
+} from 'lucide-react';
 import { toast } from 'sonner';
-import ReceiveLoteModal from './ReceiveLoteModal';
 
 export default function InboundOperacaoPage() {
     const { id: orderId } = useParams();
@@ -24,12 +24,11 @@ export default function InboundOperacaoPage() {
     const queryClient = useQueryClient();
 
     const [selectedDocks, setSelectedDocks] = useState({});
-    const [itemToConfer, setItemToConfer] = useState(null);
 
-    // Detalhes da Ordem de Recebimento
+    // Detalhes da Ordem
     const { data: order, isLoading } = useGetApiInboundId(orderId);
 
-    // Busca as docas ativas da Topologia
+    // Lista de Docas da Topologia
     const { data: dockLocations = [], isLoading: isLoadingDocks } = useGetApiTopologyLocationsDocks();
 
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
@@ -46,8 +45,9 @@ export default function InboundOperacaoPage() {
     const { mutate: releaseItem, isPending: isReleasing } = usePostApiInboundReceiveOrderItemIdRelease({
         mutation: {
             onSuccess: () => {
-                toast.success('Item liberado com sucesso.');
+                toast.success('Item liberado com sucesso. Seleção de doca disponível.');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao liberar item.')
         }
@@ -58,7 +58,10 @@ export default function InboundOperacaoPage() {
     };
 
     const handleStartItem = (itemId) => {
-        const dockId = selectedDocks[itemId];
+        const currentItem = order?.items?.find(i => i.id === itemId);
+        // Prioriza a doca recém-selecionada no estado local; se não houver, pega a doca prévia do item
+        const dockId = selectedDocks[itemId] || currentItem?.dockLocationId;
+
         if (!dockId) {
             toast.warning('Selecione a Doca de descarga para este item antes de iniciar.');
             return;
@@ -70,6 +73,21 @@ export default function InboundOperacaoPage() {
                 dockLocationId: dockId
             }
         });
+    };
+
+    const renderOrderStatusBadge = (status) => {
+        switch (status) {
+            case 'Pending':
+                return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Aguardando Recebimento</Badge>;
+            case 'Receiving':
+                return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Em Recebimento</Badge>;
+            case 'Completed':
+                return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">Finalizado</Badge>;
+            case 'Canceled':
+                return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-medium">Cancelado</Badge>;
+            default:
+                return <Badge variant="outline">{status}</Badge>;
+        }
     };
 
     const renderItemStatusBadge = (status) => {
@@ -110,23 +128,52 @@ export default function InboundOperacaoPage() {
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/inbound')} className="shrink-0 text-slate-500 hover:text-slate-900">
-                        <ArrowLeft className="h-5 w-5" />
-                    </Button>
-                    <div>
+            {/* CABEÇALHO */}
+            <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Button variant="ghost" size="icon" onClick={() => navigate('/inbound')} className="shrink-0 text-slate-500 hover:text-slate-900">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Button>
                         <div className="flex items-center gap-3">
-                            <h1 className="text-2xl font-bold tracking-tight text-slate-900">NF {documentNumber}</h1>
-                            <Badge variant="outline" className="font-mono text-xs bg-slate-50">{order.status}</Badge>
+                            <h1 className="text-2xl font-bold tracking-tight text-slate-900 font-mono">NF {documentNumber}</h1>
+                            {renderOrderStatusBadge(order.status)}
                         </div>
-                        <p className="text-sm text-slate-500 mt-0.5">
-                            Emitente: <strong className="text-slate-800">{order.issuerName}</strong> | Depositante: <strong className="text-slate-800">{order.customerName}</strong>
-                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-3 text-xs">
+                    <div className="flex items-center gap-2 text-slate-700">
+                        <Building2 size={16} className="text-slate-400 shrink-0" />
+                        <div>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Depositante</span>
+                            <span className="font-bold text-slate-800">{order.customerName || order.issuerName}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-slate-700">
+                        <Calendar size={16} className="text-slate-400 shrink-0" />
+                        <div>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Data Emissão NF-e</span>
+                            <span className="font-medium text-slate-800">
+                                {order.issueDate ? new Date(order.issueDate).toLocaleDateString('pt-BR') : '-'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-slate-700">
+                        <Clock size={16} className="text-slate-400 shrink-0" />
+                        <div>
+                            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Entrada no Sistema</span>
+                            <span className="font-medium text-slate-800">
+                                {order.createdAt ? new Date(order.createdAt).toLocaleString('pt-BR') : '-'}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
 
+            {/* TABELA DE ITENS DA ORDEM */}
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                     <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
@@ -155,6 +202,9 @@ export default function InboundOperacaoPage() {
                                 const isReceiving = item.status === 'Receiving';
                                 const isCompleted = item.status === 'Completed';
                                 const isPendingReview = item.status === 'Pending_Review';
+
+                                // Doca atual selecionada localmente ou trazida do banco
+                                const currentDockValue = selectedDocks[item.id] || item.dockLocationId || '';
 
                                 return (
                                     <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
@@ -186,17 +236,21 @@ export default function InboundOperacaoPage() {
                                             </div>
                                         </TableCell>
 
+                                        {/* DOCA: EXIBIDA COMO BADGE APENAS SE RECEIVING OU COMPLETED */}
                                         <TableCell>
-                                            {isCompleted ? (
-                                                <span className="text-xs text-slate-500 font-medium">Concluído na Doca</span>
+                                            {(isReceiving || isCompleted) ? (
+                                                <Badge variant="outline" className="bg-slate-50 text-slate-800 font-mono border-slate-300 flex items-center w-fit gap-1">
+                                                    <Warehouse size={12} className="text-blue-600" />
+                                                    {item.dockLocationPath || 'Doca Alocada'}
+                                                </Badge>
                                             ) : (
                                                 <Select
-                                                    value={selectedDocks[item.id] || ''}
+                                                    value={currentDockValue}
                                                     onValueChange={(dockId) => handleDockSelect(item.id, dockId)}
-                                                    disabled={isReceiving || isCompleted || isPendingReview || isLoadingDocks}
+                                                    disabled={isPendingReview || isLoadingDocks}
                                                 >
                                                     <SelectTrigger className="h-8 text-xs bg-white border-slate-200">
-                                                        <SelectValue placeholder={isLoadingDocks ? "Carregando Docas..." : "Selecione a Doca..."} />
+                                                        <SelectValue placeholder={isLoadingDocks ? "Carregando..." : "Selecione a Doca..."} />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {dockLocations.map(d => (
@@ -236,7 +290,7 @@ export default function InboundOperacaoPage() {
                                                         onClick={() => navigate(`/inbound/operacao/${orderId}/item/${item.id}`)}
                                                         className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                                                     >
-                                                        <PackageCheck className="h-4 w-4 mr-1" /> Conferir Item (Página)
+                                                        <PackageCheck className="h-4 w-4 mr-1" /> Conferir Item
                                                     </Button>
                                                     <Button
                                                         size="sm"
@@ -264,15 +318,6 @@ export default function InboundOperacaoPage() {
                     </Table>
                 </div>
             </div>
-
-            {itemToConfer && (
-                <ReceiveLoteModal
-                    open={!!itemToConfer}
-                    onOpenChange={(v) => !v && setItemToConfer(null)}
-                    item={itemToConfer}
-                    dockLocationId={selectedDocks[itemToConfer.id]}
-                />
-            )}
         </div>
     );
 }

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     useGetApiInboundId,
     usePostApiInboundReceiveCheckout
 } from '@/api/generated/inbound/inbound';
+import { useGetApiProducts } from '@/api/generated/products/products';
 import { useGetApiBillingServices } from '@/api/generated/billing/billing';
 import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
 import {
@@ -19,34 +20,135 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, Loader2, PackageCheck, Plus, Trash2, CheckCircle2,
-    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, Sparkles
+    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, Search, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES (Para milhares de endereços)
+function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição ou Doca (ex: P1C1AB01)..." }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const selectedLocation = locations.find(l => l.id === value);
+
+    const filteredLocations = useMemo(() => {
+        if (!searchTerm) return locations.slice(0, 40);
+        const term = searchTerm.toLowerCase();
+        return locations.filter(l => l.fullPath?.toLowerCase().includes(term)).slice(0, 40);
+    }, [locations, searchTerm]);
+
+    return (
+        <div className="relative w-full">
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-md flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+                <span className={selectedLocation ? 'text-slate-900 font-semibold font-mono' : 'text-slate-400'}>
+                    {selectedLocation ? selectedLocation.fullPath : placeholder}
+                </span>
+                <Search size={14} className="text-slate-400 shrink-0 ml-2" />
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-2">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Digite para filtrar..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-500 font-mono"
+                        />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                        {filteredLocations.length === 0 ? (
+                            <p className="text-[11px] text-slate-400 p-2 text-center">Nenhuma posição encontrada.</p>
+                        ) : (
+                            filteredLocations.map(loc => (
+                                <div
+                                    key={loc.id}
+                                    onClick={() => {
+                                        onChange(loc.id);
+                                        setIsOpen(false);
+                                        setSearchTerm('');
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between font-mono transition-colors ${value === loc.id ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-100 text-slate-700'}`}
+                                >
+                                    <span>{loc.fullPath}</span>
+                                    {value === loc.id && <CheckCircle2 size={12} className="text-blue-600" />}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function ConferenciaItemPage() {
     const { orderId, itemId } = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // 1. Dados Principais
+    // 1. Dados da Ordem
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
     const item = order?.items?.find(i => i.id === itemId);
 
-    // 2. Apis de Apoio (Serviços, Embalagens e Topologia)
+    // 2. Detalhes do Produto no WMS (Regras e Embalagens)
+    const { data: productsRes } = useGetApiProducts(
+        { Search: item?.sku || item?.rawSkuCode, PageSize: 5 },
+        { query: { enabled: !!(item?.sku || item?.rawSkuCode) } }
+    );
+    const productDetail = productsRes?.items?.find(p => p.id === item?.productId || p.sku === item?.sku);
+
+    // 3. Apis de Apoio (Serviços de Faturamento, Dicionário Global de Embalagens e Topologia)
     const { data: billingServicesResponse } = useGetApiBillingServices();
     const billingServices = Array.isArray(billingServicesResponse) ? billingServicesResponse : (billingServicesResponse?.items || []);
 
     const { data: packTypesResponse } = useGetApiPackagingTypes();
-    const packagingTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
+    const globalPackTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
 
     const { data: docks = [] } = useGetApiTopologyLocationsDocks();
     const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
-    const targetLocations = [...docks, ...storageLocations];
+    const targetLocations = useMemo(() => [...docks, ...storageLocations], [docks, storageLocations]);
 
-    // 3. Estados Locais do Fluxo de Conferência
+    // Lista de embalagens atreladas especificamente ao produto (ou fallback para global se necessário)
+    const availablePackagings = useMemo(() => {
+        if (productDetail?.packagings && productDetail.packagings.length > 0) {
+            return productDetail.packagings.map(p => {
+                const globalType = globalPackTypes.find(g => g.id === p.packagingTypeId);
+                return {
+                    packagingTypeId: p.packagingTypeId,
+                    code: globalType?.code || 'EMB',
+                    description: globalType?.description || 'Embalagem',
+                    conversionFactor: p.conversionFactor,
+                    barcode: p.barcode
+                };
+            });
+        }
+        return globalPackTypes.map(g => ({
+            packagingTypeId: g.id,
+            code: g.code,
+            description: g.description,
+            conversionFactor: 1,
+            barcode: null
+        }));
+    }, [productDetail, globalPackTypes]);
+
+    // Regras Condicionais do Produto
+    const tracksBatch = productDetail?.tracksBatch || !!item?.expectedBatch;
+    const tracksExpiration = productDetail?.tracksExpiration || !!item?.expectedExpirationDate;
+    const tracksManufacture = productDetail?.tracksManufacture || !!item?.expectedManufactureDate;
+    const tracksSerial = productDetail?.tracksSerial;
+
+    // 4. Estados do Formulário (Sempre sem default para evitar digitação no automático)
     const [selectedBillingServiceId, setSelectedBillingServiceId] = useState('');
 
-    // Formulário do Volume Atual (Configurador)
     const [volumeConfig, setVolumeConfig] = useState({
         packagingTypeId: '',
         volumeCount: 1,
@@ -56,51 +158,56 @@ export default function ConferenciaItemPage() {
         expirationDate: '',
         serialNumber: '',
         targetLocationId: '',
-        qualityStatus: 1, // 1 = Available, 2 = Quarantine, 3 = Damaged, 4 = Virtual_Shortage
+        qualityStatus: '', // Força seleção explícita
         notes: '',
         images: []
     });
 
-    // O PULO DO GATO: Carrinho de Lotes/Volumes Acumulados
+    // Carrinho de Lotes (Staging Cart)
     const [stagedVolumes, setStagedVolumes] = useState([]);
     const [generatedHusResult, setGeneratedHusResult] = useState(null);
 
-    // Pré-preenchimento Automático vindo da NF-e
+    // Preenche dados iniciais vindos do XML
     useEffect(() => {
         if (item) {
             setVolumeConfig(prev => ({
                 ...prev,
-                quantityPerVolume: item.expectedQuantity - (item.receivedQuantity || 0),
                 batch: item.expectedBatch || '',
                 expirationDate: item.expectedExpirationDate ? item.expectedExpirationDate.split('T')[0] : '',
                 manufactureDate: item.expectedManufactureDate ? item.expectedManufactureDate.split('T')[0] : '',
-                targetLocationId: item.dockLocationId || (docks[0]?.id || '')
+                targetLocationId: item.dockLocationId || ''
             }));
         }
-    }, [item, docks]);
+    }, [item]);
 
-    // Mutação do Checkout Final
+    // Quando seleciona a Embalagem do Produto, altera a Qtd por Volume automaticamente
+    const handlePackagingChange = (typeId) => {
+        const selectedPack = availablePackagings.find(p => p.packagingTypeId === typeId);
+        setVolumeConfig(prev => ({
+            ...prev,
+            packagingTypeId: typeId,
+            quantityPerVolume: selectedPack ? selectedPack.conversionFactor : 1
+        }));
+    };
+
+    // Mutação de Checkout
     const { mutate: checkoutLotes, isPending: isSubmitting } = usePostApiInboundReceiveCheckout({
         mutation: {
             onSuccess: (res) => {
-                toast.success('Checkout realizado e HUs geradas com sucesso!');
+                toast.success('Checkout realizado e HUs geradas!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
 
-                // Se a API retornar os LPNs gerados
                 if (res?.husGenerated) {
                     setGeneratedHusResult(res.husGenerated);
                 } else {
                     navigate(`/inbound/operacao/${orderId}`);
                 }
             },
-            onError: (err) => {
-                toast.error(err.response?.data?.message || err.response?.data?.detail || 'Erro ao registrar conferência.');
-            }
+            onError: (err) => toast.error(err.response?.data?.message || err.response?.data?.detail || 'Erro no checkout.')
         }
     });
 
-    // Manipulação de Imagens de Avaria/Falta
     const handleImageUpload = (e) => {
         const files = Array.from(e.target.files);
         files.forEach(file => {
@@ -122,23 +229,30 @@ export default function ConferenciaItemPage() {
         }));
     };
 
-    // Adiciona o Volume Configurado ao Carrinho Staged
+    // Validação estrita antes de adicionar ao carrinho
     const handleAddVolumeToCart = () => {
+        if (!selectedBillingServiceId) {
+            return toast.warning('Selecione o Serviço de Operação de Recebimento.');
+        }
         if (!volumeConfig.packagingTypeId) {
-            return toast.warning('Selecione o tipo de embalagem.');
+            return toast.warning('Selecione a Embalagem do Volume.');
+        }
+        if (!volumeConfig.qualityStatus) {
+            return toast.warning('Selecione o Status de Qualidade do Lote.');
         }
         if (!volumeConfig.targetLocationId) {
-            return toast.warning('Selecione a posição ou doca de destino.');
+            return toast.warning('Selecione a Posição / Doca de Destino.');
         }
         if (volumeConfig.volumeCount <= 0 || volumeConfig.quantityPerVolume <= 0) {
             return toast.warning('Informe quantidades válidas.');
         }
 
-        const selectedPack = packagingTypes.find(p => p.id === volumeConfig.packagingTypeId);
+        const selectedPack = availablePackagings.find(p => p.packagingTypeId === volumeConfig.packagingTypeId);
         const selectedLoc = targetLocations.find(l => l.id === volumeConfig.targetLocationId);
 
         const newStagedItem = {
             ...volumeConfig,
+            billingServiceId: selectedBillingServiceId,
             tempId: Date.now() + Math.random(),
             packagingCode: selectedPack?.code || 'EMB',
             locationPath: selectedLoc?.fullPath || 'DOCA',
@@ -148,11 +262,15 @@ export default function ConferenciaItemPage() {
         setStagedVolumes(prev => [...prev, newStagedItem]);
         toast.info('Lote adicionado ao carrinho de conferência.');
 
-        // Reseta parte do form para o próximo lote mantendo dados do XML
+        // RESET DOS CAMPOS PARA FORÇAR O PREENCHIMENTO EXPLÍCITO DO PRÓXIMO LOTE
+        setSelectedBillingServiceId('');
         setVolumeConfig(prev => ({
             ...prev,
+            packagingTypeId: '',
             volumeCount: 1,
-            qualityStatus: 1,
+            quantityPerVolume: 0,
+            qualityStatus: '',
+            targetLocationId: '',
             notes: '',
             images: []
         }));
@@ -162,16 +280,18 @@ export default function ConferenciaItemPage() {
         setStagedVolumes(prev => prev.filter(i => i.tempId !== tempId));
     };
 
-    // Submissão do Checkout Final no Banco
     const handleFinalCheckout = () => {
         if (stagedVolumes.length === 0) {
             return toast.warning('Adicione pelo menos um lote ao carrinho antes de finalizar.');
         }
 
+        // Utiliza o serviço de faturamento do primeiro item do carrinho
+        const serviceId = stagedVolumes[0]?.billingServiceId !== 'none' ? stagedVolumes[0]?.billingServiceId : null;
+
         checkoutLotes({
             data: {
                 orderItemId: item.id,
-                billingServiceId: selectedBillingServiceId || null,
+                billingServiceId: serviceId,
                 volumes: stagedVolumes.map(v => ({
                     packagingTypeId: v.packagingTypeId,
                     volumeCount: v.volumeCount,
@@ -181,7 +301,7 @@ export default function ConferenciaItemPage() {
                     expirationDate: v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
                     serialNumber: v.serialNumber || null,
                     targetLocationId: v.targetLocationId,
-                    qualityStatus: v.qualityStatus
+                    qualityStatus: Number(v.qualityStatus)
                 }))
             }
         });
@@ -204,13 +324,11 @@ export default function ConferenciaItemPage() {
         );
     }
 
-    // Cálculos de Totais e Progresso
     const totalCartUnits = stagedVolumes.reduce((acc, curr) => acc + curr.totalQuantity, 0);
-    const pendingQuantity = item.expectedQuantity - (item.receivedQuantity || 0);
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            {/* BARRA SUPERIOR */}
+            {/* CABEÇALHO */}
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-4">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/inbound/operacao/${orderId}`)} className="shrink-0 text-slate-500 hover:text-slate-900">
@@ -226,7 +344,6 @@ export default function ConferenciaItemPage() {
                     </div>
                 </div>
 
-                {/* CARD DE PROGRESSO */}
                 <div className="flex items-center gap-6 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl">
                     <div className="text-right">
                         <span className="text-[10px] text-slate-400 font-bold uppercase block">Esperado NF-e</span>
@@ -245,7 +362,7 @@ export default function ConferenciaItemPage() {
                 </div>
             </div>
 
-            {/* SE MODAL/MODO DE SUCESSO DE HU MOSTRA ETIQUETAS */}
+            {/* SUCESSO DE ETIQUETAS HUs */}
             {generatedHusResult ? (
                 <div className="bg-white border border-emerald-200 rounded-2xl p-8 text-center space-y-6 max-w-2xl mx-auto my-auto shadow-lg animate-in zoom-in-95">
                     <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
@@ -253,14 +370,14 @@ export default function ConferenciaItemPage() {
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-slate-900">Recebimento Concluído!</h2>
-                        <p className="text-sm text-slate-500 mt-1">HUs geradas e prontas para movimentação no estoque.</p>
+                        <p className="text-sm text-slate-500 mt-1">HUs geradas e salvas no banco de dados.</p>
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left max-h-48 overflow-y-auto font-mono text-xs space-y-1">
                         {generatedHusResult.map((lpn, idx) => (
                             <div key={idx} className="flex justify-between items-center py-1 border-b border-slate-100 last:border-none">
                                 <span className="font-bold text-slate-800">{lpn}</span>
-                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">Etiqueta ZPL Gerada</Badge>
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registrado</Badge>
                             </div>
                         ))}
                     </div>
@@ -275,20 +392,20 @@ export default function ConferenciaItemPage() {
                     </div>
                 </div>
             ) : (
-                /* CONTEÚDO PRINCIPAL (DEDICADO) */
+                /* CONTEÚDO PRINCIPAL DEDICADO */
                 <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
 
-                    {/* COLUNA ESQUERDA: CONFIGURADOR DO LOTE / VOLUME (7 COLS) */}
+                    {/* FORMULÁRIO ESQUERDO (7 COLS) */}
                     <div className="col-span-7 bg-white border border-slate-200/80 rounded-xl shadow-xs p-6 overflow-y-auto flex flex-col space-y-6">
 
-                        {/* ETAPA 1: SERVIÇO DE FATURAMENTO */}
+                        {/* 1. SERVIÇO DE FATURAMENTO (OBRIGATÓRIO E SEM DEFAULT) */}
                         <div className="space-y-2 border-b border-slate-100 pb-4">
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                                <Receipt className="text-blue-600" size={16} /> 1. Serviço de Operação de Recebimento
+                                <Receipt className="text-blue-600" size={16} /> 1. Serviço de Operação de Recebimento *
                             </Label>
                             <Select value={selectedBillingServiceId} onValueChange={setSelectedBillingServiceId}>
                                 <SelectTrigger className="bg-slate-50 border-slate-200 h-10">
-                                    <SelectValue placeholder="Selecione a tarifa/serviço aplicado a este recebimento..." />
+                                    <SelectValue placeholder="Selecione obrigatoriamente a tarifa/serviço..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {billingServices.map(s => (
@@ -299,20 +416,22 @@ export default function ConferenciaItemPage() {
                             </Select>
                         </div>
 
-                        {/* ETAPA 2: CONFIGURAÇÃO DO VOLUME / LOTE */}
+                        {/* 2. DADOS DO VOLUME / LOTE */}
                         <div className="space-y-4">
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                                <Box className="text-blue-600" size={16} /> 2. Dados do Volume / Lote Descarregado
+                                <Box className="text-blue-600" size={16} /> 2. Dados do Volume / Lote Descarregado *
                             </Label>
 
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="space-y-1.5 col-span-2">
                                     <Label className="text-xs">Embalagem do Volume *</Label>
-                                    <Select value={volumeConfig.packagingTypeId} onValueChange={(v) => setVolumeConfig(p => ({ ...p, packagingTypeId: v }))}>
-                                        <SelectTrigger className="bg-slate-50"><SelectValue placeholder="Escolha..." /></SelectTrigger>
+                                    <Select value={volumeConfig.packagingTypeId} onValueChange={handlePackagingChange}>
+                                        <SelectTrigger className="bg-slate-50"><SelectValue placeholder="Escolha a embalagem..." /></SelectTrigger>
                                         <SelectContent>
-                                            {packagingTypes.map(pt => (
-                                                <SelectItem key={pt.id} value={pt.id}>{pt.code} - {pt.description}</SelectItem>
+                                            {availablePackagings.map(pt => (
+                                                <SelectItem key={pt.packagingTypeId} value={pt.packagingTypeId}>
+                                                    {pt.code} - {pt.description} (Fator: {pt.conversionFactor})
+                                                </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
@@ -340,56 +459,77 @@ export default function ConferenciaItemPage() {
                                         className="bg-slate-50 font-mono font-bold text-blue-700"
                                     />
                                 </div>
+
+                                {/* PESQUISA INTELIGENTE DE POSIÇÕES DE ESTOQUE / DOCAS */}
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Posição / Doca Destino *</Label>
-                                    <Select value={volumeConfig.targetLocationId} onValueChange={(v) => setVolumeConfig(p => ({ ...p, targetLocationId: v }))}>
-                                        <SelectTrigger className="bg-slate-50"><SelectValue placeholder="Selecione Doca..." /></SelectTrigger>
-                                        <SelectContent>
-                                            {targetLocations.map(loc => (
-                                                <SelectItem key={loc.id} value={loc.id}>{loc.fullPath}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            {/* RASTREABILIDADE (PRÉ-PREENCHIDA DO XML) */}
-                            <div className="grid grid-cols-3 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
-                                <div className="space-y-1">
-                                    <Label className="text-[11px] text-slate-600">Lote Físico</Label>
-                                    <Input
-                                        value={volumeConfig.batch}
-                                        onChange={(e) => setVolumeConfig(p => ({ ...p, batch: e.target.value }))}
-                                        placeholder="Obtido do XML"
-                                        className="h-8 text-xs font-mono bg-white"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-[11px] text-slate-600">Data Validade</Label>
-                                    <Input
-                                        type="date"
-                                        value={volumeConfig.expirationDate}
-                                        onChange={(e) => setVolumeConfig(p => ({ ...p, expirationDate: e.target.value }))}
-                                        className="h-8 text-xs bg-white"
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label className="text-[11px] text-slate-600">Data Fabricação</Label>
-                                    <Input
-                                        type="date"
-                                        value={volumeConfig.manufactureDate}
-                                        onChange={(e) => setVolumeConfig(p => ({ ...p, manufactureDate: e.target.value }))}
-                                        className="h-8 text-xs bg-white"
+                                    <SearchableLocationSelect
+                                        value={volumeConfig.targetLocationId}
+                                        onChange={(locId) => setVolumeConfig(p => ({ ...p, targetLocationId: locId }))}
+                                        locations={targetLocations}
                                     />
                                 </div>
                             </div>
 
-                            {/* ETAPA 3: QUALIDADE / CONDICIONAIS DE AVARIA OU FALTA */}
+                            {/* RASTREABILIDADE CONDICIONADA ÀS REGRAS DO PRODUTO / XML */}
+                            {(tracksBatch || tracksExpiration || tracksManufacture || tracksSerial) && (
+                                <div className="grid grid-cols-2 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                                    {tracksBatch && (
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px] text-slate-600">Lote Físico</Label>
+                                            <Input
+                                                value={volumeConfig.batch}
+                                                onChange={(e) => setVolumeConfig(p => ({ ...p, batch: e.target.value }))}
+                                                placeholder="Lote do XML/Físico"
+                                                className="h-8 text-xs font-mono bg-white"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {tracksExpiration && (
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px] text-slate-600">Data Validade</Label>
+                                            <Input
+                                                type="date"
+                                                value={volumeConfig.expirationDate}
+                                                onChange={(e) => setVolumeConfig(p => ({ ...p, expirationDate: e.target.value }))}
+                                                className="h-8 text-xs bg-white"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {tracksManufacture && (
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px] text-slate-600">Data Fabricação</Label>
+                                            <Input
+                                                type="date"
+                                                value={volumeConfig.manufactureDate}
+                                                onChange={(e) => setVolumeConfig(p => ({ ...p, manufactureDate: e.target.value }))}
+                                                className="h-8 text-xs bg-white"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {tracksSerial && (
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px] text-slate-600">Número de Série</Label>
+                                            <Input
+                                                value={volumeConfig.serialNumber}
+                                                onChange={(e) => setVolumeConfig(p => ({ ...p, serialNumber: e.target.value }))}
+                                                placeholder="Serial Unitário"
+                                                className="h-8 text-xs font-mono bg-white"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* 3. QUALIDADE E CONDICIONAIS DE AVARIA, FALTA OU QUARENTENA */}
                             <div className="space-y-3 pt-2">
-                                <Label className="text-xs font-bold text-slate-800">3. Qualidade do Lote Recebido</Label>
-                                <Select value={String(volumeConfig.qualityStatus)} onValueChange={(v) => setVolumeConfig(p => ({ ...p, qualityStatus: Number(v) }))}>
+                                <Label className="text-xs font-bold text-slate-800">3. Qualidade do Lote Recebido *</Label>
+                                <Select value={String(volumeConfig.qualityStatus)} onValueChange={(v) => setVolumeConfig(p => ({ ...p, qualityStatus: v }))}>
                                     <SelectTrigger className="bg-slate-50">
-                                        <SelectValue />
+                                        <SelectValue placeholder="Selecione a Qualidade..." />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="1">Liberado (Sem Avarias)</SelectItem>
@@ -399,20 +539,22 @@ export default function ConferenciaItemPage() {
                                     </SelectContent>
                                 </Select>
 
-                                {/* CONDICIONAL DE AVARIA OU FALTA */}
-                                {(volumeConfig.qualityStatus === 3 || volumeConfig.qualityStatus === 4) && (
+                                {/* CONDICIONAL EXIBIDA PARA QUARENTENA (2), AVARIA (3) E FALTA VIRTUAL (4) */}
+                                {(volumeConfig.qualityStatus === '2' || volumeConfig.qualityStatus === '3' || volumeConfig.qualityStatus === '4') && (
                                     <div className="p-4 rounded-xl border bg-amber-50/50 border-amber-200 space-y-3 animate-in fade-in duration-300">
                                         <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
-                                            {volumeConfig.qualityStatus === 3 ? <AlertTriangle size={16} /> : <FileWarning size={16} />}
-                                            {volumeConfig.qualityStatus === 3 ? 'Registro de Avaria Físico' : 'Registro de Divergência / Falta'}
+                                            {volumeConfig.qualityStatus === '2' && <ShieldAlert size={16} />}
+                                            {volumeConfig.qualityStatus === '3' && <AlertTriangle size={16} />}
+                                            {volumeConfig.qualityStatus === '4' && <FileWarning size={16} />}
+                                            {volumeConfig.qualityStatus === '2' ? 'Registro de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registro de Avaria Físico' : 'Registro de Divergência / Falta'}
                                         </div>
 
                                         <div className="space-y-1">
-                                            <Label className="text-xs">Descrição / Motivo da Ocorrência</Label>
+                                            <Label className="text-xs">Descrição / Motivo do Bloqueio ou Ocorrência *</Label>
                                             <Input
                                                 value={volumeConfig.notes}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, notes: e.target.value }))}
-                                                placeholder="Descreva detalhes do dano ou divergência..."
+                                                placeholder="Descreva observações, inspecções ou motivos..."
                                                 className="bg-white text-xs h-9"
                                             />
                                         </div>
@@ -431,7 +573,7 @@ export default function ConferenciaItemPage() {
                                                 <div className="flex gap-2 flex-wrap pt-2">
                                                     {volumeConfig.images.map((img, idx) => (
                                                         <div key={idx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-amber-300">
-                                                            <img src={img.base64Data} alt="Avaria" className="w-full h-full object-cover" />
+                                                            <img src={img.base64Data} alt="Evidência" className="w-full h-full object-cover" />
                                                             <button
                                                                 onClick={() => removeImage(idx)}
                                                                 className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -448,7 +590,7 @@ export default function ConferenciaItemPage() {
                             </div>
                         </div>
 
-                        {/* BOTÃO ADICIONAR AO CARRINHO */}
+                        {/* ADICIONAR AO CARRINHO */}
                         <div className="pt-4 border-t border-slate-100">
                             <Button
                                 type="button"
@@ -460,7 +602,7 @@ export default function ConferenciaItemPage() {
                         </div>
                     </div>
 
-                    {/* COLUNA DIREITA: O CARRINHO DE STAGING E CHECKOUT (5 COLS) */}
+                    {/* CARRINHO DE STAGING (5 COLS) */}
                     <div className="col-span-5 bg-slate-50/50 border border-slate-200/80 rounded-xl p-6 flex flex-col min-h-0">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-3 shrink-0">
                             <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -469,13 +611,12 @@ export default function ConferenciaItemPage() {
                             <Badge variant="outline" className="bg-white font-mono text-xs">{stagedVolumes.length} lote(s)</Badge>
                         </div>
 
-                        {/* LISTA DE ITENS STAGED */}
                         <div className="flex-1 overflow-y-auto py-4 space-y-3 my-2 pr-1">
                             {stagedVolumes.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center space-y-2 py-12">
                                     <ShoppingCart className="w-12 h-12 text-slate-300 stroke-1" />
                                     <p className="text-xs">Nenhum volume no carrinho.</p>
-                                    <p className="text-[10px] text-slate-400 max-w-[200px]">Configure os lotes ao lado e clique em "Adicionar ao Carrinho".</p>
+                                    <p className="text-[10px] text-slate-400 max-w-[200px]">Configure o lote ao lado e clique em "Adicionar Lote".</p>
                                 </div>
                             ) : (
                                 stagedVolumes.map((item) => (
@@ -495,9 +636,9 @@ export default function ConferenciaItemPage() {
                                         <div className="text-[10px] text-slate-500 space-y-0.5 font-mono">
                                             <p>Destino: <strong className="text-slate-700">{item.locationPath}</strong></p>
                                             {item.batch && <p>Lote: <strong className="text-slate-700">{item.batch}</strong></p>}
-                                            {item.qualityStatus !== 1 && (
+                                            {item.qualityStatus !== '1' && (
                                                 <span className="text-amber-700 font-bold uppercase block mt-1">
-                                                    Status: {item.qualityStatus === 3 ? 'Avariado' : 'Falta/Divergência'}
+                                                    Status: {item.qualityStatus === '2' ? 'Quarentena' : item.qualityStatus === '3' ? 'Avariado' : 'Falta/Divergência'}
                                                 </span>
                                             )}
                                         </div>
@@ -506,7 +647,6 @@ export default function ConferenciaItemPage() {
                             )}
                         </div>
 
-                        {/* RESUMO DO CHECKOUT E SUBMISSÃO */}
                         <div className="border-t border-slate-200 pt-4 space-y-3 shrink-0 bg-white p-4 rounded-xl border">
                             <div className="flex justify-between text-xs font-semibold text-slate-700">
                                 <span>Total a Gravar nesta Conferência:</span>
@@ -518,7 +658,7 @@ export default function ConferenciaItemPage() {
                                 disabled={stagedVolumes.length === 0 || isSubmitting}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-sm"
                             >
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="w-4 h-4 mr-2" /> Registrar Checkout & Gerar HUs</>}
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Registrar Checkout & Gerar HUs</>}
                             </Button>
                         </div>
                     </div>
