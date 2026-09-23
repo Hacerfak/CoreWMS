@@ -25,6 +25,9 @@ import QualidadePage from '@/pages/Qualidade/QualidadePage';
 import TarifasECiclosPage from '@/pages/Billing/TarifasECiclosPage';
 import ExtratoFaturamentoPage from '@/pages/Billing/ExtratoFaturamentoPage';
 import InventarioPage from '@/pages/Inventario/InventarioPage';
+import OutboundListPage from '@/pages/Outbound/OutboundListPage';
+import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
+import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -136,6 +139,13 @@ export default function App() {
               <Route element={<PermissionGuard requiredPermission="billing:view" />}>
                 <Route path="/billing/tarifas-ciclos" element={<TarifasECiclosPage />} />
                 <Route path="/billing/ciclos/:id" element={<ExtratoFaturamentoPage />} />
+              </Route>
+
+              {/* Rotas de Outbound */}
+              <Route element={<PermissionGuard requiredPermission="outbound:view" />}>
+                <Route path="/outbound" element={<OutboundListPage />} />
+                <Route path="/outbound/picking/:id" element={<OutboundPickingPage />} />
+                <Route path="/outbound/packing/:id" element={<OutboundPackingPage />} />
               </Route>
 
             </Route>

@@ -558,7 +558,66 @@ export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getA
 
 
 
-export const postApiOutboundOrdersImportXml = (
+export const postApiOutboundOrdersOrderIdShip = (
+    orderId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/ship`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundOrdersOrderIdShipMutationKey = () => ['postApiOutboundOrdersOrderIdShip'] as const;
+
+export const getPostApiOutboundOrdersOrderIdShipMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>, TError,PostApiOutboundOrdersOrderIdShipMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>, TError,PostApiOutboundOrdersOrderIdShipMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundOrdersOrderIdShipMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>, PostApiOutboundOrdersOrderIdShipMutationVariables> = (props) => {
+          const {orderId} = props ?? {};
+
+          return  postApiOutboundOrdersOrderIdShip(orderId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundOrdersOrderIdShipMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>>
+
+    export type PostApiOutboundOrdersOrderIdShipMutationError = unknown
+    export type PostApiOutboundOrdersOrderIdShipMutationVariables = {orderId: string}
+
+    export const usePostApiOutboundOrdersOrderIdShip = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>, TError,PostApiOutboundOrdersOrderIdShipMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>,
+        TError,
+        PostApiOutboundOrdersOrderIdShipMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundOrdersOrderIdShipMutationOptions(options), queryClient);
+    }
+    export const postApiOutboundOrdersImportXml = (
     postApiOutboundOrdersImportXmlBody?: PostApiOutboundOrdersImportXmlBody,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {

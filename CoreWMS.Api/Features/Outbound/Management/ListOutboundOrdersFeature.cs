@@ -32,7 +32,6 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
         }
 
         if (request.CustomerId.HasValue) q = q.Where(o => o.CustomerId == request.CustomerId);
-
         if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<Enums.OutboundOrderStatus>(request.Status, true, out var statusEnum))
             q = q.Where(o => o.Status == statusEnum);
 
@@ -44,8 +43,10 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
                              (o.AccessKey != null && EF.Functions.ILike(o.AccessKey, s)));
         }
 
-        var totalTask = q.CountAsync(ct);
-        var itemsTask = q
+        // Execução sequencial para evitar exceção de thread-safety no DbContext
+        var totalCount = await q.CountAsync(ct);
+
+        var items = await q
             .OrderByDescending(o => o.IssueDate)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -54,9 +55,7 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
                 o.IssueDate, o.Status.ToString(), o.Items.Count
             )).ToListAsync(ct);
 
-        await Task.WhenAll(totalTask, itemsTask);
-
-        var response = new PaginatedResult<OutboundOrderDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        var response = new PaginatedResult<OutboundOrderDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }
