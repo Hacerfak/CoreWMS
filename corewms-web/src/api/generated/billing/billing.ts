@@ -266,6 +266,274 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiBillingTariffsIdMutationOptions(options), queryClient);
     }
+    export const postApiBillingServices = (
+    createBillingServiceCommand: CreateBillingServiceCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/services`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createBillingServiceCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiBillingServicesMutationKey = () => ['postApiBillingServices'] as const;
+
+export const getPostApiBillingServicesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingServices>>, TError,PostApiBillingServicesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingServices>>, TError,PostApiBillingServicesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBillingServicesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingServices>>, PostApiBillingServicesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiBillingServices(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiBillingServicesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingServices>>>
+    export type PostApiBillingServicesMutationBody = CreateBillingServiceCommand
+    export type PostApiBillingServicesMutationError = unknown
+    export type PostApiBillingServicesMutationVariables = {data: CreateBillingServiceCommand}
+
+    export const usePostApiBillingServices = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingServices>>, TError,PostApiBillingServicesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiBillingServices>>,
+        TError,
+        PostApiBillingServicesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiBillingServicesMutationOptions(options), queryClient);
+    }
+    export const getApiBillingServices = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/services`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiBillingServicesQueryKey = () => {
+    return [
+    `/api/billing/services`
+    ] as const;
+    }
+
+
+export const getGetApiBillingServicesQueryOptions = <TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiBillingServicesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiBillingServices>>> = ({ signal }) => getApiBillingServices(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiBillingServicesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiBillingServices>>>
+export type GetApiBillingServicesQueryError = unknown
+
+
+export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiBillingServices>>,
+          TError,
+          Awaited<ReturnType<typeof getApiBillingServices>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiBillingServices>>,
+          TError,
+          Awaited<ReturnType<typeof getApiBillingServices>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiBillingServicesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const deleteApiBillingServicesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/services/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiBillingServicesIdMutationKey = () => ['deleteApiBillingServicesId'] as const;
+
+export const getDeleteApiBillingServicesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, TError,DeleteApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, TError,DeleteApiBillingServicesIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiBillingServicesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, DeleteApiBillingServicesIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiBillingServicesId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiBillingServicesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiBillingServicesId>>>
+
+    export type DeleteApiBillingServicesIdMutationError = unknown
+    export type DeleteApiBillingServicesIdMutationVariables = {id: string}
+
+    export const useDeleteApiBillingServicesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, TError,DeleteApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiBillingServicesId>>,
+        TError,
+        DeleteApiBillingServicesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiBillingServicesIdMutationOptions(options), queryClient);
+    }
+    export const putApiBillingServicesId = (
+    id: string,
+    updateBillingServiceCommand: UpdateBillingServiceCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/services/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateBillingServiceCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiBillingServicesIdMutationKey = () => ['putApiBillingServicesId'] as const;
+
+export const getPutApiBillingServicesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiBillingServicesId>>, TError,PutApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiBillingServicesId>>, TError,PutApiBillingServicesIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiBillingServicesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiBillingServicesId>>, PutApiBillingServicesIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiBillingServicesId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiBillingServicesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiBillingServicesId>>>
+    export type PutApiBillingServicesIdMutationBody = UpdateBillingServiceCommand
+    export type PutApiBillingServicesIdMutationError = unknown
+    export type PutApiBillingServicesIdMutationVariables = {id: string;data: UpdateBillingServiceCommand}
+
+    export const usePutApiBillingServicesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiBillingServicesId>>, TError,PutApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiBillingServicesId>>,
+        TError,
+        PutApiBillingServicesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiBillingServicesIdMutationOptions(options), queryClient);
+    }
     export const getApiBillingCyclesIdExport = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -707,271 +975,3 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiBillingCyclesCycleIdItemsManualMutationOptions(options), queryClient);
     }
-    export const deleteApiBillingServicesId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/billing/services/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiBillingServicesIdMutationKey = () => ['deleteApiBillingServicesId'] as const;
-
-export const getDeleteApiBillingServicesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, TError,DeleteApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, TError,DeleteApiBillingServicesIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiBillingServicesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, DeleteApiBillingServicesIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiBillingServicesId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiBillingServicesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiBillingServicesId>>>
-
-    export type DeleteApiBillingServicesIdMutationError = unknown
-    export type DeleteApiBillingServicesIdMutationVariables = {id: string}
-
-    export const useDeleteApiBillingServicesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingServicesId>>, TError,DeleteApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiBillingServicesId>>,
-        TError,
-        DeleteApiBillingServicesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiBillingServicesIdMutationOptions(options), queryClient);
-    }
-    export const putApiBillingServicesId = (
-    id: string,
-    updateBillingServiceCommand: UpdateBillingServiceCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/billing/services/${id}`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateBillingServiceCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiBillingServicesIdMutationKey = () => ['putApiBillingServicesId'] as const;
-
-export const getPutApiBillingServicesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiBillingServicesId>>, TError,PutApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiBillingServicesId>>, TError,PutApiBillingServicesIdMutationVariables, TContext> => {
-
-const mutationKey = getPutApiBillingServicesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiBillingServicesId>>, PutApiBillingServicesIdMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  putApiBillingServicesId(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiBillingServicesIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiBillingServicesId>>>
-    export type PutApiBillingServicesIdMutationBody = UpdateBillingServiceCommand
-    export type PutApiBillingServicesIdMutationError = unknown
-    export type PutApiBillingServicesIdMutationVariables = {id: string;data: UpdateBillingServiceCommand}
-
-    export const usePutApiBillingServicesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiBillingServicesId>>, TError,PutApiBillingServicesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiBillingServicesId>>,
-        TError,
-        PutApiBillingServicesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiBillingServicesIdMutationOptions(options), queryClient);
-    }
-    export const postApiBillingServices = (
-    createBillingServiceCommand: CreateBillingServiceCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/billing/services`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: createBillingServiceCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiBillingServicesMutationKey = () => ['postApiBillingServices'] as const;
-
-export const getPostApiBillingServicesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingServices>>, TError,PostApiBillingServicesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingServices>>, TError,PostApiBillingServicesMutationVariables, TContext> => {
-
-const mutationKey = getPostApiBillingServicesMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingServices>>, PostApiBillingServicesMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiBillingServices(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiBillingServicesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingServices>>>
-    export type PostApiBillingServicesMutationBody = CreateBillingServiceCommand
-    export type PostApiBillingServicesMutationError = unknown
-    export type PostApiBillingServicesMutationVariables = {data: CreateBillingServiceCommand}
-
-    export const usePostApiBillingServices = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingServices>>, TError,PostApiBillingServicesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiBillingServices>>,
-        TError,
-        PostApiBillingServicesMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiBillingServicesMutationOptions(options), queryClient);
-    }
-    export const getApiBillingServices = (
-
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/billing/services`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiBillingServicesQueryKey = () => {
-    return [
-    `/api/billing/services`
-    ] as const;
-    }
-
-
-export const getGetApiBillingServicesQueryOptions = <TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiBillingServicesQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiBillingServices>>> = ({ signal }) => getApiBillingServices(requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiBillingServicesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiBillingServices>>>
-export type GetApiBillingServicesQueryError = unknown
-
-
-export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiBillingServices>>,
-          TError,
-          Awaited<ReturnType<typeof getApiBillingServices>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiBillingServices>>,
-          TError,
-          Awaited<ReturnType<typeof getApiBillingServices>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiBillingServicesQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
