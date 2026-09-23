@@ -40,7 +40,6 @@ const customerSchema = z.object({
     cityName: z.string().optional().nullable(),
     cityCode: z.coerce.number().optional().nullable(),
     state: z.string().length(2, 'UF inválida.'),
-
     tracksBatch: z.boolean().default(false),
     strictBatch: z.boolean().default(false),
     tracksManufacture: z.boolean().default(false),
@@ -49,15 +48,12 @@ const customerSchema = z.object({
     strictExpiration: z.boolean().default(false),
     tracksSerial: z.boolean().default(false),
     strictSerial: z.boolean().default(false),
-
     defaultPickingStrategy: z.coerce.number().default(1),
     defaultPickingBaseDate: z.coerce.number().default(1),
-
     maxDailyInboundOrders: z.coerce.number().optional().nullable(),
     maxDailyOutboundOrders: z.coerce.number().optional().nullable(),
     minStockVolume: z.coerce.number().optional().nullable(),
     maxStockVolume: z.coerce.number().optional().nullable(),
-
     requiresBlindInbound: z.boolean().default(true),
     requiresBlindOutbound: z.boolean().default(true),
     returnInvoicePerReferencedInvoice: z.boolean().default(false),
@@ -95,7 +91,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
     const { mutate: consultSefaz, isPending: isSefazPending } = usePostApiCustomersConsultSefazCnpj({
         mutation: {
             onSuccess: (sefazData) => {
-                toast.success('Dados importados com sucesso da SEFAZ!');
+                toast.success('Dados sincronizados com sucesso da SEFAZ!');
                 setValue('corporateName', sefazData.corporateName || '', { shouldValidate: true });
                 setValue('tradeName', sefazData.tradeName || '');
                 setValue('stateRegistration', sefazData.stateRegistration || '');
@@ -109,7 +105,6 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                 setValue('cityName', sefazData.cityName || '');
                 setValue('state', sefazData.state || watchState);
                 setValue('zipCode', sefazData.zipCode || '');
-                // Se a IE for preenchida, assume contribuinte
                 if (sefazData.stateRegistration) setValue('ieIndicator', 1);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao consultar SEFAZ.')
@@ -138,6 +133,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
         }
     });
 
+    // Permite consulta SEFAZ tanto no cadastro novo quanto na edição
     const handleConsultSefaz = () => {
         const cleanCnpj = (watchCnpj || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos.');
@@ -235,7 +231,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                         </div>
                                         <div className="w-28 space-y-1.5">
                                             <Label className="text-slate-700 font-medium">UF *</Label>
-                                            <Select value={watchState} onValueChange={(val) => setValue('state', val)} disabled={isEditing}>
+                                            <Select value={watchState} onValueChange={(val) => setValue('state', val)}>
                                                 <SelectTrigger className={`bg-white h-10 ${errors.state ? 'border-rose-500' : ''}`}>
                                                     <SelectValue placeholder="UF" />
                                                 </SelectTrigger>
@@ -247,7 +243,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                         <Button
                                             type="button" variant="outline"
                                             onClick={handleConsultSefaz}
-                                            disabled={isSefazPending || isEditing}
+                                            disabled={isSefazPending}
                                             className="bg-white hover:bg-blue-600 hover:text-white border-blue-200 text-blue-700 font-medium px-6 h-10"
                                         >
                                             {isSefazPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
@@ -344,10 +340,12 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                         <Input type="number" {...register('cityCode')} className="h-10 font-mono" />
                                     </div>
                                 </div>
+
                                 <div className="space-y-1.5">
                                     <Label>Cidade</Label>
                                     <Input {...register('cityName')} className="h-10" />
                                 </div>
+
                                 <div className="grid grid-cols-4 gap-4">
                                     <div className="col-span-3 space-y-1.5">
                                         <Label>Logradouro / Rua</Label>
@@ -358,6 +356,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                         <Input {...register('number')} className="h-10" />
                                     </div>
                                 </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <Label>Bairro</Label>
@@ -394,6 +393,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
                                         <div className="space-y-2">
                                             <Label>Data Base Analisada</Label>
                                             <Select value={String(watch('defaultPickingBaseDate'))} onValueChange={(val) => setValue('defaultPickingBaseDate', Number(val))} disabled={watch('defaultPickingStrategy') == 2}>
@@ -441,6 +441,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                             </div>
                                             <Switch checked={watch('requiresBlindInbound')} onCheckedChange={(val) => setValue('requiresBlindInbound', val)} />
                                         </div>
+
                                         <div className="flex items-center justify-between">
                                             <div className="space-y-0.5">
                                                 <Label className="text-base text-slate-900">Exige Conferência Cega na Expedição</Label>

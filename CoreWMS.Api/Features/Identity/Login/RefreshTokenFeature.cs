@@ -7,20 +7,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Login;
 
-// ==========================================
-// 1. DTOs
-// ==========================================
+// DTOs
 public record RefreshTokenRequest(string Email, string RefreshToken);
 public record RefreshTokenResponse(string AccessToken, string RefreshToken);
 
-// ==========================================
-// 2. Command
-// ==========================================
+// Command
 public record RefreshTokenCommand(string Email, string RefreshToken) : IRequest<RefreshTokenResponse>;
 
-// ==========================================
-// 3. Validator (Pipeline MediatR)
-// ==========================================
+// Validator
 public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenCommand>
 {
     public RefreshTokenCommandValidator()
@@ -34,9 +28,7 @@ public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenComman
     }
 }
 
-// ==========================================
-// 4. Handler
-// ==========================================
+// Handler
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, RefreshTokenResponse>
 {
     private readonly ApplicationDbContext _db;
@@ -52,7 +44,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     {
         var emailLower = request.Email.Trim().ToLower();
 
-        // NOVO: AsSplitQuery adicionado para evitar produto cartesiano na memória.
+        // Consulta dividida (AsSplitQuery) para evitar produto cartesiano
         var user = await _db.Users
             .Include(u => u.UserCompanyRoles)
                 .ThenInclude(ucr => ucr.Company)
@@ -66,7 +58,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         }
 
         var allowedCompanyIds = user.IsMaster
-            ? await _db.Companies.AsNoTracking().Select(c => c.Id).ToListAsync(ct) // NOVO: AsNoTracking() na consulta extra
+            ? await _db.Companies.AsNoTracking().Select(c => c.Id).ToListAsync(ct)
             : user.UserCompanyRoles.Select(ucr => ucr.CompanyId).ToList();
 
         var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
@@ -81,9 +73,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     }
 }
 
-// ==========================================
-// 5. Endpoint (Minimal API)
-// ==========================================
+// Endpoint Minimal API
 public static class RefreshTokenEndpoint
 {
     public static void MapRefreshTokenEndpoints(this IEndpointRouteBuilder app)
@@ -96,7 +86,7 @@ public static class RefreshTokenEndpoint
         })
         .WithTags("Identity")
         .AllowAnonymous()
-        .RequireRateLimiting("refreshPolicy") // NOVO: Proteção contra flood de tokens ativada
+        .RequireRateLimiting("refreshPolicy")
         .Produces<RefreshTokenResponse>(StatusCodes.Status200OK)
         .ProducesProblem(StatusCodes.Status400BadRequest)
         .ProducesProblem(StatusCodes.Status401Unauthorized);

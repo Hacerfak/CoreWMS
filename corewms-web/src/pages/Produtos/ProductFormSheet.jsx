@@ -66,7 +66,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     const isEditing = !!productToEdit;
 
     // CORREÇÃO: Extração segura dos Customers (Paginados)
-    const { data: customersResponse } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const { data: customersResponse } = useGetApiCustomers({ OnlyActive: true, PageSize: 100 });
     const customers = customersResponse?.items || (Array.isArray(customersResponse) ? customersResponse : []);
 
     // Extração segura das embalagens

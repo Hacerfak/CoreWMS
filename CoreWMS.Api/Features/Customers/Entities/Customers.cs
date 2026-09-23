@@ -12,10 +12,7 @@ public class Customer : AuditableEntity
     public string CorporateName { get; private set; } = string.Empty;
     public string? TradeName { get; private set; }
     public string? StateRegistration { get; private set; }
-
-    // NOVO: Indicação IE do Destinatário (1=Contribuinte, 2=Isento, 9=Não Contribuinte)
     public int IeIndicator { get; private set; }
-
     public string? MunicipalRegistration { get; private set; }
     public int Crt { get; private set; }
     public string? Cnae { get; private set; }
@@ -39,26 +36,26 @@ public class Customer : AuditableEntity
     public bool StrictExpiration { get; private set; }
     public bool TracksSerial { get; private set; }
     public bool StrictSerial { get; private set; }
-
     public PickingStrategy DefaultPickingStrategy { get; private set; }
     public PickingBaseDate DefaultPickingBaseDate { get; private set; }
 
-    // NOVOS: Limites de Capacidade (SLA)
+    // Limites de Capacidade (SLA)
     public int? MaxDailyInboundOrders { get; private set; }
     public int? MaxDailyOutboundOrders { get; private set; }
     public int? MinStockVolume { get; private set; }
     public int? MaxStockVolume { get; private set; }
 
-    // NOVOS: Regras de Conferência e Faturamento
+    // Regras de Conferência e Faturamento
     public bool RequiresBlindInbound { get; private set; }
     public bool RequiresBlindOutbound { get; private set; }
     public bool ReturnInvoicePerReferencedInvoice { get; private set; }
-
     public bool IsActive { get; private set; } = true;
 
     protected Customer() { }
 
-    public Customer(Guid companyId, string cnpj, string corporateName, string? tradeName, string? stateRegistration, int ieIndicator, string? municipalRegistration, int crt, string? cnae, string? street, string? number, string? complement, string? neighborhood, int cityCode, string? cityName, string state, string? zipCode, string? email, string? phone,
+    public Customer(
+        Guid companyId, string cnpj, string corporateName, string? tradeName, string? stateRegistration, int ieIndicator, string? municipalRegistration, int crt, string? cnae,
+        string? street, string? number, string? complement, string? neighborhood, int cityCode, string? cityName, string state, string? zipCode, string? email, string? phone,
         bool tracksBatch, bool strictBatch, bool tracksManufacture, bool strictManufacture, bool tracksExpiration, bool strictExpiration, bool tracksSerial, bool strictSerial,
         PickingStrategy defaultPickingStrategy, PickingBaseDate defaultPickingBaseDate,
         int? maxDailyInboundOrders, int? maxDailyOutboundOrders, int? minStockVolume, int? maxStockVolume,
@@ -71,7 +68,9 @@ public class Customer : AuditableEntity
         RequiresBlindInbound = requiresBlindInbound; RequiresBlindOutbound = requiresBlindOutbound; ReturnInvoicePerReferencedInvoice = returnInvoicePerReferencedInvoice;
     }
 
-    public void Update(string corporateName, string? tradeName, string? stateRegistration, int ieIndicator, string? municipalRegistration, int crt, string? cnae, string? street, string? number, string? complement, string? neighborhood, int cityCode, string? cityName, string state, string? zipCode, string? email, string? phone,
+    public void Update(
+        string corporateName, string? tradeName, string? stateRegistration, int ieIndicator, string? municipalRegistration, int crt, string? cnae,
+        string? street, string? number, string? complement, string? neighborhood, int cityCode, string? cityName, string state, string? zipCode, string? email, string? phone,
         bool tracksBatch, bool strictBatch, bool tracksManufacture, bool strictManufacture, bool tracksExpiration, bool strictExpiration, bool tracksSerial, bool strictSerial,
         PickingStrategy defaultPickingStrategy, PickingBaseDate defaultPickingBaseDate,
         int? maxDailyInboundOrders, int? maxDailyOutboundOrders, int? minStockVolume, int? maxStockVolume,
@@ -82,6 +81,42 @@ public class Customer : AuditableEntity
         DefaultPickingStrategy = defaultPickingStrategy; DefaultPickingBaseDate = defaultPickingBaseDate;
         MaxDailyInboundOrders = maxDailyInboundOrders; MaxDailyOutboundOrders = maxDailyOutboundOrders; MinStockVolume = minStockVolume; MaxStockVolume = maxStockVolume;
         RequiresBlindInbound = requiresBlindInbound; RequiresBlindOutbound = requiresBlindOutbound; ReturnInvoicePerReferencedInvoice = returnInvoicePerReferencedInvoice;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateFiscalDetails(
+        string corporateName,
+        string? tradeName,
+        string? stateRegistration,
+        string? municipalRegistration,
+        int? crt,
+        string? cnae,
+        string? street,
+        string? number,
+        string? complement,
+        string? neighborhood,
+        int? cityCode,
+        string? cityName,
+        string? state,
+        string? zipCode,
+        string? phone)
+    {
+        if (!string.IsNullOrWhiteSpace(corporateName)) CorporateName = corporateName;
+        if (!string.IsNullOrWhiteSpace(tradeName)) TradeName = tradeName;
+        if (!string.IsNullOrWhiteSpace(stateRegistration)) StateRegistration = stateRegistration;
+        if (!string.IsNullOrWhiteSpace(municipalRegistration)) MunicipalRegistration = municipalRegistration;
+        if (crt.HasValue && crt.Value > 0) Crt = crt.Value;
+        if (!string.IsNullOrWhiteSpace(cnae)) Cnae = cnae;
+        if (!string.IsNullOrWhiteSpace(street)) Street = street;
+        if (!string.IsNullOrWhiteSpace(number)) Number = number;
+        if (!string.IsNullOrWhiteSpace(complement)) Complement = complement;
+        if (!string.IsNullOrWhiteSpace(neighborhood)) Neighborhood = neighborhood;
+        if (cityCode.HasValue && cityCode.Value > 0) CityCode = cityCode.Value;
+        if (!string.IsNullOrWhiteSpace(cityName)) CityName = cityName;
+        if (!string.IsNullOrWhiteSpace(state)) State = state;
+        if (!string.IsNullOrWhiteSpace(zipCode)) ZipCode = zipCode;
+        if (!string.IsNullOrWhiteSpace(phone)) Phone = phone;
+
         UpdatedAt = DateTime.UtcNow;
     }
 

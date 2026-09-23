@@ -37,13 +37,11 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
     public async Task<IResult> Handle(ImportInboundXmlCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var company = await _db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == companyId, ct);
         if (company == null) return Results.BadRequest(new { Message = "Empresa não encontrada." });
 
         var processedOrders = new List<Guid>();
         var errors = new List<string>();
-
         var existingCustomers = await _db.Customers.Where(c => c.CompanyId == companyId).ToListAsync(ct);
         var existingProducts = await _db.Products.AsNoTracking()
             .Where(p => p.CompanyId == companyId)
@@ -55,6 +53,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
             try
             {
                 var parsedNfe = _parser.ParseXml(xmlString);
+                var issuer = parsedNfe.Issuer;
 
                 if (parsedNfe.DestCnpj != company.Cnpj)
                 {
@@ -68,21 +67,62 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     continue;
                 }
 
-                var customer = existingCustomers.FirstOrDefault(c => c.Cnpj == parsedNfe.IssuerCnpj);
+                var customer = existingCustomers.FirstOrDefault(c => c.Cnpj == issuer.Cnpj);
+
+                // 1. Cadastra o depositante com TODOS os dados do XML se não existir
                 if (customer == null)
                 {
                     customer = new Customer(
-                        companyId, parsedNfe.IssuerCnpj, parsedNfe.IssuerName, null, null, 9, null, 1, null,
-                        null, null, null, null, 0, null, "RS", null, null, null,
+                        companyId,
+                        issuer.Cnpj,
+                        issuer.CorporateName,
+                        issuer.TradeName,
+                        issuer.StateRegistration,
+                        string.IsNullOrWhiteSpace(issuer.StateRegistration) ? 9 : 1, // ieIndicator
+                        issuer.MunicipalRegistration,
+                        issuer.Crt ?? 1,
+                        issuer.Cnae,
+                        issuer.Street,
+                        issuer.Number,
+                        issuer.Complement,
+                        issuer.Neighborhood,
+                        issuer.CityCode ?? 0,
+                        issuer.CityName,
+                        string.IsNullOrWhiteSpace(issuer.State) ? "RS" : issuer.State,
+                        issuer.ZipCode,
+                        issuer.Phone,
+                        null,
                         false, false, false, false, false, false, false, false,
                         PickingStrategy.Fifo, PickingBaseDate.ReceiptDate,
                         null, null, null, null, false, false, false
                     );
+
                     _db.Customers.Add(customer);
                     existingCustomers.Add(customer);
                 }
+                else
+                {
+                    // 2. Se já existir, enriquece o cadastro com dados do endereço/inscrições caso estejam vazios
+                    customer.UpdateFiscalDetails(
+                        issuer.CorporateName,
+                        issuer.TradeName,
+                        issuer.StateRegistration,
+                        issuer.MunicipalRegistration,
+                        issuer.Crt,
+                        issuer.Cnae,
+                        issuer.Street,
+                        issuer.Number,
+                        issuer.Complement,
+                        issuer.Neighborhood,
+                        issuer.CityCode,
+                        issuer.CityName,
+                        issuer.State,
+                        issuer.ZipCode,
+                        issuer.Phone
+                    );
+                }
 
-                var order = new InboundOrder(companyId, customer.Id, parsedNfe.IssuerCnpj, parsedNfe.IssuerName, parsedNfe.AccessKey, xmlString, parsedNfe.IssueDate);
+                var order = new InboundOrder(companyId, customer.Id, issuer.Cnpj, issuer.CorporateName, parsedNfe.AccessKey, xmlString, parsedNfe.IssueDate);
                 _db.InboundOrders.Add(order);
 
                 foreach (var item in parsedNfe.Items)
@@ -99,7 +139,6 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     );
 
                     if (matchedProduct != null) orderItem.LinkProduct(matchedProduct.Id);
-
                     _db.InboundOrderItems.Add(orderItem);
                 }
 

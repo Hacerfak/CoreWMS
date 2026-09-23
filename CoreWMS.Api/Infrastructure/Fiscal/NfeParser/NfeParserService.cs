@@ -29,15 +29,44 @@ public class NfeParserService : INfeParserService
 
         var emit = infNfe.Element(Ns + "emit") ?? throw new ArgumentException("Tag <emit> não encontrada.");
         var dest = infNfe.Element(Ns + "dest") ?? throw new ArgumentException("Tag <dest> não encontrada.");
+
+        var enderEmit = emit.Element(Ns + "enderEmit");
         var enderDest = dest.Element(Ns + "enderDest");
 
-        var items = new List<NfeParsedItem>();
+        // Parseamento dos Dados Cadastrais e Fiscais do Emitente (Depositante)
+        var issuerCnpj = emit.Element(Ns + "CNPJ")?.Value ?? emit.Element(Ns + "CPF")?.Value ?? "";
+        var issuerName = emit.Element(Ns + "xNome")?.Value ?? "";
 
+        var crtStr = emit.Element(Ns + "CRT")?.Value;
+        int? crt = int.TryParse(crtStr, out var cVal) ? cVal : null;
+
+        var cityCodeStr = enderEmit?.Element(Ns + "cMun")?.Value;
+        int? cityCode = int.TryParse(cityCodeStr, out var codeVal) ? codeVal : null;
+
+        var issuer = new NfeParsedIssuer(
+            issuerCnpj,
+            issuerName,
+            emit.Element(Ns + "xFant")?.Value,
+            emit.Element(Ns + "IE")?.Value,
+            emit.Element(Ns + "IM")?.Value,
+            crt,
+            emit.Element(Ns + "CNAE")?.Value,
+            enderEmit?.Element(Ns + "xLgr")?.Value,
+            enderEmit?.Element(Ns + "nro")?.Value,
+            enderEmit?.Element(Ns + "xCmpl")?.Value,
+            enderEmit?.Element(Ns + "xBairro")?.Value,
+            cityCode,
+            enderEmit?.Element(Ns + "xMun")?.Value,
+            enderEmit?.Element(Ns + "UF")?.Value ?? "EX",
+            enderEmit?.Element(Ns + "CEP")?.Value,
+            enderEmit?.Element(Ns + "fone")?.Value
+        );
+
+        var items = new List<NfeParsedItem>();
         foreach (var det in infNfe.Elements(Ns + "det"))
         {
             var nItem = int.Parse(det.Attribute("nItem")?.Value ?? "0");
             var prod = det.Element(Ns + "prod");
-
             if (prod == null) continue;
 
             var ean = prod.Element(Ns + "cEAN")?.Value;
@@ -52,10 +81,8 @@ public class NfeParserService : INfeParserService
             if (rastro != null)
             {
                 batch = rastro.Element(Ns + "nLote")?.Value;
-
                 if (DateTime.TryParse(rastro.Element(Ns + "dFab")?.Value, out var mfg))
                     mfgDate = mfg.ToUniversalTime();
-
                 if (DateTime.TryParse(rastro.Element(Ns + "dVal")?.Value, out var exp))
                     expDate = exp.ToUniversalTime();
             }
@@ -83,8 +110,9 @@ public class NfeParserService : INfeParserService
         return new NfeParsedData(
             accessKey,
             issueDate,
-            emit.Element(Ns + "CNPJ")?.Value ?? emit.Element(Ns + "CPF")?.Value ?? "",
-            emit.Element(Ns + "xNome")?.Value ?? "",
+            issuerCnpj,
+            issuerName,
+            issuer,
             dest.Element(Ns + "CNPJ")?.Value ?? dest.Element(Ns + "CPF")?.Value ?? "",
             dest.Element(Ns + "xNome")?.Value ?? "",
             enderDest?.Element(Ns + "xMun")?.Value ?? "NÃO INFORMADO",
@@ -97,7 +125,7 @@ public class NfeParserService : INfeParserService
     private static decimal ParseDecimal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return 0;
-        // O XML da NF-e sempre usa Ponto '.' como separador decimal. Culture Invariant previne erros de localidade.
+        // O XML da NF-e sempre usa Ponto '.' como separador decimal.
         return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : 0;
     }
 }

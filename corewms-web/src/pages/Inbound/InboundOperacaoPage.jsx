@@ -17,7 +17,6 @@ import {
     CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
-import ListInboundHusModal from './ListInboundHusModal';
 
 export default function InboundOperacaoPage() {
     const { id: orderId } = useParams();
@@ -148,11 +147,11 @@ export default function InboundOperacaoPage() {
                     </div>
 
                     <Button
-                        onClick={() => setIsHusModalOpen(true)}
+                        onClick={() => navigate(`/inbound/operacao/${orderId}/hus`)}
                         variant="outline"
                         className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
                     >
-                        <Layers className="w-4 h-4 mr-2" /> HUs Geradas
+                        <Layers className="w-4 h-4 mr-2" /> HUs Geradas ({order?.items?.reduce((acc, i) => acc + (i.receivedQuantity > 0 ? 1 : 0), 0) || 0})
                     </Button>
                 </div>
 
@@ -342,15 +341,6 @@ export default function InboundOperacaoPage() {
                     </Table>
                 </div>
             </div>
-
-            {/* MODAL DE HUs */}
-            {isHusModalOpen && (
-                <ListInboundHusModal
-                    open={isHusModalOpen}
-                    onOpenChange={setIsHusModalOpen}
-                    orderData={order}
-                />
-            )}
         </div>
     );
 }

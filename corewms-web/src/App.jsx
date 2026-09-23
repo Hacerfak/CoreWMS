@@ -18,6 +18,7 @@ import InboundOperacaoPage from '@/pages/Inbound/InboundOperacaoPage';
 import ConferenciaItemPage from '@/pages/Inbound/ConferenciaItemPage';
 import InboundList from '@/pages/Inbound/InboundList';
 import ReviewInbound from '@/pages/Inbound/ReviewInbound';
+import InboundOrderHusPage from '@/pages/Inbound/InboundOrderHusPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -106,6 +107,7 @@ export default function App() {
               <Route element={<PermissionGuard requiredPermission="inbound:receive" />}>
                 <Route path="/inbound/operacao/:id" element={<InboundOperacaoPage />} />
                 <Route path="/inbound/operacao/:orderId/item/:itemId" element={<ConferenciaItemPage />} />
+                <Route path="/inbound/operacao/:id/hus" element={<InboundOrderHusPage />} />
               </Route>
             </Route>
           </Route>
