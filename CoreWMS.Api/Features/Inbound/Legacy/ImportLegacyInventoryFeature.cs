@@ -94,7 +94,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 continue;
             }
 
-            var productPack = await _db.ProductPackagings.FirstOrDefaultAsync(p => p.ProductId == orderItem.ProductId.Value && p.IsDefaultInbound, ct);
+            var productPack = await _db.ProductPackagings.FirstOrDefaultAsync(p => p.ProductId == orderItem.ProductId.Value, ct);
             if (productPack == null)
             {
                 errors.Add($"Linha {i + 1}: Produto {sku} não possui uma embalagem padrão de recebimento.");

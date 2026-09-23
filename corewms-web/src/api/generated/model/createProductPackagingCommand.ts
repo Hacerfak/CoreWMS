@@ -8,8 +8,6 @@
 export interface CreateProductPackagingCommand {
   packagingTypeId?: string;
   conversionFactor?: number;
-  isDefaultInbound?: boolean;
-  isDefaultOutbound?: boolean;
   allowFractionalPicking?: boolean;
   grossWeight?: number;
   netWeight?: number;

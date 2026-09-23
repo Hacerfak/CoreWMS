@@ -58,10 +58,8 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
                                      (p.BaseBarcode != null && EF.Functions.ILike(p.BaseBarcode, s)));
         }
 
-        // 1. Aguarda a contagem primeiro
         var totalCount = await query.CountAsync(ct);
 
-        // 2. Aguarda a busca dos itens depois
         var items = await query
             .OrderBy(p => p.Sku)
             .Skip((request.Page - 1) * request.PageSize)
@@ -73,7 +71,7 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
             p.TracksBatch, p.StrictBatch, p.TracksManufacture, p.StrictManufacture, p.TracksExpiration, p.StrictExpiration, p.TracksSerial, p.StrictSerial,
             (int)p.PickingStrategy, (int)p.PickingBaseDate, p.InboundShelfLifeToleranceDays, p.OutboundShelfLifeToleranceDays, p.IsActive,
             p.Packagings.Select(pp => new ProductPackagingDto(
-                pp.Id, pp.PackagingTypeId, pp.PackagingType.Code, pp.ConversionFactor, pp.IsDefaultInbound, pp.IsDefaultOutbound,
+                pp.Id, pp.PackagingTypeId, pp.PackagingType.Code, pp.ConversionFactor,
                 pp.AllowFractionalPicking, pp.GrossWeight, pp.NetWeight, pp.LengthMm, pp.WidthMm, pp.HeightMm, pp.CubageM3, pp.Barcode
             )).ToList()
         )).ToList();

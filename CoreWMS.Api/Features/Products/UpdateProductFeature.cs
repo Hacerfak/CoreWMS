@@ -9,7 +9,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Products;
 
-public record UpdateProductPackagingCommand(Guid? Id, Guid PackagingTypeId, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, string? Barcode);
+public record UpdateProductPackagingCommand(
+    Guid? Id,
+    Guid PackagingTypeId,
+    decimal ConversionFactor,
+    bool AllowFractionalPicking,
+    decimal GrossWeight,
+    decimal NetWeight,
+    decimal LengthMm,
+    decimal WidthMm,
+    decimal HeightMm,
+    string? Barcode
+);
 
 public record UpdateProductCommand(
     Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
@@ -26,11 +37,8 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
-
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
-        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultInbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de recebimento.");
-        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultOutbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de expedição.");
     }
 }
 
@@ -74,34 +82,45 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
             (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
 
-        var requestPackIds = request.Packagings.Where(x => x.Id.HasValue).Select(x => x.Id!.Value).ToList();
-        var packsToRemove = product.Packagings.Where(p => !requestPackIds.Contains(p.Id)).ToList();
+        // Identifica as embalagens que devem ser mantidas
+        var requestPackIds = request.Packagings
+            .Where(x => x.Id.HasValue && x.Id.Value != Guid.Empty)
+            .Select(x => x.Id!.Value)
+            .ToList();
+
+        // 1. Remove embalagens que foram excluídas no formulário
+        var packsToRemove = product.Packagings
+            .Where(p => !requestPackIds.Contains(p.Id))
+            .ToList();
 
         if (packsToRemove.Any())
         {
-            foreach (var pack in packsToRemove)
-            {
-                product.Packagings.Remove(pack);
-                _db.ProductPackagings.Remove(pack);
-            }
+            _db.ProductPackagings.RemoveRange(packsToRemove);
         }
 
+        // 2. Atualiza existentes ou adiciona novas embalagens
         foreach (var packReq in request.Packagings)
         {
-            if (packReq.Id.HasValue)
+            if (packReq.Id.HasValue && packReq.Id.Value != Guid.Empty)
             {
                 var existing = product.Packagings.FirstOrDefault(p => p.Id == packReq.Id.Value);
                 if (existing != null)
                 {
-                    existing.UpdateFlagsAndFactor(packReq.ConversionFactor, packReq.IsDefaultInbound, packReq.IsDefaultOutbound, packReq.AllowFractionalPicking);
+                    existing.UpdateFlagsAndFactor(packReq.ConversionFactor, packReq.AllowFractionalPicking);
                     existing.UpdateDimensions(packReq.GrossWeight, packReq.NetWeight, packReq.LengthMm, packReq.WidthMm, packReq.HeightMm, packReq.Barcode);
                 }
             }
             else
             {
-                var newPack = new ProductPackaging(product.Id, packReq.PackagingTypeId, packReq.ConversionFactor, packReq.IsDefaultInbound, packReq.IsDefaultOutbound, packReq.AllowFractionalPicking);
+                var newPack = new ProductPackaging(
+                    product.Id,
+                    packReq.PackagingTypeId,
+                    packReq.ConversionFactor,
+                    packReq.AllowFractionalPicking
+                );
                 newPack.UpdateDimensions(packReq.GrossWeight, packReq.NetWeight, packReq.LengthMm, packReq.WidthMm, packReq.HeightMm, packReq.Barcode);
-                product.Packagings.Add(newPack);
+
+                _db.ProductPackagings.Add(newPack);
             }
         }
 

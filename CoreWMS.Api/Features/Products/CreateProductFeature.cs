@@ -9,7 +9,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Products;
 
-public record CreateProductPackagingCommand(Guid PackagingTypeId, decimal ConversionFactor, bool IsDefaultInbound, bool IsDefaultOutbound, bool AllowFractionalPicking, decimal GrossWeight, decimal NetWeight, decimal LengthMm, decimal WidthMm, decimal HeightMm, string? Barcode);
+public record CreateProductPackagingCommand(
+    Guid PackagingTypeId,
+    decimal ConversionFactor,
+    bool AllowFractionalPicking,
+    decimal GrossWeight,
+    decimal NetWeight,
+    decimal LengthMm,
+    decimal WidthMm,
+    decimal HeightMm,
+    string? Barcode
+);
 
 public record CreateProductCommand(
     Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
@@ -27,11 +37,8 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
-
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
-        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultInbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de recebimento.");
-        RuleFor(x => x.Packagings).Must(p => p != null && p.Count(x => x.IsDefaultOutbound) == 1).WithMessage("Deve existir exatamente UMA embalagem padrão de expedição.");
     }
 }
 
@@ -70,7 +77,6 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
         }
 
         var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit);
-
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
         product.UpdateRules(
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
@@ -78,7 +84,7 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
 
         foreach (var pack in request.Packagings)
         {
-            var packaging = new ProductPackaging(product.Id, pack.PackagingTypeId, pack.ConversionFactor, pack.IsDefaultInbound, pack.IsDefaultOutbound, pack.AllowFractionalPicking);
+            var packaging = new ProductPackaging(product.Id, pack.PackagingTypeId, pack.ConversionFactor, pack.AllowFractionalPicking);
             packaging.UpdateDimensions(pack.GrossWeight, pack.NetWeight, pack.LengthMm, pack.WidthMm, pack.HeightMm, pack.Barcode);
             product.Packagings.Add(packaging);
         }

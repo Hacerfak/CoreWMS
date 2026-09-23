@@ -10,8 +10,6 @@ export interface UpdateProductPackagingCommand {
   id?: string | null;
   packagingTypeId?: string;
   conversionFactor?: number;
-  isDefaultInbound?: boolean;
-  isDefaultOutbound?: boolean;
   allowFractionalPicking?: boolean;
   grossWeight?: number;
   netWeight?: number;

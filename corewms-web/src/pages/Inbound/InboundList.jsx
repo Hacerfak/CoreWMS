@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Search, Loader2, ArrowDownToLine, Upload, Eye, Ban, PackageCheck, FileCode2, Play, Trash2 } from 'lucide-react';
+import { Search, Loader2, ArrowDownToLine, Upload, Eye, Ban, PackageCheck, FileCode2, Play, Trash2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
 
@@ -198,6 +198,30 @@ export default function InboundList() {
                                                 >
                                                     <PackageCheck className="h-4 w-4 mr-1" /> Conferência
                                                 </Button>
+                                            )}
+
+                                            {/* 4. Ordem FINALIZADA -> Detalhes e HUs Geradas */}
+                                            {order.status === 'Completed' && (
+                                                <div className="inline-flex gap-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => navigate(`/inbound/operacao/${order.id}`)}
+                                                        className="border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-xs"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" /> Ver Detalhes
+                                                    </Button>
+
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        title="Ver HUs Geradas"
+                                                        onClick={() => navigate(`/inbound/operacao/${order.id}/hus`)}
+                                                        className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 shadow-xs"
+                                                    >
+                                                        <Layers className="h-3.5 w-3.5 mr-1" /> HUs
+                                                    </Button>
+                                                </div>
                                             )}
 
                                             {/* Botão Cancelar para ordens ativas */}

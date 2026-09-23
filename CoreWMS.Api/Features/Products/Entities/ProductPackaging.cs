@@ -14,8 +14,6 @@ public class ProductPackaging : AuditableEntity
     public decimal ConversionFactor { get; private set; } // Quantidade da unidade base. Ex: 1 Pallet = 1500 UN
 
     // Flag de comportamento
-    public bool IsDefaultInbound { get; private set; } // Vem marcado se for a forma padrão de recebimento
-    public bool IsDefaultOutbound { get; private set; }
     public bool AllowFractionalPicking { get; private set; } // Posso abrir esse volume para expedir solto?
 
     // Dimensões e Peso (Fundamentais para roteirização e cálculo de Frete)
@@ -26,25 +24,21 @@ public class ProductPackaging : AuditableEntity
     public decimal HeightMm { get; private set; }
 
     // Cubagem M3 Calculada
-    public decimal CubageM3 => (LengthMm * WidthMm * HeightMm) / 1000000000m;
+    public decimal CubageM3 => LengthMm * WidthMm * HeightMm / 1000000000m;
 
     protected ProductPackaging() { }
 
-    public ProductPackaging(Guid productId, Guid packagingTypeId, decimal conversionFactor, bool isDefaultInbound, bool isDefaultOutbound, bool allowFractionalPicking)
+    public ProductPackaging(Guid productId, Guid packagingTypeId, decimal conversionFactor, bool allowFractionalPicking)
     {
         ProductId = productId;
         PackagingTypeId = packagingTypeId;
         ConversionFactor = conversionFactor;
-        IsDefaultInbound = isDefaultInbound;
-        IsDefaultOutbound = isDefaultOutbound;
         AllowFractionalPicking = allowFractionalPicking;
     }
 
-    public void UpdateFlagsAndFactor(decimal conversionFactor, bool isDefaultInbound, bool isDefaultOutbound, bool allowFractionalPicking)
+    public void UpdateFlagsAndFactor(decimal conversionFactor, bool allowFractionalPicking)
     {
         ConversionFactor = conversionFactor;
-        IsDefaultInbound = isDefaultInbound;
-        IsDefaultOutbound = isDefaultOutbound;
         AllowFractionalPicking = allowFractionalPicking;
         UpdatedAt = DateTime.UtcNow;
     }
