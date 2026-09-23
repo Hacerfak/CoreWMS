@@ -12,7 +12,6 @@ import {
 import { Search, Plus, Building, MapPin, Loader2, Edit, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ClienteFormSheet from './ClienteFormSheet';
-import PageContainer from '@/components/layout/PageContainer';
 
 export default function ClientesList() {
     const queryClient = useQueryClient();
@@ -60,88 +59,86 @@ export default function ClientesList() {
                 </Button>
             </div>
 
-            <PageContainer>
-                <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-slate-100 flex items-center gap-4">
-                        <div className="relative flex-1 max-w-md">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <Input
-                                placeholder="Buscar por Razão Social ou CNPJ..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="pl-9 bg-slate-50 border-slate-200"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-auto">
-                        <Table>
-                            <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-sm z-10">
-                                <TableRow>
-                                    <TableHead className="w-[350px]">Razão Social</TableHead>
-                                    <TableHead>CNPJ</TableHead>
-                                    <TableHead>Localização</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {isLoading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
-                                            <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
-                                        </TableCell>
-                                    </TableRow>
-                                ) : clientes?.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center text-slate-500">
-                                            Nenhum cliente encontrado.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    clientes?.map((cliente) => (
-                                        <TableRow key={cliente.id} className="hover:bg-slate-50/50 transition-colors">
-                                            <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
-                                                        <Building size={16} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-slate-900 truncate max-w-[260px]">{cliente.corporateName}</p>
-                                                        <p className="text-xs text-slate-500 truncate max-w-[260px]">{cliente.tradeName || 'Sem nome fantasia'}</p>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="font-mono text-sm text-slate-600">
-                                                {cliente.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                                                    <MapPin size={14} className="text-slate-400" />
-                                                    {cliente.cityName} - {cliente.state}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">
-                                                    Ativo
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right space-x-1">
-                                                <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)} className="text-blue-600 hover:bg-blue-50">
-                                                    <Edit className="h-4 w-4 mr-1" /> Editar
-                                                </Button>
-                                                <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
-                                                    <Trash2 className="h-4 w-4 mr-1" /> Excluir
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="p-4 border-b border-slate-100 flex items-center gap-4">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                            placeholder="Buscar por Razão Social ou CNPJ..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="pl-9 bg-slate-50 border-slate-200"
+                        />
                     </div>
                 </div>
-            </PageContainer>
+
+                <div className="flex-1 overflow-auto">
+                    <Table>
+                        <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-sm z-10">
+                            <TableRow>
+                                <TableHead className="w-[350px]">Razão Social</TableHead>
+                                <TableHead>CNPJ</TableHead>
+                                <TableHead>Localização</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {isLoading ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-24 text-center">
+                                        <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
+                                    </TableCell>
+                                </TableRow>
+                            ) : clientes?.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} className="h-24 text-center text-slate-500">
+                                        Nenhum cliente encontrado.
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                clientes?.map((cliente) => (
+                                    <TableRow key={cliente.id} className="hover:bg-slate-50/50 transition-colors">
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+                                                    <Building size={16} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium text-slate-900 truncate max-w-[260px]">{cliente.corporateName}</p>
+                                                    <p className="text-xs text-slate-500 truncate max-w-[260px]">{cliente.tradeName || 'Sem nome fantasia'}</p>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="font-mono text-sm text-slate-600">
+                                            {cliente.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                                                <MapPin size={14} className="text-slate-400" />
+                                                {cliente.cityName} - {cliente.state}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">
+                                                Ativo
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right space-x-1">
+                                            <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)} className="text-blue-600 hover:bg-blue-50">
+                                                <Edit className="h-4 w-4 mr-1" /> Editar
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                                                <Trash2 className="h-4 w-4 mr-1" /> Excluir
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </div>
 
             <ClienteFormSheet
                 open={isSheetOpen}

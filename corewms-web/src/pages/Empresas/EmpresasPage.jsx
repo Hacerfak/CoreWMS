@@ -25,7 +25,7 @@ export default function EmpresasPage() {
                 </div>
             </div>
 
-            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="flex-1 overflow-auto">
                     <Table>
                         <TableHeader className="bg-slate-50/50 sticky top-0">

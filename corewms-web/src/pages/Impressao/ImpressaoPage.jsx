@@ -136,7 +136,7 @@ export default function ImpressaoPage() {
 
                 {/* ABA AGENTES */}
                 <TabsContent value="agentes" className="flex-1 mt-4">
-                    <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
+                    <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                             <h3 className="font-semibold text-slate-800">Estações (Print Agents)</h3>
                             <Button onClick={() => handleOpenAgenteModal()} className="bg-blue-600 hover:bg-blue-700 text-white h-8">
@@ -223,7 +223,7 @@ export default function ImpressaoPage() {
 
                 {/* ABA TEMPLATES */}
                 <TabsContent value="templates" className="flex-1 mt-4">
-                    <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
+                    <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                             <h3 className="font-semibold text-slate-800">Modelos ZPL</h3>
                             <Button onClick={() => handleOpenTemplateModal()} className="bg-blue-600 hover:bg-blue-700 text-white h-8">

@@ -70,7 +70,9 @@ api.interceptors.response.use(
                     failedQueue.push({ resolve, reject });
                 })
                     .then(token => {
-                        originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                        if (originalRequest.headers) {
+                            originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                        }
                         return api(originalRequest);
                     })
                     .catch(err => Promise.reject(err));
@@ -81,9 +83,9 @@ api.interceptors.response.use(
 
             const authStore = useAuthStore.getState();
             const refreshToken = authStore.refreshToken;
-            const email = authStore.user?.email || (authStore.user as any)?.Email || authStore.user?.nome;
 
-            if (!refreshToken || !email) {
+            // Se não houver refresh token salvo, realiza o logout
+            if (!refreshToken) {
                 isRefreshing = false;
                 authStore.logout();
                 window.location.href = '/login';
@@ -93,9 +95,8 @@ api.interceptors.response.use(
             try {
                 const baseURL = (api.defaults.baseURL || '').replace(/\/$/, '');
 
-                // Chamada direta com axios para não engatilhar o interceptor em loop
+                // Chamada direta via axios puro para evitar disparar o interceptor em loop
                 const { data } = await axios.post(`${baseURL}/api/identity/refresh`, {
-                    email: email,
                     refreshToken: refreshToken
                 });
 
@@ -109,8 +110,12 @@ api.interceptors.response.use(
                 // Atualiza o estado Zustand com os novos tokens
                 authStore.setTokens(newAccessToken, newRefreshToken);
 
-                // Re-injeta o token renovado e drena a fila de requisições pendentes
-                originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+                // Re-injeta o token renovado nos cabeçalhos da requisição original
+                if (originalRequest.headers) {
+                    originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
+                }
+
+                // Libera todas as requisições que estavam aguardando na fila
                 processQueue(null, newAccessToken);
 
                 return api(originalRequest);

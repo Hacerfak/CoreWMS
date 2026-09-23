@@ -7,28 +7,24 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Login;
 
-// DTOs
-public record RefreshTokenRequest(string Email, string RefreshToken);
+// 1. DTOs
+public record RefreshTokenRequest(string? Email, string RefreshToken);
 public record RefreshTokenResponse(string AccessToken, string RefreshToken);
 
-// Command
-public record RefreshTokenCommand(string Email, string RefreshToken) : IRequest<RefreshTokenResponse>;
+// 2. Command
+public record RefreshTokenCommand(string? Email, string RefreshToken) : IRequest<RefreshTokenResponse>;
 
-// Validator
+// 3. Validator (Pipeline MediatR)
 public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenCommand>
 {
     public RefreshTokenCommandValidator()
     {
-        RuleFor(x => x.Email)
-            .NotEmpty().WithMessage("O e-mail é obrigatório.")
-            .EmailAddress().WithMessage("Formato de e-mail inválido.");
-
         RuleFor(x => x.RefreshToken)
             .NotEmpty().WithMessage("O Refresh Token é obrigatório.");
     }
 }
 
-// Handler
+// 4. Handler
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, RefreshTokenResponse>
 {
     private readonly ApplicationDbContext _db;
@@ -42,17 +38,30 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
 
     public async Task<RefreshTokenResponse> Handle(RefreshTokenCommand request, CancellationToken ct)
     {
-        var emailLower = request.Email.Trim().ToLower();
+        CoreWMS.Api.Features.Identity.Entities.User? user = null;
 
-        // Consulta dividida (AsSplitQuery) para evitar produto cartesiano
-        var user = await _db.Users
-            .Include(u => u.UserCompanyRoles)
-                .ThenInclude(ucr => ucr.Company)
-            .Include(u => u.UserCustomers)
-            .AsSplitQuery()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
+        // Tenta buscar por E-mail + RefreshToken se fornecido, ou diretamente pelo RefreshToken
+        if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            var emailLower = request.Email.Trim().ToLower();
+            user = await _db.Users
+                .Include(u => u.UserCompanyRoles)
+                    .ThenInclude(ucr => ucr.Company)
+                .Include(u => u.UserCustomers)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower && u.RefreshToken == request.RefreshToken, ct);
+        }
+        else
+        {
+            user = await _db.Users
+                .Include(u => u.UserCompanyRoles)
+                    .ThenInclude(ucr => ucr.Company)
+                .Include(u => u.UserCustomers)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(u => u.RefreshToken == request.RefreshToken, ct);
+        }
 
-        if (user == null || user.RefreshToken != request.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+        if (user == null || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
         {
             throw new UnauthorizedAccessException("Refresh token inválido ou expirado.");
         }
@@ -73,7 +82,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     }
 }
 
-// Endpoint Minimal API
+// 5. Endpoint Minimal API
 public static class RefreshTokenEndpoint
 {
     public static void MapRefreshTokenEndpoints(this IEndpointRouteBuilder app)

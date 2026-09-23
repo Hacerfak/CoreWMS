@@ -99,7 +99,7 @@ export default function AuditoriaPage() {
                 </div>
             </div>
 
-            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {/* BARRA DE FILTROS COM RHF */}
                 <form onSubmit={handleSubmit(onSubmitFilters)} className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-end gap-4">
                     <div className="space-y-1.5 flex-1 min-w-[200px]">

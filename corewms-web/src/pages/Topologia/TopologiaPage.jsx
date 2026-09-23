@@ -23,11 +23,11 @@ export default function TopologiaPage() {
                     </TabsList>
                 </div>
 
-                <TabsContent value="layout" className="flex-1 mt-4 overflow-hidden">
+                <TabsContent value="layout" className="flex-1 mt-4 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <LayoutFisicoTab />
                 </TabsContent>
 
-                <TabsContent value="tipos" className="flex-1 mt-4 overflow-hidden">
+                <TabsContent value="tipos" className="flex-1 mt-4 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <StorageTypesTab />
                 </TabsContent>
             </Tabs>
