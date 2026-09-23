@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
-    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine, Boxes, ShieldAlert, Receipt
+    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine, Boxes, ShieldAlert, Receipt, ClipboardCheck
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -55,6 +55,7 @@ export default function MainLayout() {
             scope: 'Operação',
             items: [
                 { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
+                { icon: ClipboardCheck, label: 'Inventário', path: '/inventario', permission: 'inventory:view' },
 
             ]
         },

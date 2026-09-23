@@ -24,6 +24,7 @@ import EstoquePage from '@/pages/Estoque/EstoquePage';
 import QualidadePage from '@/pages/Qualidade/QualidadePage';
 import TarifasECiclosPage from '@/pages/Billing/TarifasECiclosPage';
 import ExtratoFaturamentoPage from '@/pages/Billing/ExtratoFaturamentoPage';
+import InventarioPage from '@/pages/Inventario/InventarioPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -102,6 +103,11 @@ export default function App() {
               {/* Rotas de Estoque */}
               <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
                 <Route path="/estoque" element={<EstoquePage />} />
+              </Route>
+
+              {/* Rotas de Inventário*/}
+              <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
+                <Route path="/inventario" element={<InventarioPage />} />
               </Route>
 
               {/* ROTAS DO INBOUND */}
