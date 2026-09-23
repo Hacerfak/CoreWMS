@@ -27,7 +27,7 @@ public class JwtTokenGenerator : IJwtTokenGenerator
         var secret = _configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
         var issuer = _configuration["JwtSettings:Issuer"] ?? "CoreWMS";
         var audience = _configuration["JwtSettings:Audience"] ?? "CoreWMS.Users";
-        var expirationMinutes = _configuration.GetValue<int?>("JwtSettings:ExpirationMinutes") ?? 5;
+        var expirationMinutes = _configuration.GetValue<int?>("JwtSettings:ExpirationMinutes") ?? 1;
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
