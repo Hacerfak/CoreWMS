@@ -34,11 +34,17 @@ public class ListInboundOrdersHandler : IRequestHandler<ListInboundOrdersQuery, 
     public async Task<IResult> Handle(ListInboundOrdersQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var q = _db.InboundOrders
             .AsNoTracking()
             .Include(o => o.Customer)
             .Where(o => o.CompanyId == companyId);
+
+        // Filtro Viseira B2B para ordens de recebimento
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            q = q.Where(o => o.CustomerId.HasValue && allowedCustomerIds.Contains(o.CustomerId.Value));
+        }
 
         if (request.CustomerId.HasValue) q = q.Where(o => o.CustomerId == request.CustomerId);
         if (request.Status.HasValue) q = q.Where(o => o.Status == request.Status);
@@ -58,7 +64,7 @@ public class ListInboundOrdersHandler : IRequestHandler<ListInboundOrdersQuery, 
             .Select(o => new InboundOrderDto(
                 o.Id, o.CustomerId, o.Customer != null ? o.Customer.CorporateName : null,
                 o.IssuerCnpj, o.IssuerName, o.AccessKey, o.IssueDate, o.Status.ToString(),
-                o.Items.Any(i => i.Status == InboundOrderItemStatus.Pending_Review) // <-- VERIFICAÇÃO AUTOMÁTICA
+                o.Items.Any(i => i.Status == InboundOrderItemStatus.Pending_Review)
             )).ToListAsync(ct);
 
         var response = new PaginatedResult<InboundOrderDto>(items, totalCount, request.Page, request.PageSize);

@@ -28,9 +28,9 @@ public class RefreshTokenCommandValidator : AbstractValidator<RefreshTokenComman
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, RefreshTokenResponse>
 {
     private readonly ApplicationDbContext _db;
-    private readonly JwtTokenGenerator _jwt;
+    private readonly IJwtTokenGenerator _jwt;
 
-    public RefreshTokenCommandHandler(ApplicationDbContext db, JwtTokenGenerator jwt)
+    public RefreshTokenCommandHandler(ApplicationDbContext db, IJwtTokenGenerator jwt)
     {
         _db = db;
         _jwt = jwt;
@@ -40,24 +40,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     {
         CoreWMS.Api.Features.Identity.Entities.User? user = null;
 
-        // Tenta buscar por E-mail + RefreshToken se fornecido, ou diretamente pelo RefreshToken
         if (!string.IsNullOrWhiteSpace(request.Email))
         {
             var emailLower = request.Email.Trim().ToLower();
             user = await _db.Users
-                .Include(u => u.UserCompanyRoles)
-                    .ThenInclude(ucr => ucr.Company)
-                .Include(u => u.UserCustomers)
-                .AsSplitQuery()
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower && u.RefreshToken == request.RefreshToken, ct);
         }
         else
         {
             user = await _db.Users
-                .Include(u => u.UserCompanyRoles)
-                    .ThenInclude(ucr => ucr.Company)
-                .Include(u => u.UserCustomers)
-                .AsSplitQuery()
                 .FirstOrDefaultAsync(u => u.RefreshToken == request.RefreshToken, ct);
         }
 
@@ -66,13 +57,8 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
             throw new UnauthorizedAccessException("Refresh token inválido ou expirado.");
         }
 
-        var allowedCompanyIds = user.IsMaster
-            ? await _db.Companies.AsNoTracking().Select(c => c.Id).ToListAsync(ct)
-            : user.UserCompanyRoles.Select(ucr => ucr.CompanyId).ToList();
-
-        var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
-
-        var newAccessToken = _jwt.GenerateToken(user, allowedCompanyIds, allowedCustomerIds);
+        // Gera o JWT ultraleve sem serializar listas de IDs
+        var newAccessToken = _jwt.GenerateToken(user);
         var newRefreshToken = _jwt.GenerateRefreshToken();
 
         user.SetRefreshToken(newRefreshToken, DateTime.UtcNow.AddDays(7));

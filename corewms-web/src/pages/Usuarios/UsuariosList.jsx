@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,9 +21,8 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Search, Plus, KeyRound, Loader2, Edit, Trash2, Building2, Save, ShieldCheck } from 'lucide-react';
+import { Search, Plus, KeyRound, Loader2, Edit, Trash2, Shield, Save, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import VincularEmpresaModal from './VincularEmpresaModal';
 
 // Schema do Usuário
 const userSchema = z.object({
@@ -37,6 +37,7 @@ const resetPasswordSchema = z.object({
 });
 
 export default function UsuariosList() {
+    const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
 
@@ -189,7 +190,7 @@ export default function UsuariosList() {
                                     <TableCell>
                                         {user.isMaster ? (
                                             <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-semibold gap-1">
-                                                <ShieldCheck size={14} /> Master (Global)
+                                                <ShieldCheck size={14} /> Master
                                             </Badge>
                                         ) : (
                                             <span className="text-sm font-medium text-slate-600 px-2">
@@ -202,8 +203,14 @@ export default function UsuariosList() {
                                     </TableCell>
                                     <TableCell className="text-right space-x-1">
                                         {!user.isMaster && (
-                                            <Button variant="ghost" size="sm" onClick={() => setUserToAssign(user)} className="text-emerald-600 hover:bg-emerald-50">
-                                                <Building2 className="h-4 w-4 mr-1" /> Vínculos
+                                            // Substitua o acionamento do Modal antigo pela navegação:
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => navigate(`/usuarios/${user.id}/acessos`)}
+                                                className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                                            >
+                                                <Shield className="h-3.5 w-3.5 mr-1" /> Acessos
                                             </Button>
                                         )}
                                         <Button variant="ghost" size="sm" onClick={() => setUserToResetPassword(user)} className="text-amber-600 hover:bg-amber-50">
@@ -292,15 +299,6 @@ export default function UsuariosList() {
                     </form>
                 </DialogContent>
             </Dialog>
-
-            {/* Modal de Gestão de Vínculos - Injeta o Usuário Fresco da Lista */}
-            {userToAssign && (
-                <VincularEmpresaModal
-                    user={users.find(u => u.id === userToAssign.id) || userToAssign}
-                    open={!!userToAssign}
-                    onOpenChange={(open) => !open && setUserToAssign(null)}
-                />
-            )}
 
             {/* Modal de Exclusão de Usuário */}
             <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>

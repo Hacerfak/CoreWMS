@@ -1,4 +1,3 @@
-using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -6,45 +5,95 @@ using System.Security.Claims;
 
 namespace CoreWMS.Api.Features.Identity.Users;
 
-// 1. Request
-public record GetMyPermissionsQuery(Guid UserId, bool IsMaster, Guid CompanyId) : IRequest<List<string>>;
+public record UserCompanyDto(Guid Id, string CorporateName, string? TradeName, string Cnpj);
 
-// 2. Handler
-public class GetMyPermissionsHandler : IRequestHandler<GetMyPermissionsQuery, List<string>>
+public record UserMeResponse(
+    Guid Id,
+    string Name,
+    string Email,
+    bool IsMaster,
+    List<UserCompanyDto> Companies,
+    List<string> Permissions
+);
+
+public record GetUserMeQuery(Guid UserId, Guid? ActiveCompanyId) : IRequest<UserMeResponse>;
+
+public class GetUserMeHandler : IRequestHandler<GetUserMeQuery, UserMeResponse>
 {
     private readonly ApplicationDbContext _db;
-    public GetMyPermissionsHandler(ApplicationDbContext db) => _db = db;
 
-    public async Task<List<string>> Handle(GetMyPermissionsQuery request, CancellationToken ct)
+    public GetUserMeHandler(ApplicationDbContext db) => _db = db;
+
+    public async Task<UserMeResponse> Handle(GetUserMeQuery request, CancellationToken ct)
     {
-        if (request.IsMaster) return new List<string> { "*" };
+        var user = await _db.Users
+            .AsNoTracking()
+            .Include(u => u.UserCompanyRoles)
+                .ThenInclude(ucr => ucr.Company)
+            .FirstOrDefaultAsync(u => u.Id == request.UserId, ct);
 
-        if (request.CompanyId == Guid.Empty)
-            throw new InvalidOperationException("Cabeçalho X-Company-Id é obrigatório.");
+        if (user == null)
+            throw new KeyNotFoundException("Usuário não encontrado.");
 
-        var permissions = await _db.UserCompanyRoles
-            .Where(ucr => ucr.UserId == request.UserId && ucr.CompanyId == request.CompanyId)
-            .SelectMany(ucr => ucr.Role.Permissions)
-            .Select(p => p.Permission)
-            .AsNoTracking() // Optimization for reads
-            .ToListAsync(ct);
+        List<UserCompanyDto> companies;
+        if (user.IsMaster)
+        {
+            companies = await _db.Companies
+                .AsNoTracking()
+                .Select(c => new UserCompanyDto(c.Id, c.CorporateName, c.TradeName, c.Cnpj))
+                .ToListAsync(ct);
+        }
+        else
+        {
+            companies = user.UserCompanyRoles
+                .Select(ucr => new UserCompanyDto(ucr.Company.Id, ucr.Company.CorporateName, ucr.Company.TradeName, ucr.Company.Cnpj))
+                .DistinctBy(c => c.Id)
+                .ToList();
+        }
 
-        return permissions;
+        List<string> permissions = new();
+        if (user.IsMaster)
+        {
+            permissions = new List<string> { "*" };
+        }
+        else if (request.ActiveCompanyId.HasValue && request.ActiveCompanyId.Value != Guid.Empty)
+        {
+            permissions = await _db.UserCompanyRoles
+                .Where(ucr => ucr.UserId == request.UserId && ucr.CompanyId == request.ActiveCompanyId.Value)
+                .SelectMany(ucr => ucr.Role.Permissions)
+                .Select(p => p.Permission)
+                .AsNoTracking()
+                .Distinct()
+                .ToListAsync(ct);
+        }
+
+        return new UserMeResponse(user.Id, user.Name, user.Email, user.IsMaster, companies, permissions);
     }
 }
 
-// 3. Endpoint
-public static class GetMyPermissionsEndpoint
+public static class GetMeEndpoints
 {
-    public static void MapGetMyPermissionsEndpoints(this IEndpointRouteBuilder app)
+    public static void MapGetMeEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/users/me", async (HttpContext ctx, ClaimsPrincipal userPrincipal, IMediator mediator) =>
+        {
+            var userId = Guid.Parse(userPrincipal.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            Guid.TryParse(ctx.Request.Headers["X-Company-Id"].ToString(), out var companyId);
+
+            var result = await mediator.Send(new GetUserMeQuery(userId, companyId));
+            return Results.Ok(result);
+        })
+        .WithName("GetUserMe")
+        .WithTags("Users")
+        .RequireAuthorization();
+
         app.MapGet("/api/users/me/permissions", async (HttpContext ctx, ClaimsPrincipal userPrincipal, IMediator mediator) =>
         {
             var userId = Guid.Parse(userPrincipal.FindFirst(ClaimTypes.NameIdentifier)!.Value);
-            var isMaster = bool.Parse(userPrincipal.FindFirst("isMaster")?.Value ?? "false");
             Guid.TryParse(ctx.Request.Headers["X-Company-Id"].ToString(), out var companyId);
-            var permissions = await mediator.Send(new GetMyPermissionsQuery(userId, isMaster, companyId));
-            return Results.Ok(permissions);
+
+            var result = await mediator.Send(new GetUserMeQuery(userId, companyId));
+            return Results.Ok(result.Permissions);
         })
         .WithName("GetMyPermissions")
         .WithTags("Users")

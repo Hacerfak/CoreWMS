@@ -11,28 +11,27 @@ import { toast } from 'sonner';
 export default function SelecaoEmpresa() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-
     const { user, empresas, setCompanyId, logout, setPermissions } = useAuthStore();
     const [loadingContext, setLoadingContext] = useState(false);
 
+    const isMasterOrAdmin = user?.isMaster || user?.role === 'ADMIN';
+
     useEffect(() => {
-        if (empresas.length === 0 && user?.role === 'ADMIN') {
+        if (empresas.length === 0 && isMasterOrAdmin) {
             navigate('/onboarding', { replace: true });
         }
-    }, [empresas, navigate, user]);
+    }, [empresas, navigate, isMasterOrAdmin]);
 
     const handleSelectCompany = async (empresaId) => {
         try {
             setLoadingContext(true);
             setCompanyId(empresaId);
 
-            // A chamada retorna as permissões vinculadas ao Tenant (X-Company-Id)
+            // A chamada injeta o X-Company-Id através do interceptor do Axios
             const response = await getMyPermissions();
-
-            // Orval pode retornar o array direto ou envelopado em um data (depende do interceptor)
             const userPermissions = Array.isArray(response) ? response : (response?.data || []);
-            setPermissions(userPermissions);
 
+            setPermissions(userPermissions);
             navigate('/dashboard');
         } catch (error) {
             toast.error('Erro ao carregar matriz de permissões. Tente novamente.');
@@ -96,7 +95,7 @@ export default function SelecaoEmpresa() {
                             </Card>
                         ))}
 
-                        {user?.role === 'ADMIN' && (
+                        {isMasterOrAdmin && (
                             <button
                                 onClick={() => navigate('/onboarding')}
                                 className="group flex flex-col items-center justify-center h-full min-h-[220px] rounded-xl border-2 border-dashed border-slate-200 bg-transparent hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300"

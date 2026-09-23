@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { postApiCompanies } from '@/api/generated/companies/companies';
-import { postApiIdentityRefresh } from '@/api/generated/identity/identity';
+import { customInstance } from '@/api/orval-mutator';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,6 @@ export default function Onboarding() {
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
-
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
     const [uf, setUf] = useState('RS');
@@ -37,7 +36,6 @@ export default function Onboarding() {
     const handleSubmit = (e) => {
         e.preventDefault();
         setErrorMsg('');
-
         if (!file || !senha) {
             setErrorMsg('Selecione o arquivo do certificado e informe a senha.');
             return;
@@ -52,24 +50,26 @@ export default function Onboarding() {
             {
                 onSuccess: async (newCompany) => {
                     toast.success('Empresa configurada com sucesso!');
-
                     const authStore = useAuthStore.getState();
-                    const userEmail = authStore.user?.email || authStore.user?.Email;
-                    const currentRefreshToken = authStore.refreshToken;
 
                     try {
-                        if (userEmail && currentRefreshToken) {
-                            const res = await postApiIdentityRefresh({
-                                email: userEmail,
-                                refreshToken: currentRefreshToken
+                        // Obtém do endpoint /api/users/me a lista atualizada de empresas
+                        const userMeData = await customInstance({ url: '/api/users/me', method: 'GET' });
+
+                        if (userMeData?.companies) {
+                            authStore.setUserData({
+                                user: {
+                                    id: userMeData.id,
+                                    nome: userMeData.name,
+                                    email: userMeData.email,
+                                    isMaster: userMeData.isMaster,
+                                    role: userMeData.isMaster ? 'ADMIN' : 'USER',
+                                },
+                                empresas: userMeData.companies,
+                                permissions: userMeData.permissions || []
                             });
-
-                            const newAccessToken = res?.accessToken || res?.data?.accessToken;
-                            const newRefreshToken = res?.refreshToken || res?.data?.refreshToken;
-
+                        } else {
                             useAuthStore.setState({
-                                token: newAccessToken,
-                                refreshToken: newRefreshToken,
                                 empresas: [
                                     ...authStore.empresas,
                                     {
@@ -81,7 +81,16 @@ export default function Onboarding() {
                             });
                         }
                     } catch (err) {
-                        console.warn('A renovação silenciosa falhou, mas a empresa foi criada.', err);
+                        useAuthStore.setState({
+                            empresas: [
+                                ...authStore.empresas,
+                                {
+                                    id: newCompany.id,
+                                    cnpj: newCompany.cnpj,
+                                    corporateName: newCompany.corporateName
+                                }
+                            ]
+                        });
                     }
 
                     const origin = location.state?.from || '/selecao-empresa';
@@ -99,7 +108,6 @@ export default function Onboarding() {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex items-center justify-center p-6 relative">
-
             {isPending && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
                     <div className="bg-slate-900/90 border border-slate-700/80 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center space-y-4">
@@ -117,9 +125,7 @@ export default function Onboarding() {
 
             <Card className="w-full max-w-lg shadow-2xl shadow-slate-200/50 border-slate-200/60 bg-white/80 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
-
                 <CardHeader className="space-y-1 relative pb-6 pt-8 px-8">
-                    {/* Botões de Ação no Header */}
                     <div className="absolute left-6 top-6 flex items-center w-[calc(100%-48px)] justify-between">
                         <Button
                             variant="ghost"
@@ -130,7 +136,6 @@ export default function Onboarding() {
                         >
                             <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
                         </Button>
-
                         <Button
                             variant="ghost"
                             size="sm"
@@ -141,7 +146,6 @@ export default function Onboarding() {
                             <LogOut className="h-4 w-4 mr-2" /> Sair
                         </Button>
                     </div>
-
                     <div className="text-center mt-8">
                         <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight">Implantação de Ambiente</CardTitle>
                         <CardDescription className="mt-2 text-slate-500 text-sm">
@@ -152,7 +156,6 @@ export default function Onboarding() {
 
                 <CardContent className="px-8 pb-8">
                     <form onSubmit={handleSubmit} className="space-y-6">
-
                         {errorMsg && (
                             <div className="bg-rose-50 border border-rose-200/80 text-rose-700 text-xs p-3 rounded-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-1">
                                 <AlertCircle size={16} className="shrink-0 text-rose-500" />
@@ -200,7 +203,7 @@ export default function Onboarding() {
                                     accept=".pfx"
                                     disabled={isPending}
                                     className="hidden"
-                                    onChange={(e) => setFile(e.target.files[0])}
+                                    onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
                                 />
                             </label>
                         </div>

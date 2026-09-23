@@ -1,4 +1,8 @@
+using System.Security.Claims;
+using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CoreWMS.Api.Infrastructure.Security;
 
@@ -13,10 +17,14 @@ public interface ITenantProvider
 public class TenantProvider : ITenantProvider
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ApplicationDbContext _db;
+    private readonly IMemoryCache _cache;
 
-    public TenantProvider(IHttpContextAccessor httpContextAccessor)
+    public TenantProvider(IHttpContextAccessor httpContextAccessor, ApplicationDbContext db, IMemoryCache cache)
     {
         _httpContextAccessor = httpContextAccessor;
+        _db = db;
+        _cache = cache;
     }
 
     public Guid GetCompanyId()
@@ -46,17 +54,38 @@ public class TenantProvider : ITenantProvider
 
     public bool IsPartnerUser()
     {
-        var claim = _httpContextAccessor.HttpContext?.User?.FindFirst("isPartner")?.Value;
-        return claim == "True" || claim == "true";
+        return GetAllowedCustomerIds().Count > 0;
     }
 
     public List<Guid> GetAllowedCustomerIds()
     {
-        var claim = _httpContextAccessor.HttpContext?.User?.FindFirst("customers")?.Value;
-        if (string.IsNullOrWhiteSpace(claim)) return new List<Guid>();
+        var user = _httpContextAccessor.HttpContext?.User;
+        var userIdClaim = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-        return claim.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(Guid.Parse)
-                    .ToList();
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return new List<Guid>();
+        }
+
+        var companyId = TryGetCompanyId();
+        // 1. Chave de cache isolada por Usuário + Empresa
+        var cacheKey = $"user_customers:{userId}:{companyId}";
+
+        return _cache.GetOrCreate(cacheKey, entry =>
+        {
+            entry.SetSlidingExpiration(TimeSpan.FromMinutes(15));
+
+            var query = _db.UserCustomers
+                .AsNoTracking()
+                .Where(uc => uc.UserId == userId);
+
+            // 2. Garante que só retorna depositantes pertencentes à Empresa ativa
+            if (companyId.HasValue)
+            {
+                query = query.Where(uc => uc.Customer.CompanyId == companyId.Value);
+            }
+
+            return query.Select(uc => uc.CustomerId).ToList();
+        }) ?? new List<Guid>();
     }
 }

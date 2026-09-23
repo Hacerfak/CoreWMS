@@ -19,16 +19,14 @@ public class PermissionCacheService : IPermissionCacheService
 
     public void InvalidateUserCompanyCache(Guid userId, Guid companyId)
     {
-        var cacheKey = $"perm:{userId}:{companyId}";
-        _cache.Remove(cacheKey);
+        _cache.Remove($"perm:{userId}:{companyId}");
+        _cache.Remove($"user_customers:{userId}");
     }
 
     public void InvalidateUserAllCompaniesCache(Guid userId)
     {
-        // Remove entradas da memória baseadas no padrão de chave do usuário
         if (_cache is MemoryCache memoryCache)
         {
-            // Força a remoção manual disparando a invalidação lógica
             memoryCache.Compact(1.0);
         }
     }

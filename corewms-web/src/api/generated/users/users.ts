@@ -447,6 +447,153 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiUsersIdMutationOptions(options), queryClient);
     }
+    export const getUserMe = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/users/me`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetUserMeQueryKey = () => {
+    return [
+    `/api/users/me`
+    ] as const;
+    }
+
+
+export const getGetUserMeQueryOptions = <TData = Awaited<ReturnType<typeof getUserMe>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserMeQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserMe>>> = ({ signal }) => getUserMe(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetUserMeQueryResult = NonNullable<Awaited<ReturnType<typeof getUserMe>>>
+export type GetUserMeQueryError = unknown
+
+
+export function useGetUserMe<TData = Awaited<ReturnType<typeof getUserMe>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getUserMe>>,
+          TError,
+          Awaited<ReturnType<typeof getUserMe>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetUserMe<TData = Awaited<ReturnType<typeof getUserMe>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getUserMe>>,
+          TError,
+          Awaited<ReturnType<typeof getUserMe>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetUserMe<TData = Awaited<ReturnType<typeof getUserMe>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetUserMe<TData = Awaited<ReturnType<typeof getUserMe>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetUserMeQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const putApiUsersMe = (
+    updateProfileRequest: UpdateProfileRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/users/me`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateProfileRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiUsersMeMutationKey = () => ['putApiUsersMe'] as const;
+
+export const getPutApiUsersMeMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext> => {
+
+const mutationKey = getPutApiUsersMeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiUsersMe>>, PutApiUsersMeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  putApiUsersMe(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiUsersMeMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersMe>>>
+    export type PutApiUsersMeMutationBody = UpdateProfileRequest
+    export type PutApiUsersMeMutationError = unknown
+    export type PutApiUsersMeMutationVariables = {data: UpdateProfileRequest}
+
+    export const usePutApiUsersMe = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiUsersMe>>,
+        TError,
+        PutApiUsersMeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiUsersMeMutationOptions(options), queryClient);
+    }
     export const getMyPermissions = (
 
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -594,65 +741,4 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiUsersIdPasswordMutationOptions(options), queryClient);
-    }
-    export const putApiUsersMe = (
-    updateProfileRequest: UpdateProfileRequest,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/users/me`, method: 'PUT',
-      headers: {'Content-Type': 'application/json', },
-      data: updateProfileRequest, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPutApiUsersMeMutationKey = () => ['putApiUsersMe'] as const;
-
-export const getPutApiUsersMeMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext> => {
-
-const mutationKey = getPutApiUsersMeMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiUsersMe>>, PutApiUsersMeMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  putApiUsersMe(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PutApiUsersMeMutationResult = NonNullable<Awaited<ReturnType<typeof putApiUsersMe>>>
-    export type PutApiUsersMeMutationBody = UpdateProfileRequest
-    export type PutApiUsersMeMutationError = unknown
-    export type PutApiUsersMeMutationVariables = {data: UpdateProfileRequest}
-
-    export const usePutApiUsersMe = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiUsersMe>>, TError,PutApiUsersMeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiUsersMe>>,
-        TError,
-        PutApiUsersMeMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPutApiUsersMeMutationOptions(options), queryClient);
     }

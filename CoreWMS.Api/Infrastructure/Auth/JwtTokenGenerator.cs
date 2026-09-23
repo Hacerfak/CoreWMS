@@ -9,7 +9,7 @@ namespace CoreWMS.Api.Infrastructure.Auth;
 
 public interface IJwtTokenGenerator
 {
-    string GenerateToken(User user, List<Guid> allowedCompanyIds, List<Guid> allowedCustomerIds);
+    string GenerateToken(User user);
     string GenerateRefreshToken();
 }
 
@@ -22,29 +22,24 @@ public class JwtTokenGenerator : IJwtTokenGenerator
         _configuration = configuration;
     }
 
-    public string GenerateToken(User user, List<Guid> allowedCompanyIds, List<Guid> allowedCustomerIds)
+    public string GenerateToken(User user)
     {
         var secret = _configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
         var issuer = _configuration["JwtSettings:Issuer"] ?? "CoreWMS";
         var audience = _configuration["JwtSettings:Audience"] ?? "CoreWMS.Users";
-        var expirationMinutes = _configuration.GetValue<int?>("JwtSettings:ExpirationMinutes") ?? 1;
+        var expirationMinutes = _configuration.GetValue<int?>("JwtSettings:ExpirationMinutes") ?? 30;
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var isPartner = allowedCustomerIds.Any();
-
+        // JWT Enxuto: Apenas a identidade do usuário
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim(ClaimTypes.Name, user.Name),
-            new Claim("name", user.Name),
-            new Claim("isMaster", user.IsMaster.ToString()),
-            new Claim("companies", string.Join(",", allowedCompanyIds)),
-            new Claim("isPartner", isPartner.ToString()),
-            new Claim("customers", string.Join(",", allowedCustomerIds))
+            new Claim("isMaster", user.IsMaster.ToString())
         };
 
         var tokenDescriptor = new SecurityTokenDescriptor

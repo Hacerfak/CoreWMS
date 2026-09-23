@@ -7,21 +7,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Login;
 
-// ==========================================
 // 1. DTOs
-// ==========================================
 public record LoginRequest(string Email, string Password);
 public record CompanyLoginDto(Guid Id, string Cnpj, string CorporateName);
 public record LoginResponse(string AccessToken, string RefreshToken, Guid UserId, string UserName, string Email, string Role, List<CompanyLoginDto> Companies);
 
-// ==========================================
 // 2. Command
-// ==========================================
 public record LoginCommand(string Email, string Password) : IRequest<LoginResponse>;
 
-// ==========================================
 // 3. Validator (Pipeline MediatR)
-// ==========================================
 public class LoginCommandValidator : AbstractValidator<LoginCommand>
 {
     public LoginCommandValidator()
@@ -29,21 +23,18 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
         RuleFor(x => x.Email)
             .NotEmpty().WithMessage("O e-mail é obrigatório.")
             .EmailAddress().WithMessage("Formato de e-mail inválido.");
-
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("A senha é obrigatória.");
     }
 }
 
-// ==========================================
 // 4. Handler
-// ==========================================
 public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
 {
     private readonly ApplicationDbContext _db;
-    private readonly JwtTokenGenerator _jwt;
+    private readonly IJwtTokenGenerator _jwt;
 
-    public LoginCommandHandler(ApplicationDbContext db, JwtTokenGenerator jwt)
+    public LoginCommandHandler(ApplicationDbContext db, IJwtTokenGenerator jwt)
     {
         _db = db;
         _jwt = jwt;
@@ -52,10 +43,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken ct)
     {
         var emailLower = request.Email.Trim().ToLower();
-
         var user = await _db.Users
-            .Include(u => u.UserCustomers)
-            .AsSplitQuery()
             .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -64,7 +52,6 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         }
 
         List<CompanyLoginDto> userCompanies;
-
         if (user.IsMaster)
         {
             userCompanies = await _db.Companies
@@ -82,10 +69,8 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
                 .ToListAsync(ct);
         }
 
-        var allowedCompanyIds = userCompanies.Select(c => c.Id).ToList();
-        var allowedCustomerIds = user.UserCustomers.Select(uc => uc.CustomerId).ToList();
-
-        var token = _jwt.GenerateToken(user, allowedCompanyIds, allowedCustomerIds);
+        // Gera o JWT ultraleve sem poluir o cabeçalho HTTP com coleções
+        var token = _jwt.GenerateToken(user);
         var refreshToken = _jwt.GenerateRefreshToken();
 
         user.SetRefreshToken(refreshToken, DateTime.UtcNow.AddDays(7));
@@ -102,9 +87,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     }
 }
 
-// ==========================================
-// 5. Endpoint (Minimal API)
-// ==========================================
+// 5. Endpoint Minimal API
 public static class LoginEndpoint
 {
     public static void MapLoginEndpoints(this IEndpointRouteBuilder app)

@@ -19,14 +19,14 @@ public class RequirePermissionFilter : IEndpointFilter
         var httpContext = context.HttpContext;
         var user = httpContext.User;
 
-        // 1. Identificação básica do Utilizador
+        // 1. Identificação básica do Usuário
         var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
         {
             return Results.Unauthorized();
         }
 
-        // 2. O PULO DO GATO: Se for Master, passa direto! (Permite operações globais como criar Empresa)
+        // 2. Se for Master, ignora checagem e concede acesso total
         var isMaster = user.FindFirst("isMaster")?.Value;
         if (string.Equals(isMaster, "True", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(isMaster, "true", StringComparison.OrdinalIgnoreCase))
@@ -34,29 +34,30 @@ public class RequirePermissionFilter : IEndpointFilter
             return await next(context);
         }
 
-        // 3. Exige o cabeçalho de isolamento de empresa (Tenant) para usuários comuns
+        // 3. Exige o cabeçalho de isolamento de empresa (Tenant)
         if (!httpContext.Request.Headers.TryGetValue("X-Company-Id", out var companyIdHeader) ||
             !Guid.TryParse(companyIdHeader, out var companyId))
         {
             return Results.BadRequest(new { Message = "O cabeçalho 'X-Company-Id' é obrigatório para esta operação." });
         }
 
-        // 4. Validação de Escopo do Token (O utilizador pertence a esta empresa?)
-        var allowedCompaniesClaim = user.FindFirst("companies")?.Value ?? "";
-        var allowedCompanies = allowedCompaniesClaim.Split(',', StringSplitOptions.RemoveEmptyEntries);
-
-        if (!allowedCompanies.Contains(companyId.ToString()))
-        {
-            return Results.Forbid();
-        }
-
-        // 5. Verificação de Permissão Específica no Banco (Com Cache Otimizado)
+        // 4. Verificação de Permissão Específica na Empresa Ativa (Com Cache)
         var cache = httpContext.RequestServices.GetRequiredService<IMemoryCache>();
         var cacheKey = $"perm:{userId}:{companyId}";
 
         if (!cache.TryGetValue(cacheKey, out HashSet<string>? userPermissions) || userPermissions == null)
         {
             var db = httpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
+
+            // Confirma vinculo ativo do usuário com a empresa
+            var hasCompanyAccess = await db.UserCompanyRoles
+                .AnyAsync(ucr => ucr.UserId == userId && ucr.CompanyId == companyId);
+
+            if (!hasCompanyAccess)
+            {
+                return Results.Forbid();
+            }
+
             var permissionsList = await db.UserCompanyRoles
                 .Where(ucr => ucr.UserId == userId && ucr.CompanyId == companyId)
                 .SelectMany(ucr => ucr.Role.Permissions)
@@ -66,8 +67,8 @@ public class RequirePermissionFilter : IEndpointFilter
             userPermissions = new HashSet<string>(permissionsList);
 
             var cacheOptions = new MemoryCacheEntryOptions()
-                .SetSlidingExpiration(TimeSpan.FromMinutes(5))
-                .SetAbsoluteExpiration(TimeSpan.FromMinutes(30));
+                .SetSlidingExpiration(TimeSpan.FromMinutes(15))
+                .SetAbsoluteExpiration(TimeSpan.FromHours(1));
 
             cache.Set(cacheKey, userPermissions, cacheOptions);
         }

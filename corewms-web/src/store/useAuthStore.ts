@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { jwtDecode } from 'jwt-decode';
 
 export interface User {
     id: string;
     nome: string;
-    email?: string;
-    role?: string; // <- Apenas o role, sem isMaster!
+    email: string;
+    isMaster: boolean;
+    role?: string;
 }
 
 export interface Empresa {
@@ -14,15 +14,6 @@ export interface Empresa {
     corporateName: string;
     tradeName?: string | null;
     cnpj: string;
-    [key: string]: unknown;
-}
-
-interface CustomJwtPayload {
-    sub: string;
-    name?: string;
-    email?: string;
-    isMaster?: string; // Mantemos aqui pois vem de dentro do JWT
-    [key: string]: unknown;
 }
 
 interface AuthState {
@@ -32,10 +23,10 @@ interface AuthState {
     user: User | null;
     empresas: Empresa[];
     permissions: string[];
-    setAuth: (payload: { token: string; user: User; empresas?: Empresa[], permissions?: string[] }) => void;
-    setPermissions: (permissions: string[]) => void;
+
     setTokens: (token: string, refreshToken?: string | null) => void;
-    setEmpresas: (empresas: Empresa[]) => void;
+    setUserData: (payload: { user: User; empresas: Empresa[]; permissions: string[] }) => void;
+    setPermissions: (permissions: string[]) => void;
     setCompanyId: (id: string | null) => void;
     logout: () => void;
     isAuthenticated: () => boolean;
@@ -50,35 +41,31 @@ export const useAuthStore = create<AuthState>()(
             user: null,
             empresas: [],
             permissions: [],
-            setAuth: ({ token, user, empresas = [], permissions = [] }) => {
-                set({ token, user, empresas, permissions });
-            },
-            setPermissions: (permissions: string[]) => set({ permissions }),
 
             setTokens: (token: string, refreshToken: string | null = null) => {
-                try {
-                    const decoded = jwtDecode<CustomJwtPayload>(token);
-                    const userEmail = decoded.email || (decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] as string) || '';
-
-                    set({
-                        token,
-                        refreshToken,
-                        user: {
-                            id: decoded.sub,
-                            nome: decoded.name || userEmail || 'Usuário',
-                            email: userEmail,
-                            // Transforma a claim do JWT no mesmo padrão da API
-                            role: decoded.isMaster === 'True' ? 'ADMIN' : 'USER',
-                        },
-                    });
-                } catch {
-                    get().logout();
-                }
+                set({ token, refreshToken });
             },
 
-            setEmpresas: (empresas: Empresa[]) => set({ empresas }),
+            setUserData: ({ user, empresas, permissions }) => {
+                set({
+                    user,
+                    empresas,
+                    permissions,
+                });
+            },
+
+            setPermissions: (permissions: string[]) => set({ permissions }),
             setCompanyId: (id: string | null) => set({ companyId: id }),
-            logout: () => set({ token: null, refreshToken: null, companyId: null, user: null, empresas: [], permissions: [] }),
+
+            logout: () => set({
+                token: null,
+                refreshToken: null,
+                companyId: null,
+                user: null,
+                empresas: [],
+                permissions: []
+            }),
+
             isAuthenticated: () => !!get().token,
         }),
         { name: 'corewms-auth' }

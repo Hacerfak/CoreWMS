@@ -22,13 +22,21 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
     public async Task<IResult> Handle(GetInboundOrderByIdQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
-        var order = await _db.InboundOrders
+        var query = _db.InboundOrders
             .AsNoTracking()
             .Include(o => o.Customer)
             .Include(o => o.Items)
                 .ThenInclude(i => i.DockLocation)
-            .Where(o => o.CompanyId == companyId && o.Id == request.Id)
+            .Where(o => o.CompanyId == companyId && o.Id == request.Id);
+
+        // Bloqueio Viseira B2B por ID de Ordem
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            query = query.Where(o => o.CustomerId.HasValue && allowedCustomerIds.Contains(o.CustomerId.Value));
+        }
+
+        var order = await query
             .Select(o => new InboundOrderDetailsDto(
                 o.Id,
                 o.CustomerId,
@@ -52,9 +60,9 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
                     i.LockedByUserId,
                     i.DockLocationId,
                     i.DockLocation != null ? i.DockLocation.FullPath : null,
-                    i.ExpectedBatch,             // <-- LOTE DO XML
-                    i.ExpectedManufactureDate,   // <-- DATA FABRICAÇÃO DO XML
-                    i.ExpectedExpirationDate     // <-- DATA VALIDADE DO XML
+                    i.ExpectedBatch,
+                    i.ExpectedManufactureDate,
+                    i.ExpectedExpirationDate
                 )).ToList()
             )).FirstOrDefaultAsync(ct);
 

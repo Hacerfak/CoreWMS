@@ -9,20 +9,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Customers;
 
-// 1. Request
 public record ListCustomersQuery(string? Search, bool OnlyActive = true, int Page = 1, int PageSize = 20) : IRequest<IResult>;
 
-// 2. Validator
 public class ListCustomersQueryValidator : AbstractValidator<ListCustomersQuery>
 {
     public ListCustomersQueryValidator()
     {
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 1000).WithMessage("O tamanho da página deve ser entre 1 e 1000.");
     }
 }
 
-// 3. Handler
 public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -37,8 +34,14 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
     public async Task<IResult> Handle(ListCustomersQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var q = _db.Customers.AsNoTracking().Where(c => c.CompanyId == companyId);
+
+        // Filtro Viseira B2B para utilizadores parceiros
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            q = q.Where(c => allowedCustomerIds.Contains(c.Id));
+        }
 
         if (request.OnlyActive) q = q.Where(c => c.IsActive);
 
@@ -50,10 +53,8 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
                              (c.TradeName != null && EF.Functions.ILike(c.TradeName, s)));
         }
 
-        // 1. Aguarda a contagem
         var totalCount = await q.CountAsync(ct);
 
-        // 2. Aguarda os itens
         var items = await q
             .OrderBy(c => c.CorporateName)
             .Skip((request.Page - 1) * request.PageSize)
@@ -66,7 +67,6 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
     }
 }
 
-// 4. Endpoint
 public static class ListCustomersEndpoints
 {
     public static void MapListCustomersEndpoints(this IEndpointRouteBuilder app)

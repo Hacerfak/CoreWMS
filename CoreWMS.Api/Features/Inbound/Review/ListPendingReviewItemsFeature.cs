@@ -23,11 +23,19 @@ public class ListPendingReviewItemsHandler : IRequestHandler<ListPendingReviewIt
     public async Task<IResult> Handle(ListPendingReviewItemsQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
-        var pendingItems = await _db.InboundOrderItems
+        var query = _db.InboundOrderItems
             .AsNoTracking()
             .Include(i => i.InboundOrder)
-            .Where(i => i.InboundOrder.CompanyId == companyId && i.Status == InboundOrderItemStatus.Pending_Review)
+            .Where(i => i.InboundOrder.CompanyId == companyId && i.Status == InboundOrderItemStatus.Pending_Review);
+
+        // Filtro Viseira B2B para itens em revisão
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            query = query.Where(i => i.InboundOrder.CustomerId.HasValue && allowedCustomerIds.Contains(i.InboundOrder.CustomerId.Value));
+        }
+
+        var pendingItems = await query
             .OrderBy(i => i.InboundOrder.IssueDate)
             .ThenBy(i => i.LineNumber)
             .Select(i => new PendingReviewItemDto(
@@ -42,7 +50,7 @@ public class ListPendingReviewItemsHandler : IRequestHandler<ListPendingReviewIt
                 i.RawDescription,
                 i.RawNcm,
                 i.RawCest,
-                string.IsNullOrWhiteSpace(i.RawUnit) ? "UN" : i.RawUnit, // <-- Mapeando a Unidade lida do XML
+                string.IsNullOrWhiteSpace(i.RawUnit) ? "UN" : i.RawUnit,
                 i.ExpectedQuantity,
                 i.ExpectedBatch
             ))

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
-import { useHasPermission } from '@/hooks/useHasPermission';
-// ADICIONADO O ÍCONE ArrowDownToLine
-import { Warehouse, LayoutDashboard, Users, Shield, Building2, Printer, ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine } from 'lucide-react';
+
+import {
+    Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
+    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine
+} from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -18,13 +20,21 @@ export default function MainLayout() {
 
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-    const { user, logout, empresas, companyId } = useAuthStore();
+    // Leitura direta do Zustand no topo do componente
+    const { user, logout, empresas, companyId, permissions } = useAuthStore();
     const empresaAtual = empresas?.find(e => e.id === companyId);
 
     const handleLogout = () => {
         queryClient.clear();
         logout();
         navigate('/login');
+    };
+
+    // Função de verificação conforme as Regras do React
+    const hasPermission = (permission) => {
+        if (!permission) return true;
+        if (user?.isMaster || user?.role === 'ADMIN' || permissions?.includes('*')) return true;
+        return permissions?.includes(permission);
     };
 
     const menuGroups = [
@@ -44,7 +54,6 @@ export default function MainLayout() {
         {
             scope: 'Logística',
             items: [
-                // ADICIONADO AQUI:
                 { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
             ]
@@ -77,7 +86,7 @@ export default function MainLayout() {
                 </div>
                 <div className="flex-1 overflow-y-auto py-6 px-4 scrollbar-thin scrollbar-thumb-slate-200">
                     {menuGroups.map((group, index) => {
-                        const visibleItems = group.items.filter(item => useHasPermission(item.permission));
+                        const visibleItems = group.items.filter(item => hasPermission(item.permission));
                         if (visibleItems.length === 0) return null;
 
                         return (
@@ -137,7 +146,7 @@ export default function MainLayout() {
                             <DropdownMenuLabel className="font-normal p-3">
                                 <div className="flex flex-col space-y-1">
                                     <p className="text-sm font-medium text-slate-900 leading-none">{user?.nome}</p>
-                                    <p className="text-xs text-slate-500 mt-1">{user?.role === 'ADMIN' ? 'Master' : 'Operacional'}</p>
+                                    <p className="text-xs text-slate-500 mt-1">{user?.isMaster || user?.role === 'ADMIN' ? 'Master' : 'Operacional'}</p>
                                 </div>
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
