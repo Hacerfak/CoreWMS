@@ -1,36 +1,26 @@
-using CoreWMS.Api.Core.Models;
+using System.Text;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inventory.Queries;
 
-public record ListKardexQuery(Guid? ProductId, string? Lpn, DateTime? StartDate, DateTime? EndDate, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record ExportKardexQuery(Guid? ProductId, string? Lpn, DateTime? StartDate, DateTime? EndDate) : IRequest<IResult>;
 
-public class ListKardexQueryValidator : AbstractValidator<ListKardexQuery>
-{
-    public ListKardexQueryValidator()
-    {
-        RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, 1000);
-    }
-}
-
-public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
+public class ExportKardexHandler : IRequestHandler<ExportKardexQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
 
-    public ListKardexHandler(ApplicationDbContext db, ITenantProvider tenant)
+    public ExportKardexHandler(ApplicationDbContext db, ITenantProvider tenant)
     {
         _db = db;
         _tenant = tenant;
     }
 
-    public async Task<IResult> Handle(ListKardexQuery request, CancellationToken ct)
+    public async Task<IResult> Handle(ExportKardexQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
@@ -53,29 +43,31 @@ public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
         if (request.EndDate.HasValue) query = query.Where(q => q.Transaction.CreatedAt <= request.EndDate.Value.ToUniversalTime());
         if (!string.IsNullOrWhiteSpace(request.Lpn)) query = query.Where(q => q.HandlingUnitLpn == request.Lpn.Trim().ToUpper());
 
-        var totalCount = await query.CountAsync(ct);
-        var skip = (request.Page - 1) * request.PageSize;
+        var items = await query.OrderByDescending(q => q.Transaction.CreatedAt).ToListAsync(ct);
 
-        var items = await query
-            .OrderByDescending(q => q.Transaction.CreatedAt)
-            .Skip(skip)
-            .Take(request.PageSize)
-            .Select(q => new InventoryTransactionDto(
-                q.Transaction.Id, q.Transaction.CreatedAt, q.ProductSku, q.HandlingUnitLpn,
-                q.Transaction.Type.ToString(), q.Transaction.QuantityChange,
-                q.Transaction.BalanceAfter, q.Transaction.SourceDocumentNumber
-            )).ToListAsync(ct);
+        var builder = new StringBuilder();
+        builder.AppendLine("DataHora;SKU;LPN;TipoEvento;VariacaoQuantidade;SaldoApos;DocumentoOrigem");
 
-        var response = new PaginatedResult<InventoryTransactionDto>(items, totalCount, request.Page, request.PageSize);
-        return Results.Ok(response);
+        foreach (var i in items)
+        {
+            var dt = i.Transaction.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss");
+            builder.AppendLine($"\"{dt}\";\"{i.ProductSku}\";\"{i.HandlingUnitLpn ?? ""}\";\"{i.Transaction.Type}\";{i.Transaction.QuantityChange};{i.Transaction.BalanceAfter};\"{i.Transaction.SourceDocumentNumber ?? ""}\"");
+        }
+
+        var preamble = Encoding.UTF8.GetPreamble();
+        var contentBytes = Encoding.UTF8.GetBytes(builder.ToString());
+        var fileBytes = preamble.Concat(contentBytes).ToArray();
+
+        var fileName = $"kardex_extrato_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+        return Results.File(fileBytes, "text/csv; charset=utf-8", fileName);
     }
 }
 
-public static class ListKardexEndpoints
+public static class ExportKardexEndpoints
 {
-    public static void MapListKardexEndpoints(this IEndpointRouteBuilder app)
+    public static void MapExportKardexEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/inventory/kardex", async ([AsParameters] ListKardexQuery query, IMediator mediator) =>
+        app.MapGet("/api/inventory/kardex/export", async ([AsParameters] ExportKardexQuery query, IMediator mediator) =>
             await mediator.Send(query))
            .WithTags("Inventory")
            .RequireAuthorization()

@@ -25,8 +25,11 @@ import type {
 
 import type {
   ChangeQualityCommand,
+  GetApiInventoryBalancesExportParams,
   GetApiInventoryBalancesParams,
+  GetApiInventoryHandlingUnitsExportParams,
   GetApiInventoryHandlingUnitsParams,
+  GetApiInventoryKardexExportParams,
   GetApiInventoryKardexParams,
   MoveHandlingUnitCommand,
   UpdateHandlingUnitCommand
@@ -57,6 +60,267 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getApiInventoryHandlingUnitsExport = (
+    params?: GetApiInventoryHandlingUnitsExportParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/handling-units/export`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiInventoryHandlingUnitsExportQueryKey = (params?: GetApiInventoryHandlingUnitsExportParams,) => {
+    return [
+    `/api/inventory/handling-units/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiInventoryHandlingUnitsExportQueryOptions = <TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError = unknown>(params?: GetApiInventoryHandlingUnitsExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInventoryHandlingUnitsExportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>> = ({ signal }) => getApiInventoryHandlingUnitsExport(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInventoryHandlingUnitsExportQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>>
+export type GetApiInventoryHandlingUnitsExportQueryError = unknown
+
+
+export function useGetApiInventoryHandlingUnitsExport<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError = unknown>(
+ params: undefined |  GetApiInventoryHandlingUnitsExportParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryHandlingUnitsExport<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError = unknown>(
+ params?: GetApiInventoryHandlingUnitsExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryHandlingUnitsExport<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError = unknown>(
+ params?: GetApiInventoryHandlingUnitsExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiInventoryHandlingUnitsExport<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError = unknown>(
+ params?: GetApiInventoryHandlingUnitsExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInventoryHandlingUnitsExportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiInventoryBalancesExport = (
+    params?: GetApiInventoryBalancesExportParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/balances/export`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiInventoryBalancesExportQueryKey = (params?: GetApiInventoryBalancesExportParams,) => {
+    return [
+    `/api/inventory/balances/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiInventoryBalancesExportQueryOptions = <TData = Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError = unknown>(params?: GetApiInventoryBalancesExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInventoryBalancesExportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>> = ({ signal }) => getApiInventoryBalancesExport(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInventoryBalancesExportQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>>
+export type GetApiInventoryBalancesExportQueryError = unknown
+
+
+export function useGetApiInventoryBalancesExport<TData = Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError = unknown>(
+ params: undefined |  GetApiInventoryBalancesExportParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryBalancesExport>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryBalancesExport>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryBalancesExport<TData = Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError = unknown>(
+ params?: GetApiInventoryBalancesExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryBalancesExport>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryBalancesExport>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryBalancesExport<TData = Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError = unknown>(
+ params?: GetApiInventoryBalancesExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiInventoryBalancesExport<TData = Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError = unknown>(
+ params?: GetApiInventoryBalancesExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInventoryBalancesExportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiInventoryKardexExport = (
+    params?: GetApiInventoryKardexExportParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/kardex/export`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiInventoryKardexExportQueryKey = (params?: GetApiInventoryKardexExportParams,) => {
+    return [
+    `/api/inventory/kardex/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiInventoryKardexExportQueryOptions = <TData = Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError = unknown>(params?: GetApiInventoryKardexExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiInventoryKardexExportQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiInventoryKardexExport>>> = ({ signal }) => getApiInventoryKardexExport(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiInventoryKardexExportQueryResult = NonNullable<Awaited<ReturnType<typeof getApiInventoryKardexExport>>>
+export type GetApiInventoryKardexExportQueryError = unknown
+
+
+export function useGetApiInventoryKardexExport<TData = Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError = unknown>(
+ params: undefined |  GetApiInventoryKardexExportParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryKardexExport>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryKardexExport>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryKardexExport<TData = Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError = unknown>(
+ params?: GetApiInventoryKardexExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiInventoryKardexExport>>,
+          TError,
+          Awaited<ReturnType<typeof getApiInventoryKardexExport>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiInventoryKardexExport<TData = Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError = unknown>(
+ params?: GetApiInventoryKardexExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiInventoryKardexExport<TData = Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError = unknown>(
+ params?: GetApiInventoryKardexExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiInventoryKardexExportQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 
 export const getApiInventoryBalances = (
     params?: GetApiInventoryBalancesParams,

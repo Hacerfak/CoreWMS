@@ -20,6 +20,7 @@ import InboundList from '@/pages/Inbound/InboundList';
 import ReviewInbound from '@/pages/Inbound/ReviewInbound';
 import InboundOrderHusPage from '@/pages/Inbound/InboundOrderHusPage';
 import GerenciarAcessosPage from '@/pages/Usuarios/GerenciarAcessosPage';
+import EstoquePage from '@/pages/Estoque/EstoquePage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -93,6 +94,11 @@ export default function App() {
 
               <Route element={<PermissionGuard requiredPermission="products:view" />}>
                 <Route path="/produtos" element={<ProdutosPage />} />
+              </Route>
+
+              {/* Rotas de Estoque */}
+              <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
+                <Route path="/estoque" element={<EstoquePage />} />
               </Route>
 
               {/* ROTAS DO INBOUND */}

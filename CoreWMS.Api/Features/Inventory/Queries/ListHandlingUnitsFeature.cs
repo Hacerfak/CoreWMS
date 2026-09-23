@@ -16,7 +16,7 @@ public class ListHandlingUnitsQueryValidator : AbstractValidator<ListHandlingUni
     public ListHandlingUnitsQueryValidator()
     {
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, 100).WithMessage("O tamanho da página deve ser entre 1 e 100.");
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 1000).WithMessage("O tamanho da página deve ser entre 1 e 1000.");
     }
 }
 
@@ -37,13 +37,19 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
         var q = _db.HandlingUnits.AsNoTracking()
             .Where(h => h.CompanyId == companyId);
 
+        // Viseira B2B
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            q = q.Where(h => allowedCustomerIds.Contains(h.CustomerId));
+        }
+
         if (request.CustomerId.HasValue) q = q.Where(h => h.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(h => h.ProductId == request.ProductId);
         if (request.LocationId.HasValue) q = q.Where(h => h.CurrentLocationId == request.LocationId);
         if (request.Status.HasValue) q = q.Where(h => h.Status == (HuStatus)request.Status.Value);
         if (!string.IsNullOrWhiteSpace(request.Lpn)) q = q.Where(h => h.Lpn.Contains(request.Lpn.Trim().ToUpper()));
 
-        // Execução sequencial para evitar concorrência de Threads no DbContext
         var totalCount = await q.CountAsync(ct);
         var skip = (request.Page - 1) * request.PageSize;
 

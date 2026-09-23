@@ -15,7 +15,7 @@ public class GetInventoryBalanceQueryValidator : AbstractValidator<GetInventoryB
     public GetInventoryBalanceQueryValidator()
     {
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 1000);
     }
 }
 
@@ -33,18 +33,24 @@ public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQue
     public async Task<IResult> Handle(GetInventoryBalanceQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var q = _db.InventoryBalances.AsNoTracking()
             .Include(b => b.Product)
             .Include(b => b.Customer)
             .Where(b => b.CompanyId == companyId);
 
+        // Viseira B2B
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            q = q.Where(b => allowedCustomerIds.Contains(b.CustomerId));
+        }
+
         if (request.CustomerId.HasValue) q = q.Where(b => b.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(b => b.ProductId == request.ProductId);
 
-        var totalTask = q.CountAsync(ct);
+        var totalCount = await q.CountAsync(ct);
 
-        var itemsTask = q
+        var items = await q
             .OrderBy(b => b.Product.Sku)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -53,9 +59,7 @@ public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQue
                 b.TotalExpected, b.TotalAvailable, b.TotalAllocated, b.TotalQuarantine, b.TotalPhysical
             )).ToListAsync(ct);
 
-        await Task.WhenAll(totalTask, itemsTask);
-
-        var response = new PaginatedResult<InventoryBalanceDto>(itemsTask.Result, totalTask.Result, request.Page, request.PageSize);
+        var response = new PaginatedResult<InventoryBalanceDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

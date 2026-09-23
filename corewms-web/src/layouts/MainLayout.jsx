@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
-    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine
+    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine, Boxes
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -52,9 +52,16 @@ export default function MainLayout() {
             ]
         },
         {
-            scope: 'Logística',
+            scope: 'Operação',
             items: [
                 { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
+
+            ]
+        },
+        {
+            scope: 'Gestão',
+            items: [
+                { icon: Boxes, label: 'Estoque e Relatórios', path: '/estoque', permission: 'inventory:view' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
             ]
         },
