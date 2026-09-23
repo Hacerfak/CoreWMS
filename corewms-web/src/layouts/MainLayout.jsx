@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
-    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine, Boxes
+    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine, Boxes, ShieldAlert, Receipt
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -62,7 +62,14 @@ export default function MainLayout() {
             scope: 'Gestão',
             items: [
                 { icon: Boxes, label: 'Estoque e Relatórios', path: '/estoque', permission: 'inventory:view' },
+                { icon: ShieldAlert, label: 'Controle de Qualidade', path: '/qualidade', permission: 'inventory:manageQuality' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
+            ]
+        },
+        {
+            scope: 'Faturamento',
+            items: [
+                { icon: Receipt, label: 'Tarifas e Ciclos', path: '/billing/tarifas-ciclos', permission: 'billing:view' }
             ]
         },
         {

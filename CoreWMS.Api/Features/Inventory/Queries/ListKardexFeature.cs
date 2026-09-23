@@ -53,6 +53,7 @@ public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
         if (request.EndDate.HasValue) query = query.Where(q => q.Transaction.CreatedAt <= request.EndDate.Value.ToUniversalTime());
         if (!string.IsNullOrWhiteSpace(request.Lpn)) query = query.Where(q => q.HandlingUnitLpn == request.Lpn.Trim().ToUpper());
 
+        // Execução sequencial para garantir thread-safety
         var totalCount = await query.CountAsync(ct);
         var skip = (request.Page - 1) * request.PageSize;
 

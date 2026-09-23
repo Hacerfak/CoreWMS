@@ -25,28 +25,37 @@ public class BillingEngineService
         if (service.Type == BillingServiceType.Manual_Entry || string.IsNullOrWhiteSpace(service.SqlTemplate))
             throw new InvalidOperationException("Este serviço não é de cálculo automático.");
 
-        // Higieniza o template substituindo as tags por parâmetros Dapper reais contra SQL Injection
+        // 1. Higieniza o template substituindo as tags com ou sem aspas simples
         var safeQuery = service.SqlTemplate
+            .Replace("'{armazem_id}'", "@ArmazemId")
             .Replace("{armazem_id}", "@ArmazemId")
+            .Replace("'{depositante_id}'", "@DepositanteId")
             .Replace("{depositante_id}", "@DepositanteId")
+            .Replace("'{servico_valor}'", "@ServicoValor")
             .Replace("{servico_valor}", "@ServicoValor")
             .Replace("'{cobranca_data_ini}'", "@CobrancaDataIni")
-            .Replace("'{cobranca_data_fim}'", "@CobrancaDataFim");
+            .Replace("{cobranca_data_ini}", "@CobrancaDataIni")
+            .Replace("'{cobranca_data_fim}'", "@CobrancaDataFim")
+            .Replace("{cobranca_data_fim}", "@CobrancaDataFim");
+
+        // 2. Garante datas em UTC para o driver Npgsql do PostgreSQL
+        var dataIniUtc = DateTime.SpecifyKind(cycle.StartDate.Date, DateTimeKind.Utc);
+        var dataFimUtc = DateTime.SpecifyKind(cycle.EndDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc); // Pega até 23:59:59.999
 
         var parameters = new
         {
             ArmazemId = cycle.CompanyId,
             DepositanteId = cycle.CustomerId,
             ServicoValor = tariff.UnitValue,
-            CobrancaDataIni = cycle.StartDate.Date,
-            CobrancaDataFim = cycle.EndDate.Date
+            CobrancaDataIni = dataIniUtc,
+            CobrancaDataFim = dataFimUtc
         };
 
-        // 1. Extrai a conexão e transação ativas do EF Core
+        // 3. Extrai a conexão e transação ativas do EF Core
         var connection = _db.Database.GetDbConnection();
         var transaction = _db.Database.CurrentTransaction?.GetDbTransaction();
 
-        // 2. Executa a query dinâmica via Dapper no mesmo contexto transacional
+        // 4. Executa a query dinâmica via Dapper
         var resultRows = await connection.QueryAsync<dynamic>(safeQuery, parameters, transaction);
 
         decimal totalQty = 0;
@@ -55,19 +64,25 @@ public class BillingEngineService
 
         foreach (var row in resultRows)
         {
-            var dict = (IDictionary<string, object>)row;
+            var rawDict = (IDictionary<string, object>)row;
+            extractList.Add(rawDict);
 
-            // CORREÇÃO: Adiciona a linha lida à lista para montar o Extrato Detalhado (Raw JSON)
-            extractList.Add(dict);
+            // Transforma o dicionário em Case-Insensitive (Postgres converte colunas unquoted para minúsculas)
+            var dict = new Dictionary<string, object>(rawDict, StringComparer.OrdinalIgnoreCase);
 
-            // Converte de forma segura testando os tipos nativos do Postgres
-            if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull)
+            // Soma dos Volumes / Quantidades
+            if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull and not null)
                 totalQty += Convert.ToDecimal(qtyObj, System.Globalization.CultureInfo.InvariantCulture);
+            else if (dict.TryGetValue("QUANTIDADE", out var qtyAltObj) && qtyAltObj is not DBNull and not null)
+                totalQty += Convert.ToDecimal(qtyAltObj, System.Globalization.CultureInfo.InvariantCulture);
 
-            if (dict.TryGetValue("VALOR_DIARIA", out var valObj) && valObj is not DBNull)
+            // Soma do Valor Total / Diárias
+            if (dict.TryGetValue("VALOR_DIARIA", out var valObj) && valObj is not DBNull and not null)
                 totalAmount += Convert.ToDecimal(valObj, System.Globalization.CultureInfo.InvariantCulture);
-            else if (dict.TryGetValue("service_total", out var sTotalObj) && sTotalObj is not DBNull)
+            else if (dict.TryGetValue("SERVICE_TOTAL", out var sTotalObj) && sTotalObj is not DBNull and not null)
                 totalAmount += Convert.ToDecimal(sTotalObj, System.Globalization.CultureInfo.InvariantCulture);
+            else if (dict.TryGetValue("VALOR_TOTAL", out var vTotalObj) && vTotalObj is not DBNull and not null)
+                totalAmount += Convert.ToDecimal(vTotalObj, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         var jsonOptions = new JsonSerializerOptions { WriteIndented = false };

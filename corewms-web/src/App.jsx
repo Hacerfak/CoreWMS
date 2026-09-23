@@ -21,6 +21,9 @@ import ReviewInbound from '@/pages/Inbound/ReviewInbound';
 import InboundOrderHusPage from '@/pages/Inbound/InboundOrderHusPage';
 import GerenciarAcessosPage from '@/pages/Usuarios/GerenciarAcessosPage';
 import EstoquePage from '@/pages/Estoque/EstoquePage';
+import QualidadePage from '@/pages/Qualidade/QualidadePage';
+import TarifasECiclosPage from '@/pages/Billing/TarifasECiclosPage';
+import ExtratoFaturamentoPage from '@/pages/Billing/ExtratoFaturamentoPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -117,6 +120,18 @@ export default function App() {
                 <Route path="/inbound/operacao/:orderId/item/:itemId" element={<ConferenciaItemPage />} />
                 <Route path="/inbound/operacao/:id/hus" element={<InboundOrderHusPage />} />
               </Route>
+
+              {/* Qualidade */}
+              <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
+                <Route path="/qualidade" element={<QualidadePage />} />
+              </Route>
+
+              {/* Billing */}
+              <Route element={<PermissionGuard requiredPermission="billing:view" />}>
+                <Route path="/billing/tarifas-ciclos" element={<TarifasECiclosPage />} />
+                <Route path="/billing/ciclos/:id" element={<ExtratoFaturamentoPage />} />
+              </Route>
+
             </Route>
           </Route>
         </Route>

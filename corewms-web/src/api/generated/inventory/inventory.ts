@@ -583,15 +583,14 @@ export function useGetApiInventoryKardex<TData = Awaited<ReturnType<typeof getAp
 
 
 
-export const postApiInventoryHandlingUnitsIdQuality = (
-    id: string,
+export const postApiInventoryHandlingUnitsQuality = (
     changeQualityCommand: ChangeQualityCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/inventory/handling-units/${id}/quality`, method: 'POST',
+      {url: `/api/inventory/handling-units/quality`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
       data: changeQualityCommand, signal
     },
@@ -601,13 +600,13 @@ export const postApiInventoryHandlingUnitsIdQuality = (
 
 
 
-export const getPostApiInventoryHandlingUnitsIdQualityMutationKey = () => ['postApiInventoryHandlingUnitsIdQuality'] as const;
+export const getPostApiInventoryHandlingUnitsQualityMutationKey = () => ['postApiInventoryHandlingUnitsQuality'] as const;
 
-export const getPostApiInventoryHandlingUnitsIdQualityMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext> => {
+export const getPostApiInventoryHandlingUnitsQualityMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsQuality>>, TError,PostApiInventoryHandlingUnitsQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsQuality>>, TError,PostApiInventoryHandlingUnitsQualityMutationVariables, TContext> => {
 
-const mutationKey = getPostApiInventoryHandlingUnitsIdQualityMutationKey();
+const mutationKey = getPostApiInventoryHandlingUnitsQualityMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -617,10 +616,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, PostApiInventoryHandlingUnitsIdQualityMutationVariables> = (props) => {
-          const {id,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsQuality>>, PostApiInventoryHandlingUnitsQualityMutationVariables> = (props) => {
+          const {data} = props ?? {};
 
-          return  postApiInventoryHandlingUnitsIdQuality(id,data,requestOptions)
+          return  postApiInventoryHandlingUnitsQuality(data,requestOptions)
         }
 
 
@@ -630,20 +629,20 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiInventoryHandlingUnitsIdQualityMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>>
-    export type PostApiInventoryHandlingUnitsIdQualityMutationBody = ChangeQualityCommand
-    export type PostApiInventoryHandlingUnitsIdQualityMutationError = unknown
-    export type PostApiInventoryHandlingUnitsIdQualityMutationVariables = {id: string;data: ChangeQualityCommand}
+    export type PostApiInventoryHandlingUnitsQualityMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsQuality>>>
+    export type PostApiInventoryHandlingUnitsQualityMutationBody = ChangeQualityCommand
+    export type PostApiInventoryHandlingUnitsQualityMutationError = unknown
+    export type PostApiInventoryHandlingUnitsQualityMutationVariables = {data: ChangeQualityCommand}
 
-    export const usePostApiInventoryHandlingUnitsIdQuality = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>, TError,PostApiInventoryHandlingUnitsIdQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiInventoryHandlingUnitsQuality = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsQuality>>, TError,PostApiInventoryHandlingUnitsQualityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiInventoryHandlingUnitsIdQuality>>,
+        Awaited<ReturnType<typeof postApiInventoryHandlingUnitsQuality>>,
         TError,
-        PostApiInventoryHandlingUnitsIdQualityMutationVariables,
+        PostApiInventoryHandlingUnitsQualityMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiInventoryHandlingUnitsIdQualityMutationOptions(options), queryClient);
+      return useMutation(getPostApiInventoryHandlingUnitsQualityMutationOptions(options), queryClient);
     }
     export const postApiInventoryHandlingUnitsIdMove = (
     id: string,

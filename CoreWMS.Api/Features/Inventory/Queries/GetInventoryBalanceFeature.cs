@@ -48,6 +48,7 @@ public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQue
         if (request.CustomerId.HasValue) q = q.Where(b => b.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(b => b.ProductId == request.ProductId);
 
+        // Execução sequencial para evitar concorrência no DbContext
         var totalCount = await q.CountAsync(ct);
 
         var items = await q

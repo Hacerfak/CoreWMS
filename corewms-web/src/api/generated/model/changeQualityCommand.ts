@@ -7,6 +7,9 @@
 import type { QualityStatus } from './qualityStatus';
 
 export interface ChangeQualityCommand {
-  id?: string;
+  /** @nullable */
+  handlingUnitIds?: string[] | null;
   newStatus?: QualityStatus;
+  /** @nullable */
+  reason?: string | null;
 }
