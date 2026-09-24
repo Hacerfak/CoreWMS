@@ -16,6 +16,11 @@ export interface UpdateCompanyCommand {
   /** @nullable */
   cnae?: string | null;
   crt?: number;
+  environment?: number;
+  nfeSerie?: number;
+  nfeNextNumber?: number;
+  /** @nullable */
+  rntrc?: string | null;
   /** @nullable */
   municipalRegistration?: string | null;
   /** @nullable */

@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Building2, Save, FileKey2, UploadCloud, AlertCircle, Sparkles, MapPin, FileSignature } from 'lucide-react';
+import { Loader2, Building2, Save, FileKey2, UploadCloud, AlertCircle, Sparkles, MapPin, FileSignature, ShieldCheck, FileText, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const empresaSchema = z.object({
@@ -23,6 +23,10 @@ const empresaSchema = z.object({
     municipalRegistration: z.string().optional(),
     cnae: z.string().optional(),
     crt: z.coerce.number().optional().nullable(),
+    environment: z.coerce.number().default(2),
+    nfeSerie: z.coerce.number().min(1, 'Série deve ser maior que 0.').default(1),
+    nfeNextNumber: z.coerce.number().min(1, 'Número deve ser maior que 0.').default(1),
+    rntrc: z.string().optional(),
     iest: z.string().optional(),
     email: z.string().email('E-mail inválido.').or(z.literal('')).optional(),
     phone: z.string().optional(),
@@ -47,7 +51,8 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
     const [activeTab, setActiveTab] = useState('dados');
 
     const { register: regDados, handleSubmit: submitDados, setValue: setDadosValue, reset: resetDados, watch: watchDados, formState: { errors: errDados } } = useForm({
-        resolver: zodResolver(empresaSchema)
+        resolver: zodResolver(empresaSchema),
+        defaultValues: { environment: 2, nfeSerie: 1, nfeNextNumber: 1 }
     });
 
     const { register: regCert, handleSubmit: submitCert, reset: resetCert, formState: { errors: errCert } } = useForm({
@@ -63,6 +68,10 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                 municipalRegistration: empresaToEdit.municipalRegistration || '',
                 cnae: empresaToEdit.cnae || '',
                 crt: empresaToEdit.crt || 1,
+                environment: empresaToEdit.environment ?? 2,
+                nfeSerie: empresaToEdit.nfeSerie || 1,
+                nfeNextNumber: empresaToEdit.nfeNextNumber || 1,
+                rntrc: empresaToEdit.rntrc || '',
                 iest: empresaToEdit.iest || '',
                 email: empresaToEdit.email || '',
                 phone: empresaToEdit.phone || '',
@@ -81,22 +90,21 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
         }
     }, [open, empresaToEdit, resetDados, resetCert]);
 
-    // Mutações da API
     const { mutate: updateCompany, isPending: isUpdatingDados } = usePutApiCompaniesId({
         mutation: {
             onSuccess: () => {
-                toast.success('Dados atualizados com sucesso!');
+                toast.success('Empresa atualizada com sucesso!');
                 queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
                 onOpenChange(false);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar dados.')
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar empresa.')
         }
     });
 
     const { mutate: uploadCert, isPending: isUploadingCert } = usePutApiCompaniesIdCertificate({
         mutation: {
             onSuccess: () => {
-                toast.success(`Certificado validado! Validade atualizada.`);
+                toast.success('Certificado A1 instalado com sucesso!');
                 queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
                 onOpenChange(false);
             },
@@ -122,23 +130,11 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                 setDadosValue('cityCode', sefazData.cityCode || watchDados('cityCode'), { shouldValidate: true });
                 setDadosValue('state', sefazData.state || watchDados('state'), { shouldValidate: true });
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao consultar a SEFAZ. Verifique se o certificado é válido.')
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao consultar SEFAZ.')
         }
     });
 
-    const handleFileToBase64 = (e, setValueCallback, fieldName) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const base64 = event.target.result.split(',')[1];
-            setValueCallback(fieldName, base64, { shouldValidate: true });
-        };
-        reader.readAsDataURL(file);
-    };
-
     const onCertSubmit = (data) => {
-        // Passamos o objeto puro para o hook do Orval
         uploadCert({
             id: empresaToEdit.id,
             data: {
@@ -156,7 +152,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                         Edição de Empresa Multi-Tenant
                     </SheetTitle>
                     <SheetDescription className="text-slate-500">
-                        Atualize dados cadastrais, informações fiscais e instale o certificado digital da matriz.
+                        Atualize dados cadastrais, parâmetros de faturamento NF-e/CT-e e certificado digital.
                     </SheetDescription>
                 </SheetHeader>
 
@@ -164,7 +160,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                     <div className="px-6 border-b border-slate-100 bg-white">
                         <TabsList className="bg-transparent h-12 gap-3 p-0">
                             <TabsTrigger value="dados" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 gap-2 px-4">
-                                <Building2 size={16} /> Dados Cadastrais
+                                <Building2 size={16} /> Dados Cadastrais & SEFAZ
                             </TabsTrigger>
                             <TabsTrigger value="certificado" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 gap-2 px-4">
                                 <FileSignature size={16} /> Certificado Digital (A1)
@@ -176,12 +172,11 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                     <TabsContent value="dados" className="flex-1 flex flex-col min-h-0 mt-0">
                         <form onSubmit={submitDados((data) => updateCompany({ id: empresaToEdit.id, data }))} className="flex-1 flex flex-col min-h-0">
                             <div className="flex-1 overflow-y-auto p-8 space-y-6">
-
                                 {/* DESTAQUE CNPJ + SEFAZ */}
                                 <div className="bg-blue-50/40 p-5 rounded-xl border border-blue-100 space-y-2">
                                     <div className="flex items-end gap-4">
                                         <div className="flex-1 space-y-1.5">
-                                            <Label className="text-slate-700 font-medium">CNPJ (Identificador Único)</Label>
+                                            <Label className="text-slate-700 font-medium">CNPJ (Identificador único)</Label>
                                             <Input
                                                 value={empresaToEdit?.cnpj?.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5") || ''}
                                                 disabled
@@ -216,19 +211,31 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                             <Label>Nome Fantasia</Label>
                                             <Input {...regDados('tradeName')} className="h-10" />
                                         </div>
-                                        <div className="col-span-4 space-y-1.5">
+
+                                        <div className="col-span-6 space-y-1.5">
+                                            <Label className="font-semibold text-slate-800">Ambiente SEFAZ *</Label>
+                                            <select
+                                                className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-amber-50/50 px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                                {...regDados('environment')}
+                                            >
+                                                <option value={2}>🟠 Homologação (Testes sem valor fiscal)</option>
+                                                <option value={1}>🟢 Produção (Emissão Real com valor jurídico)</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="col-span-6 space-y-1.5">
                                             <Label>Regime Tributário (CRT)</Label>
                                             <select
                                                 className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                                                 {...regDados('crt')}
                                             >
-                                                <option value="">Selecione...</option>
-                                                <option value="1">1 - Simples Nacional</option>
-                                                <option value="2">2 - Simples Nac. (Excesso)</option>
-                                                <option value="3">3 - Regime Normal</option>
-                                                <option value="4">4 - Simples Nacional (MEI)</option>
+                                                <option value={1}>1 - Simples Nacional</option>
+                                                <option value={2}>2 - Simples Nac. (Excesso)</option>
+                                                <option value={3}>3 - Regime Normal</option>
+                                                <option value={4}>4 - Simples Nacional (MEI)</option>
                                             </select>
                                         </div>
+
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>Inscrição Estadual (IE)</Label>
                                             <Input {...regDados('stateRegistration')} className="h-10" />
@@ -237,13 +244,34 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                             <Label>CNAE Fiscal</Label>
                                             <Input {...regDados('cnae')} placeholder="Ex: 4930-2/02" className="font-mono h-10" />
                                         </div>
-                                        <div className="col-span-6 space-y-1.5">
+                                        <div className="col-span-4 space-y-1.5">
                                             <Label>Inscrição Municipal</Label>
                                             <Input {...regDados('municipalRegistration')} className="h-10" />
                                         </div>
-                                        <div className="col-span-6 space-y-1.5">
-                                            <Label>Inscrição Estadual (ST)</Label>
-                                            <Input {...regDados('iest')} className="h-10" />
+                                    </div>
+                                </div>
+
+                                {/* PARÂMETROS NF-E E TRANSPORTE (NOVOS) */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-slate-900 border-b pb-1 flex items-center gap-2">
+                                        <FileText size={16} className="text-slate-400" /> Numeração Fiscal & Transporte (ANTT)
+                                    </h3>
+                                    <div className="grid grid-cols-12 gap-4">
+                                        <div className="col-span-4 space-y-1.5">
+                                            <Label>Série NF-e *</Label>
+                                            <Input type="number" min="1" {...regDados('nfeSerie')} className="font-mono h-10" />
+                                            {errDados.nfeSerie && <p className="text-xs text-rose-500">{errDados.nfeSerie.message}</p>}
+                                        </div>
+                                        <div className="col-span-4 space-y-1.5">
+                                            <Label>Próximo Nº NF-e *</Label>
+                                            <Input type="number" min="1" {...regDados('nfeNextNumber')} className="font-mono h-10" />
+                                            {errDados.nfeNextNumber && <p className="text-xs text-rose-500">{errDados.nfeNextNumber.message}</p>}
+                                        </div>
+                                        <div className="col-span-4 space-y-1.5">
+                                            <Label className="flex items-center gap-1">
+                                                <Truck size={13} /> RNTRC (ANTT)
+                                            </Label>
+                                            <Input {...regDados('rntrc')} placeholder="Ex: 12345678" className="font-mono h-10" />
                                         </div>
                                     </div>
                                 </div>
@@ -304,24 +332,6 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Logotipo */}
-                                <div className="space-y-4 pb-4">
-                                    <h3 className="text-sm font-semibold text-slate-900 border-b pb-1">Identidade Visual</h3>
-                                    <div className="space-y-2">
-                                        <Label>Logotipo da Empresa (PNG/JPG)</Label>
-                                        <div className="flex items-center gap-4">
-                                            {watchDados('logoBase64') ? (
-                                                <img src={`data:image/png;base64,${watchDados('logoBase64')}`} alt="Logo" className="w-16 h-16 rounded-xl object-contain border border-slate-200 bg-slate-50 shadow-sm" />
-                                            ) : (
-                                                <div className="w-16 h-16 rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400">
-                                                    <UploadCloud size={24} />
-                                                </div>
-                                            )}
-                                            <Input type="file" accept="image/*" onChange={(e) => handleFileToBase64(e, setDadosValue, 'logoBase64')} className="flex-1 cursor-pointer h-10 file:pt-1" />
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
 
                             <SheetFooter className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
@@ -339,22 +349,31 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                             <div className="flex-1 overflow-y-auto p-8 space-y-6">
                                 <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-sm flex items-start gap-3">
                                     <AlertCircle size={20} className="mt-0.5 shrink-0 text-amber-600" />
-                                    <p className="leading-relaxed">O certificado <strong>A1 (.pfx)</strong> é exigido para a emissão de NFe/CTe, comunicação com a SEFAZ e sincronização de cadastro. Ele será validado criptograficamente e armazenado de forma segura no backend.</p>
+                                    <p className="leading-relaxed">O certificado <strong>A1 (.pfx)</strong> é exigido para emissão de NFe/CTe, comunicação com a SEFAZ e sincronização. Ele será armazenado criptografado no servidor.</p>
                                 </div>
+
+                                {empresaToEdit?.certificateExpiration && (
+                                    <div className="p-4 rounded-xl border bg-slate-50 flex items-center justify-between text-xs">
+                                        <span className="text-slate-600 font-semibold flex items-center gap-1.5">
+                                            <ShieldCheck size={16} className="text-emerald-600" /> Certificado Atual Instalado:
+                                        </span>
+                                        <span className="font-mono font-bold text-slate-800">
+                                            Validade até {new Date(empresaToEdit.certificateExpiration).toLocaleDateString('pt-BR')}
+                                        </span>
+                                    </div>
+                                )}
 
                                 <div className="space-y-1.5">
                                     <Label>Arquivo do Certificado (.pfx / .p12) *</Label>
                                     <Input type="file" accept=".pfx,.p12" {...regCert('certificateFile')} className="cursor-pointer h-10 file:pt-1" />
                                     {errCert.certificateFile && <p className="text-xs text-rose-500">{errCert.certificateFile.message}</p>}
                                 </div>
-
                                 <div className="space-y-1.5">
                                     <Label>Senha do Certificado *</Label>
-                                    <Input type="password" placeholder="Digite a senha original de instalação" {...regCert('password')} className="h-10" />
+                                    <Input type="password" placeholder="Digite a senha de instalação" {...regCert('password')} className="h-10" />
                                     {errCert.password && <p className="text-xs text-rose-500">{errCert.password.message}</p>}
                                 </div>
                             </div>
-
                             <SheetFooter className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
                                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-5">Cancelar</Button>
                                 <Button type="submit" disabled={isUploadingCert} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[180px] px-6">

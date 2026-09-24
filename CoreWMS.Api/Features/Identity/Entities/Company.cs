@@ -4,7 +4,7 @@ namespace CoreWMS.Api.Features.Identity.Entities;
 
 public class Company : AuditableEntity
 {
-    // Identificação Fiscal[cite: 4]
+    // Identificação Fiscal
     public string Cnpj { get; private set; } = null!;
     public string CorporateName { get; private set; } = null!;
     public string? TradeName { get; private set; }
@@ -12,16 +12,19 @@ public class Company : AuditableEntity
     public string? MunicipalRegistration { get; private set; }
     public int Crt { get; private set; } = 1;
 
-    // Novos Campos Fiscais / SEFAZ
+    // Campos Fiscais / SEFAZ / ANTT
     public string? Cnae { get; private set; }
     public string? Iest { get; private set; } // Inscrição Estadual ST
+    public int NfeSerie { get; private set; } = 1;
+    public int NfeNextNumber { get; private set; } = 1;
+    public string? Rntrc { get; private set; } // Registro Nacional de Transportadores (ANTT)
 
     // Contato
     public string? Email { get; private set; }
     public string? Phone { get; private set; }
     public string? LogoBase64 { get; private set; }
 
-    // Endereço[cite: 4]
+    // Endereço
     public string? Street { get; private set; }
     public string? Number { get; private set; }
     public string? Complement { get; private set; }
@@ -31,12 +34,12 @@ public class Company : AuditableEntity
     public string State { get; private set; } = "RS";
     public string? ZipCode { get; private set; }
 
-    // Certificado Digital[cite: 4]
+    // Certificado Digital
     public byte[]? CertificateBytes { get; private set; }
     public string? CertificatePassword { get; private set; }
     public DateTime? CertificateExpiration { get; private set; }
 
-    // Configurações[cite: 4]
+    // Configurações Fiscais (1 = Produção, 2 = Homologação)
     public int Environment { get; private set; } = 2;
     public bool IsActive { get; private set; } = true;
 
@@ -49,25 +52,6 @@ public class Company : AuditableEntity
         State = state;
     }
 
-    // Mantido intacto para o seu CreateCompanyHandler[cite: 4, 5]
-    public void UpdateFiscalData(string corporateName, string? tradeName, string? stateRegistration, string? municipalRegistration, int crt, string? street, string? number, string? complement, string? neighborhood, int cityCode, string? cityName, string state, string? zipCode)
-    {
-        CorporateName = corporateName;
-        TradeName = tradeName;
-        StateRegistration = stateRegistration;
-        MunicipalRegistration = municipalRegistration;
-        Crt = crt;
-        Street = street;
-        Number = number;
-        Complement = complement;
-        Neighborhood = neighborhood;
-        CityCode = cityCode;
-        CityName = cityName;
-        State = state;
-        ZipCode = zipCode;
-    }
-
-    // NOVO: Atualização de todos os campos via painel
     public void UpdateDetails(
         string corporateName, string? tradeName, string? stateRegistration,
         string? cnae, int crt, string? municipalRegistration, string? iest,
@@ -96,6 +80,16 @@ public class Company : AuditableEntity
         if (logoBase64 != null) LogoBase64 = logoBase64;
     }
 
+    public void UpdateNfeAndTransportDetails(int nfeSerie, int nfeNextNumber, string? rntrc)
+    {
+        if (nfeSerie < 1) throw new ArgumentException("A série da NF-e deve ser maior ou igual a 1.");
+        if (nfeNextNumber < 1) throw new ArgumentException("O número da NF-e deve ser maior ou igual a 1.");
+
+        NfeSerie = nfeSerie;
+        NfeNextNumber = nfeNextNumber;
+        Rntrc = rntrc;
+    }
+
     public void SetCertificate(byte[] bytes, string password, DateTime expiration)
     {
         CertificateBytes = bytes;
@@ -104,4 +98,6 @@ public class Company : AuditableEntity
     }
 
     public void UpdateEnvironment(int environment) => Environment = environment;
+
+    public void ToggleActive() => IsActive = !IsActive;
 }

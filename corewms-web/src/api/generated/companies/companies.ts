@@ -478,6 +478,65 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCompaniesIdSyncSefazMutationOptions(options), queryClient);
     }
+    export const patchApiCompaniesIdToggleActive = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/companies/${id}/toggle-active`, method: 'PATCH', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPatchApiCompaniesIdToggleActiveMutationKey = () => ['patchApiCompaniesIdToggleActive'] as const;
+
+export const getPatchApiCompaniesIdToggleActiveMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiCompaniesIdToggleActive>>, TError,PatchApiCompaniesIdToggleActiveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiCompaniesIdToggleActive>>, TError,PatchApiCompaniesIdToggleActiveMutationVariables, TContext> => {
+
+const mutationKey = getPatchApiCompaniesIdToggleActiveMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiCompaniesIdToggleActive>>, PatchApiCompaniesIdToggleActiveMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  patchApiCompaniesIdToggleActive(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiCompaniesIdToggleActiveMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiCompaniesIdToggleActive>>>
+
+    export type PatchApiCompaniesIdToggleActiveMutationError = unknown
+    export type PatchApiCompaniesIdToggleActiveMutationVariables = {id: string}
+
+    export const usePatchApiCompaniesIdToggleActive = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiCompaniesIdToggleActive>>, TError,PatchApiCompaniesIdToggleActiveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiCompaniesIdToggleActive>>,
+        TError,
+        PatchApiCompaniesIdToggleActiveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiCompaniesIdToggleActiveMutationOptions(options), queryClient);
+    }
     export const putApiCompaniesIdCertificate = (
     id: string,
     putApiCompaniesIdCertificateBody?: PutApiCompaniesIdCertificateBody,

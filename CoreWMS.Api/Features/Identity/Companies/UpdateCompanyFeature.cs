@@ -6,15 +6,13 @@ using MediatR;
 
 namespace CoreWMS.Api.Features.Identity.Companies;
 
-// 1. Request
 public record UpdateCompanyCommand(
     Guid Id, string CorporateName, string? TradeName, string? StateRegistration,
-    string? Cnae, int Crt, string? MunicipalRegistration, string? Iest,
-    string? Email, string? Phone,
+    string? Cnae, int Crt, int Environment, int NfeSerie, int NfeNextNumber, string? Rntrc,
+    string? MunicipalRegistration, string? Iest, string? Email, string? Phone,
     string? ZipCode, string? Street, string? Number, string? Complement, string? Neighborhood, string? CityName, int CityCode, string State,
     string? LogoBase64) : IRequest<IResult>;
 
-// 2. Validator
 public class UpdateCompanyCommandValidator : AbstractValidator<UpdateCompanyCommand>
 {
     public UpdateCompanyCommandValidator()
@@ -22,10 +20,12 @@ public class UpdateCompanyCommandValidator : AbstractValidator<UpdateCompanyComm
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.CorporateName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.State).NotEmpty().Length(2);
+        RuleFor(x => x.Environment).InclusiveBetween(1, 2);
+        RuleFor(x => x.NfeSerie).GreaterThanOrEqualTo(1).WithMessage("A série da NF-e deve ser maior ou igual a 1.");
+        RuleFor(x => x.NfeNextNumber).GreaterThanOrEqualTo(1).WithMessage("O número sequencial da NF-e deve ser maior ou igual a 1.");
     }
 }
 
-// 3. Handler
 public class UpdateCompanyHandler : IRequestHandler<UpdateCompanyCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -34,7 +34,6 @@ public class UpdateCompanyHandler : IRequestHandler<UpdateCompanyCommand, IResul
     public async Task<IResult> Handle(UpdateCompanyCommand request, CancellationToken ct)
     {
         var company = await _db.Companies.FindAsync(new object[] { request.Id }, ct);
-
         if (company == null) return Results.NotFound(new { Message = "Empresa não encontrada." });
 
         company.UpdateDetails(
@@ -44,12 +43,14 @@ public class UpdateCompanyHandler : IRequestHandler<UpdateCompanyCommand, IResul
             request.ZipCode, request.Street, request.Number, request.Complement, request.Neighborhood, request.CityName, request.CityCode, request.State,
             request.LogoBase64);
 
+        company.UpdateEnvironment(request.Environment);
+        company.UpdateNfeAndTransportDetails(request.NfeSerie, request.NfeNextNumber, request.Rntrc);
+
         await _db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
 }
 
-// 4. Endpoint
 public static class UpdateCompanyEndpoints
 {
     public static void MapUpdateCompanyEndpoints(this IEndpointRouteBuilder app)
