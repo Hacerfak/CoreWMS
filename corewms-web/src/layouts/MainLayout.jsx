@@ -75,16 +75,11 @@ export default function MainLayout() {
             ]
         },
         {
-            scope: 'Segurança',
+            scope: 'Configurações e Segurança',
             items: [
                 { icon: Users, label: 'Usuários', path: '/usuarios', permission: 'users:manage' },
                 { icon: Shield, label: 'Perfis de Acesso', path: '/perfis', permission: 'roles:manage' },
                 { icon: ScrollText, label: 'Auditoria', path: '/auditoria', permission: 'audit:view' },
-            ]
-        },
-        {
-            scope: 'Configurações',
-            items: [
                 { icon: Building2, label: 'Empresas', path: '/empresas', permission: 'companies:manage' },
                 { icon: Printer, label: 'Impressão', path: '/impressao', permission: 'printing:manage' },
             ]

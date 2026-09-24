@@ -62,7 +62,8 @@ export default function EmpresasPage() {
                     <Table>
                         <TableHeader className="bg-slate-50/50 sticky top-0">
                             <TableRow>
-                                <TableHead>Razão Social / CNPJ</TableHead>
+                                <TableHead>Razão Social</TableHead>
+                                <TableHead>CNPJ</TableHead>
                                 <TableHead>Ambiente SEFAZ</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Validade Certificado</TableHead>
@@ -89,7 +90,13 @@ export default function EmpresasPage() {
                                                     </div>
                                                     <div className="flex flex-col">
                                                         <span className="font-bold text-slate-900 text-xs">{empresa.corporateName}</span>
-                                                        <span className="text-[11px] text-slate-500 font-mono">CNPJ: {empresa.cnpj}</span>
+                                                    </div>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-slate-900 text-xs">{empresa.cnpj}</span>
                                                     </div>
                                                 </div>
                                             </TableCell>

@@ -118,7 +118,7 @@ export default function ImpressaoPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Gestão de Impressão</h1>
-                    <p className="text-sm text-slate-500 mt-1">Gerencie agentes de hardware, impressoras Zebra/Epson e templates ZPL.</p>
+                    <p className="text-sm text-slate-500 mt-1">Gerencie agentes de hardware, impressoras térmicas e templates ZPL de etiquetas.</p>
                 </div>
             </div>
 
@@ -129,7 +129,7 @@ export default function ImpressaoPage() {
                             <Server className="w-4 h-4 mr-2" /> Agentes e Impressoras
                         </TabsTrigger>
                         <TabsTrigger value="templates" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-none px-4">
-                            <Tag className="w-4 h-4 mr-2" /> Templates (ZPL)
+                            <Tag className="w-4 h-4 mr-2" /> Etiquetas
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -138,7 +138,7 @@ export default function ImpressaoPage() {
                 <TabsContent value="agentes" className="flex-1 mt-4">
                     <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="font-semibold text-slate-800">Estações (Print Agents)</h3>
+                            <h3 className="font-semibold text-slate-800">Estações (Print Agents) e Impressoras Térmicas</h3>
                             <Button onClick={() => handleOpenAgenteModal()} className="bg-blue-600 hover:bg-blue-700 text-white h-8">
                                 <Plus className="mr-2 h-4 w-4" /> Novo Agente
                             </Button>
@@ -225,7 +225,7 @@ export default function ImpressaoPage() {
                 <TabsContent value="templates" className="flex-1 mt-4">
                     <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="font-semibold text-slate-800">Modelos ZPL</h3>
+                            <h3 className="font-semibold text-slate-800">Modelos de etiquetas ZPL</h3>
                             <Button onClick={() => handleOpenTemplateModal()} className="bg-blue-600 hover:bg-blue-700 text-white h-8">
                                 <Plus className="mr-2 h-4 w-4" /> Novo Template
                             </Button>
@@ -236,7 +236,6 @@ export default function ImpressaoPage() {
                                     <TableRow>
                                         <TableHead>Nome</TableHead>
                                         <TableHead>Dimensões</TableHead>
-                                        <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Ações</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -247,7 +246,6 @@ export default function ImpressaoPage() {
                                         <TableRow key={tpl.id}>
                                             <TableCell className="font-medium text-slate-900">{tpl.name}</TableCell>
                                             <TableCell className="text-slate-600">{tpl.widthMm}x{tpl.heightMm} mm</TableCell>
-                                            <TableCell><Badge variant="outline" className="bg-emerald-50 text-emerald-700">Ativo</Badge></TableCell>
                                             <TableCell className="text-right space-x-1">
                                                 <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => handleOpenPrintTemplate(tpl)}>
                                                     <Play className="h-4 w-4 mr-1" /> Testar
