@@ -167,7 +167,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
             <SheetContent className="w-full sm:w-[950px] !max-w-[950px] flex flex-col p-0 bg-white shadow-2xl">
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <SheetTitle className="text-xl font-bold text-slate-900">{isEditing ? 'Editar Produto' : 'Novo Produto'}</SheetTitle>
-                    <SheetDescription className="text-slate-500">Configure as regras logísticas e a árvore de embalagens.</SheetDescription>
+                    <SheetDescription className="text-slate-500">Configure as regras logísticas e as embalagens.</SheetDescription>
                 </SheetHeader>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0">
@@ -184,7 +184,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                         <div className="flex-1 overflow-y-auto p-6">
                             <TabsContent value="dados" className="space-y-4 mt-0">
                                 <div className="space-y-1.5">
-                                    <Label>Depositante (Cliente)</Label>
+                                    <Label>Depositante</Label>
                                     {isEditing ? (
                                         <Input
                                             value={productToEdit?.customerName || 'Depositante'}
@@ -254,22 +254,22 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-200/80 space-y-5">
                                     <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Controles de Rastreabilidade</h3>
                                     <div className="grid grid-cols-2 gap-4">
-                                        {renderToggle('Lote / Partida', 'Tracking interno WMS', 'tracksBatch', 'strictBatch')}
+                                        {renderToggle('Lote', 'Tracking interno WMS', 'tracksBatch', 'strictBatch')}
                                         {renderToggle('Data de Fabricação', 'Produção industrial', 'tracksManufacture', 'strictManufacture')}
                                         {renderToggle('Data de Validade', 'Vencimento para FEFO', 'tracksExpiration', 'strictExpiration')}
                                         {renderToggle('Número de Série', 'Serialização de unitários', 'tracksSerial', 'strictSerial')}
                                     </div>
 
-                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Motor de Separação & Físico</h3>
+                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Regras de Separação & Físico</h3>
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="space-y-2">
-                                            <Label>Estratégia de Fila</Label>
+                                            <Label>Estratégia de Separação</Label>
                                             <Select value={String(watch('pickingStrategy'))} onValueChange={(val) => setValue('pickingStrategy', Number(val))}>
                                                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="1">FIFO (Primeiro que Entra, Sai)</SelectItem>
-                                                    <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO (Primeiro que Vence, Sai)</SelectItem>
-                                                    <SelectItem value="3">LIFO (Último que Entra, Sai)</SelectItem>
+                                                    <SelectItem value="1">FIFO</SelectItem>
+                                                    <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO</SelectItem>
+                                                    <SelectItem value="3">LIFO</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -279,9 +279,9 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                             <Select value={String(watch('pickingBaseDate'))} onValueChange={(val) => setValue('pickingBaseDate', Number(val))} disabled={watch('pickingStrategy') == 2}>
                                                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="1">Data Física WMS</SelectItem>
-                                                    <SelectItem value="2">Data Sistêmica WMS</SelectItem>
-                                                    <SelectItem value="3">Data Emissão NF-e</SelectItem>
+                                                    <SelectItem value="1">Data de Recebimento</SelectItem>
+                                                    <SelectItem value="2">Data de Entrada da NF-e</SelectItem>
+                                                    <SelectItem value="3">Data de Emissão da NF-e</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -293,8 +293,8 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
-                                        <div className="space-y-1.5"><Label>Tol. Recebimento (Dias Vida Útil)</Label><Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" /></div>
-                                        <div className="space-y-1.5"><Label>Tol. Expedição (Dias Vida Útil)</Label><Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" /></div>
+                                        <div className="space-y-1.5"><Label>Tolerância Recebimento (Dias Vida Útil)</Label><Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" /></div>
+                                        <div className="space-y-1.5"><Label>Tolerância Expedição (Dias Vida Útil)</Label><Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" /></div>
                                     </div>
                                 </div>
                             </TabsContent>
@@ -348,7 +348,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         <div className="flex gap-6 pt-2 border-t border-slate-200">
                                             <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-amber-700">
                                                 <Checkbox checked={watch(`packagings.${index}.allowFractionalPicking`)} onCheckedChange={(v) => setValue(`packagings.${index}.allowFractionalPicking`, v)} />
-                                                Permite Quebra (Fração)
+                                                Permite Quebra (Fracionamento)
                                             </label>
                                         </div>
                                     </div>

@@ -11,8 +11,8 @@ export default function ProdutosPage() {
     return (
         <div className="flex flex-col h-full space-y-6">
             <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Catálogo de Produtos</h1>
-                <p className="text-sm text-slate-500 mt-1">Gerencie os SKUs, regras logísticas e tipos de volumes (caixas, pallets) do armazém.</p>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900">Catálogo de Produtos e Volumes</h1>
+                <p className="text-sm text-slate-500 mt-1">Gerencie os SKUs, regras logísticas e tipos de volumes do armazém.</p>
             </div>
 
             <Tabs value={currentTab} onValueChange={setCurrentTab} className="flex-1 flex flex-col min-h-0">
@@ -22,7 +22,7 @@ export default function ProdutosPage() {
                             <Package className="w-4 h-4 mr-2" /> SKUs e Materiais
                         </TabsTrigger>
                         <TabsTrigger value="packagings" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-none px-4">
-                            <Box className="w-4 h-4 mr-2" /> Tipos de Embalagem (Global)
+                            <Box className="w-4 h-4 mr-2" /> Tipos de Volumes
                         </TabsTrigger>
                     </TabsList>
                 </div>

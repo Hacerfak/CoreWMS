@@ -1,27 +1,35 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiCustomers, useDeleteApiCustomersId } from '@/api/generated/customers/customers';
+import { customInstance } from '@/api/orval-mutator';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Search, Plus, Building, MapPin, Loader2, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Building, MapPin, Loader2, Edit, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import ClienteFormSheet from './ClienteFormSheet';
 
 export default function ClientesList() {
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('ACTIVE'); // ACTIVE, INACTIVE, ALL
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedCliente, setSelectedCliente] = useState(null);
     const [clienteToDelete, setClienteToDelete] = useState(null);
 
-    // MUDANÇA: Captura a resposta completa e extrai de forma segura os items
-    const { data: apiResponse, isLoading } = useGetApiCustomers({ Search: search });
+    const queryParams = {
+        Search: search,
+        Status: statusFilter === 'ALL' ? undefined : statusFilter,
+        OnlyActive: statusFilter === 'ACTIVE' ? true : statusFilter === 'INACTIVE' ? false : false
+    };
+
+    const { data: apiResponse, isLoading } = useGetApiCustomers(queryParams);
     const clientes = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
     const { mutate: deleteCustomer, isPending: isDeleting } = useDeleteApiCustomersId({
@@ -37,6 +45,19 @@ export default function ClientesList() {
         }
     });
 
+    const handleToggleActive = async (cliente) => {
+        try {
+            const res = await customInstance({
+                url: `/api/customers/${cliente.id}/toggle-active`,
+                method: 'PATCH'
+            });
+            toast.success(res?.message || 'Status do cliente alterado com sucesso!');
+            queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao alterar status do cliente.');
+        }
+    };
+
     const handleCreate = () => {
         setSelectedCliente(null);
         setIsSheetOpen(true);
@@ -51,8 +72,8 @@ export default function ClientesList() {
         <div className="flex flex-col h-full space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clientes</h1>
-                    <p className="text-sm text-slate-500 mt-1">Gerencie os depositantes e parceiros de negócio.</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clientes Depositantes</h1>
+                    <p className="text-sm text-slate-500 mt-1">Gerencie os depositantes, contratos SLA e parceiros de negócio.</p>
                 </div>
                 <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
                     <Plus className="mr-2 h-4 w-4" /> Novo Cliente
@@ -60,23 +81,38 @@ export default function ClientesList() {
             </div>
 
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="p-4 border-b border-slate-100 flex items-center gap-4">
+                {/* BARRA DE FILTROS */}
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Buscar por Razão Social ou CNPJ..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="pl-9 bg-slate-50 border-slate-200"
+                            className="pl-9 bg-slate-50 border-slate-200 text-xs"
                         />
+                    </div>
+
+                    <div className="w-[180px]">
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
+                                <SelectValue placeholder="Filtrar por Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ACTIVE">🟢 Apenas Ativos</SelectItem>
+                                <SelectItem value="INACTIVE">🔴 Apenas Inativos</SelectItem>
+                                <SelectItem value="ALL">📋 Todos os Registros</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
 
+                {/* TABELA DE CLIENTES */}
                 <div className="flex-1 overflow-auto">
                     <Table>
                         <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-sm z-10">
                             <TableRow>
-                                <TableHead className="w-[350px]">Razão Social</TableHead>
+                                <TableHead className="w-[350px]">Razão Social / Fantasia</TableHead>
                                 <TableHead>CNPJ</TableHead>
                                 <TableHead>Localização</TableHead>
                                 <TableHead>Status</TableHead>
@@ -101,7 +137,7 @@ export default function ClientesList() {
                                     <TableRow key={cliente.id} className="hover:bg-slate-50/50 transition-colors">
                                         <TableCell>
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+                                                <div className="w-8 h-8 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                                                     <Building size={16} />
                                                 </div>
                                                 <div>
@@ -120,17 +156,24 @@ export default function ClientesList() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">
-                                                Ativo
+                                            <Badge variant="outline" className={cliente.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "bg-rose-50 text-rose-700 border-rose-200 font-medium"}>
+                                                {cliente.isActive ? 'Ativo' : 'Inativo'}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
                                             <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)} className="text-blue-600 hover:bg-blue-50">
                                                 <Edit className="h-4 w-4 mr-1" /> Editar
                                             </Button>
-                                            <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
-                                                <Trash2 className="h-4 w-4 mr-1" /> Excluir
-                                            </Button>
+
+                                            {cliente.isActive ? (
+                                                <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                                                    <Trash2 className="h-4 w-4 mr-1" /> Inativar
+                                                </Button>
+                                            ) : (
+                                                <Button variant="ghost" size="sm" onClick={() => handleToggleActive(cliente)} className="text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700">
+                                                    <RotateCcw className="h-4 w-4 mr-1" /> Reativar
+                                                </Button>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))
@@ -147,11 +190,11 @@ export default function ClientesList() {
             />
 
             <AlertDialog open={!!clienteToDelete} onOpenChange={(open) => !open && setClienteToDelete(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-slate-900">Inativar Cliente Depositante?</AlertDialogTitle>
                         <AlertDialogDescription className="text-slate-500">
-                            Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>?
+                            Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>? Ele não aparecerá nas operações ativas até ser restaurado.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

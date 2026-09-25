@@ -133,7 +133,6 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
         }
     });
 
-    // Permite consulta SEFAZ tanto no cadastro novo quanto na edição
     const handleConsultSefaz = () => {
         const cleanCnpj = (watchCnpj || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos.');
@@ -305,7 +304,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-3 gap-4">
                                     <div className="space-y-1.5">
                                         <Label>Inscrição Municipal (IM)</Label>
                                         <Input {...register('municipalRegistration')} className="h-10" />
@@ -313,6 +312,10 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                     <div className="space-y-1.5">
                                         <Label>E-mail Corporativo</Label>
                                         <Input type="email" {...register('email')} className="h-10" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label>Telefone / Celular</Label>
+                                        <Input {...register('phone')} placeholder="(00) 00000-0000" className="h-10 font-mono" />
                                     </div>
                                 </div>
                             </TabsContent>
@@ -372,24 +375,24 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                             {/* REGRAS LOGÍSTICAS WMS */}
                             <TabsContent value="regras-wms" className="mt-0 space-y-6">
                                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-200/80 space-y-5">
-                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Controles de Rastreabilidade (Default)</h3>
+                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2">Controles de Rastreabilidade</h3>
                                     <div className="grid grid-cols-2 gap-4">
-                                        {renderToggle('Lote / Partida', 'Rastreabilidade interna de lote.', 'tracksBatch', 'strictBatch')}
+                                        {renderToggle('Lote', 'Rastreabilidade interna de lote.', 'tracksBatch', 'strictBatch')}
                                         {renderToggle('Data de Fabricação', 'Data de produção industrial.', 'tracksManufacture', 'strictManufacture')}
                                         {renderToggle('Data de Validade', 'Vencimento para bloqueios e FEFO.', 'tracksExpiration', 'strictExpiration')}
                                         {renderToggle('Número de Série', 'Controle unitário serializado.', 'tracksSerial', 'strictSerial')}
                                     </div>
 
-                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Motor de Separação (Picking Default)</h3>
+                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Regras de Separação</h3>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label>Estratégia de Fila</Label>
                                             <Select value={String(watch('defaultPickingStrategy'))} onValueChange={(val) => setValue('defaultPickingStrategy', Number(val))}>
                                                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="1">FIFO (Primeiro a Entrar, Sair)</SelectItem>
-                                                    <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO (Vencer Primeiro)</SelectItem>
-                                                    <SelectItem value="3">LIFO (Último a Entrar, Sair)</SelectItem>
+                                                    <SelectItem value="1">FIFO</SelectItem>
+                                                    <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO</SelectItem>
+                                                    <SelectItem value="3">LIFO</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                         </div>
@@ -399,8 +402,8 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteToEdit = n
                                             <Select value={String(watch('defaultPickingBaseDate'))} onValueChange={(val) => setValue('defaultPickingBaseDate', Number(val))} disabled={watch('defaultPickingStrategy') == 2}>
                                                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="1">Data Física de Recebimento</SelectItem>
-                                                    <SelectItem value="2">Data de Entrada no Sistema</SelectItem>
+                                                    <SelectItem value="1">Data de Recebimento</SelectItem>
+                                                    <SelectItem value="2">Data de Entrada da NF-e</SelectItem>
                                                     <SelectItem value="3">Data de Emissão da NF-e</SelectItem>
                                                 </SelectContent>
                                             </Select>

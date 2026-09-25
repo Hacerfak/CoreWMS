@@ -88,7 +88,7 @@ export default function PackagingTypesTab() {
     return (
         <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex flex-col overflow-hidden h-full">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <h3 className="font-semibold text-slate-800">Dicionário de Embalagens</h3>
+                <h3 className="font-semibold text-slate-800">Tipos de Volumes</h3>
                 <Button onClick={() => { setSelectedType(null); setIsModalOpen(true); }} className="bg-blue-600 hover:bg-blue-700 text-white h-8">
                     <Plus className="mr-2 h-4 w-4" /> Novo Tipo
                 </Button>
@@ -100,7 +100,6 @@ export default function PackagingTypesTab() {
                         <TableRow>
                             <TableHead>Código</TableHead>
                             <TableHead>Descrição</TableHead>
-                            <TableHead>Status</TableHead>
                             <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -118,7 +117,6 @@ export default function PackagingTypesTab() {
                                     </div>
                                 </TableCell>
                                 <TableCell className="font-medium text-slate-700">{type.description}</TableCell>
-                                <TableCell><Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Ativo</Badge></TableCell>
                                 <TableCell className="text-right space-x-1">
                                     <Button variant="ghost" size="sm" onClick={() => { setSelectedType(type); setIsModalOpen(true); }} className="text-blue-600 hover:bg-blue-50"><Edit className="h-4 w-4" /></Button>
                                     <Button variant="ghost" size="sm" onClick={() => setTypeToDelete(type)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-4 w-4" /></Button>

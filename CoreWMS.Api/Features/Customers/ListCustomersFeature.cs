@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Customers;
 
-public record ListCustomersQuery(string? Search, bool OnlyActive = true, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record ListCustomersQuery(string? Search, bool? OnlyActive, string? Status, int Page = 1, int PageSize = 20) : IRequest<IResult>;
 
 public class ListCustomersQueryValidator : AbstractValidator<ListCustomersQuery>
 {
@@ -36,14 +36,23 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
         var companyId = _tenant.GetCompanyId();
         var q = _db.Customers.AsNoTracking().Where(c => c.CompanyId == companyId);
 
-        // Filtro Viseira B2B para utilizadores parceiros
+        // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
             q = q.Where(c => allowedCustomerIds.Contains(c.Id));
         }
 
-        if (request.OnlyActive) q = q.Where(c => c.IsActive);
+        // Filtro de Status (ACTIVE, INACTIVE ou ALL)
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (request.Status.Equals("ACTIVE", StringComparison.OrdinalIgnoreCase)) q = q.Where(c => c.IsActive);
+            else if (request.Status.Equals("INACTIVE", StringComparison.OrdinalIgnoreCase)) q = q.Where(c => !c.IsActive);
+        }
+        else if (request.OnlyActive.HasValue && request.OnlyActive.Value)
+        {
+            q = q.Where(c => c.IsActive);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -54,7 +63,6 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
         }
 
         var totalCount = await q.CountAsync(ct);
-
         var items = await q
             .OrderBy(c => c.CorporateName)
             .Skip((request.Page - 1) * request.PageSize)
