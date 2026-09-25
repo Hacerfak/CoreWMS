@@ -5,11 +5,11 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace CoreWMS.Api.Infrastructure.Caching;
 
-public record PackagingCacheModel(Guid Id, string Code, decimal ConversionFactor, bool AllowFractional);
+public record PackagingCacheModel(Guid Id, string Code, decimal ConversionFactor, bool AllowFractional, int MaxStacking);
 public record CustomerSlaCacheModel(bool RequiresBlindInbound, bool RequiresBlindOutbound);
 
 public record ProductMasterDataCacheModel(
-    Guid ProductId, Guid CustomerId, string Sku, int MaxStacking,
+    Guid ProductId, Guid CustomerId, string Sku,
     bool StrictBatch, bool StrictExpiration, bool StrictManufacture, bool StrictSerial,
     PickingStrategy PickingStrategy, CustomerSlaCacheModel CustomerSla,
     Dictionary<string, PackagingCacheModel> PackagingsByBarcode
@@ -53,7 +53,6 @@ public class MasterDataCacheService : IMasterDataCacheService
                     p.Id,
                     p.CustomerId,
                     p.Sku,
-                    p.MaxStacking,
                     p.StrictBatch,
                     p.StrictExpiration,
                     p.StrictManufacture,
@@ -65,13 +64,21 @@ public class MasterDataCacheService : IMasterDataCacheService
                     CustomerStrictSerial = p.Customer.StrictSerial,
                     p.Customer.RequiresBlindInbound,
                     p.Customer.RequiresBlindOutbound,
-                    Packagings = p.Packagings.Select(pack => new { pack.Id, pack.PackagingType.Code, pack.ConversionFactor, pack.AllowFractionalPicking, pack.Barcode }).ToList()
+                    Packagings = p.Packagings.Select(pack => new
+                    {
+                        pack.Id,
+                        pack.PackagingType.Code,
+                        pack.ConversionFactor,
+                        pack.AllowFractionalPicking,
+                        pack.Barcode,
+                        pack.MaxStacking
+                    }).ToList()
                 })
                 .FirstOrDefaultAsync(ct);
 
             if (data == null)
             {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1); // Negative Caching
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
                 return null;
             }
 
@@ -80,11 +87,17 @@ public class MasterDataCacheService : IMasterDataCacheService
             var packagingsDict = new Dictionary<string, PackagingCacheModel>(StringComparer.OrdinalIgnoreCase);
             foreach (var pack in data.Packagings.Where(p => !string.IsNullOrWhiteSpace(p.Barcode)))
             {
-                packagingsDict[pack.Barcode!] = new PackagingCacheModel(pack.Id, pack.Code, pack.ConversionFactor, pack.AllowFractionalPicking);
+                packagingsDict[pack.Barcode!] = new PackagingCacheModel(
+                    pack.Id,
+                    pack.Code,
+                    pack.ConversionFactor,
+                    pack.AllowFractionalPicking,
+                    pack.MaxStacking
+                );
             }
 
             return new ProductMasterDataCacheModel(
-                data.Id, data.CustomerId, data.Sku, data.MaxStacking,
+                data.Id, data.CustomerId, data.Sku,
                 data.StrictBatch || data.CustomerStrictBatch,
                 data.StrictExpiration || data.CustomerStrictExp,
                 data.StrictManufacture || data.CustomerStrictMfg,
@@ -113,7 +126,7 @@ public class MasterDataCacheService : IMasterDataCacheService
 
             if (id == Guid.Empty)
             {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1); // Proteção contra scans falsos sucessivos
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
                 return Guid.Empty;
             }
 
@@ -131,20 +144,16 @@ public class MasterDataCacheService : IMasterDataCacheService
         _cache.Remove($"MasterData_Product_{companyId}_{productId}");
     }
 
-    // ==========================================
-    // CACHE DE TOPOLOGIA (LOCALIZAÇÕES)
-    // ==========================================
     public async Task<Guid?> GetLocationIdAsync(string fullPath, CancellationToken ct = default)
     {
         var safePath = fullPath.Trim().ToUpper();
-        var cacheKey = $"Location_Global_{safePath}"; // Cache partilhado!
+        var cacheKey = $"Location_Global_{safePath}";
 
         return await _cache.GetOrCreateAsync(cacheKey, async entry =>
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            // Query original restituída
             var locationId = await db.Locations
                 .Where(l => l.FullPath == safePath && l.Zone.Warehouse.Code != "")
                 .Select(l => l.Id)
@@ -152,7 +161,7 @@ public class MasterDataCacheService : IMasterDataCacheService
 
             if (locationId == Guid.Empty)
             {
-                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1); // Negative Caching
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1);
                 return (Guid?)null;
             }
 

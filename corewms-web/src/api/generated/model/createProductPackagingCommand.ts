@@ -16,4 +16,5 @@ export interface CreateProductPackagingCommand {
   heightMm?: number;
   /** @nullable */
   barcode?: string | null;
+  maxStacking?: number;
 }

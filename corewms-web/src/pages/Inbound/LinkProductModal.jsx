@@ -130,8 +130,6 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
             ncm: item.rawNcm || null,
             cest: item.rawCest || null,
             origin: 0,
-            maxStacking: 1,
-            // HERANÇA DAS REGRAS LOGÍSTICAS DO DEPOSITANTE
             pickingStrategy: customerData?.defaultPickingStrategy ?? 1,
             pickingBaseDate: customerData?.defaultPickingBaseDate ?? 1,
             tracksBatch: customerData?.tracksBatch ?? false,
@@ -146,17 +144,15 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                 packagingTypeId: p.packagingTypeId,
                 conversionFactor: p.conversionFactor,
                 barcode: p.barcode || null,
-                isDefaultInbound: idx === 0,
-                isDefaultOutbound: idx === 0,
                 allowFractionalPicking: true,
                 grossWeight: 0,
                 netWeight: 0,
-                lengthMm: 0,
-                widthMm: 0,
-                heightMm: 0
+                lengthMm: 1200,
+                widthMm: 1000,
+                heightMm: 1500,
+                maxStacking: 1
             }))
         };
-
         createProduct({ data: fullPayload });
     };
 

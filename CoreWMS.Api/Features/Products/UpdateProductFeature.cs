@@ -19,11 +19,12 @@ public record UpdateProductPackagingCommand(
     decimal LengthMm,
     decimal WidthMm,
     decimal HeightMm,
-    string? Barcode
+    string? Barcode,
+    int MaxStacking
 );
 
 public record UpdateProductCommand(
-    Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
+    Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<UpdateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
@@ -34,11 +35,14 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Description).NotEmpty().MaximumLength(200);
         RuleFor(x => x.BaseUnit).NotEmpty().MaximumLength(10);
-        RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
+        RuleForEach(x => x.Packagings).ChildRules(p =>
+        {
+            p.RuleFor(x => x.MaxStacking).GreaterThan(0).WithMessage("O empilhamento máximo deve ser maior que zero.");
+        });
     }
 }
 
@@ -80,15 +84,13 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
         product.UpdateRules(
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
-            (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
+            (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
 
-        // Identifica as embalagens que devem ser mantidas
         var requestPackIds = request.Packagings
             .Where(x => x.Id.HasValue && x.Id.Value != Guid.Empty)
             .Select(x => x.Id!.Value)
             .ToList();
 
-        // 1. Remove embalagens que foram excluídas no formulário
         var packsToRemove = product.Packagings
             .Where(p => !requestPackIds.Contains(p.Id))
             .ToList();
@@ -98,7 +100,6 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
             _db.ProductPackagings.RemoveRange(packsToRemove);
         }
 
-        // 2. Atualiza existentes ou adiciona novas embalagens
         foreach (var packReq in request.Packagings)
         {
             if (packReq.Id.HasValue && packReq.Id.Value != Guid.Empty)
@@ -107,7 +108,7 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
                 if (existing != null)
                 {
                     existing.UpdateFlagsAndFactor(packReq.ConversionFactor, packReq.AllowFractionalPicking);
-                    existing.UpdateDimensions(packReq.GrossWeight, packReq.NetWeight, packReq.LengthMm, packReq.WidthMm, packReq.HeightMm, packReq.Barcode);
+                    existing.UpdateDimensions(packReq.GrossWeight, packReq.NetWeight, packReq.LengthMm, packReq.WidthMm, packReq.HeightMm, packReq.Barcode, packReq.MaxStacking);
                 }
             }
             else
@@ -116,10 +117,10 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
                     product.Id,
                     packReq.PackagingTypeId,
                     packReq.ConversionFactor,
-                    packReq.AllowFractionalPicking
+                    packReq.AllowFractionalPicking,
+                    packReq.MaxStacking
                 );
-                newPack.UpdateDimensions(packReq.GrossWeight, packReq.NetWeight, packReq.LengthMm, packReq.WidthMm, packReq.HeightMm, packReq.Barcode);
-
+                newPack.UpdateDimensions(packReq.GrossWeight, packReq.NetWeight, packReq.LengthMm, packReq.WidthMm, packReq.HeightMm, packReq.Barcode, packReq.MaxStacking);
                 _db.ProductPackagings.Add(newPack);
             }
         }

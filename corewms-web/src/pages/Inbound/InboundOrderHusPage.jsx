@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
     ArrowLeft, Printer, Undo2, Search, Layers, Loader2,
-    ShieldAlert, Box, Warehouse, AlertTriangle, MapPin, CheckCircle2
+    ShieldAlert, Box, Warehouse, AlertTriangle, MapPin, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PrintHuModal from './PrintHuModal';
@@ -329,12 +329,23 @@ export default function InboundOrderHusPage() {
                     </div>
 
                     <div className="flex gap-2">
+                        {/* BOTÃO CONDICIONAL DE ALOCAÇÃO INTELIGENTE (Aparece se houver volumes na Doca) */}
+                        {metrics.pendingAllocationHus > 0 && (
+                            <Button
+                                onClick={() => navigate(`/inbound/operacao/${orderId}/alocacao`)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs"
+                            >
+                                <Sparkles className="w-4 h-4 mr-1.5" /> Alocação Inteligente ({metrics.pendingAllocationHus})
+                            </Button>
+                        )}
+
                         <Button
                             onClick={() => handleOpenMoveModal(selectedHus)}
                             disabled={selectedHus.length === 0}
-                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs text-xs font-semibold"
+                            variant="outline"
+                            className="text-xs font-semibold"
                         >
-                            <MapPin className="w-4 h-4 mr-1.5" /> Alocar / Mover ({selectedHus.length})
+                            <MapPin className="w-4 h-4 mr-1.5 text-blue-600" /> Mover ({selectedHus.length})
                         </Button>
 
                         <Button

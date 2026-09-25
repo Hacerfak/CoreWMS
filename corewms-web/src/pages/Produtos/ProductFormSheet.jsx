@@ -6,7 +6,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
 import { usePostApiProducts, usePutApiProductsId } from '@/api/generated/products/products';
 import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
-
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -28,7 +27,8 @@ const packagingSchema = z.object({
     netWeight: z.coerce.number().min(0),
     lengthMm: z.coerce.number().min(0),
     widthMm: z.coerce.number().min(0),
-    heightMm: z.coerce.number().min(0)
+    heightMm: z.coerce.number().min(0),
+    maxStacking: z.coerce.number().min(1, 'Min 1')
 });
 
 const productSchema = z.object({
@@ -40,7 +40,6 @@ const productSchema = z.object({
     ncm: z.string().optional().nullable(),
     cest: z.string().optional().nullable(),
     origin: z.coerce.number().default(0),
-    maxStacking: z.coerce.number().min(1, 'Min 1'),
     tracksBatch: z.boolean().default(false),
     strictBatch: z.boolean().default(false),
     tracksManufacture: z.boolean().default(false),
@@ -70,10 +69,10 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(productSchema),
         defaultValues: {
-            customerId: '', sku: '', description: '', baseUnit: 'UN', origin: 0, maxStacking: 1, pickingStrategy: 1, pickingBaseDate: 1,
+            customerId: '', sku: '', description: '', baseUnit: 'UN', origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
             tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
             tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
-            packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0 }]
+            packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
         }
     });
 
@@ -82,13 +81,20 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
     useEffect(() => {
         if (open) {
             if (productToEdit) {
-                reset({ ...productToEdit, customerId: productToEdit.customerId });
+                reset({
+                    ...productToEdit,
+                    customerId: productToEdit.customerId,
+                    packagings: productToEdit.packagings?.map(p => ({
+                        ...p,
+                        maxStacking: p.maxStacking || 1
+                    })) || [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
+                });
             } else {
                 reset({
-                    customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '', origin: 0, maxStacking: 1, pickingStrategy: 1, pickingBaseDate: 1,
+                    customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '', origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
                     tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
                     tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
-                    packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0 }]
+                    packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
                 });
             }
             setActiveTab('dados');
@@ -115,7 +121,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
             setActiveTab('regras');
             return;
         }
-
         isEditing ? updateProduct({ id: productToEdit.id, data }) : createProduct({ data });
     };
 
@@ -202,7 +207,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         </Select>
                                     )}
                                 </div>
-
                                 <div className="grid grid-cols-3 gap-4">
                                     <div className="space-y-1.5 col-span-2">
                                         <Label>SKU *</Label>
@@ -213,12 +217,10 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         <Input {...register('baseUnit')} placeholder="Ex: UN, KG" className="font-mono uppercase" />
                                     </div>
                                 </div>
-
                                 <div className="space-y-1.5">
                                     <Label>Descrição Completa *</Label>
                                     <Input {...register('description')} className={errors.description ? 'border-rose-500' : ''} />
                                 </div>
-
                                 <div className="space-y-1.5">
                                     <Label>Código de Barras Base (EAN/GTIN)</Label>
                                     <Input {...register('baseBarcode')} className="font-mono" />
@@ -236,7 +238,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         <Input {...register('cest')} className="font-mono" />
                                     </div>
                                 </div>
-
                                 <div className="space-y-1.5">
                                     <Label>Origem da Mercadoria</Label>
                                     <Select value={String(watch('origin') || '0')} onValueChange={(v) => setValue('origin', Number(v))}>
@@ -259,9 +260,8 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         {renderToggle('Data de Validade', 'Vencimento para FEFO', 'tracksExpiration', 'strictExpiration')}
                                         {renderToggle('Número de Série', 'Serialização de unitários', 'tracksSerial', 'strictSerial')}
                                     </div>
-
-                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Regras de Separação & Físico</h3>
-                                    <div className="grid grid-cols-3 gap-4">
+                                    <h3 className="font-bold text-slate-800 text-sm border-b pb-2 pt-4">Regras de Separação</h3>
+                                    <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <Label>Estratégia de Separação</Label>
                                             <Select value={String(watch('pickingStrategy'))} onValueChange={(val) => setValue('pickingStrategy', Number(val))}>
@@ -273,7 +273,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                 </SelectContent>
                                             </Select>
                                         </div>
-
                                         <div className="space-y-2">
                                             <Label>Data Base Analisada</Label>
                                             <Select value={String(watch('pickingBaseDate'))} onValueChange={(val) => setValue('pickingBaseDate', Number(val))} disabled={watch('pickingStrategy') == 2}>
@@ -285,13 +284,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                 </SelectContent>
                                             </Select>
                                         </div>
-
-                                        <div className="space-y-2">
-                                            <Label>Limite Empilhamento (Blocado)</Label>
-                                            <Input type="number" {...register('maxStacking')} className="bg-white" />
-                                        </div>
                                     </div>
-
                                     <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
                                         <div className="space-y-1.5"><Label>Tolerância Recebimento (Dias Vida Útil)</Label><Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" /></div>
                                         <div className="space-y-1.5"><Label>Tolerância Expedição (Dias Vida Útil)</Label><Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" /></div>
@@ -301,7 +294,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
 
                             <TabsContent value="embalagens" className="space-y-4 mt-0">
                                 {errors.packagings && <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-md">{errors.packagings.root?.message || 'Verifique as informações das embalagens.'}</div>}
-
                                 {fields.map((item, index) => (
                                     <div key={item.id} className="relative p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">
                                         <div className="absolute top-4 right-4">
@@ -309,9 +301,7 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                 <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0"><Trash2 size={16} /></Button>
                                             )}
                                         </div>
-
                                         <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Box size={16} /> Embalagem #{index + 1}</h4>
-
                                         <div className="grid grid-cols-3 gap-4">
                                             <div className="space-y-1.5">
                                                 <Label>Tipo de Embalagem *</Label>
@@ -322,7 +312,6 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-
                                             <div className="space-y-1.5">
                                                 <Label>Fator de Conversão *</Label>
                                                 <div className="flex items-center gap-2">
@@ -330,19 +319,23 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                                     <span className="text-xs font-mono text-slate-500">{watch('baseUnit')}</span>
                                                 </div>
                                             </div>
-
                                             <div className="space-y-1.5">
                                                 <Label>Cód. Barras (DUN/ITF)</Label>
                                                 <Input {...register(`packagings.${index}.barcode`)} className="font-mono" />
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-5 gap-3">
+                                        {/* DIMENSÕES, PESO E EMPILHAMENTO MÁXIMO DA EMBALAGEM */}
+                                        <div className="grid grid-cols-6 gap-3">
                                             <div className="space-y-1.5"><Label className="text-xs">Peso Bruto (KG)</Label><Input type="number" step="0.001" {...register(`packagings.${index}.grossWeight`)} className="h-8 text-xs" /></div>
                                             <div className="space-y-1.5"><Label className="text-xs">Peso Líq. (KG)</Label><Input type="number" step="0.001" {...register(`packagings.${index}.netWeight`)} className="h-8 text-xs" /></div>
                                             <div className="space-y-1.5"><Label className="text-xs">Comp. (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.lengthMm`)} className="h-8 text-xs" /></div>
                                             <div className="space-y-1.5"><Label className="text-xs">Largura (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.widthMm`)} className="h-8 text-xs" /></div>
                                             <div className="space-y-1.5"><Label className="text-xs">Altura (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.heightMm`)} className="h-8 text-xs" /></div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-bold text-blue-900">Empilhamento Máx.</Label>
+                                                <Input type="number" min="1" {...register(`packagings.${index}.maxStacking`)} className="h-8 text-xs font-bold text-blue-700 bg-blue-50/50 border-blue-200" />
+                                            </div>
                                         </div>
 
                                         <div className="flex gap-6 pt-2 border-t border-slate-200">
@@ -353,11 +346,10 @@ export default function ProductFormSheet({ open, onOpenChange, productToEdit }) 
                                         </div>
                                     </div>
                                 ))}
-
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    onClick={() => append({ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0 })}
+                                    onClick={() => append({ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 })}
                                     className="w-full border-dashed border-2 text-blue-600 hover:bg-blue-50"
                                 >
                                     <PlusCircle size={16} className="mr-2" /> Adicionar Embalagem Secundária

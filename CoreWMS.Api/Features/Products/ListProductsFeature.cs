@@ -59,7 +59,6 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
         }
 
         var totalCount = await query.CountAsync(ct);
-
         var items = await query
             .OrderBy(p => p.Sku)
             .Skip((request.Page - 1) * request.PageSize)
@@ -67,12 +66,12 @@ public class ListProductsHandler : IRequestHandler<ListProductsQuery, IResult>
             .ToListAsync(ct);
 
         var dtos = items.Select(p => new ProductDto(
-            p.Id, p.CustomerId, p.Customer.CorporateName, p.Sku, p.Description, p.BaseUnit, p.BaseBarcode, p.Ncm, p.Cest, p.Origin, p.MaxStacking,
+            p.Id, p.CustomerId, p.Customer.CorporateName, p.Sku, p.Description, p.BaseUnit, p.BaseBarcode, p.Ncm, p.Cest, p.Origin,
             p.TracksBatch, p.StrictBatch, p.TracksManufacture, p.StrictManufacture, p.TracksExpiration, p.StrictExpiration, p.TracksSerial, p.StrictSerial,
             (int)p.PickingStrategy, (int)p.PickingBaseDate, p.InboundShelfLifeToleranceDays, p.OutboundShelfLifeToleranceDays, p.IsActive,
             p.Packagings.Select(pp => new ProductPackagingDto(
                 pp.Id, pp.PackagingTypeId, pp.PackagingType.Code, pp.ConversionFactor,
-                pp.AllowFractionalPicking, pp.GrossWeight, pp.NetWeight, pp.LengthMm, pp.WidthMm, pp.HeightMm, pp.CubageM3, pp.Barcode
+                pp.AllowFractionalPicking, pp.GrossWeight, pp.NetWeight, pp.LengthMm, pp.WidthMm, pp.HeightMm, pp.CubageM3, pp.Barcode, pp.MaxStacking
             )).ToList()
         )).ToList();
 

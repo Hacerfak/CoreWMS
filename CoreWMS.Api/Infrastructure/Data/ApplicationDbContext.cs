@@ -297,7 +297,6 @@ public class ApplicationDbContext : DbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.Barcode).HasMaxLength(50);
 
-            // Precisão (18 dígitos totais, 4 ou 2 casas decimais)
             b.Property(x => x.ConversionFactor).HasPrecision(18, 10);
             b.Property(x => x.GrossWeight).HasPrecision(18, 10);
             b.Property(x => x.NetWeight).HasPrecision(18, 10);
@@ -305,22 +304,19 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.WidthMm).HasPrecision(18, 2);
             b.Property(x => x.HeightMm).HasPrecision(18, 2);
 
-            // Se o produto for excluído, apagamos as amarrações de embalagem dele (Cascade)
+            b.Property(x => x.MaxStacking).IsRequired();
+
             b.HasOne(x => x.Product)
              .WithMany(p => p.Packagings)
              .HasForeignKey(x => x.ProductId)
              .OnDelete(DeleteBehavior.Cascade);
 
-            // Restringe exclusão de um "Tipo de Embalagem" se ele estiver em uso por algum produto
             b.HasOne(x => x.PackagingType)
              .WithMany()
              .HasForeignKey(x => x.PackagingTypeId)
              .OnDelete(DeleteBehavior.Restrict);
 
-            // Impede que a mesma embalagem seja vinculada duas vezes ao mesmo produto
             b.HasIndex(x => new { x.ProductId, x.PackagingTypeId }).IsUnique();
-
-            // Índice ultrarrápido para bipagem da embalagem via Coletor RF
             b.HasIndex(x => x.Barcode);
         });
 

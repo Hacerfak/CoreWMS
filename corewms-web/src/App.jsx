@@ -28,6 +28,7 @@ import InventarioPage from '@/pages/Inventario/InventarioPage';
 import OutboundListPage from '@/pages/Outbound/OutboundListPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
 import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
+import AlocacaoInteligentePage from '@/pages/Inbound/AlocacaoInteligentePage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -128,6 +129,7 @@ export default function App() {
                 <Route path="/inbound/operacao/:id" element={<InboundOperacaoPage />} />
                 <Route path="/inbound/operacao/:orderId/item/:itemId" element={<ConferenciaItemPage />} />
                 <Route path="/inbound/operacao/:id/hus" element={<InboundOrderHusPage />} />
+                <Route path="/inbound/operacao/:id/alocacao" element={<AlocacaoInteligentePage />} />
               </Route>
 
               {/* Qualidade */}

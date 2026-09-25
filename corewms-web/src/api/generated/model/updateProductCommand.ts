@@ -19,7 +19,6 @@ export interface UpdateProductCommand {
   /** @nullable */
   cest?: string | null;
   origin?: number;
-  maxStacking?: number;
   tracksBatch?: boolean;
   strictBatch?: boolean;
   tracksManufacture?: boolean;

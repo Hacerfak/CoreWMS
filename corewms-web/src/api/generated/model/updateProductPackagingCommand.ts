@@ -18,4 +18,5 @@ export interface UpdateProductPackagingCommand {
   heightMm?: number;
   /** @nullable */
   barcode?: string | null;
+  maxStacking?: number;
 }

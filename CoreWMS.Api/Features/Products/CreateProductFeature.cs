@@ -18,11 +18,12 @@ public record CreateProductPackagingCommand(
     decimal LengthMm,
     decimal WidthMm,
     decimal HeightMm,
-    string? Barcode
+    string? Barcode,
+    int MaxStacking
 );
 
 public record CreateProductCommand(
-    Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin, int MaxStacking,
+    Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<CreateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
@@ -34,11 +35,14 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.Sku).NotEmpty().MaximumLength(50);
         RuleFor(x => x.Description).NotEmpty().MaximumLength(200);
         RuleFor(x => x.BaseUnit).NotEmpty().MaximumLength(10);
-        RuleFor(x => x.MaxStacking).GreaterThan(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
         RuleFor(x => x.Packagings).NotEmpty().WithMessage("O produto deve possuir pelo menos uma embalagem vinculada.");
+        RuleForEach(x => x.Packagings).ChildRules(p =>
+        {
+            p.RuleFor(x => x.MaxStacking).GreaterThan(0).WithMessage("O empilhamento máximo deve ser maior que zero.");
+        });
     }
 }
 
@@ -80,12 +84,12 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
         product.UpdateRules(
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,
-            (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.MaxStacking, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
+            (PickingStrategy)request.PickingStrategy, (PickingBaseDate)request.PickingBaseDate, request.InboundShelfLifeToleranceDays, request.OutboundShelfLifeToleranceDays);
 
         foreach (var pack in request.Packagings)
         {
-            var packaging = new ProductPackaging(product.Id, pack.PackagingTypeId, pack.ConversionFactor, pack.AllowFractionalPicking);
-            packaging.UpdateDimensions(pack.GrossWeight, pack.NetWeight, pack.LengthMm, pack.WidthMm, pack.HeightMm, pack.Barcode);
+            var packaging = new ProductPackaging(product.Id, pack.PackagingTypeId, pack.ConversionFactor, pack.AllowFractionalPicking, pack.MaxStacking);
+            packaging.UpdateDimensions(pack.GrossWeight, pack.NetWeight, pack.LengthMm, pack.WidthMm, pack.HeightMm, pack.Barcode, pack.MaxStacking);
             product.Packagings.Add(packaging);
         }
 

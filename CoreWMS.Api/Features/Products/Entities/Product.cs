@@ -18,7 +18,6 @@ public class Product : AuditableEntity
     public string? Ncm { get; private set; }
     public string? Cest { get; private set; }
     public int Origin { get; private set; } = 0;
-    public int MaxStacking { get; private set; } = 1;
 
     // Regras Logísticas WMS (Autônomas)
     public bool TracksBatch { get; private set; }
@@ -29,10 +28,8 @@ public class Product : AuditableEntity
     public bool StrictExpiration { get; private set; }
     public bool TracksSerial { get; private set; }
     public bool StrictSerial { get; private set; }
-
     public PickingStrategy PickingStrategy { get; private set; }
     public PickingBaseDate PickingBaseDate { get; private set; }
-
     public int? InboundShelfLifeToleranceDays { get; private set; }
     public int? OutboundShelfLifeToleranceDays { get; private set; }
     public bool IsActive { get; private set; } = true;
@@ -53,11 +50,11 @@ public class Product : AuditableEntity
 
     public void UpdateRules(
         bool tracksBatch, bool strictBatch, bool tracksMfg, bool strictMfg, bool tracksExp, bool strictExp, bool tracksSerial, bool strictSerial,
-        PickingStrategy strategy, PickingBaseDate baseDate, int maxStacking, int? inShelfLife, int? outShelfLife)
+        PickingStrategy strategy, PickingBaseDate baseDate, int? inShelfLife, int? outShelfLife)
     {
         TracksBatch = tracksBatch; StrictBatch = strictBatch; TracksManufacture = tracksMfg; StrictManufacture = strictMfg;
         TracksExpiration = tracksExp; StrictExpiration = strictExp; TracksSerial = tracksSerial; StrictSerial = strictSerial;
-        PickingStrategy = strategy; PickingBaseDate = baseDate; MaxStacking = maxStacking;
+        PickingStrategy = strategy; PickingBaseDate = baseDate;
         InboundShelfLifeToleranceDays = inShelfLife; OutboundShelfLifeToleranceDays = outShelfLife; UpdatedAt = DateTime.UtcNow;
     }
 
