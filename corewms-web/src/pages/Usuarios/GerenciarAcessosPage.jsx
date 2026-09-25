@@ -159,14 +159,14 @@ export default function GerenciarAcessosPage() {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                                Gestão de Acessos & Viseira B2B
+                                Gestão de Acessos e Vínculos
                             </h1>
                             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
                                 {currentUser?.name}
                             </Badge>
                         </div>
                         <p className="text-sm text-slate-500 mt-0.5">
-                            Configuração de matriz de permissões por Empresa e isolamento de Depositantes para {currentUser?.email}.
+                            Configuração de matriz de permissões por Empresa e isolamento de Depositantes.
                         </p>
                     </div>
                 </div>
@@ -244,7 +244,7 @@ export default function GerenciarAcessosPage() {
                                                 </Badge>
                                             ) : (
                                                 <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 gap-1">
-                                                    <UserCheck size={12} /> Interno (Acesso Total)
+                                                    <UserCheck size={12} /> Interno
                                                 </Badge>
                                             )}
                                         </div>
@@ -263,7 +263,7 @@ export default function GerenciarAcessosPage() {
                                 <PlusCircle className="text-blue-600" size={18} /> Conceder ou Atualizar Permissão
                             </CardTitle>
                             <CardDescription className="text-slate-500 text-xs">
-                                Selecione a operação, o perfil de acesso e defina as restrições B2B para o parceiro.
+                                Selecione a operação, o perfil de acesso e vínculo com Depositantes.
                             </CardDescription>
                         </CardHeader>
 
@@ -273,7 +273,7 @@ export default function GerenciarAcessosPage() {
                                 {/* SELEÇÃO DE EMPRESA E ROLE */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <Label className="text-slate-800 font-semibold text-xs">Empresa (Operação) *</Label>
+                                        <Label className="text-slate-800 font-semibold text-xs">Empresa*</Label>
                                         <Select
                                             value={watchCompanyId}
                                             onValueChange={(val) => {
@@ -296,7 +296,7 @@ export default function GerenciarAcessosPage() {
                                     </div>
 
                                     <div className="space-y-1.5">
-                                        <Label className="text-slate-800 font-semibold text-xs">Perfil de Acesso (Role) *</Label>
+                                        <Label className="text-slate-800 font-semibold text-xs">Perfil de Acesso*</Label>
                                         <Select
                                             value={watchRoleId}
                                             onValueChange={(val) => setValue('roleId', val, { shouldValidate: true })}
@@ -321,10 +321,10 @@ export default function GerenciarAcessosPage() {
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div>
                                             <Label className="text-slate-900 font-bold text-sm flex items-center gap-2">
-                                                <Filter size={16} className="text-amber-600" /> Viseira B2B (Restrição de Depositantes)
+                                                <Filter size={16} className="text-amber-600" /> Vínculo com Depositantes
                                             </Label>
                                             <p className="text-xs text-slate-500 mt-0.5">
-                                                Marque os clientes visíveis. <strong className="text-emerald-700">Deixe todos desmarcados para conceder acesso interno total.</strong>
+                                                Marque os clientes que o usuário terá acesso aos dados (Acesso Externo). <strong className="text-emerald-700">Deixe todos desmarcados para conceder acesso aos dados de todos os depositantes (Acesso Interno).</strong>
                                             </p>
                                         </div>
 
@@ -410,14 +410,14 @@ export default function GerenciarAcessosPage() {
                                             <>
                                                 <Users className="text-amber-600 shrink-0" size={16} />
                                                 <span>
-                                                    Modo **Parceiro B2B**: O usuário visualiza apenas **{watchAllowedCustomerIds.length} depositante(s)** nesta empresa.
+                                                    Modo **Externo**: O usuário visualiza apenas **{watchAllowedCustomerIds.length} depositante(s)** nesta empresa.
                                                 </span>
                                             </>
                                         ) : (
                                             <>
                                                 <UserCheck className="text-emerald-600 shrink-0" size={16} />
                                                 <span>
-                                                    Modo **Equipe Interna**: Acesso total a todos os depositantes cadastrados nesta empresa.
+                                                    Modo **Interno**: Acesso a todos os depositantes cadastrados nesta empresa.
                                                 </span>
                                             </>
                                         )}
