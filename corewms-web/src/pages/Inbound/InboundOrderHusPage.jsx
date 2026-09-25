@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiInboundId } from '@/api/generated/inbound/inbound';
@@ -16,13 +16,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
     ArrowLeft, Printer, Undo2, Search, Layers, Loader2,
-    ShieldAlert, Box, Warehouse, AlertTriangle, Archive, MapPin, CheckCircle2
+    ShieldAlert, Box, Warehouse, AlertTriangle, MapPin, CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PrintHuModal from './PrintHuModal';
 
-// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES DE ARMAZENAMENTO
-function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição de Estoque (ex: P1C1AB01)..." }) {
+// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES
+function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição (ex: P1C1AB01)..." }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -109,26 +109,22 @@ export default function InboundOrderHusPage() {
     const [husToMove, setHusToMove] = useState([]);
     const [targetLocationId, setTargetLocationId] = useState('');
     const [isMoving, setIsMoving] = useState(false);
+    const [locationTypeTab, setLocationTypeTab] = useState('storage'); // storage ou quality
 
     // 1. Dados da Ordem de Recebimento
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
 
-    // Mapa auxiliar de produtos/itens da ordem para resolução de descrição e unidade base
-    const orderItemsMap = useMemo(() => {
-        const map = new Map();
-        order?.items?.forEach(item => {
-            if (item.productId) map.set(item.productId, item);
-            if (item.sku) map.set(item.sku, item);
-        });
-        return map;
-    }, [order]);
-
-    const orderBaseUnit = order?.items?.[0]?.unit || 'UN';
-
-    // 2. Busca de Posições de Armazenamento para Alocação
+    // 2. Busca de Posições de Armazenamento e Posições de Qualidade
     const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
+    const [qualityLocations, setQualityLocations] = useState([]);
 
-    // 3. Busca das HUs FILTRADAS PELA NF-E
+    useEffect(() => {
+        customInstance({ url: '/api/topology/locations/quality', method: 'GET' })
+            .then(res => setQualityLocations(Array.isArray(res) ? res : []))
+            .catch(() => setQualityLocations([]));
+    }, []);
+
+    // 3. Busca das HUs FILTRADAS NO BACKEND PELA NF-E DE ENTRADA
     const { data: apiResponse, isLoading: isLoadingHus, refetch } = useGetApiInventoryHandlingUnits(
         { ReceiptDocumentId: orderId, Page: page, PageSize: PAGE_SIZE },
         { query: { enabled: !!orderId } }
@@ -152,7 +148,7 @@ export default function InboundOrderHusPage() {
         });
     }, [orderHus, search, qualityFilter, statusFilter]);
 
-    // Métricas Globais da NF-e com Enum correto (Received = 2, Stored = 3)
+    // Métricas Globais da NF-e
     const metrics = useMemo(() => {
         const totalHus = totalCount;
         const totalUnitsInStock = orderHus.reduce((acc, h) => acc + (Number(h.currentQuantity) || 0), 0);
@@ -174,6 +170,17 @@ export default function InboundOrderHusPage() {
         setSelectedHus(prev =>
             prev.some(h => h.id === hu.id) ? prev.filter(h => h.id !== hu.id) : [...prev, hu]
         );
+    };
+
+    const handleOpenMoveModal = (hus) => {
+        setHusToMove(hus);
+        setTargetLocationId('');
+
+        // Se qualquer HU selecionada estiver com restrição de qualidade, abre por padrão na aba de Qualidade
+        const hasQualityRestriction = hus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
+        setLocationTypeTab(hasQualityRestriction ? 'quality' : 'storage');
+
+        setIsMoveModalOpen(true);
     };
 
     const handleConfirmRollback = async () => {
@@ -206,7 +213,7 @@ export default function InboundOrderHusPage() {
 
     const handleExecuteMove = async () => {
         if (!targetLocationId || husToMove.length === 0) {
-            return toast.warning('Selecione a posição de armazenamento de destino.');
+            return toast.warning('Selecione o endereço de destino.');
         }
 
         setIsMoving(true);
@@ -253,7 +260,6 @@ export default function InboundOrderHusPage() {
         return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Divergência / Falta</Badge>;
     };
 
-    // Mapeamento dos valores de HuStatus Enum (Received = 2, Stored = 3)
     const renderHuStatusBadge = (status) => {
         const statusStr = String(status);
         switch (statusStr) {
@@ -291,6 +297,8 @@ export default function InboundOrderHusPage() {
         ? parseInt(order.accessKey.substring(25, 34), 10)
         : 'N/A';
 
+    const firstHuUnit = orderHus[0]?.unit || 'UN';
+
     return (
         <div className="flex flex-col h-full space-y-6">
             {/* CABEÇALHO DA PÁGINA */}
@@ -322,7 +330,7 @@ export default function InboundOrderHusPage() {
 
                     <div className="flex gap-2">
                         <Button
-                            onClick={() => { setHusToMove(selectedHus); setIsMoveModalOpen(true); }}
+                            onClick={() => handleOpenMoveModal(selectedHus)}
                             disabled={selectedHus.length === 0}
                             className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs text-xs font-semibold"
                         >
@@ -362,7 +370,7 @@ export default function InboundOrderHusPage() {
                         <div className="p-2 bg-emerald-100 text-emerald-700 rounded-md"><Box size={20} /></div>
                         <div>
                             <span className="text-[10px] text-slate-400 font-bold uppercase block">Volume Total Recebido</span>
-                            <span className="text-lg font-bold font-mono text-emerald-700">{metrics.totalUnitsInStock} {orderBaseUnit}</span>
+                            <span className="text-lg font-bold font-mono text-emerald-700">{metrics.totalUnitsInStock} {firstHuUnit}</span>
                         </div>
                     </div>
 
@@ -454,11 +462,9 @@ export default function InboundOrderHusPage() {
                                     const isSelected = selectedHus.some(h => h.id === hu.id);
                                     const isPendingAllocation = String(hu.status) === 'Received' || String(hu.status) === '2';
 
-                                    // Localiza a descrição real do produto e a unidade base pelo mapeamento da ordem
                                     const skuCode = hu.productSku || hu.sku;
-                                    const itemMatch = orderItemsMap.get(hu.productId) || orderItemsMap.get(skuCode);
-                                    const description = itemMatch?.description || hu.productDescription || hu.description || 'Produto WMS';
-                                    const unit = itemMatch?.unit || hu.unit || orderBaseUnit;
+                                    const description = hu.productDescription || hu.description || 'Produto WMS';
+                                    const unit = hu.unit || 'UN';
 
                                     return (
                                         <TableRow key={hu.id} className={isSelected ? 'bg-blue-50/40' : 'hover:bg-slate-50/50'}>
@@ -515,10 +521,7 @@ export default function InboundOrderHusPage() {
                                                     size="sm"
                                                     variant="ghost"
                                                     title={isPendingAllocation ? "Alocar no Estoque" : "Mover Posição"}
-                                                    onClick={() => {
-                                                        setHusToMove([hu]);
-                                                        setIsMoveModalOpen(true);
-                                                    }}
+                                                    onClick={() => handleOpenMoveModal([hu])}
                                                     className="text-blue-600 hover:bg-blue-50"
                                                 >
                                                     <MapPin size={14} />
@@ -588,7 +591,7 @@ export default function InboundOrderHusPage() {
                 )}
             </div>
 
-            {/* MODAL DE ALOCAÇÃO / MOVIMENTAÇÃO COM BUSCA DE POSIÇÕES */}
+            {/* MODAL DE ALOCAÇÃO / MOVIMENTAÇÃO COM SELETOR PESQUISÁVEL E SUPORTE A ARMAZENAMENTO OU QUALIDADE */}
             <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
@@ -596,17 +599,38 @@ export default function InboundOrderHusPage() {
                             <MapPin className="text-blue-600" size={20} /> Alocar / Mover no Estoque
                         </DialogTitle>
                         <DialogDescription className="text-slate-500 text-xs">
-                            Selecione a posição de armazenamento de destino para {husToMove.length} HU(s). Ao alocar em um endereço de estoque, o status mudará automaticamente para <strong className="text-emerald-700 font-mono">Armazenado</strong>.
+                            Selecione a posição de destino para {husToMove.length} HU(s). Ao alocar em um endereço de armazenamento ou qualidade, o status mudará para <strong className="text-emerald-700 font-mono">Armazenado</strong>.
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
+                        {/* SELETOR DE ABA/TIPO DE ENDEREÇO */}
+                        <div className="flex border-b border-slate-200">
+                            <button
+                                type="button"
+                                onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
+                                className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Armazenamento Geral ({storageLocations.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
+                                className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                            >
+                                Posições de Qualidade / Retenção ({qualityLocations.length})
+                            </button>
+                        </div>
+
                         <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-700">Endereço de Armazenamento Destino *</label>
+                            <label className="text-xs font-semibold text-slate-700">
+                                Endereço Destino ({locationTypeTab === 'storage' ? 'Armazenamento' : 'Qualidade'}) *
+                            </label>
                             <SearchableLocationSelect
                                 value={targetLocationId}
                                 onChange={(locId) => setTargetLocationId(locId)}
-                                locations={storageLocations}
+                                locations={locationTypeTab === 'storage' ? storageLocations : qualityLocations}
+                                placeholder={locationTypeTab === 'storage' ? "Pesquisar Posição de Armazenamento..." : "Pesquisar Posição de Qualidade/Avaria..."}
                             />
                         </div>
                     </div>
