@@ -1,5 +1,6 @@
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Enums;
+using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -49,6 +50,18 @@ public class LinkProductToItemHandler : IRequestHandler<LinkProductToItemCommand
         if (product.CustomerId != item.InboundOrder.CustomerId) return Results.BadRequest(new { Message = "O produto selecionado pertence a um depositante diferente do emitente da Nota Fiscal." });
 
         item.LinkProduct(product.Id);
+
+        // LANÇAMENTO DE EXPECTATIVA NO BALANÇO DE ESTOQUE
+        var balance = await _db.InventoryBalances
+            .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.CustomerId == item.InboundOrder.CustomerId.Value && b.ProductId == product.Id, ct);
+
+        if (balance == null)
+        {
+            balance = new InventoryBalance(companyId, item.InboundOrder.CustomerId.Value, product.Id);
+            _db.InventoryBalances.Add(balance);
+        }
+
+        balance.AddExpected(item.ExpectedQuantity);
 
         try
         {

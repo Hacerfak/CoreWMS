@@ -52,20 +52,17 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
         foreach (var hu in generatedHus)
         {
             var balance = await _db.InventoryBalances
-                .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == hu.ProductId, ct);
+                .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == hu.ProductId && b.CustomerId == hu.CustomerId, ct);
 
             if (balance != null)
             {
-                if (hu.QualityStatus == Inventory.Enums.QualityStatus.Available)
-                    balance.Ship(hu.CurrentQuantity);
-                else
-                    balance.RemoveQuarantine(hu.CurrentQuantity);
+                balance.RollbackReceipt(hu.CurrentQuantity, hu.Status, hu.QualityStatus);
             }
 
             await _kardex.WriteAsync(new Inventory.Entities.InventoryTransaction(
                 companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
                 Inventory.Enums.TransactionType.Inventory_Adjustment_Out,
-                hu.CurrentQuantity, hu.CurrentQuantity,
+                -hu.CurrentQuantity, 0,
                 order.Id, $"ESTORNO NF {order.AccessKey}"), ct);
         }
 

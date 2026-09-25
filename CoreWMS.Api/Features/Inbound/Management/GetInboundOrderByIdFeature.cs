@@ -27,9 +27,10 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
             .Include(o => o.Customer)
             .Include(o => o.Items)
                 .ThenInclude(i => i.DockLocation)
+            .Include(o => o.Items)
+                .ThenInclude(i => i.Product)
             .Where(o => o.CompanyId == companyId && o.Id == request.Id);
 
-        // Bloqueio Viseira B2B por ID de Ordem
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
@@ -52,8 +53,9 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
                     i.Id,
                     i.ProductId,
                     i.LineNumber,
-                    i.RawSkuCode,
-                    i.RawDescription,
+                    i.Product != null ? i.Product.Sku : i.RawSkuCode,
+                    i.Product != null ? i.Product.Description : i.RawDescription,
+                    i.Product != null ? i.Product.BaseUnit : i.RawUnit, // Projeta a Unidade Base WMS (ex: PAL, KG, CX)
                     i.ExpectedQuantity,
                     i.ReceivedQuantity,
                     i.Status.ToString(),

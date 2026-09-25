@@ -2,6 +2,7 @@ using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Products.Enums;
+using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Security;
@@ -138,7 +139,15 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                         item.Quantity, item.UnitValue, item.Batch, item.ManufactureDate, item.ExpirationDate
                     );
 
-                    if (matchedProduct != null) orderItem.LinkProduct(matchedProduct.Id);
+                    if (matchedProduct != null)
+                    {
+                        orderItem.LinkProduct(matchedProduct.Id);
+
+                        // LANÇAMENTO DA EXPECTATIVA DE ENTRADA (TotalExpected)
+                        var balance = await GetOrCreateBalanceAsync(companyId, customer.Id, matchedProduct.Id, ct);
+                        balance.AddExpected(orderItem.ExpectedQuantity);
+                    }
+
                     _db.InboundOrderItems.Add(orderItem);
                 }
 
@@ -159,8 +168,19 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
             Errors = errors
         });
     }
-}
+    private async Task<InventoryBalance> GetOrCreateBalanceAsync(Guid companyId, Guid customerId, Guid productId, CancellationToken ct)
+    {
+        var balance = await _db.InventoryBalances
+            .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.CustomerId == customerId && b.ProductId == productId, ct);
 
+        if (balance == null)
+        {
+            balance = new InventoryBalance(companyId, customerId, productId);
+            _db.InventoryBalances.Add(balance);
+        }
+        return balance;
+    }
+}
 public static class ImportInboundXmlEndpoints
 {
     public static void MapImportInboundXmlEndpoints(this IEndpointRouteBuilder app)

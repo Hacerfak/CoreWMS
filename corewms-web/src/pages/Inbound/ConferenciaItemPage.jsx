@@ -9,10 +9,7 @@ import {
 import { useGetApiProducts } from '@/api/generated/products/products';
 import { useGetApiBillingServices } from '@/api/generated/billing/billing';
 import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
-import {
-    useGetApiTopologyLocationsDocks,
-    useGetApiTopologyLocationsStorage
-} from '@/api/generated/topology/topology';
+import { useGetApiCustomers } from '@/api/generated/customers/customers';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,76 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, Loader2, PackageCheck, Plus, Trash2, CheckCircle2,
-    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, Search, ShieldAlert, PauseCircle
+    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, ShieldAlert, PauseCircle, Warehouse
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PrintHuModal from './PrintHuModal';
-
-// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES
-function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição ou Doca (ex: P1C1AB01)..." }) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-
-    const selectedLocation = locations.find(l => l.id === value);
-
-    const filteredLocations = useMemo(() => {
-        if (!searchTerm) return locations.slice(0, 40);
-        const term = searchTerm.toLowerCase();
-        return locations.filter(l => l.fullPath?.toLowerCase().includes(term)).slice(0, 40);
-    }, [locations, searchTerm]);
-
-    return (
-        <div className="relative w-full">
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-md flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-                <span className={selectedLocation ? 'text-slate-900 font-semibold font-mono' : 'text-slate-400'}>
-                    {selectedLocation ? selectedLocation.fullPath : placeholder}
-                </span>
-                <Search size={14} className="text-slate-400 shrink-0 ml-2" />
-            </button>
-
-            {isOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-2">
-                    <div className="relative">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                        <input
-                            type="text"
-                            autoFocus
-                            placeholder="Digite para filtrar..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-500 font-mono"
-                        />
-                    </div>
-
-                    <div className="max-h-48 overflow-y-auto space-y-1">
-                        {filteredLocations.length === 0 ? (
-                            <p className="text-[11px] text-slate-400 p-2 text-center">Nenhuma posição encontrada.</p>
-                        ) : (
-                            filteredLocations.map(loc => (
-                                <div
-                                    key={loc.id}
-                                    onClick={() => {
-                                        onChange(loc.id);
-                                        setIsOpen(false);
-                                        setSearchTerm('');
-                                    }}
-                                    className={`px-2.5 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between font-mono transition-colors ${value === loc.id ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-100 text-slate-700'}`}
-                                >
-                                    <span>{loc.fullPath}</span>
-                                    {value === loc.id && <CheckCircle2 size={12} className="text-blue-600" />}
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-}
 
 export default function ConferenciaItemPage() {
     const { orderId, itemId } = useParams();
@@ -103,23 +34,31 @@ export default function ConferenciaItemPage() {
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
     const item = order?.items?.find(i => i.id === itemId);
 
-    // 2. Detalhes do Produto no WMS
+    // UNIDADE DE MEDIDA DINÂMICA CONSUMIDA DIRETO DA DTO DO ITEM
+    const baseUnit = item?.unit || 'UN';
+
+    // 2. Busca Cadastro do Cliente para validar parâmetro "Exige Conferência Cega"
+    const { data: customersResponse } = useGetApiCustomers(
+        { PageSize: 500 },
+        { query: { enabled: Boolean(order?.customerId) } }
+    );
+    const customersList = customersResponse?.items || (Array.isArray(customersResponse) ? customersResponse : []);
+    const customerDetail = customersList.find(c => c.id === order?.customerId);
+    const isBlindInbound = Boolean(customerDetail?.requiresBlindInbound);
+
+    // 3. Detalhes do Produto no WMS (para embalagens e regras de rastreabilidade)
     const { data: productsRes } = useGetApiProducts(
         { Search: item?.sku || item?.rawSkuCode, PageSize: 5 },
         { query: { enabled: !!(item?.sku || item?.rawSkuCode) } }
     );
     const productDetail = productsRes?.items?.find(p => p.id === item?.productId || p.sku === item?.sku);
 
-    // 3. APIs de Apoio
+    // 4. APIs de Apoio
     const { data: billingServicesResponse } = useGetApiBillingServices();
     const billingServices = Array.isArray(billingServicesResponse) ? billingServicesResponse : (billingServicesResponse?.items || []);
 
     const { data: packTypesResponse } = useGetApiPackagingTypes();
     const globalPackTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
-
-    const { data: docks = [] } = useGetApiTopologyLocationsDocks();
-    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
-    const targetLocations = useMemo(() => [...docks, ...storageLocations], [docks, storageLocations]);
 
     // Embalagens atreladas ao cadastro do produto
     const availablePackagings = useMemo(() => {
@@ -146,11 +85,18 @@ export default function ConferenciaItemPage() {
 
     // REGRAS ESTRITAS DE RASTREABILIDADE - DEPENDEM EXCLUSIVAMENTE DO CADASTRO DO PRODUTO WMS
     const tracksBatch = Boolean(productDetail?.tracksBatch);
-    const tracksExpiration = Boolean(productDetail?.tracksExpiration);
-    const tracksManufacture = Boolean(productDetail?.tracksManufacture);
-    const tracksSerial = Boolean(productDetail?.tracksSerial);
+    const strictBatch = Boolean(productDetail?.strictBatch);
 
-    // 4. Estados do Formulário
+    const tracksExpiration = Boolean(productDetail?.tracksExpiration);
+    const strictExpiration = Boolean(productDetail?.strictExpiration);
+
+    const tracksManufacture = Boolean(productDetail?.tracksManufacture);
+    const strictManufacture = Boolean(productDetail?.strictManufacture);
+
+    const tracksSerial = Boolean(productDetail?.tracksSerial);
+    const strictSerial = Boolean(productDetail?.strictSerial);
+
+    // 5. Estados do Formulário
     const [selectedBillingServiceId, setSelectedBillingServiceId] = useState('');
 
     const [volumeConfig, setVolumeConfig] = useState({
@@ -161,7 +107,6 @@ export default function ConferenciaItemPage() {
         manufactureDate: '',
         expirationDate: '',
         serialNumber: '',
-        targetLocationId: '',
         qualityStatus: '',
         notes: '',
         images: []
@@ -176,10 +121,9 @@ export default function ConferenciaItemPage() {
         if (item) {
             setVolumeConfig(prev => ({
                 ...prev,
-                batch: tracksBatch ? (item.expectedBatch || '') : '',
-                expirationDate: (tracksExpiration && item.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : '',
-                manufactureDate: (tracksManufacture && item.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : '',
-                targetLocationId: item.dockLocationId || ''
+                batch: tracksBatch ? (item.expectedBatch || prev.batch || '') : '',
+                expirationDate: (tracksExpiration && item.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : (tracksExpiration ? prev.expirationDate : ''),
+                manufactureDate: (tracksManufacture && item.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : (tracksManufacture ? prev.manufactureDate : '')
             }));
         }
     }, [item, tracksBatch, tracksExpiration, tracksManufacture]);
@@ -209,7 +153,7 @@ export default function ConferenciaItemPage() {
     const { mutate: checkoutLotes, isPending: isSubmitting } = usePostApiInboundReceiveCheckout({
         mutation: {
             onSuccess: (res) => {
-                toast.success('Checkout realizado e HUs geradas!');
+                toast.success('Checkout realizado e HUs geradas na Doca!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
 
@@ -252,28 +196,42 @@ export default function ConferenciaItemPage() {
             return toast.warning('Selecione a Embalagem do Volume.');
         }
         if (!volumeConfig.qualityStatus) {
-            return toast.warning('Selecione o Status de Qualidade do Lote.');
-        }
-        if (!volumeConfig.targetLocationId) {
-            return toast.warning('Selecione a Posição / Doca de Destino.');
+            return toast.warning('Selecione a Qualidade do Lote Recebido.');
         }
         if (volumeConfig.volumeCount <= 0 || volumeConfig.quantityPerVolume <= 0) {
             return toast.warning('Informe quantidades válidas.');
         }
+        if (!item?.dockLocationId) {
+            return toast.warning('Nenhuma Doca vinculada a este item da ordem.');
+        }
+
+        // VALIDAÇÕES DAS REGRAS DO PRODUTO (EXIGÊNCIAS OBRIGATÓRIAS)
+        if (tracksBatch && strictBatch && !volumeConfig.batch?.trim()) {
+            return toast.warning('O lote é obrigatório para este produto.');
+        }
+        if (tracksExpiration && strictExpiration && !volumeConfig.expirationDate) {
+            return toast.warning('A data de validade é obrigatória para este produto.');
+        }
+        if (tracksManufacture && strictManufacture && !volumeConfig.manufactureDate) {
+            return toast.warning('A data de fabricação é obrigatória para este produto.');
+        }
+        if (tracksSerial && strictSerial && !volumeConfig.serialNumber?.trim()) {
+            return toast.warning('O número de série é obrigatório para este produto.');
+        }
 
         const selectedPack = availablePackagings.find(p => p.packagingTypeId === volumeConfig.packagingTypeId);
-        const selectedLoc = targetLocations.find(l => l.id === volumeConfig.targetLocationId);
 
         const newStagedItem = {
             ...volumeConfig,
-            batch: tracksBatch ? volumeConfig.batch : '',
+            targetLocationId: item.dockLocationId, // OBRIGATORIAMENTE A DOCA DA ORDEM
+            batch: tracksBatch ? volumeConfig.batch?.trim() : '',
             expirationDate: tracksExpiration ? volumeConfig.expirationDate : '',
             manufactureDate: tracksManufacture ? volumeConfig.manufactureDate : '',
-            serialNumber: tracksSerial ? volumeConfig.serialNumber : '',
+            serialNumber: tracksSerial ? volumeConfig.serialNumber?.trim() : '',
             billingServiceId: selectedBillingServiceId,
             tempId: Date.now() + Math.random(),
             packagingCode: selectedPack?.code || 'EMB',
-            locationPath: selectedLoc?.fullPath || 'DOCA',
+            locationPath: item.dockLocationPath || 'DOCA',
             totalQuantity: volumeConfig.volumeCount * volumeConfig.quantityPerVolume
         };
 
@@ -287,10 +245,10 @@ export default function ConferenciaItemPage() {
             volumeCount: 1,
             quantityPerVolume: 0,
             qualityStatus: '',
-            targetLocationId: '',
             batch: tracksBatch ? (item?.expectedBatch || '') : '',
             expirationDate: (tracksExpiration && item?.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : '',
             manufactureDate: (tracksManufacture && item?.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : '',
+            serialNumber: '',
             notes: '',
             images: []
         }));
@@ -319,7 +277,7 @@ export default function ConferenciaItemPage() {
                     manufactureDate: tracksManufacture && v.manufactureDate ? new Date(v.manufactureDate).toISOString() : null,
                     expirationDate: tracksExpiration && v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
                     serialNumber: tracksSerial && v.serialNumber ? v.serialNumber : null,
-                    targetLocationId: v.targetLocationId,
+                    targetLocationId: item.dockLocationId, // OBRIGATORIAMENTE A DOCA DE RECEBIMENTO
                     qualityStatus: Number(v.qualityStatus)
                 }))
             }
@@ -354,10 +312,11 @@ export default function ConferenciaItemPage() {
     }
 
     const totalCartUnits = stagedVolumes.reduce((acc, curr) => acc + curr.totalQuantity, 0);
+    const subtotalCurrentLot = (volumeConfig.volumeCount || 0) * (volumeConfig.quantityPerVolume || 0);
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            {/* CABEÇALHO COM BOTÃO PAUSAR & LIBERAR */}
+            {/* CABEÇALHO */}
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-4">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/inbound/operacao/${orderId}`)} className="shrink-0 text-slate-500 hover:text-slate-900">
@@ -367,7 +326,9 @@ export default function ConferenciaItemPage() {
                         <div className="flex items-center gap-2">
                             <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Linha #{item.lineNumber}</span>
                             <h1 className="text-xl font-bold text-slate-900 font-mono">{item.sku || item.rawSkuCode}</h1>
-                            <Badge variant="outline" className="bg-slate-50">{item.status}</Badge>
+                            <Badge variant="outline" className="bg-slate-50 font-mono text-blue-700 border-blue-200 flex items-center gap-1">
+                                <Warehouse size={12} /> Doca: {item.dockLocationPath || 'P1DC01'}
+                            </Badge>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5 truncate max-w-xl">{item.description || item.rawDescription}</p>
                     </div>
@@ -386,17 +347,23 @@ export default function ConferenciaItemPage() {
                     <div className="flex items-center gap-6 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl">
                         <div className="text-right">
                             <span className="text-[10px] text-slate-400 font-bold uppercase block">Esperado NF-e</span>
-                            <span className="text-sm font-bold font-mono text-slate-800">{item.expectedQuantity} UN</span>
+                            {isBlindInbound ? (
+                                <span className="text-xs font-bold font-mono text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded" title="Conferência Cega Ativada no Cliente">
+                                    *** {baseUnit}
+                                </span>
+                            ) : (
+                                <span className="text-sm font-bold font-mono text-slate-800">{item.expectedQuantity} {baseUnit}</span>
+                            )}
                         </div>
                         <div className="h-8 w-px bg-slate-200" />
                         <div className="text-right">
                             <span className="text-[10px] text-slate-400 font-bold uppercase block">Já Recebido</span>
-                            <span className="text-sm font-bold font-mono text-emerald-600">{item.receivedQuantity || 0} UN</span>
+                            <span className="text-sm font-bold font-mono text-emerald-600">{item.receivedQuantity || 0} {baseUnit}</span>
                         </div>
                         <div className="h-8 w-px bg-slate-200" />
                         <div className="text-right">
                             <span className="text-[10px] text-slate-400 font-bold uppercase block">No Carrinho</span>
-                            <span className="text-sm font-bold font-mono text-blue-600">{totalCartUnits} UN</span>
+                            <span className="text-sm font-bold font-mono text-blue-600">{totalCartUnits} {baseUnit}</span>
                         </div>
                     </div>
                 </div>
@@ -409,15 +376,15 @@ export default function ConferenciaItemPage() {
                         <CheckCircle2 size={36} />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-bold text-slate-900">Recebimento Concluído!</h2>
-                        <p className="text-sm text-slate-500 mt-1">HUs geradas e salvas no banco de dados.</p>
+                        <h2 className="text-2xl font-bold text-slate-900">Recebimento Concluído na Doca!</h2>
+                        <p className="text-sm text-slate-500 mt-1">HUs geradas e salvas na Doca de Recebimento.</p>
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left max-h-48 overflow-y-auto font-mono text-xs space-y-1">
                         {generatedHusResult.map((hu, idx) => (
                             <div key={idx} className="flex justify-between items-center py-1 border-b border-slate-100 last:border-none">
                                 <span className="font-bold text-slate-800">{typeof hu === 'string' ? hu : hu.lpn}</span>
-                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registrado</Badge>
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registrado na Doca</Badge>
                             </div>
                         ))}
                     </div>
@@ -440,11 +407,11 @@ export default function ConferenciaItemPage() {
 
                         {/* 1. SERVIÇO DE FATURAMENTO */}
                         <div className="space-y-2 border-b border-slate-100 pb-4">
-                            <Label className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                                <Receipt className="text-blue-600" size={16} /> 1. Serviço de Operação de Recebimento *
+                            <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                <Receipt className="text-blue-600" size={16} /> 1. Serviço de Operação de Recebimento <span className="text-rose-500 font-bold">*</span>
                             </Label>
                             <Select value={selectedBillingServiceId} onValueChange={setSelectedBillingServiceId}>
-                                <SelectTrigger className="bg-slate-50 border-slate-200 h-10">
+                                <SelectTrigger className={`bg-slate-50 h-10 ${!selectedBillingServiceId ? 'border-amber-300' : 'border-slate-200'}`}>
                                     <SelectValue placeholder="Selecione obrigatoriamente a tarifa/serviço..." />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -456,119 +423,149 @@ export default function ConferenciaItemPage() {
                             </Select>
                         </div>
 
-                        {/* 2. DADOS DO VOLUME / LOTE */}
-                        <div className="space-y-4">
-                            <Label className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                                <Box className="text-blue-600" size={16} /> 2. Dados do Volume / Lote Descarregado *
+                        {/* 2. DADOS DO VOLUME / QUANTIDADES */}
+                        <div className="space-y-4 border-b border-slate-100 pb-4">
+                            <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                <Box className="text-blue-600" size={16} /> 2. Dados do Volume & Quantidades <span className="text-rose-500 font-bold">*</span>
                             </Label>
 
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="space-y-1.5 col-span-2">
-                                    <Label className="text-xs">Embalagem do Volume *</Label>
-                                    <Select value={volumeConfig.packagingTypeId} onValueChange={handlePackagingChange}>
-                                        <SelectTrigger className="bg-slate-50"><SelectValue placeholder="Escolha a embalagem..." /></SelectTrigger>
-                                        <SelectContent>
-                                            {availablePackagings.map(pt => (
-                                                <SelectItem key={pt.packagingTypeId} value={pt.packagingTypeId}>
-                                                    {pt.code} - {pt.description} (Fator: {pt.conversionFactor})
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-700 flex items-center">
+                                    Embalagem do Volume <span className="text-rose-500 font-bold ml-0.5">*</span>
+                                </Label>
+                                <Select value={volumeConfig.packagingTypeId} onValueChange={handlePackagingChange}>
+                                    <SelectTrigger className={`bg-slate-50 h-10 ${!volumeConfig.packagingTypeId ? 'border-amber-300' : 'border-slate-200'}`}>
+                                        <SelectValue placeholder="Escolha a embalagem..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availablePackagings.map(pt => (
+                                            <SelectItem key={pt.packagingTypeId} value={pt.packagingTypeId}>
+                                                {pt.code} - {pt.description} (Fator: {pt.conversionFactor})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* PAINEL EM DESTAQUE PARA QUANTIDADES */}
+                            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-bold text-blue-950 flex items-center">
+                                            Qtd Volumes (HUs) <span className="text-rose-500 font-bold ml-0.5">*</span>
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            min="1"
+                                            value={volumeConfig.volumeCount}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => setVolumeConfig(p => ({ ...p, volumeCount: Number(e.target.value) }))}
+                                            className="bg-white border-blue-300 focus:ring-2 focus:ring-blue-600 font-mono text-base font-bold h-11 text-center text-slate-900 shadow-xs"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-bold text-blue-950 flex items-center">
+                                            Qtd de Peças por Volume <span className="text-rose-500 font-bold ml-0.5">*</span>
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            step="0.0001"
+                                            value={volumeConfig.quantityPerVolume}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => setVolumeConfig(p => ({ ...p, quantityPerVolume: Number(e.target.value) }))}
+                                            className="bg-white border-blue-300 focus:ring-2 focus:ring-blue-600 font-mono text-base font-bold h-11 text-center text-blue-700 shadow-xs"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs">Qtd Volumes (HUs) *</Label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        value={volumeConfig.volumeCount}
-                                        onChange={(e) => setVolumeConfig(p => ({ ...p, volumeCount: Number(e.target.value) }))}
-                                        className="bg-slate-50 font-mono font-bold"
-                                    />
+
+                                <div className="flex items-center justify-between pt-1 border-t border-blue-200/60 text-xs">
+                                    <span className="text-blue-800 font-medium">Subtotal de Peças deste Lote:</span>
+                                    <Badge className="bg-blue-600 text-white font-mono font-bold text-xs px-2.5 py-0.5">
+                                        {subtotalCurrentLot} {baseUnit}
+                                    </Badge>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs">Qtd de Peças por Volume *</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.0001"
-                                        value={volumeConfig.quantityPerVolume}
-                                        onChange={(e) => setVolumeConfig(p => ({ ...p, quantityPerVolume: Number(e.target.value) }))}
-                                        className="bg-slate-50 font-mono font-bold text-blue-700"
-                                    />
-                                </div>
-
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs">Posição / Doca Destino *</Label>
-                                    <SearchableLocationSelect
-                                        value={volumeConfig.targetLocationId}
-                                        onChange={(locId) => setVolumeConfig(p => ({ ...p, targetLocationId: locId }))}
-                                        locations={targetLocations}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* RASTREABILIDADE EXIBIDA APENAS SE HABILITADA NO CADASTRO DO PRODUTO */}
+                            {/* RASTREABILIDADE EXIBIDA E EXIGIDA CONFORME REGRAS DO PRODUTO */}
                             {(tracksBatch || tracksExpiration || tracksManufacture || tracksSerial) && (
-                                <div className="grid grid-cols-2 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+                                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                                     {tracksBatch && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600 font-semibold">Lote Físico</Label>
+                                            <Label className="text-[11px] text-slate-700 font-semibold flex items-center justify-between">
+                                                <span>Lote Físico {strictBatch && <span className="text-rose-500 font-bold">*</span>}</span>
+                                                {strictBatch && <span className="text-[9px] text-rose-600 font-normal">(Obrigatório)</span>}
+                                            </Label>
                                             <Input
                                                 value={volumeConfig.batch}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, batch: e.target.value }))}
                                                 placeholder="Lote do XML/Físico"
-                                                className="h-8 text-xs font-mono bg-white"
+                                                className={`h-8 text-xs font-mono bg-white ${strictBatch && !volumeConfig.batch ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
 
                                     {tracksExpiration && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600 font-semibold">Data Validade</Label>
+                                            <Label className="text-[11px] text-slate-700 font-semibold flex items-center justify-between">
+                                                <span>Data Validade {strictExpiration && <span className="text-rose-500 font-bold">*</span>}</span>
+                                                {strictExpiration && <span className="text-[9px] text-rose-600 font-normal">(Obrigatório)</span>}
+                                            </Label>
                                             <Input
                                                 type="date"
                                                 value={volumeConfig.expirationDate}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, expirationDate: e.target.value }))}
-                                                className="h-8 text-xs bg-white font-mono"
+                                                className={`h-8 text-xs bg-white font-mono ${strictExpiration && !volumeConfig.expirationDate ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
 
                                     {tracksManufacture && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600 font-semibold">Data Fabricação</Label>
+                                            <Label className="text-[11px] text-slate-700 font-semibold flex items-center justify-between">
+                                                <span>Data Fabricação {strictManufacture && <span className="text-rose-500 font-bold">*</span>}</span>
+                                                {strictManufacture && <span className="text-[9px] text-rose-600 font-normal">(Obrigatório)</span>}
+                                            </Label>
                                             <Input
                                                 type="date"
                                                 value={volumeConfig.manufactureDate}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, manufactureDate: e.target.value }))}
-                                                className="h-8 text-xs bg-white font-mono"
+                                                className={`h-8 text-xs bg-white font-mono ${strictManufacture && !volumeConfig.manufactureDate ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
 
                                     {tracksSerial && (
                                         <div className="space-y-1">
-                                            <Label className="text-[11px] text-slate-600 font-semibold">Número de Série</Label>
+                                            <Label className="text-[11px] text-slate-700 font-semibold flex items-center justify-between">
+                                                <span>Número de Série {strictSerial && <span className="text-rose-500 font-bold">*</span>}</span>
+                                                {strictSerial && <span className="text-[9px] text-rose-600 font-normal">(Obrigatório)</span>}
+                                            </Label>
                                             <Input
                                                 value={volumeConfig.serialNumber}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, serialNumber: e.target.value }))}
                                                 placeholder="Serial Unitário"
-                                                className="h-8 text-xs font-mono bg-white"
+                                                className={`h-8 text-xs font-mono bg-white ${strictSerial && !volumeConfig.serialNumber ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
                                 </div>
                             )}
+                        </div>
 
-                            {/* 3. QUALIDADE E CONDICIONAIS */}
-                            <div className="space-y-3 pt-2">
-                                <Label className="text-xs font-bold text-slate-800">3. Qualidade do Lote Recebido *</Label>
+                        {/* 3. QUALIDADE DO LOTE RECEBIDO */}
+                        <div className="space-y-4">
+                            <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                                <ShieldAlert className="text-blue-600" size={16} /> 3. Qualidade do Lote Recebido <span className="text-rose-500 font-bold">*</span>
+                            </Label>
+
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-700 flex items-center">
+                                    Status de Qualidade <span className="text-rose-500 font-bold ml-0.5">*</span>
+                                </Label>
                                 <Select value={String(volumeConfig.qualityStatus)} onValueChange={(v) => setVolumeConfig(p => ({ ...p, qualityStatus: v }))}>
-                                    <SelectTrigger className="bg-slate-50">
-                                        <SelectValue placeholder="Selecione a Qualidade..." />
+                                    <SelectTrigger className={`bg-slate-50 h-10 ${!volumeConfig.qualityStatus ? 'border-amber-300' : 'border-slate-200'}`}>
+                                        <SelectValue placeholder="Selecione..." />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="1">Liberado (Sem Avarias)</SelectItem>
@@ -577,55 +574,58 @@ export default function ConferenciaItemPage() {
                                         <SelectItem value="4">Falta Virtual / Divergência Fiscal</SelectItem>
                                     </SelectContent>
                                 </Select>
-
-                                {(volumeConfig.qualityStatus === '2' || volumeConfig.qualityStatus === '3' || volumeConfig.qualityStatus === '4') && (
-                                    <div className="p-4 rounded-xl border bg-amber-50/50 border-amber-200 space-y-3 animate-in fade-in duration-300">
-                                        <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
-                                            {volumeConfig.qualityStatus === '2' && <ShieldAlert size={16} />}
-                                            {volumeConfig.qualityStatus === '3' && <AlertTriangle size={16} />}
-                                            {volumeConfig.qualityStatus === '4' && <FileWarning size={16} />}
-                                            {volumeConfig.qualityStatus === '2' ? 'Registro de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registro de Avaria Físico' : 'Registro de Divergência / Falta'}
-                                        </div>
-
-                                        <div className="space-y-1">
-                                            <Label className="text-xs">Descrição / Motivo do Bloqueio ou Ocorrência *</Label>
-                                            <Input
-                                                value={volumeConfig.notes}
-                                                onChange={(e) => setVolumeConfig(p => ({ ...p, notes: e.target.value }))}
-                                                placeholder="Descreva observações, inspecções ou motivos..."
-                                                className="bg-white text-xs h-9"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                            <Label className="text-xs">Anexar Imagens / Comprovantes</Label>
-                                            <div className="flex items-center gap-3">
-                                                <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-amber-300 bg-white text-xs text-amber-800 cursor-pointer hover:bg-amber-100/50">
-                                                    <Upload size={14} /> Selecionar Fotos
-                                                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
-                                                </label>
-                                                <span className="text-[10px] text-slate-500">{volumeConfig.images.length} imagem(ns) anexada(s)</span>
-                                            </div>
-
-                                            {volumeConfig.images.length > 0 && (
-                                                <div className="flex gap-2 flex-wrap pt-2">
-                                                    {volumeConfig.images.map((img, idx) => (
-                                                        <div key={idx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-amber-300">
-                                                            <img src={img.base64Data} alt="Evidência" className="w-full h-full object-cover" />
-                                                            <button
-                                                                onClick={() => removeImage(idx)}
-                                                                className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
+
+                            {/* OCORRÊNCIAS / EVIDÊNCIAS DE QUALIDADE */}
+                            {(volumeConfig.qualityStatus === '2' || volumeConfig.qualityStatus === '3' || volumeConfig.qualityStatus === '4') && (
+                                <div className="p-4 rounded-xl border bg-amber-50/50 border-amber-200 space-y-3 animate-in fade-in duration-300">
+                                    <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
+                                        {volumeConfig.qualityStatus === '2' && <ShieldAlert size={16} />}
+                                        {volumeConfig.qualityStatus === '3' && <AlertTriangle size={16} />}
+                                        {volumeConfig.qualityStatus === '4' && <FileWarning size={16} />}
+                                        {volumeConfig.qualityStatus === '2' ? 'Registro de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registro de Avaria Físico' : 'Registro de Divergência / Falta'}
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <Label className="text-xs flex items-center">
+                                            Motivo da Ocorrência <span className="text-rose-500 font-bold ml-0.5">*</span>
+                                        </Label>
+                                        <Input
+                                            value={volumeConfig.notes}
+                                            onChange={(e) => setVolumeConfig(p => ({ ...p, notes: e.target.value }))}
+                                            placeholder="Descreva observações, inspecções ou motivos..."
+                                            className="bg-white text-xs h-9"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Anexar Imagens / Comprovantes</Label>
+                                        <div className="flex items-center gap-3">
+                                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-amber-300 bg-white text-xs text-amber-800 cursor-pointer hover:bg-amber-100/50">
+                                                <Upload size={14} /> Selecionar Fotos
+                                                <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
+                                            </label>
+                                            <span className="text-[10px] text-slate-500">{volumeConfig.images.length} imagem(ns) anexada(s)</span>
+                                        </div>
+
+                                        {volumeConfig.images.length > 0 && (
+                                            <div className="flex gap-2 flex-wrap pt-2">
+                                                {volumeConfig.images.map((img, idx) => (
+                                                    <div key={idx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-amber-300">
+                                                        <img src={img.base64Data} alt="Evidência" className="w-full h-full object-cover" />
+                                                        <button
+                                                            onClick={() => removeImage(idx)}
+                                                            className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="pt-4 border-t border-slate-100">
@@ -639,7 +639,7 @@ export default function ConferenciaItemPage() {
                         </div>
                     </div>
 
-                    {/* CARRINHO DE CONFERÊNCIA COM RASTREABILIDADE E QUALIDADE */}
+                    {/* CARRINHO DE CONFERÊNCIA (5 COLS) */}
                     <div className="col-span-5 bg-slate-50/50 border border-slate-200/80 rounded-xl p-6 flex flex-col min-h-0">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-3 shrink-0">
                             <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -670,11 +670,11 @@ export default function ConferenciaItemPage() {
 
                                             <div className="flex items-center gap-2">
                                                 <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-mono text-[10px]">{cartItem.packagingCode}</Badge>
-                                                <span className="font-bold text-slate-900 text-xs font-mono">{cartItem.volumeCount} Vol x {cartItem.quantityPerVolume} UN</span>
+                                                <span className="font-bold text-slate-900 text-xs font-mono">{cartItem.volumeCount} Vol x {cartItem.quantityPerVolume} {baseUnit}</span>
                                             </div>
 
                                             <div className="text-[10px] text-slate-500 space-y-1 font-mono pt-1 border-t border-slate-100">
-                                                <p>Destino: <strong className="text-slate-800">{cartItem.locationPath}</strong></p>
+                                                <p>Destino: <strong className="text-slate-800 font-bold">{cartItem.locationPath}</strong></p>
                                                 {cartItem.batch && <p>Lote: <strong className="text-slate-800">{cartItem.batch}</strong></p>}
                                                 {cartItem.expirationDate && <p>Validade: <strong className="text-slate-800">{cartItem.expirationDate}</strong></p>}
                                                 {cartItem.manufactureDate && <p>Fabricação: <strong className="text-slate-800">{cartItem.manufactureDate}</strong></p>}
@@ -694,8 +694,8 @@ export default function ConferenciaItemPage() {
 
                         <div className="border-t border-slate-200 pt-4 space-y-3 shrink-0 bg-white p-4 rounded-xl border">
                             <div className="flex justify-between text-xs font-semibold text-slate-700">
-                                <span>Total a Gravar nesta Conferência:</span>
-                                <span className="font-mono text-emerald-700 font-bold text-sm">{totalCartUnits} UN</span>
+                                <span>Total a Gravar na Doca:</span>
+                                <span className="font-mono text-emerald-700 font-bold text-sm">{totalCartUnits} {baseUnit}</span>
                             </div>
 
                             <Button
@@ -703,7 +703,7 @@ export default function ConferenciaItemPage() {
                                 disabled={stagedVolumes.length === 0 || isSubmitting}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-sm"
                             >
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Registrar Checkout & Gerar HUs</>}
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Registrar Checkout na Doca</>}
                             </Button>
                         </div>
                     </div>
@@ -721,7 +721,7 @@ export default function ConferenciaItemPage() {
                         productDescription: item.description || item.rawDescription,
                         batch: item.expectedBatch,
                         expirationDate: item.expectedExpirationDate,
-                        unit: item.rawUnit || 'UN'
+                        unit: baseUnit
                     }))}
                     orderData={order}
                 />

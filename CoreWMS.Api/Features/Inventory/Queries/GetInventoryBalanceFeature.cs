@@ -38,7 +38,6 @@ public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQue
             .Include(b => b.Customer)
             .Where(b => b.CompanyId == companyId);
 
-        // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
@@ -48,16 +47,14 @@ public class GetInventoryBalanceHandler : IRequestHandler<GetInventoryBalanceQue
         if (request.CustomerId.HasValue) q = q.Where(b => b.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(b => b.ProductId == request.ProductId);
 
-        // Execução sequencial para evitar concorrência no DbContext
         var totalCount = await q.CountAsync(ct);
-
         var items = await q
             .OrderBy(b => b.Product.Sku)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(b => new InventoryBalanceDto(
                 b.ProductId, b.Product.Sku, b.Customer.CorporateName,
-                b.TotalExpected, b.TotalAvailable, b.TotalAllocated, b.TotalQuarantine, b.TotalPhysical
+                b.TotalExpected, b.TotalDock, b.TotalAvailable, b.TotalAllocated, b.TotalQuarantine, b.TotalPhysical
             )).ToListAsync(ct);
 
         var response = new PaginatedResult<InventoryBalanceDto>(items, totalCount, request.Page, request.PageSize);

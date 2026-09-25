@@ -5,6 +5,7 @@ using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Topology.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
@@ -37,7 +38,13 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         if (lines.Length <= 1) return Results.BadRequest(new { Message = "Planilha vazia." });
 
         var customers = await _db.Customers.Where(c => c.CompanyId == companyId).ToDictionaryAsync(c => c.Cnpj, c => c.Id, ct);
-        var locations = await _db.Locations.Where(l => l.Zone.Warehouse.Code != "").ToDictionaryAsync(l => l.FullPath.ToUpper(), l => l.Id, ct);
+
+        // Carrega as localizações incluindo a relação StorageType para validar o StorageRole (Dock, Storage, Quality)
+        var locations = await _db.Locations
+            .AsNoTracking()
+            .Include(l => l.StorageType)
+            .Where(l => l.Zone.Warehouse.Code != "")
+            .ToDictionaryAsync(l => l.FullPath.ToUpper(), l => l, ct);
 
         var openOrders = await _db.InboundOrders
             .Include(o => o.Items)
@@ -75,7 +82,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 continue;
             }
 
-            if (!locations.TryGetValue(locationPath, out var locationId))
+            if (!locations.TryGetValue(locationPath, out var locationObj))
             {
                 errors.Add($"Linha {i + 1}: Endereço {locationPath} não cadastrado na Topologia.");
                 continue;
@@ -106,8 +113,17 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 orderItem.InboundOrderId, string.IsNullOrWhiteSpace(lote) ? null : lote, null, null, null,
                 quantity, orderItem.ExpectedUnitValue);
 
-            hu.ReceiveAtDock(locationId);
+            // 1. Registra a HU na Doca
+            hu.ReceiveAtDock(locationObj.Id);
             if (qualityStatus != QualityStatus.Available) hu.ChangeQuality(qualityStatus);
+
+            var targetRole = locationObj.StorageType?.Role ?? StorageRole.Storage;
+
+            // 2. Se a posição for de Armazenamento ou Qualidade, transita o status da HU para Stored
+            if (targetRole != StorageRole.Dock)
+            {
+                hu.MoveTo(locationObj.Id);
+            }
 
             husToInsert.Add(hu);
             existingHus.Add(lpn);
@@ -121,11 +137,17 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 _db.InventoryBalances.Add(balance);
             }
 
-            if (qualityStatus == QualityStatus.Quarantine) balance.Quarantine(quantity);
-            else balance.Receive(quantity);
+            // 1. Recebe na Doca (Deduz de TotalExpected e incrementa TotalDock)
+            balance.ReceiveToDock(quantity);
+
+            // 2. Se for uma posição interna do armazém, executa a alocação saindo do TotalDock
+            if (targetRole != StorageRole.Dock)
+            {
+                balance.AllocateFromDock(quantity, targetRole, qualityStatus);
+            }
 
             await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, customerId, orderItem.ProductId.Value, hu.Id, locationId,
+                companyId, customerId, orderItem.ProductId.Value, hu.Id, locationObj.Id,
                 TransactionType.Inbound_Receipt, quantity, quantity,
                 orderItem.InboundOrderId, $"MIGRAÇÃO NF {nfNumero}"), ct);
 
@@ -147,7 +169,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
 
         return Results.Ok(new
         {
-            Message = $"Migração concluída.",
+            Message = $"Migração de inventário legada concluída com sucesso.",
             HusImported = insertedHus,
             Errors = errors.Take(50)
         });

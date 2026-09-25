@@ -7,6 +7,7 @@ import {
     usePostApiInboundReceiveOrderItemIdRelease
 } from '@/api/generated/inbound/inbound';
 import { useGetApiTopologyLocationsDocks } from '@/api/generated/topology/topology';
+import { useGetApiCustomers } from '@/api/generated/customers/customers';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     Loader2, ArrowLeft, Warehouse, Play, PauseCircle, PackageCheck,
-    CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw
+    CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw, EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,12 +25,20 @@ export default function InboundOperacaoPage() {
     const queryClient = useQueryClient();
 
     const [selectedDocks, setSelectedDocks] = useState({});
-    const [isHusModalOpen, setIsHusModalOpen] = useState(false);
 
-    // Detalhes da Ordem
+    // 1. Detalhes da Ordem (já traz item.unit atualizado do backend)
     const { data: order, isLoading } = useGetApiInboundId(orderId);
 
-    // Lista de Docas da Topologia
+    // 2. Busca Cadastro do Cliente para verificar se "Exige Conferência Cega"
+    const { data: customersResponse } = useGetApiCustomers(
+        { PageSize: 500 },
+        { query: { enabled: Boolean(order?.customerId) } }
+    );
+    const customersList = customersResponse?.items || (Array.isArray(customersResponse) ? customersResponse : []);
+    const customerDetail = customersList.find(c => c.id === order?.customerId);
+    const isBlindInbound = Boolean(customerDetail?.requiresBlindInbound);
+
+    // 3. Lista de Docas da Topologia
     const { data: dockLocations = [], isLoading: isLoadingDocks } = useGetApiTopologyLocationsDocks();
 
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
@@ -38,7 +47,6 @@ export default function InboundOperacaoPage() {
                 toast.success('Doca atribuída e recebimento do item iniciado!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
-                // Redireciona diretamente para a conferência após dar início/continuidade
                 navigate(`/inbound/operacao/${orderId}/item/${variables.data.orderItemId}`);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao iniciar recebimento do item.')
@@ -99,11 +107,9 @@ export default function InboundOperacaoPage() {
         if (item.status === 'Completed') {
             return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">100% Recebido</Badge>;
         }
-        // Se o status for Receiving E houver um operador preso nele
         if (item.status === 'Receiving' && item.lockedByUserId) {
             return <Badge className="bg-purple-100 text-purple-800 border-purple-200 animate-pulse font-medium">Em Recebimento</Badge>;
         }
-        // Se tiver recebimento parcial e estiver destravado
         if (item.receivedQuantity > 0) {
             return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Parcial - Aguardando</Badge>;
         }
@@ -213,13 +219,11 @@ export default function InboundOperacaoPage() {
                             {order.items?.map((item) => {
                                 const isCompleted = item.status === 'Completed';
                                 const isPendingReview = item.status === 'Pending_Review';
-
-                                // O item só está em recebimento se estiver no status Receiving E tiver uma trava de operador ativa
                                 const isReceiving = item.status === 'Receiving' && Boolean(item.lockedByUserId);
-                                // Caso contrário, está pronto para iniciar ou continuar
                                 const isReady = !isCompleted && !isPendingReview && !isReceiving;
 
                                 const currentDockValue = selectedDocks[item.id] || item.dockLocationId || '';
+                                const displayUnit = item.unit || 'UN'; // Unidade do produto WMS enviada pelo backend
 
                                 return (
                                     <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
@@ -236,19 +240,31 @@ export default function InboundOperacaoPage() {
                                             </div>
                                         </TableCell>
 
+                                        {/* PROGRESSO DE DESCARGA */}
                                         <TableCell>
-                                            <div className="flex flex-col gap-1 w-36">
-                                                <div className="flex justify-between text-xs font-semibold text-slate-700">
-                                                    <span>{item.receivedQuantity}</span>
-                                                    <span className="text-slate-400">/ {item.expectedQuantity} UN</span>
+                                            {isBlindInbound ? (
+                                                <div className="flex items-center gap-2 w-36">
+                                                    <span className="font-bold text-slate-800 font-mono text-xs">
+                                                        {item.receivedQuantity || 0} {displayUnit}
+                                                    </span>
+                                                    <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] font-sans px-1.5 py-0 flex items-center gap-1" title="Conferência Cega Ativada no Cliente">
+                                                        <EyeOff size={10} /> Cega
+                                                    </Badge>
                                                 </div>
-                                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                                    <div
-                                                        className={`h-full ${isCompleted ? 'bg-emerald-500' : 'bg-blue-600'}`}
-                                                        style={{ width: `${Math.min(100, (item.receivedQuantity / item.expectedQuantity) * 100)}%` }}
-                                                    />
+                                            ) : (
+                                                <div className="flex flex-col gap-1 w-36">
+                                                    <div className="flex justify-between text-xs font-semibold text-slate-700 font-mono">
+                                                        <span>{item.receivedQuantity || 0}</span>
+                                                        <span className="text-slate-400">/ {item.expectedQuantity} {displayUnit}</span>
+                                                    </div>
+                                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                                        <div
+                                                            className={`h-full ${isCompleted ? 'bg-emerald-500' : 'bg-blue-600'}`}
+                                                            style={{ width: `${Math.min(100, ((item.receivedQuantity || 0) / item.expectedQuantity) * 100)}%` }}
+                                                        />
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </TableCell>
 
                                         {/* DOCA */}
@@ -287,7 +303,6 @@ export default function InboundOperacaoPage() {
                                                 </Button>
                                             )}
 
-                                            {/* AGUARDANDO RECEBIMENTO / CONTINUIDADE */}
                                             {isReady && (
                                                 <Button
                                                     size="sm"
@@ -305,7 +320,6 @@ export default function InboundOperacaoPage() {
                                                 </Button>
                                             )}
 
-                                            {/* EM RECEBIMENTO ATIVO */}
                                             {isReceiving && (
                                                 <div className="inline-flex gap-1.5">
                                                     <Button

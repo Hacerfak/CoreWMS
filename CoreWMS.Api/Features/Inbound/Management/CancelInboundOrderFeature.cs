@@ -38,6 +38,24 @@ public class CancelInboundOrderHandler : IRequestHandler<CancelInboundOrderComma
 
         order.UpdateStatus(InboundOrderStatus.Canceled);
 
+        if (order.CustomerId.HasValue)
+        {
+            var customerId = order.CustomerId.Value;
+
+            foreach (var item in order.Items.Where(i => i.ProductId.HasValue && i.ReceivedQuantity == 0))
+            {
+                var productId = item.ProductId!.Value;
+
+                var balance = await _db.InventoryBalances
+                    .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.CustomerId == customerId && b.ProductId == productId, ct);
+
+                if (balance != null)
+                {
+                    balance.RemoveExpected(item.ExpectedQuantity);
+                }
+            }
+        }
+
         foreach (var item in order.Items)
         {
             if (item.LockedByUserId.HasValue) item.Unlock();

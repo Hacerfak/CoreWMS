@@ -6,6 +6,7 @@
  */
 
 export interface MoveHandlingUnitCommand {
-  id?: string;
+  /** @nullable */
+  handlingUnitIds?: string[] | null;
   destinationLocationId?: string;
 }

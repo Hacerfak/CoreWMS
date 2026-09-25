@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiInboundId } from '@/api/generated/inbound/inbound';
 import { useGetApiInventoryHandlingUnits } from '@/api/generated/inventory/inventory';
+import { useGetApiTopologyLocationsStorage } from '@/api/generated/topology/topology';
 import { customInstance } from '@/api/orval-mutator';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,56 +12,132 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import {
     ArrowLeft, Printer, Undo2, Search, Layers, Loader2,
-    ShieldAlert, Box, Warehouse, AlertTriangle, Archive
+    ShieldAlert, Box, Warehouse, AlertTriangle, Archive, MapPin, CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PrintHuModal from './PrintHuModal';
+
+// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES DE ARMAZENAMENTO
+function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição de Estoque (ex: P1C1AB01)..." }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const selectedLocation = locations.find(l => l.id === value);
+
+    const filteredLocations = useMemo(() => {
+        if (!searchTerm) return locations.slice(0, 40);
+        const term = searchTerm.toLowerCase();
+        return locations.filter(l => l.fullPath?.toLowerCase().includes(term)).slice(0, 40);
+    }, [locations, searchTerm]);
+
+    return (
+        <div className="relative w-full">
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full h-10 px-3 text-xs bg-slate-50 border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${!value ? 'border-amber-300' : 'border-slate-200'}`}
+            >
+                <span className={selectedLocation ? 'text-slate-900 font-bold font-mono' : 'text-slate-400'}>
+                    {selectedLocation ? selectedLocation.fullPath : placeholder}
+                </span>
+                <Search size={14} className="text-slate-400 shrink-0 ml-2" />
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-2">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Digite para filtrar..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-500 font-mono"
+                        />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                        {filteredLocations.length === 0 ? (
+                            <p className="text-[11px] text-slate-400 p-2 text-center">Nenhuma posição encontrada.</p>
+                        ) : (
+                            filteredLocations.map(loc => (
+                                <div
+                                    key={loc.id}
+                                    onClick={() => {
+                                        onChange(loc.id);
+                                        setIsOpen(false);
+                                        setSearchTerm('');
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between font-mono transition-colors ${value === loc.id ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-100 text-slate-700'}`}
+                                >
+                                    <span>{loc.fullPath}</span>
+                                    {value === loc.id && <CheckCircle2 size={12} className="text-blue-600" />}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function InboundOrderHusPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // Controle de Paginação
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 100;
 
-    // Filtros Locais
     const [search, setSearch] = useState('');
     const [qualityFilter, setQualityFilter] = useState('ALL');
     const [statusFilter, setStatusFilter] = useState('ALL');
 
-    // Seleção e Modais
     const [selectedHus, setSelectedHus] = useState([]);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [husToRollback, setHusToRollback] = useState(null);
     const [isRollingBack, setIsRollingBack] = useState(false);
 
+    // Modal de Alocação / Movimentação
+    const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+    const [husToMove, setHusToMove] = useState([]);
+    const [targetLocationId, setTargetLocationId] = useState('');
+    const [isMoving, setIsMoving] = useState(false);
+
     // 1. Dados da Ordem de Recebimento
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
 
-    // 2. Busca de HUs do Depositante com limite estrito de 100
+    // Mapa auxiliar de produtos/itens da ordem para resolução de descrição e unidade base
+    const orderItemsMap = useMemo(() => {
+        const map = new Map();
+        order?.items?.forEach(item => {
+            if (item.productId) map.set(item.productId, item);
+            if (item.sku) map.set(item.sku, item);
+        });
+        return map;
+    }, [order]);
+
+    const orderBaseUnit = order?.items?.[0]?.unit || 'UN';
+
+    // 2. Busca de Posições de Armazenamento para Alocação
+    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
+
+    // 3. Busca das HUs FILTRADAS PELA NF-E
     const { data: apiResponse, isLoading: isLoadingHus, refetch } = useGetApiInventoryHandlingUnits(
-        { CustomerId: order?.customerId, Page: page, PageSize: PAGE_SIZE },
-        { query: { enabled: !!order?.customerId } }
+        { ReceiptDocumentId: orderId, Page: page, PageSize: PAGE_SIZE },
+        { query: { enabled: !!orderId } }
     );
 
-    const allHus = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
-    const totalCount = apiResponse?.totalCount || allHus.length;
+    const orderHus = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
+    const totalCount = apiResponse?.totalCount || orderHus.length;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-    // Filtra apenas as HUs pertencentes a esta Ordem de Recebimento (NF-e)
-    const orderHus = useMemo(() => {
-        return allHus.filter(h =>
-            !h.receiptDocumentId || !orderId ||
-            String(h.receiptDocumentId).toLowerCase() === String(orderId).toLowerCase()
-        );
-    }, [allHus, orderId]);
-
-    // Aplica Filtros de Pesquisa e Categoria
     const filteredHus = useMemo(() => {
         return orderHus.filter(hu => {
             const matchesSearch = !search ||
@@ -75,14 +152,14 @@ export default function InboundOrderHusPage() {
         });
     }, [orderHus, search, qualityFilter, statusFilter]);
 
-    // Métricas para os Cards de Topo
+    // Métricas Globais da NF-e com Enum correto (Received = 2, Stored = 3)
     const metrics = useMemo(() => {
         const totalHus = totalCount;
         const totalUnitsInStock = orderHus.reduce((acc, h) => acc + (Number(h.currentQuantity) || 0), 0);
         const quarantineHus = orderHus.filter(h => String(h.qualityStatus) === '2' || String(h.qualityStatus) === 'Quarantine').length;
-        const consumedOrShippedHus = orderHus.filter(h => String(h.status) === 'Consumed' || String(h.status) === 'Shipped').length;
+        const pendingAllocationHus = orderHus.filter(h => String(h.status) === '2' || String(h.status) === 'Received').length;
 
-        return { totalHus, totalUnitsInStock, quarantineHus, consumedOrShippedHus };
+        return { totalHus, totalUnitsInStock, quarantineHus, pendingAllocationHus };
     }, [orderHus, totalCount]);
 
     const toggleSelectAll = () => {
@@ -127,6 +204,41 @@ export default function InboundOrderHusPage() {
         }
     };
 
+    const handleExecuteMove = async () => {
+        if (!targetLocationId || husToMove.length === 0) {
+            return toast.warning('Selecione a posição de armazenamento de destino.');
+        }
+
+        setIsMoving(true);
+        try {
+            const huIds = husToMove.map(h => h.id);
+
+            const res = await customInstance({
+                url: '/api/inventory/handling-units/move',
+                method: 'POST',
+                data: {
+                    handlingUnitIds: huIds,
+                    destinationLocationId: targetLocationId
+                }
+            });
+
+            toast.success(res?.message || 'Alocação concluída com sucesso!');
+
+            await refetch();
+            queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+            queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+
+            setSelectedHus(prev => prev.filter(h => !huIds.includes(h.id)));
+            setIsMoveModalOpen(false);
+            setHusToMove([]);
+            setTargetLocationId('');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Erro ao alocar HUs.');
+        } finally {
+            setIsMoving(false);
+        }
+    };
+
     const renderQualityBadge = (qualityStatus) => {
         const statusStr = String(qualityStatus);
         if (statusStr === '1' || statusStr === 'Available') {
@@ -141,20 +253,27 @@ export default function InboundOrderHusPage() {
         return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Divergência / Falta</Badge>;
     };
 
+    // Mapeamento dos valores de HuStatus Enum (Received = 2, Stored = 3)
     const renderHuStatusBadge = (status) => {
         const statusStr = String(status);
         switch (statusStr) {
             case 'Received':
-                return <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200 font-mono text-[10px]">Na Doca</Badge>;
+            case '2':
+                return <Badge variant="outline" className="bg-amber-50 text-amber-900 border-amber-300 font-mono text-[10px] font-bold">Na Doca (Aguardando Alocação)</Badge>;
             case 'Stored':
+            case '3':
                 return <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 font-mono text-[10px]">Armazenado</Badge>;
             case 'Picking':
+            case '4':
             case 'Staged':
-                return <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 font-mono text-[10px]">Em Expedição</Badge>;
+            case '5':
+                return <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200 font-mono text-[10px]">Em Expedição</Badge>;
             case 'Shipped':
+            case '6':
                 return <Badge variant="outline" className="bg-purple-50 text-purple-800 border-purple-200 font-mono text-[10px]">Expedido</Badge>;
             case 'Consumed':
-                return <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 font-mono text-[10px]">Consumido / Zerado</Badge>;
+            case '7':
+                return <Badge variant="outline" className="bg-slate-100 text-slate-600 border-slate-300 font-mono text-[10px]">Consumido</Badge>;
             default:
                 return <Badge variant="outline" className="font-mono text-[10px]">{statusStr}</Badge>;
         }
@@ -196,37 +315,45 @@ export default function InboundOrderHusPage() {
                                 </Badge>
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                                Consulta, reimpressão de etiquetas térmicas e controle de estornos da Nota Fiscal.
+                                Gerencie a alocação no estoque, reimpressão de etiquetas térmicas e estornos da Nota Fiscal.
                             </p>
                         </div>
                     </div>
 
                     <div className="flex gap-2">
                         <Button
+                            onClick={() => { setHusToMove(selectedHus); setIsMoveModalOpen(true); }}
+                            disabled={selectedHus.length === 0}
+                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs text-xs font-semibold"
+                        >
+                            <MapPin className="w-4 h-4 mr-1.5" /> Alocar / Mover ({selectedHus.length})
+                        </Button>
+
+                        <Button
                             onClick={() => setHusToRollback(selectedHus)}
                             disabled={selectedHus.length === 0}
                             variant="outline"
-                            className="border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 shadow-xs"
+                            className="border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 shadow-xs text-xs font-semibold"
                         >
-                            <Undo2 className="w-4 h-4 mr-2 text-rose-600" /> Estornar Selecionadas ({selectedHus.length})
+                            <Undo2 className="w-4 h-4 mr-1.5 text-rose-600" /> Estornar ({selectedHus.length})
                         </Button>
 
                         <Button
                             onClick={() => setIsPrintModalOpen(true)}
                             disabled={selectedHus.length === 0}
-                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-xs"
+                            className="bg-slate-900 hover:bg-slate-800 text-white shadow-xs text-xs font-semibold"
                         >
-                            <Printer className="w-4 h-4 mr-2" /> Reimprimir Selecionadas ({selectedHus.length})
+                            <Printer className="w-4 h-4 mr-1.5" /> Reimprimir ({selectedHus.length})
                         </Button>
                     </div>
                 </div>
 
-                {/* PAINEL DE MÉTRICAS */}
+                {/* PAINEL DE MÉTRICAS GLOBAIS DA NF-E */}
                 <div className="grid grid-cols-4 gap-4 border-t border-slate-100 pt-4">
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3">
                         <div className="p-2 bg-blue-100 text-blue-700 rounded-md"><Layers size={20} /></div>
                         <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Total de HUs Registradas</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Total HUs na NF-e</span>
                             <span className="text-lg font-bold font-mono text-slate-900">{metrics.totalHus}</span>
                         </div>
                     </div>
@@ -234,24 +361,24 @@ export default function InboundOrderHusPage() {
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3">
                         <div className="p-2 bg-emerald-100 text-emerald-700 rounded-md"><Box size={20} /></div>
                         <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Página Atual em Estoque</span>
-                            <span className="text-lg font-bold font-mono text-emerald-700">{metrics.totalUnitsInStock} UN</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Volume Total Recebido</span>
+                            <span className="text-lg font-bold font-mono text-emerald-700">{metrics.totalUnitsInStock} {orderBaseUnit}</span>
                         </div>
                     </div>
 
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3">
-                        <div className="p-2 bg-amber-100 text-amber-700 rounded-md"><ShieldAlert size={20} /></div>
+                        <div className="p-2 bg-amber-100 text-amber-700 rounded-md"><Warehouse size={20} /></div>
                         <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Quarentena (Página)</span>
-                            <span className="text-lg font-bold font-mono text-amber-800">{metrics.quarantineHus}</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Na Doca (Aguardando Alocação)</span>
+                            <span className="text-lg font-bold font-mono text-amber-800">{metrics.pendingAllocationHus}</span>
                         </div>
                     </div>
 
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 text-purple-700 rounded-md"><Archive size={20} /></div>
+                        <div className="p-2 bg-rose-100 text-rose-700 rounded-md"><ShieldAlert size={20} /></div>
                         <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Expedidas (Página)</span>
-                            <span className="text-lg font-bold font-mono text-purple-800">{metrics.consumedOrShippedHus}</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Quarentena / Retidos</span>
+                            <span className="text-lg font-bold font-mono text-rose-800">{metrics.quarantineHus}</span>
                         </div>
                     </div>
                 </div>
@@ -266,13 +393,13 @@ export default function InboundOrderHusPage() {
                             placeholder="Buscar por LPN, SKU ou Lote..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="pl-9 bg-white border-slate-200"
+                            className="pl-9 bg-white border-slate-200 text-xs"
                         />
                     </div>
 
                     <div className="w-48">
                         <Select value={qualityFilter} onValueChange={setQualityFilter}>
-                            <SelectTrigger className="bg-white border-slate-200"><SelectValue placeholder="Qualidade..." /></SelectTrigger>
+                            <SelectTrigger className="bg-white border-slate-200 text-xs"><SelectValue placeholder="Qualidade..." /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="ALL">Todas Qualidades</SelectItem>
                                 <SelectItem value="1">Liberado (Sem Avarias)</SelectItem>
@@ -284,13 +411,13 @@ export default function InboundOrderHusPage() {
 
                     <div className="w-48">
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="bg-white border-slate-200"><SelectValue placeholder="Status da HU..." /></SelectTrigger>
+                            <SelectTrigger className="bg-white border-slate-200 text-xs"><SelectValue placeholder="Status da HU..." /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="ALL">Todos os Status</SelectItem>
-                                <SelectItem value="Received">Na Doca</SelectItem>
-                                <SelectItem value="Stored">Armazenado</SelectItem>
-                                <SelectItem value="Shipped">Expedido</SelectItem>
-                                <SelectItem value="Consumed">Consumido / Zerado</SelectItem>
+                                <SelectItem value="2">Na Doca</SelectItem>
+                                <SelectItem value="3">Armazenado</SelectItem>
+                                <SelectItem value="6">Expedido</SelectItem>
+                                <SelectItem value="7">Consumido</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -321,10 +448,17 @@ export default function InboundOrderHusPage() {
                             {isLoadingHus ? (
                                 <TableRow><TableCell colSpan={10} className="h-32 text-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
                             ) : filteredHus.length === 0 ? (
-                                <TableRow><TableCell colSpan={10} className="h-32 text-center text-slate-500">Nenhuma HU encontrada nesta página.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={10} className="h-32 text-center text-slate-500">Nenhuma HU encontrada para esta NF-e.</TableCell></TableRow>
                             ) : (
                                 filteredHus.map((hu) => {
                                     const isSelected = selectedHus.some(h => h.id === hu.id);
+                                    const isPendingAllocation = String(hu.status) === 'Received' || String(hu.status) === '2';
+
+                                    // Localiza a descrição real do produto e a unidade base pelo mapeamento da ordem
+                                    const skuCode = hu.productSku || hu.sku;
+                                    const itemMatch = orderItemsMap.get(hu.productId) || orderItemsMap.get(skuCode);
+                                    const description = itemMatch?.description || hu.productDescription || hu.description || 'Produto WMS';
+                                    const unit = itemMatch?.unit || hu.unit || orderBaseUnit;
 
                                     return (
                                         <TableRow key={hu.id} className={isSelected ? 'bg-blue-50/40' : 'hover:bg-slate-50/50'}>
@@ -341,19 +475,19 @@ export default function InboundOrderHusPage() {
 
                                             <TableCell>
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-slate-800">{hu.productSku || hu.sku}</span>
-                                                    <span className="text-[10px] text-slate-400 truncate max-w-[200px]" title={hu.productDescription || hu.description}>
-                                                        {hu.productDescription || hu.description || 'Produto WMS'}
+                                                    <span className="font-semibold text-slate-800 text-xs font-mono">{skuCode}</span>
+                                                    <span className="text-[10px] text-slate-500 truncate max-w-[220px]" title={description}>
+                                                        {description}
                                                     </span>
                                                 </div>
                                             </TableCell>
 
-                                            <TableCell className="font-mono font-bold">
+                                            <TableCell className="font-mono font-bold text-xs">
                                                 <span className="text-blue-700">{hu.currentQuantity ?? hu.initialQuantity}</span>
-                                                <span className="text-slate-400 font-normal text-xs"> / {hu.initialQuantity} {hu.unit || 'UN'}</span>
+                                                <span className="text-slate-400 font-normal"> / {hu.initialQuantity} {unit}</span>
                                             </TableCell>
 
-                                            <TableCell className="font-mono text-slate-700">
+                                            <TableCell className="font-mono text-xs text-slate-700">
                                                 {hu.batch || 'N/A'}
                                             </TableCell>
 
@@ -377,6 +511,19 @@ export default function InboundOrderHusPage() {
                                             </TableCell>
 
                                             <TableCell className="text-right space-x-1">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    title={isPendingAllocation ? "Alocar no Estoque" : "Mover Posição"}
+                                                    onClick={() => {
+                                                        setHusToMove([hu]);
+                                                        setIsMoveModalOpen(true);
+                                                    }}
+                                                    className="text-blue-600 hover:bg-blue-50"
+                                                >
+                                                    <MapPin size={14} />
+                                                </Button>
+
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
@@ -408,11 +555,11 @@ export default function InboundOrderHusPage() {
                     </Table>
                 </div>
 
-                {/* CONTROLES DE PAGINAÇÃO NO RODAPÉ DA TABELA */}
+                {/* CONTROLES DE PAGINAÇÃO */}
                 {totalCount > 0 && (
                     <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
                         <span className="text-xs text-slate-500 font-medium">
-                            Mostrando {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} HUs
+                            Mostrando {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} HUs da NF-e
                         </span>
                         <div className="flex gap-2">
                             <Button
@@ -441,15 +588,48 @@ export default function InboundOrderHusPage() {
                 )}
             </div>
 
+            {/* MODAL DE ALOCAÇÃO / MOVIMENTAÇÃO COM BUSCA DE POSIÇÕES */}
+            <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
+                <DialogContent className="sm:max-w-md bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-slate-900 flex items-center gap-2">
+                            <MapPin className="text-blue-600" size={20} /> Alocar / Mover no Estoque
+                        </DialogTitle>
+                        <DialogDescription className="text-slate-500 text-xs">
+                            Selecione a posição de armazenamento de destino para {husToMove.length} HU(s). Ao alocar em um endereço de estoque, o status mudará automaticamente para <strong className="text-emerald-700 font-mono">Armazenado</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-semibold text-slate-700">Endereço de Armazenamento Destino *</label>
+                            <SearchableLocationSelect
+                                value={targetLocationId}
+                                onChange={(locId) => setTargetLocationId(locId)}
+                                locations={storageLocations}
+                            />
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsMoveModalOpen(false)} disabled={isMoving}>Cancelar</Button>
+                        <Button onClick={handleExecuteMove} disabled={!targetLocationId || isMoving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                            {isMoving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                            Confirmar Alocação
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             {/* CONFIRMAÇÃO DE ESTORNO */}
             <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
-                <AlertDialogContent>
+                <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>
                         <AlertDialogTitle>
                             Estornar {husToRollback?.length === 1 ? `HU ${husToRollback[0]?.lpn}` : `${husToRollback?.length} HU(s) selecionadas`}?
                         </AlertDialogTitle>
                         <AlertDialogDescription>
-                            Deseja estornar a entrada deste(s) volume(s)? A quantidade recebida na NF-e e os saldos em estoque serão reajustados e as HUs serão removidas do sistema.
+                            Deseja estornar a entrada deste(s) volume(s)? A quantidade recebida na NF-e e os saldos em estoque serão reajustados.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

@@ -13,9 +13,8 @@ public record InboundOrderDto(
     string AccessKey, DateTime IssueDate, string Status, bool HasPendingReview
 );
 
-// Incluídos ExpectedBatch, ExpectedManufactureDate e ExpectedExpirationDate
 public record InboundOrderItemDto(
-    Guid Id, Guid? ProductId, int LineNumber, string Sku, string Description,
+    Guid Id, Guid? ProductId, int LineNumber, string Sku, string Description, string Unit,
     decimal ExpectedQuantity, decimal ReceivedQuantity, string Status,
     Guid? LockedByUserId, Guid? DockLocationId, string? DockLocationPath,
     string? ExpectedBatch, DateTime? ExpectedManufactureDate, DateTime? ExpectedExpirationDate

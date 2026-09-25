@@ -87,26 +87,24 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
             for (int i = 0; i < vol.VolumeCount; i++)
             {
-                // Geração de Código LPN Único com 10 caracteres alfanuméricos (Sem prefixo "HU")
                 var lpn = GenerateShortLpn();
-
                 var hu = new HandlingUnit(
                     lpn, companyId, orderItem.InboundOrder.CustomerId!.Value, orderItem.ProductId.Value, vol.PackagingTypeId,
                     orderItem.InboundOrderId, vol.Batch, vol.ManufactureDate, vol.ExpirationDate, vol.SerialNumber,
                     vol.QuantityPerVolume, orderItem.ExpectedUnitValue
                 );
 
+                // Força entrada física na Doca
                 hu.ReceiveAtDock(vol.TargetLocationId);
+
                 if (vol.QualityStatus != QualityStatus.Available)
                     hu.ChangeQuality(vol.QualityStatus);
 
                 husToInsert.Add(hu);
                 totalToReceive += vol.QuantityPerVolume;
 
-                if (vol.QualityStatus == QualityStatus.Virtual_Shortage || vol.QualityStatus == QualityStatus.Damaged || vol.QualityStatus == QualityStatus.Quarantine)
-                    balance.Quarantine(vol.QuantityPerVolume);
-                else
-                    balance.Receive(vol.QuantityPerVolume);
+                // Entra 100% no balde TotalDock
+                balance.ReceiveToDock(vol.QuantityPerVolume);
 
                 await _kardex.WriteAsync(new InventoryTransaction(
                     companyId, orderItem.InboundOrder.CustomerId.Value, orderItem.ProductId.Value, hu.Id, vol.TargetLocationId,
@@ -149,7 +147,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         return Results.Ok(new
         {
-            Message = "Lote recebido com sucesso.",
+            Message = "Lote recebido na Doca com sucesso.",
             HusGenerated = husToInsert.Select(h => new { h.Id, h.Lpn }).ToList(),
             OrderItemStatus = orderItem.Status.ToString()
         });
@@ -168,9 +166,8 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
     private static string GenerateShortLpn()
     {
-        var ticks = (DateTime.UtcNow.Ticks - 638000000000000000L) % 2176782336L; // 6 dígitos Base36
-        var randomVal = Random.Shared.Next(0, 1679616);                          // 4 dígitos Base36
-
+        var ticks = (DateTime.UtcNow.Ticks - 638000000000000000L) % 2176782336L;
+        var randomVal = Random.Shared.Next(0, 1679616);
         return $"{ConvertToBase36(ticks, 6)}{ConvertToBase36(randomVal, 4)}".ToUpper();
     }
 
@@ -178,13 +175,11 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     {
         const string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         var result = new StringBuilder();
-
         while (number > 0)
         {
             result.Insert(0, chars[(int)(number % 36)]);
             number /= 36;
         }
-
         return result.ToString().PadLeft(minLength, '0');
     }
 }

@@ -38,7 +38,6 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
     public async Task<IResult> Handle(RollbackHandlingUnitsCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var hus = await _db.HandlingUnits
             .Include(h => h.Product)
             .Where(h => h.CompanyId == companyId && request.HandlingUnitIds.Contains(h.Id))
@@ -47,7 +46,6 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
         if (!hus.Any())
             return Results.NotFound(new { Message = "Nenhuma Unidade de Manuseio (HU) encontrada." });
 
-        // 1. Verificação de segurança: Impede estorno se qualquer HU do lote estiver em expedição
         var invalidStatusHus = hus.Where(h => h.Status == HuStatus.Shipped || h.Status == HuStatus.Staged || h.Status == HuStatus.Picking).ToList();
         if (invalidStatusHus.Any())
         {
@@ -58,7 +56,6 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
             });
         }
 
-        // 2. Verificação de alocações em notas de saída/retorno
         var huIds = hus.Select(h => h.Id).ToList();
         var allocatedHuIds = await _db.OutboundAllocations
             .Where(a => huIds.Contains(a.HandlingUnitId))
@@ -75,14 +72,12 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
             });
         }
 
-        // 3. Carrega as Ordens de Entrada atreladas para reajuste de progresso
         var orderIds = hus.Where(h => h.ReceiptDocumentId.HasValue).Select(h => h.ReceiptDocumentId!.Value).Distinct().ToList();
         var inboundOrders = await _db.InboundOrders
             .Include(o => o.Items)
             .Where(o => orderIds.Contains(o.Id))
             .ToListAsync(ct);
 
-        // 4. Carrega os Saldos de Estoque das mercadorias
         var productIds = hus.Select(h => h.ProductId).Distinct().ToList();
         var balances = await _db.InventoryBalances
             .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId))
@@ -90,7 +85,6 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
 
         foreach (var hu in hus)
         {
-            // Reajusta a quantidade recebida na Ordem e Item de Entrada
             if (hu.ReceiptDocumentId.HasValue)
             {
                 var order = inboundOrders.FirstOrDefault(o => o.Id == hu.ReceiptDocumentId.Value);
@@ -100,13 +94,11 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
                     if (item != null)
                     {
                         item.AddReceivedQuantity(-hu.CurrentQuantity);
-
                         if (item.Status == InboundOrderItemStatus.Completed)
                         {
                             item.UpdateStatus(InboundOrderItemStatus.Ready_To_Receive);
                         }
                     }
-
                     if (order.Status == InboundOrderStatus.Completed)
                     {
                         order.UpdateStatus(InboundOrderStatus.Receiving);
@@ -114,30 +106,19 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
                 }
             }
 
-            // Reajusta o saldo físico no estoque
-            var balance = balances.FirstOrDefault(b => b.ProductId == hu.ProductId);
+            var balance = balances.FirstOrDefault(b => b.ProductId == hu.ProductId && b.CustomerId == hu.CustomerId);
             if (balance != null)
             {
-                if (hu.QualityStatus == QualityStatus.Available)
-                {
-                    balance.Ship(hu.CurrentQuantity);
-                }
-                else
-                {
-                    balance.RemoveQuarantine(hu.CurrentQuantity);
-                }
+                balance.RollbackReceipt(hu.CurrentQuantity, hu.Status, hu.QualityStatus);
             }
 
-            // Escreve transação no Kardex
             await _kardex.WriteAsync(new InventoryTransaction(
                 companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
                 TransactionType.Inventory_Adjustment_Out, -hu.CurrentQuantity, 0,
-                hu.ReceiptDocumentId, $"Estorno de HU {hu.Lpn}"), ct);
+                hu.ReceiptDocumentId, $"ESTORNO HU {hu.Lpn}"), ct);
         }
 
-        // 5. Exclui o lote de HUs
         _db.HandlingUnits.RemoveRange(hus);
-
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { Message = $"{hus.Count} HU(s) estornada(s) com sucesso." });

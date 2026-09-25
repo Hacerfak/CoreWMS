@@ -38,11 +38,9 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
     public async Task<IResult> Handle(ChangeQualityCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var query = _db.HandlingUnits
             .Where(h => h.CompanyId == companyId && request.HandlingUnitIds.Contains(h.Id));
 
-        // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedIds = _tenant.GetAllowedCustomerIds();
@@ -50,7 +48,6 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
         }
 
         var hus = await query.ToListAsync(ct);
-
         if (!hus.Any())
             return Results.NotFound(new { Message = "Nenhuma Unidade de Manuseio (HU) válida foi encontrada." });
 
@@ -60,7 +57,6 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
             .ToListAsync(ct);
 
         int updatedCount = 0;
-
         foreach (var hu in hus)
         {
             if (hu.QualityStatus == request.NewStatus) continue;
@@ -68,30 +64,20 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
             var oldStatus = hu.QualityStatus;
             var balance = balances.FirstOrDefault(b => b.ProductId == hu.ProductId && b.CustomerId == hu.CustomerId);
 
-            if (balance == null) continue;
-
-            // Transição: Disponível -> Bloqueado (Quarentena, Avaria ou Falta Virtual)
-            if (oldStatus == QualityStatus.Available && request.NewStatus != QualityStatus.Available)
+            // Só altera as gavetas do InventoryBalance se a HU JÁ FOI ARMAZENADA (Stored).
+            // Se estiver na Doca (Received), continua no balde TotalDock!
+            if (hu.Status != HuStatus.Received && balance != null)
             {
-                balance.Quarantine(hu.CurrentQuantity);
-
-                await _kardex.WriteAsync(new InventoryTransaction(
-                    companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
-                    TransactionType.Quality_Hold, 0, hu.CurrentQuantity,
-                    null, $"BLOQUEIO QUALIDADE ({request.NewStatus}): {request.Reason ?? "Sem observação"}"), ct);
-            }
-            // Transição: Bloqueado -> Liberado (Disponível)
-            else if (oldStatus != QualityStatus.Available && request.NewStatus == QualityStatus.Available)
-            {
-                balance.ReleaseFromQuarantine(hu.CurrentQuantity);
-
-                await _kardex.WriteAsync(new InventoryTransaction(
-                    companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
-                    TransactionType.Quality_Release, 0, hu.CurrentQuantity,
-                    null, $"LIBERAÇÃO QUALIDADE: {request.Reason ?? "Sem observação"}"), ct);
+                balance.ChangeQualityForStored(hu.CurrentQuantity, oldStatus, request.NewStatus);
             }
 
             hu.ChangeQuality(request.NewStatus);
+
+            await _kardex.WriteAsync(new InventoryTransaction(
+                companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
+                request.NewStatus == QualityStatus.Available ? TransactionType.Quality_Release : TransactionType.Quality_Hold,
+                0, hu.CurrentQuantity, null, $"ALTERAÇÃO QUALIDADE ({oldStatus} -> {request.NewStatus}): {request.Reason ?? "Sem observação"}"), ct);
+
             updatedCount++;
         }
 
