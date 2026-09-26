@@ -4,6 +4,7 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
+import type { QualityImageDto } from './qualityImageDto';
 import type { QualityStatus } from './qualityStatus';
 
 export interface ReceiveVolumeDto {
@@ -20,4 +21,10 @@ export interface ReceiveVolumeDto {
   serialNumber?: string | null;
   targetLocationId?: string;
   qualityStatus?: QualityStatus;
+  /** @nullable */
+  qualityReasonId?: string | null;
+  /** @nullable */
+  qualityNotes?: string | null;
+  /** @nullable */
+  qualityImages?: QualityImageDto[] | null;
 }

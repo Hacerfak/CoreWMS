@@ -5,10 +5,12 @@ using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
+using CoreWMS.Api.Infrastructure.Storage;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -41,14 +43,22 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     private readonly IMasterDataCacheService _masterDataCache;
     private readonly KardexChannel _kardex;
     private readonly IHttpContextAccessor _http;
+    private readonly ILocalImageStorageService _imageStorage;
 
-    public ReceiveLoteHandler(ApplicationDbContext db, ITenantProvider tenant, IMasterDataCacheService masterDataCache, KardexChannel kardex, IHttpContextAccessor http)
+    public ReceiveLoteHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IMasterDataCacheService masterDataCache,
+        KardexChannel kardex,
+        IHttpContextAccessor http,
+        ILocalImageStorageService imageStorage)
     {
         _db = db;
         _tenant = tenant;
         _masterDataCache = masterDataCache;
         _kardex = kardex;
         _http = http;
+        _imageStorage = imageStorage;
     }
 
     public async Task<IResult> Handle(ReceiveLoteCommand request, CancellationToken ct)
@@ -85,6 +95,20 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             if (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) && vol.Batch != orderItem.ExpectedBatch && vol.QualityStatus == QualityStatus.Available)
                 throw new InvalidOperationException($"Divergência Fiscal: Lote ({vol.Batch}) difere da nota fiscal ({orderItem.ExpectedBatch}).");
 
+            // OTIMIZAÇÃO: Processa e grava as fotos no disco UMA ÚNICA VEZ por lote de volumes
+            var processedImages = new List<(string FileName, string FilePath, long FileSize)>();
+            if (vol.QualityStatus != QualityStatus.Available && vol.QualityImages != null && vol.QualityImages.Any())
+            {
+                foreach (var img in vol.QualityImages)
+                {
+                    if (!string.IsNullOrWhiteSpace(img.Base64Data))
+                    {
+                        var (filePath, size) = await _imageStorage.CompressAndSaveImageAsync(img.FileName, img.Base64Data, ct);
+                        processedImages.Add((img.FileName, filePath, size));
+                    }
+                }
+            }
+
             for (int i = 0; i < vol.VolumeCount; i++)
             {
                 var lpn = GenerateShortLpn();
@@ -94,16 +118,34 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                     vol.QuantityPerVolume, orderItem.ExpectedUnitValue
                 );
 
-                // Força entrada física na Doca
+                // Entry física obrigatória na Doca
                 hu.ReceiveAtDock(vol.TargetLocationId);
 
+                // Registro de Qualidade por HU reaproveitando os arquivos salvos no disco
                 if (vol.QualityStatus != QualityStatus.Available)
+                {
                     hu.ChangeQuality(vol.QualityStatus);
+
+                    Guid reasonId = vol.QualityReasonId ?? await GetDefaultQualityReasonIdAsync(companyId, ct);
+                    string qualityNotes = !string.IsNullOrWhiteSpace(vol.QualityNotes)
+                        ? vol.QualityNotes
+                        : $"Retenção registrada na conferência da NF-e {orderItem.InboundOrder.AccessKey} ({vol.QualityStatus})";
+
+                    var qualityEvent = new QualityEvent(companyId, hu.Id, vol.TargetLocationId, reasonId, qualityNotes);
+
+                    // Vincula os mesmos caminhos de arquivos já gerados sem duplicar no disco
+                    foreach (var (fileName, filePath, size) in processedImages)
+                    {
+                        qualityEvent.AddImage(fileName, filePath, size);
+                    }
+
+                    _db.QualityEvents.Add(qualityEvent);
+                }
 
                 husToInsert.Add(hu);
                 totalToReceive += vol.QuantityPerVolume;
 
-                // Entra 100% no balde TotalDock
+                // Entra no balde TotalDock
                 balance.ReceiveToDock(vol.QuantityPerVolume);
 
                 await _kardex.WriteAsync(new InventoryTransaction(
@@ -122,7 +164,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             orderItem.InboundOrder.UpdateStatus(InboundOrderStatus.Completed);
         }
 
-        // Faturamento
+        // Faturamento de Serviços de Recebimento
         if (request.BillingServiceId.HasValue)
         {
             var activeCycle = await _db.BillingCycles.FirstOrDefaultAsync(c => c.CustomerId == orderItem.InboundOrder.CustomerId && c.Status == Billing.Entities.BillingStatus.Draft, ct);
@@ -162,6 +204,20 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             _db.InventoryBalances.Add(balance);
         }
         return balance;
+    }
+
+    private async Task<Guid> GetDefaultQualityReasonIdAsync(Guid companyId, CancellationToken ct)
+    {
+        var reason = await _db.QualityReasons
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.CompanyId == companyId && r.IsActive, ct);
+
+        if (reason != null) return reason.Id;
+
+        var defaultReason = new QualityReason(companyId, "RECEBIMENTO", "Avaria / Divergência Identificada no Recebimento Fiscal");
+        _db.QualityReasons.Add(defaultReason);
+        await _db.SaveChangesAsync(ct);
+        return defaultReason.Id;
     }
 
     private static string GenerateShortLpn()

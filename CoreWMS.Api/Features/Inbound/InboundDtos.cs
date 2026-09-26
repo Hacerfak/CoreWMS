@@ -6,7 +6,20 @@ public record PendingReviewItemDto(
     string RawNcm, string? RawCest, string RawUnit, decimal ExpectedQuantity, string? ExpectedBatch
 );
 
-public record ReceiveVolumeDto(Guid PackagingTypeId, int VolumeCount, decimal QuantityPerVolume, string? Batch, DateTime? ManufactureDate, DateTime? ExpirationDate, string? SerialNumber, Guid TargetLocationId, Inventory.Enums.QualityStatus QualityStatus);
+public record ReceiveVolumeDto(
+    Guid PackagingTypeId,
+    int VolumeCount,
+    decimal QuantityPerVolume,
+    string? Batch,
+    DateTime? ManufactureDate,
+    DateTime? ExpirationDate,
+    string? SerialNumber,
+    Guid TargetLocationId,
+    Inventory.Enums.QualityStatus QualityStatus,
+    Guid? QualityReasonId,
+    string? QualityNotes,
+    List<Quality.QualityImageDto>? QualityImages
+);
 
 public record InboundOrderDto(
     Guid Id, Guid? CustomerId, string? CustomerName, string IssuerCnpj, string IssuerName,

@@ -362,6 +362,7 @@ public class ApplicationDbContext : DbContext
             b.HasKey(x => x.Id);
 
             b.Property(x => x.TotalExpected).HasPrecision(18, 10);
+            b.Property(x => x.TotalDock).HasPrecision(18, 10);
             b.Property(x => x.TotalAvailable).HasPrecision(18, 10);
             b.Property(x => x.TotalAllocated).HasPrecision(18, 10);
             b.Property(x => x.TotalQuarantine).HasPrecision(18, 10);

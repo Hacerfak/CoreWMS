@@ -277,8 +277,12 @@ export default function ConferenciaItemPage() {
                     manufactureDate: tracksManufacture && v.manufactureDate ? new Date(v.manufactureDate).toISOString() : null,
                     expirationDate: tracksExpiration && v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
                     serialNumber: tracksSerial && v.serialNumber ? v.serialNumber : null,
-                    targetLocationId: item.dockLocationId, // OBRIGATORIAMENTE A DOCA DE RECEBIMENTO
-                    qualityStatus: Number(v.qualityStatus)
+                    targetLocationId: item.dockLocationId,
+                    qualityStatus: Number(v.qualityStatus),
+                    qualityNotes: v.notes?.trim() || null,
+                    qualityImages: v.images && v.images.length > 0
+                        ? v.images.map(img => ({ fileName: img.fileName, base64Data: img.base64Data }))
+                        : null
                 }))
             }
         });

@@ -2,6 +2,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+RUN apt update && apt install -y libfontconfig1
+
 # Copia o arquivo de projeto e restaura as dependências
 COPY ["CoreWMS.Api.csproj", "./"]
 RUN dotnet restore "CoreWMS.Api.csproj"
