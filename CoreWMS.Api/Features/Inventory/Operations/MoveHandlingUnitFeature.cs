@@ -39,6 +39,7 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
     {
         var companyId = _tenant.GetCompanyId();
 
+        // 1. Busca o endereço de destino
         var destination = await _db.Locations
             .AsNoTracking()
             .Include(l => l.StorageType)
@@ -47,7 +48,12 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         if (destination == null || !destination.IsActive)
             return Results.BadRequest(new { Message = "Endereço de destino inválido ou inativo." });
 
+        var destinationRole = destination.StorageType?.Role ?? StorageRole.Storage;
+
+        // 2. Busca as HUs
         var query = _db.HandlingUnits
+            .Include(h => h.CurrentLocation)
+                .ThenInclude(l => l!.StorageType)
             .Where(h => h.CompanyId == companyId && request.HandlingUnitIds.Contains(h.Id));
 
         if (_tenant.IsPartnerUser())
@@ -61,6 +67,17 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         if (!hus.Any())
             return Results.NotFound(new { Message = "Nenhuma Unidade de Manuseio encontrada." });
 
+        // TRAVA ESTRITA DE QUALIDADE: Volumes avariados/retidos só podem ir para Posições do tipo Qualidade
+        var qualityRestrictedHus = hus.Where(h => h.QualityStatus != QualityStatus.Available).ToList();
+        if (qualityRestrictedHus.Any() && destinationRole != StorageRole.Quality)
+        {
+            var lpns = string.Join(", ", qualityRestrictedHus.Select(h => h.Lpn));
+            return Results.BadRequest(new
+            {
+                Message = $"Movimentação Bloqueada: As seguintes HUs possuem restrição de qualidade (Avaria/Quarentena) e só podem ser movimentadas para posições do tipo Qualidade: {lpns}."
+            });
+        }
+
         var productIds = hus.Select(h => h.ProductId).Distinct().ToList();
         var balances = await _db.InventoryBalances
             .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId))
@@ -69,21 +86,36 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         foreach (var hu in hus)
         {
             var oldStatus = hu.Status;
+            var oldQualityStatus = hu.QualityStatus;
+
             hu.MoveTo(destination.Id);
 
             var balance = balances.FirstOrDefault(b => b.ProductId == hu.ProductId && b.CustomerId == hu.CustomerId);
 
-            // Transição de Putaway: Sai da Doca (Received) para o Armazém/Qualidade (Stored)
+            // CASO A: Putaway saindo da Doca (Received -> Stored)
             if (oldStatus == HuStatus.Received && balance != null)
             {
-                var role = destination.StorageType?.Role ?? StorageRole.Storage;
-                balance.AllocateFromDock(hu.CurrentQuantity, role, hu.QualityStatus);
+                balance.AllocateFromDock(hu.CurrentQuantity, destinationRole, hu.QualityStatus);
+            }
+            // CASO B: Item livre sendo movido para uma Posição de Qualidade (Quarentena Automática)
+            else if (destinationRole == StorageRole.Quality && hu.QualityStatus == QualityStatus.Available)
+            {
+                hu.ChangeQuality(QualityStatus.Quarantine);
+
+                if (balance != null)
+                {
+                    balance.ChangeQualityForStored(hu.CurrentQuantity, QualityStatus.Available, QualityStatus.Quarantine);
+                }
+
+                await _kardex.WriteAsync(new InventoryTransaction(
+                    companyId, hu.CustomerId, hu.ProductId, hu.Id,
+                    destination.Id, TransactionType.Quality_Hold,
+                    0, hu.CurrentQuantity, hu.ReceiptDocumentId,
+                    $"QUARENTENA AUTOMÁTICA: Movimentado para posição de qualidade {destination.FullPath}"), ct);
             }
 
-            string actionDescription = destination.StorageType?.Role == StorageRole.Storage
-                ? $"ALOCAÇÃO PARA ARMAZENAMENTO {destination.FullPath}"
-                : destination.StorageType?.Role == StorageRole.Quality
-                ? $"ALOCAÇÃO PARA QUALIDADE/QUARENTENA {destination.FullPath}"
+            string actionDescription = destinationRole == StorageRole.Quality
+                ? $"ALOCAÇÃO / RETENÇÃO NA QUALIDADE {destination.FullPath}"
                 : $"MOVIMENTAÇÃO INTERNA PARA {destination.FullPath}";
 
             await _kardex.WriteAsync(new InventoryTransaction(

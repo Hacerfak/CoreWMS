@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PrintHuModal from './PrintHuModal';
+import RegisterHoldModal from '@/pages/Qualidade/RegisterHoldModal';
 
 // COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES
 function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição (ex: P1C1AB01)..." }) {
@@ -104,12 +105,15 @@ export default function InboundOrderHusPage() {
     const [husToRollback, setHusToRollback] = useState(null);
     const [isRollingBack, setIsRollingBack] = useState(false);
 
+    // Modal de Apontamento de Avaria
+    const [husToHold, setHusToHold] = useState(null);
+
     // Modal de Alocação / Movimentação
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [husToMove, setHusToMove] = useState([]);
     const [targetLocationId, setTargetLocationId] = useState('');
     const [isMoving, setIsMoving] = useState(false);
-    const [locationTypeTab, setLocationTypeTab] = useState('storage'); // storage ou quality
+    const [locationTypeTab, setLocationTypeTab] = useState('storage');
 
     // 1. Dados da Ordem de Recebimento
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
@@ -124,7 +128,7 @@ export default function InboundOrderHusPage() {
             .catch(() => setQualityLocations([]));
     }, []);
 
-    // 3. Busca das HUs FILTRADAS NO BACKEND PELA NF-E DE ENTRADA
+    // 3. Busca das HUs FILTRADAS PELA NF-E
     const { data: apiResponse, isLoading: isLoadingHus, refetch } = useGetApiInventoryHandlingUnits(
         { ReceiptDocumentId: orderId, Page: page, PageSize: PAGE_SIZE },
         { query: { enabled: !!orderId } }
@@ -152,7 +156,7 @@ export default function InboundOrderHusPage() {
     const metrics = useMemo(() => {
         const totalHus = totalCount;
         const totalUnitsInStock = orderHus.reduce((acc, h) => acc + (Number(h.currentQuantity) || 0), 0);
-        const quarantineHus = orderHus.filter(h => String(h.qualityStatus) === '2' || String(h.qualityStatus) === 'Quarantine').length;
+        const quarantineHus = orderHus.filter(h => String(h.qualityStatus) === '2' || String(h.qualityStatus) === 'Quarantine' || String(h.qualityStatus) === '3' || String(h.qualityStatus) === 'Damaged').length;
         const pendingAllocationHus = orderHus.filter(h => String(h.status) === '2' || String(h.status) === 'Received').length;
 
         return { totalHus, totalUnitsInStock, quarantineHus, pendingAllocationHus };
@@ -176,7 +180,6 @@ export default function InboundOrderHusPage() {
         setHusToMove(hus);
         setTargetLocationId('');
 
-        // Se qualquer HU selecionada estiver com restrição de qualidade, abre por padrão na aba de Qualidade
         const hasQualityRestriction = hus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
         setLocationTypeTab(hasQualityRestriction ? 'quality' : 'storage');
 
@@ -229,7 +232,7 @@ export default function InboundOrderHusPage() {
                 }
             });
 
-            toast.success(res?.message || 'Alocação concluída com sucesso!');
+            toast.success(res?.message || 'Alocação/Movimentação concluída com sucesso!');
 
             await refetch();
             queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
@@ -240,7 +243,7 @@ export default function InboundOrderHusPage() {
             setHusToMove([]);
             setTargetLocationId('');
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao alocar HUs.');
+            toast.error(err.response?.data?.message || 'Erro ao movimentar HUs.');
         } finally {
             setIsMoving(false);
         }
@@ -298,6 +301,7 @@ export default function InboundOrderHusPage() {
         : 'N/A';
 
     const firstHuUnit = orderHus[0]?.unit || 'UN';
+    const isSelectedRestricted = selectedHus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
 
     return (
         <div className="flex flex-col h-full space-y-6">
@@ -323,13 +327,13 @@ export default function InboundOrderHusPage() {
                                 </Badge>
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                                Gerencie a alocação no estoque, reimpressão de etiquetas térmicas e estornos da Nota Fiscal.
+                                Gerencie a alocação no estoque, reimpressão de etiquetas térmicas, apontamento de avarias e estornos da Nota Fiscal.
                             </p>
                         </div>
                     </div>
 
                     <div className="flex gap-2">
-                        {/* BOTÃO CONDICIONAL DE ALOCAÇÃO INTELIGENTE (Aparece se houver volumes na Doca) */}
+                        {/* ALOCAÇÃO INTELIGENTE */}
                         {metrics.pendingAllocationHus > 0 && (
                             <Button
                                 onClick={() => navigate(`/inbound/operacao/${orderId}/alocacao`)}
@@ -339,6 +343,17 @@ export default function InboundOrderHusPage() {
                             </Button>
                         )}
 
+                        {/* BOTÃO REGISTRAR AVARIA EM LOTE - AMARELO (AMBER) */}
+                        <Button
+                            onClick={() => setHusToHold(selectedHus)}
+                            disabled={selectedHus.length === 0}
+                            variant="outline"
+                            className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 text-xs font-semibold"
+                        >
+                            <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-600" /> Registrar Avaria ({selectedHus.length})
+                        </Button>
+
+                        {/* BOTÃO MOVER EM LOTE */}
                         <Button
                             onClick={() => handleOpenMoveModal(selectedHus)}
                             disabled={selectedHus.length === 0}
@@ -348,11 +363,12 @@ export default function InboundOrderHusPage() {
                             <MapPin className="w-4 h-4 mr-1.5 text-blue-600" /> Mover ({selectedHus.length})
                         </Button>
 
+                        {/* BOTÃO ESTORNAR EM LOTE - VERMELHO (ROSE) */}
                         <Button
                             onClick={() => setHusToRollback(selectedHus)}
                             disabled={selectedHus.length === 0}
                             variant="outline"
-                            className="border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 shadow-xs text-xs font-semibold"
+                            className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold"
                         >
                             <Undo2 className="w-4 h-4 mr-1.5 text-rose-600" /> Estornar ({selectedHus.length})
                         </Button>
@@ -396,7 +412,7 @@ export default function InboundOrderHusPage() {
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center gap-3">
                         <div className="p-2 bg-rose-100 text-rose-700 rounded-md"><ShieldAlert size={20} /></div>
                         <div>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Quarentena / Retidos</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Quarentena / Retidos / Avaria</span>
                             <span className="text-lg font-bold font-mono text-rose-800">{metrics.quarantineHus}</span>
                         </div>
                     </div>
@@ -472,6 +488,7 @@ export default function InboundOrderHusPage() {
                                 filteredHus.map((hu) => {
                                     const isSelected = selectedHus.some(h => h.id === hu.id);
                                     const isPendingAllocation = String(hu.status) === 'Received' || String(hu.status) === '2';
+                                    const isQualityRestricted = String(hu.qualityStatus) !== 'Available' && String(hu.qualityStatus) !== '1';
 
                                     const skuCode = hu.productSku || hu.sku;
                                     const description = hu.productDescription || hu.description || 'Produto WMS';
@@ -528,6 +545,19 @@ export default function InboundOrderHusPage() {
                                             </TableCell>
 
                                             <TableCell className="text-right space-x-1">
+                                                {/* AÇÃO INDIVIDUAL: REGISTRAR AVARIA (AMARELO/AMBER) */}
+                                                {!isQualityRestricted && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        title="Registrar Avaria / Bloqueio"
+                                                        onClick={() => setHusToHold([hu])}
+                                                        className="text-amber-600 hover:bg-amber-50"
+                                                    >
+                                                        <AlertTriangle size={14} />
+                                                    </Button>
+                                                )}
+
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
@@ -551,12 +581,13 @@ export default function InboundOrderHusPage() {
                                                     <Printer size={14} />
                                                 </Button>
 
+                                                {/* AÇÃO INDIVIDUAL: ESTORNAR (VERMELHO/ROSE) */}
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
                                                     title="Estornar Entrada"
                                                     onClick={() => setHusToRollback([hu])}
-                                                    className="text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                                    className="text-rose-600 hover:bg-rose-50"
                                                 >
                                                     <Undo2 size={14} />
                                                 </Button>
@@ -602,7 +633,7 @@ export default function InboundOrderHusPage() {
                 )}
             </div>
 
-            {/* MODAL DE ALOCAÇÃO / MOVIMENTAÇÃO COM SELETOR PESQUISÁVEL E SUPORTE A ARMAZENAMENTO OU QUALIDADE */}
+            {/* MODAL DE ALOCAÇÃO / MOVIMENTAÇÃO */}
             <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
@@ -610,38 +641,44 @@ export default function InboundOrderHusPage() {
                             <MapPin className="text-blue-600" size={20} /> Alocar / Mover no Estoque
                         </DialogTitle>
                         <DialogDescription className="text-slate-500 text-xs">
-                            Selecione a posição de destino para {husToMove.length} HU(s). Ao alocar em um endereço de armazenamento ou qualidade, o status mudará para <strong className="text-emerald-700 font-mono">Armazenado</strong>.
+                            Selecione a posição de destino para {husToMove.length} HU(s).
                         </DialogDescription>
                     </DialogHeader>
 
                     <div className="space-y-4 py-2">
-                        {/* SELETOR DE ABA/TIPO DE ENDEREÇO */}
-                        <div className="flex border-b border-slate-200">
-                            <button
-                                type="button"
-                                onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
-                                className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Armazenamento Geral ({storageLocations.length})
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
-                                className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                Posições de Qualidade / Retenção ({qualityLocations.length})
-                            </button>
-                        </div>
+                        {isSelectedRestricted ? (
+                            <div className="p-3 rounded-lg border bg-rose-50 border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
+                                <ShieldAlert size={18} className="shrink-0 text-rose-600" />
+                                <span>Volumes com avaria ou quarentena só podem ser movimentados para posições do tipo <strong>Qualidade</strong>.</span>
+                            </div>
+                        ) : (
+                            <div className="flex border-b border-slate-200">
+                                <button
+                                    type="button"
+                                    onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
+                                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Armazenamento Geral ({storageLocations.length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
+                                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    Posições de Qualidade / Retenção ({qualityLocations.length})
+                                </button>
+                            </div>
+                        )}
 
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold text-slate-700">
-                                Endereço Destino ({locationTypeTab === 'storage' ? 'Armazenamento' : 'Qualidade'}) *
+                                Endereço Destino ({isSelectedRestricted || locationTypeTab === 'quality' ? 'Qualidade' : 'Armazenamento'}) *
                             </label>
                             <SearchableLocationSelect
                                 value={targetLocationId}
                                 onChange={(locId) => setTargetLocationId(locId)}
-                                locations={locationTypeTab === 'storage' ? storageLocations : qualityLocations}
-                                placeholder={locationTypeTab === 'storage' ? "Pesquisar Posição de Armazenamento..." : "Pesquisar Posição de Qualidade/Avaria..."}
+                                locations={isSelectedRestricted || locationTypeTab === 'quality' ? qualityLocations : storageLocations}
+                                placeholder={isSelectedRestricted || locationTypeTab === 'quality' ? "Pesquisar Posição de Qualidade/Avaria..." : "Pesquisar Posição de Armazenamento..."}
                             />
                         </div>
                     </div>
@@ -650,11 +687,26 @@ export default function InboundOrderHusPage() {
                         <Button variant="outline" onClick={() => setIsMoveModalOpen(false)} disabled={isMoving}>Cancelar</Button>
                         <Button onClick={handleExecuteMove} disabled={!targetLocationId || isMoving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
                             {isMoving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                            Confirmar Alocação
+                            Confirmar Alocação / Movimento
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* MODAL DE APONTAMENTO DE AVARIA / BLOQUEIO (INDIVIDUAL E EM LOTE) */}
+            {husToHold && husToHold.length > 0 && (
+                <RegisterHoldModal
+                    open={!!husToHold && husToHold.length > 0}
+                    onOpenChange={(open) => !open && setHusToHold(null)}
+                    hus={husToHold}
+                    onSuccess={() => {
+                        refetch();
+                        queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                        queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+                        setSelectedHus([]);
+                    }}
+                />
+            )}
 
             {/* CONFIRMAÇÃO DE ESTORNO */}
             <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
