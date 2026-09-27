@@ -1,11 +1,11 @@
 # ==========================================
 # Ambientes, Segredos e Certificados (.NET / React)
 # ==========================================
-.env
-.env.local
-.env.*.local
-appsettings.Local.json
-appsettings.*.Local.json
+#.env
+#.env.local
+#.env.*.local
+#appsettings.Local.json
+#appsettings.*.Local.json
 *.pfx
 *.p12
 *.pem
