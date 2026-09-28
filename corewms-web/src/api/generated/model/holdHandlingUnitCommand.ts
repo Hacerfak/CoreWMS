@@ -5,9 +5,12 @@
  * OpenAPI spec version: v1
  */
 import type { QualityImageDto } from './qualityImageDto';
+import type { QualityStatus } from './qualityStatus';
 
 export interface HoldHandlingUnitCommand {
-  handlingUnitId?: string;
+  /** @nullable */
+  handlingUnitIds?: string[] | null;
+  newStatus?: QualityStatus;
   reasonId?: string;
   /** @nullable */
   notes?: string | null;

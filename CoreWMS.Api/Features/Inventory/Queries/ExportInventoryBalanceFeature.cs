@@ -28,7 +28,6 @@ public class ExportInventoryBalanceHandler : IRequestHandler<ExportInventoryBala
             .Include(b => b.Customer)
             .Where(b => b.CompanyId == companyId);
 
-        // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
@@ -41,18 +40,18 @@ public class ExportInventoryBalanceHandler : IRequestHandler<ExportInventoryBala
         var balances = await q.OrderBy(b => b.Product.Sku).ToListAsync(ct);
 
         var builder = new StringBuilder();
-        builder.AppendLine("SKU;Depositante;Esperado;Disponivel;Alocado;Quarentena;FisicoTotal");
+        builder.AppendLine("SKU;Depositante;EsperadoNfe;NaDoca;Disponivel;Alocado;Quarentena;FisicoTotal");
 
         foreach (var b in balances)
         {
-            builder.AppendLine($"\"{b.Product.Sku}\";\"{b.Customer.CorporateName}\";{b.TotalExpected};{b.TotalAvailable};{b.TotalAllocated};{b.TotalQuarantine};{b.TotalPhysical}");
+            builder.AppendLine($"\"{b.Product.Sku}\";\"{b.Customer.CorporateName}\";{b.TotalExpected};{b.TotalDock};{b.TotalAvailable};{b.TotalAllocated};{b.TotalQuarantine};{b.TotalPhysical}");
         }
 
         var preamble = Encoding.UTF8.GetPreamble();
         var contentBytes = Encoding.UTF8.GetBytes(builder.ToString());
         var fileBytes = preamble.Concat(contentBytes).ToArray();
-
         var fileName = $"balanco_estoque_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+
         return Results.File(fileBytes, "text/csv; charset=utf-8", fileName);
     }
 }

@@ -18,7 +18,11 @@ public record HandlingUnitDto(
     decimal CurrentQuantity,
     string Status,
     string QualityStatus,
-    Guid? ReceiptDocumentId
+    Guid? ReceiptDocumentId,
+    DateTime CreatedAt,
+    string? NfeNumber,
+    string? NfeSeries,
+    string? AccessKey
 );
 
 public record InventoryBalanceDto(

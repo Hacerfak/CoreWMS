@@ -54,6 +54,28 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         var balances = await _db.InventoryBalances.Where(b => b.CompanyId == companyId).ToListAsync(ct);
         var existingHus = await _db.HandlingUnits.Where(h => h.CompanyId == companyId).Select(h => h.Lpn).ToHashSetAsync(ct);
 
+        // PRE-CARREGAMENTO DAS EMBALAGENS DOS PRODUTOS
+        var allProductPackagings = await _db.ProductPackagings
+            .AsNoTracking()
+            .OrderBy(p => p.CreatedAt)
+            .ToListAsync(ct);
+
+        var packagingsByProduct = allProductPackagings
+            .GroupBy(p => p.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // MAPA DE MEMÓRIA PARA MANTER A MESMA EMBALAGEM EM HUS DO MESMO (PRODUCT_ID, LOTE)
+        var existingHuBatches = await _db.HandlingUnits
+            .AsNoTracking()
+            .Where(h => h.CompanyId == companyId && h.Batch != null && h.Batch != "")
+            .Select(h => new { h.ProductId, Batch = h.Batch!.ToUpper(), h.PackagingTypeId })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var assignedPackagingsByBatch = existingHuBatches
+            .GroupBy(h => (h.ProductId, h.Batch))
+            .ToDictionary(g => g.Key, g => g.First().PackagingTypeId);
+
         int insertedHus = 0;
         var errors = new List<string>();
         var husToInsert = new List<HandlingUnit>();
@@ -65,7 +87,8 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
 
             var lpn = cols[0].Trim().ToUpper().Replace("\"", "");
             var sku = cols[1].Trim().ToUpper().Replace("\"", "");
-            var lote = cols[5].Trim().Replace("\"", "");
+            var loteRaw = cols[5].Trim().Replace("\"", "");
+            var cleanLote = string.IsNullOrWhiteSpace(loteRaw) ? null : loteRaw.ToUpper();
             var quantity = ParseBrDecimal(cols[7]);
             var locationPath = cols[10].Trim().ToUpper().Replace("\"", "");
             var nfNumero = cols[11].Trim().Replace("\"", "");
@@ -101,25 +124,61 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 continue;
             }
 
-            var productPack = await _db.ProductPackagings.FirstOrDefaultAsync(p => p.ProductId == orderItem.ProductId.Value, ct);
-            if (productPack == null)
+            var productId = orderItem.ProductId.Value;
+
+            if (!packagingsByProduct.TryGetValue(productId, out var productPacks) || !productPacks.Any())
             {
-                errors.Add($"Linha {i + 1}: Produto {sku} não possui uma embalagem padrão de recebimento.");
+                errors.Add($"Linha {i + 1}: O produto {sku} não possui nenhuma embalagem cadastrada.");
                 continue;
             }
 
+            // REGRA DE SELEÇÃO INTELIGENTE DE EMBALAGEM
+            Guid selectedPackagingTypeId;
+
+            // 1. Tenta encontrar embalagem que corresponda exatamente à quantidade da HU
+            var exactMatchPack = productPacks.FirstOrDefault(p => p.ConversionFactor == quantity);
+
+            if (exactMatchPack != null)
+            {
+                selectedPackagingTypeId = exactMatchPack.PackagingTypeId;
+
+                if (cleanLote != null)
+                {
+                    assignedPackagingsByBatch[(productId, cleanLote)] = selectedPackagingTypeId;
+                }
+            }
+            else if (cleanLote != null)
+            {
+                // 2. Quantidade fracionada com Lote: reutiliza a embalagem já vinculada a este produto e lote
+                if (assignedPackagingsByBatch.TryGetValue((productId, cleanLote), out var batchPackTypeId))
+                {
+                    selectedPackagingTypeId = batchPackTypeId;
+                }
+                else
+                {
+                    // Se é a primeira HU deste lote e é fracionada, usa a primeira embalagem cadastrada
+                    selectedPackagingTypeId = productPacks.First().PackagingTypeId;
+                    assignedPackagingsByBatch[(productId, cleanLote)] = selectedPackagingTypeId;
+                }
+            }
+            else
+            {
+                // 3. Sem lote e sem correspondência exata de quantidade -> Usa a primeira embalagem do produto
+                selectedPackagingTypeId = productPacks.First().PackagingTypeId;
+            }
+
             var hu = new HandlingUnit(
-                lpn, companyId, customerId, orderItem.ProductId.Value, productPack.PackagingTypeId,
-                orderItem.InboundOrderId, string.IsNullOrWhiteSpace(lote) ? null : lote, null, null, null,
+                lpn, companyId, customerId, productId, selectedPackagingTypeId,
+                orderItem.InboundOrderId, cleanLote, null, null, null,
                 quantity, orderItem.ExpectedUnitValue);
 
-            // 1. Registra a HU na Doca
+            // Registra a HU na Doca
             hu.ReceiveAtDock(locationObj.Id);
             if (qualityStatus != QualityStatus.Available) hu.ChangeQuality(qualityStatus);
 
             var targetRole = locationObj.StorageType?.Role ?? StorageRole.Storage;
 
-            // 2. Se a posição for de Armazenamento ou Qualidade, transita o status da HU para Stored
+            // Se a posição for de Armazenamento ou Qualidade, transita o status da HU para Stored
             if (targetRole != StorageRole.Dock)
             {
                 hu.MoveTo(locationObj.Id);
@@ -129,25 +188,25 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             existingHus.Add(lpn);
             insertedHus++;
 
-            var balance = balances.FirstOrDefault(b => b.ProductId == orderItem.ProductId.Value && b.CustomerId == customerId);
+            var balance = balances.FirstOrDefault(b => b.ProductId == productId && b.CustomerId == customerId);
             if (balance == null)
             {
-                balance = new InventoryBalance(companyId, customerId, orderItem.ProductId.Value);
+                balance = new InventoryBalance(companyId, customerId, productId);
                 balances.Add(balance);
                 _db.InventoryBalances.Add(balance);
             }
 
-            // 1. Recebe na Doca (Deduz de TotalExpected e incrementa TotalDock)
+            // 1. Recebe na Doca
             balance.ReceiveToDock(quantity);
 
-            // 2. Se for uma posição interna do armazém, executa a alocação saindo do TotalDock
+            // 2. Se for posição interna, aloca saindo da Doca
             if (targetRole != StorageRole.Dock)
             {
                 balance.AllocateFromDock(quantity, targetRole, qualityStatus);
             }
 
             await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, customerId, orderItem.ProductId.Value, hu.Id, locationObj.Id,
+                companyId, customerId, productId, hu.Id, locationObj.Id,
                 TransactionType.Inbound_Receipt, quantity, quantity,
                 orderItem.InboundOrderId, $"MIGRAÇÃO NF {nfNumero}"), ct);
 
@@ -169,7 +228,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
 
         return Results.Ok(new
         {
-            Message = $"Migração de inventário legada concluída com sucesso.",
+            Message = "Migração de inventário legada concluída com sucesso.",
             HusImported = insertedHus,
             Errors = errors.Take(50)
         });
