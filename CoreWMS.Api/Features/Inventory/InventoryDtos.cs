@@ -16,6 +16,8 @@ public record HandlingUnitDto(
     string? SerialNumber,
     decimal InitialQuantity,
     decimal CurrentQuantity,
+    decimal UnitValue,
+    decimal TotalValue,
     string Status,
     string QualityStatus,
     Guid? ReceiptDocumentId,

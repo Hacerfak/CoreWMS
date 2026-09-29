@@ -1,3 +1,4 @@
+// CoreWMS.Api/Features/Inventory/Queries/ListHandlingUnitsFeature.cs
 using CoreWMS.Api.Core.Models;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
@@ -11,6 +12,7 @@ namespace CoreWMS.Api.Features.Inventory.Queries;
 
 public record ListHandlingUnitsQuery(
     Guid? CustomerId,
+    string? Sku,
     Guid? ProductId,
     Guid? ReceiptDocumentId,
     string? Lpn,
@@ -63,7 +65,7 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
             q = q.Where(h => allowedCustomerIds.Contains(h.CustomerId));
         }
 
-        // 1. Filtros Chave
+        // 1. Filtros Mestre
         if (request.CustomerId.HasValue) q = q.Where(h => h.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(h => h.ProductId == request.ProductId);
         if (request.ReceiptDocumentId.HasValue) q = q.Where(h => h.ReceiptDocumentId == request.ReceiptDocumentId);
@@ -71,9 +73,12 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
         if (request.Status.HasValue) q = q.Where(h => h.Status == (HuStatus)request.Status.Value);
         if (request.QualityStatus.HasValue) q = q.Where(h => h.QualityStatus == (QualityStatus)request.QualityStatus.Value);
 
-        // 2. Filtros de Texto
+        // 2. Filtros de Texto na API
         if (!string.IsNullOrWhiteSpace(request.Lpn))
             q = q.Where(h => EF.Functions.ILike(h.Lpn, $"%{request.Lpn.Trim()}%"));
+
+        if (!string.IsNullOrWhiteSpace(request.Sku))
+            q = q.Where(h => EF.Functions.ILike(h.Product.Sku, $"%{request.Sku.Trim()}%") || EF.Functions.ILike(h.Product.Description, $"%{request.Sku.Trim()}%"));
 
         if (!string.IsNullOrWhiteSpace(request.Batch))
             q = q.Where(h => h.Batch != null && EF.Functions.ILike(h.Batch, $"%{request.Batch.Trim()}%"));
@@ -90,7 +95,7 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
             q = q.Where(h => h.ReceiptDocumentId.HasValue && inboundOrderIds.Contains(h.ReceiptDocumentId.Value));
         }
 
-        // 3. Filtro por Período de Entrada (Com trava explícita das 00:00:00 às 23:59:59)
+        // 3. Filtro por Período (00:00:00 às 23:59:59)
         if (request.StartDate.HasValue)
         {
             var startUtc = DateTime.SpecifyKind(request.StartDate.Value.Date, DateTimeKind.Utc);
@@ -134,6 +139,8 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
                 nfeNum = int.Parse(accessKey.Substring(25, 9)).ToString();
             }
 
+            decimal totalValue = h.CurrentQuantity * h.UnitValue;
+
             return new HandlingUnitDto(
                 h.Id,
                 h.Lpn,
@@ -150,6 +157,8 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
                 h.SerialNumber,
                 h.InitialQuantity,
                 h.CurrentQuantity,
+                h.UnitValue,
+                totalValue,
                 h.Status.ToString(),
                 h.QualityStatus.ToString(),
                 h.ReceiptDocumentId,

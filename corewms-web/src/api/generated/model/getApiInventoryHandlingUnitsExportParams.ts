@@ -8,7 +8,14 @@
 export type GetApiInventoryHandlingUnitsExportParams = {
 CustomerId?: string;
 ProductId?: string;
+ReceiptDocumentId?: string;
 Lpn?: string;
+Sku?: string;
+Batch?: string;
+NfeNumber?: string;
 LocationId?: string;
 Status?: number;
+QualityStatus?: number;
+StartDate?: string;
+EndDate?: string;
 };
