@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
@@ -7,10 +8,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inventory.Queries;
 
-public record ExportInventoryBalanceQuery(Guid? CustomerId, Guid? ProductId) : IRequest<IResult>;
+public record ExportInventoryBalanceQuery(
+    Guid? CustomerId,
+    string? Sku,
+    string? NfeNumber,
+    Guid? ProductId
+) : IRequest<IResult>;
 
 public class ExportInventoryBalanceHandler : IRequestHandler<ExportInventoryBalanceQuery, IResult>
 {
+    private static readonly CultureInfo PtBrCulture = CultureInfo.GetCultureInfo("pt-BR");
+
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
 
@@ -23,6 +31,7 @@ public class ExportInventoryBalanceHandler : IRequestHandler<ExportInventoryBala
     public async Task<IResult> Handle(ExportInventoryBalanceQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+
         var q = _db.InventoryBalances.AsNoTracking()
             .Include(b => b.Product)
             .Include(b => b.Customer)
@@ -37,14 +46,30 @@ public class ExportInventoryBalanceHandler : IRequestHandler<ExportInventoryBala
         if (request.CustomerId.HasValue) q = q.Where(b => b.CustomerId == request.CustomerId);
         if (request.ProductId.HasValue) q = q.Where(b => b.ProductId == request.ProductId);
 
+        if (!string.IsNullOrWhiteSpace(request.Sku))
+            q = q.Where(b => EF.Functions.ILike(b.Product.Sku, $"%{request.Sku.Trim()}%") || EF.Functions.ILike(b.Product.Description, $"%{request.Sku.Trim()}%"));
+
+        if (!string.IsNullOrWhiteSpace(request.NfeNumber))
+        {
+            var term = request.NfeNumber.Trim();
+            var inboundOrderIds = await _db.InboundOrders
+                .AsNoTracking()
+                .Where(o => o.CompanyId == companyId && (EF.Functions.ILike(o.AccessKey, $"%{term}%") || o.AccessKey.Contains(term)))
+                .Select(o => o.Id)
+                .ToListAsync(ct);
+
+            q = q.Where(b => _db.HandlingUnits.Any(h => h.CompanyId == companyId && h.CustomerId == b.CustomerId && h.ProductId == b.ProductId && h.ReceiptDocumentId.HasValue && inboundOrderIds.Contains(h.ReceiptDocumentId.Value)));
+        }
+
         var balances = await q.OrderBy(b => b.Product.Sku).ToListAsync(ct);
 
         var builder = new StringBuilder();
-        builder.AppendLine("SKU;Depositante;EsperadoNfe;NaDoca;Disponivel;Alocado;Quarentena;FisicoTotal");
+        builder.AppendLine("CnpjDepositante;Depositante;SKU;UnidadeBase;DescricaoProduto;EsperadoNfe;NaDoca;Disponivel;Alocado;Quarentena;FisicoTotal");
 
         foreach (var b in balances)
         {
-            builder.AppendLine($"\"{b.Product.Sku}\";\"{b.Customer.CorporateName}\";{b.TotalExpected};{b.TotalDock};{b.TotalAvailable};{b.TotalAllocated};{b.TotalQuarantine};{b.TotalPhysical}");
+            var cnpjCell = string.IsNullOrWhiteSpace(b.Customer.Cnpj) ? "" : $"'{b.Customer.Cnpj.Trim()}";
+            builder.AppendLine($"{cnpjCell};\"{b.Customer.CorporateName}\";\"{b.Product.Sku}\";\"{b.Product.BaseUnit}\";\"{b.Product.Description}\";{b.TotalExpected.ToString("0.00######", PtBrCulture)};{b.TotalDock.ToString("0.00######", PtBrCulture)};{b.TotalAvailable.ToString("0.00######", PtBrCulture)};{b.TotalAllocated.ToString("0.00######", PtBrCulture)};{b.TotalQuarantine.ToString("0.00######", PtBrCulture)};{b.TotalPhysical.ToString("0.00######", PtBrCulture)}");
         }
 
         var preamble = Encoding.UTF8.GetPreamble();

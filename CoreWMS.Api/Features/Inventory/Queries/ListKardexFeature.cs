@@ -1,4 +1,3 @@
-using CoreWMS.Api.Core.Models;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -8,14 +7,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inventory.Queries;
 
-public record ListKardexQuery(Guid? ProductId, string? Lpn, DateTime? StartDate, DateTime? EndDate, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record ListKardexQuery(
+    Guid? CustomerId,
+    string? Sku,
+    string? Lpn,
+    string? Batch,
+    string? NfeNumber,
+    Guid? ProductId,
+    DateTime? StartDate,
+    DateTime? EndDate,
+    int Page = 1,
+    int PageSize = 20
+) : IRequest<IResult>;
 
 public class ListKardexQueryValidator : AbstractValidator<ListKardexQuery>
 {
     public ListKardexQueryValidator()
     {
         RuleFor(x => x.Page).GreaterThanOrEqualTo(1);
-        RuleFor(x => x.PageSize).InclusiveBetween(1, 1000);
+        RuleFor(x => x.PageSize).InclusiveBetween(1, 1000).WithMessage("O tamanho da página deve ser entre 1 e 1000.");
     }
 }
 
@@ -34,40 +44,96 @@ public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
     {
         var companyId = _tenant.GetCompanyId();
 
-        var query = from t in _db.InventoryTransactions.AsNoTracking()
-                    where t.CompanyId == companyId
-                    join p in _db.Products.AsNoTracking() on t.ProductId equals p.Id
-                    join h in _db.HandlingUnits.AsNoTracking() on t.HandlingUnitId equals h.Id into hGroup
-                    from hu in hGroup.DefaultIfEmpty()
-                    select new { Transaction = t, ProductSku = p.Sku, HandlingUnitLpn = hu != null ? hu.Lpn : null };
+        var baseQuery = from t in _db.InventoryTransactions.AsNoTracking()
+                        where t.CompanyId == companyId
+                        join c in _db.Customers.AsNoTracking() on t.CustomerId equals c.Id
+                        join p in _db.Products.AsNoTracking() on t.ProductId equals p.Id
+                        join h in _db.HandlingUnits.AsNoTracking() on t.HandlingUnitId equals h.Id into hGroup
+                        from hu in hGroup.DefaultIfEmpty()
+                        join l in _db.Locations.AsNoTracking() on t.LocationId equals l.Id into lGroup
+                        from loc in lGroup.DefaultIfEmpty()
+                        select new
+                        {
+                            Transaction = t,
+                            CustomerName = c.CorporateName,
+                            ProductSku = p.Sku,
+                            ProductDescription = p.Description,
+                            HandlingUnitLpn = hu != null ? hu.Lpn : null,
+                            HandlingUnitBatch = hu != null ? hu.Batch : null,
+                            HandlingUnitExpirationDate = hu != null ? hu.ExpirationDate : null,
+                            LocationPath = loc != null ? loc.FullPath : null
+                        };
 
         // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
-            query = query.Where(q => allowedCustomerIds.Contains(q.Transaction.CustomerId));
+            baseQuery = baseQuery.Where(q => allowedCustomerIds.Contains(q.Transaction.CustomerId));
         }
 
-        if (request.ProductId.HasValue) query = query.Where(q => q.Transaction.ProductId == request.ProductId);
-        if (request.StartDate.HasValue) query = query.Where(q => q.Transaction.CreatedAt >= request.StartDate.Value.ToUniversalTime());
-        if (request.EndDate.HasValue) query = query.Where(q => q.Transaction.CreatedAt <= request.EndDate.Value.ToUniversalTime());
-        if (!string.IsNullOrWhiteSpace(request.Lpn)) query = query.Where(q => q.HandlingUnitLpn == request.Lpn.Trim().ToUpper());
+        // 1. Filtros Mestre e Texto
+        if (request.CustomerId.HasValue) baseQuery = baseQuery.Where(q => q.Transaction.CustomerId == request.CustomerId);
+        if (request.ProductId.HasValue) baseQuery = baseQuery.Where(q => q.Transaction.ProductId == request.ProductId);
 
-        // Execução sequencial para garantir thread-safety
-        var totalCount = await query.CountAsync(ct);
+        if (!string.IsNullOrWhiteSpace(request.Lpn))
+            baseQuery = baseQuery.Where(q => q.HandlingUnitLpn != null && EF.Functions.ILike(q.HandlingUnitLpn, $"%{request.Lpn.Trim()}%"));
+
+        if (!string.IsNullOrWhiteSpace(request.Sku))
+            baseQuery = baseQuery.Where(q => EF.Functions.ILike(q.ProductSku, $"%{request.Sku.Trim()}%") || EF.Functions.ILike(q.ProductDescription, $"%{request.Sku.Trim()}%"));
+
+        if (!string.IsNullOrWhiteSpace(request.Batch))
+            baseQuery = baseQuery.Where(q => q.HandlingUnitBatch != null && EF.Functions.ILike(q.HandlingUnitBatch, $"%{request.Batch.Trim()}%"));
+
+        if (!string.IsNullOrWhiteSpace(request.NfeNumber))
+            baseQuery = baseQuery.Where(q => q.Transaction.SourceDocumentNumber != null && EF.Functions.ILike(q.Transaction.SourceDocumentNumber, $"%{request.NfeNumber.Trim()}%"));
+
+        // 2. Filtro de Datas com Cobertura de 24h (00:00:00 às 23:59:59)
+        if (request.StartDate.HasValue)
+        {
+            var startUtc = DateTime.SpecifyKind(request.StartDate.Value.Date, DateTimeKind.Utc);
+            baseQuery = baseQuery.Where(q => q.Transaction.CreatedAt >= startUtc);
+        }
+
+        if (request.EndDate.HasValue)
+        {
+            var endDate = request.EndDate.Value;
+            var endUtc = endDate.Kind == DateTimeKind.Utc && endDate.TimeOfDay > TimeSpan.Zero
+                ? endDate
+                : DateTime.SpecifyKind(endDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+
+            baseQuery = baseQuery.Where(q => q.Transaction.CreatedAt <= endUtc);
+        }
+
+        // 3. Totais da Seleção Filtrada
+        var totalCount = await baseQuery.CountAsync(ct);
+        var totalInputs = await baseQuery.Where(q => q.Transaction.QuantityChange > 0).SumAsync(q => (decimal?)q.Transaction.QuantityChange, ct) ?? 0m;
+        var totalOutputs = await baseQuery.Where(q => q.Transaction.QuantityChange < 0).SumAsync(q => (decimal?)Math.Abs(q.Transaction.QuantityChange), ct) ?? 0m;
+        var netChange = totalInputs - totalOutputs;
+
+        // 4. Paginação
         var skip = (request.Page - 1) * request.PageSize;
 
-        var items = await query
+        var items = await baseQuery
             .OrderByDescending(q => q.Transaction.CreatedAt)
             .Skip(skip)
             .Take(request.PageSize)
-            .Select(q => new InventoryTransactionDto(
-                q.Transaction.Id, q.Transaction.CreatedAt, q.ProductSku, q.HandlingUnitLpn,
-                q.Transaction.Type.ToString(), q.Transaction.QuantityChange,
-                q.Transaction.BalanceAfter, q.Transaction.SourceDocumentNumber
+            .Select(q => new KardexTransactionDto(
+                q.Transaction.Id,
+                q.Transaction.CreatedAt,
+                q.CustomerName,
+                q.ProductSku,
+                q.ProductDescription,
+                q.HandlingUnitLpn,
+                q.HandlingUnitBatch,
+                q.HandlingUnitExpirationDate,
+                q.Transaction.Type.ToString(),
+                q.Transaction.QuantityChange,
+                q.Transaction.BalanceAfter,
+                q.LocationPath,
+                q.Transaction.SourceDocumentNumber
             )).ToListAsync(ct);
 
-        var response = new PaginatedResult<InventoryTransactionDto>(items, totalCount, request.Page, request.PageSize);
+        var response = new KardexResponse(items, totalCount, request.Page, request.PageSize, totalInputs, totalOutputs, netChange);
         return Results.Ok(response);
     }
 }

@@ -30,6 +30,7 @@ public record HandlingUnitDto(
 public record InventoryBalanceDto(
     Guid ProductId,
     string ProductSku,
+    string ProductDescription,
     string CustomerName,
     decimal TotalExpected,
     decimal TotalDock,
@@ -39,13 +40,41 @@ public record InventoryBalanceDto(
     decimal TotalPhysical
 );
 
-public record InventoryTransactionDto(
+public record InventoryBalanceResponse(
+    List<InventoryBalanceDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    decimal TotalPhysical,
+    decimal TotalExpected,
+    decimal TotalDock,
+    decimal TotalAvailable,
+    decimal TotalAllocated,
+    decimal TotalQuarantine
+);
+
+public record KardexTransactionDto(
     Guid Id,
     DateTime CreatedAt,
+    string CustomerName,
     string ProductSku,
+    string ProductDescription,
     string? Lpn,
+    string? Batch,
+    DateTime? ExpirationDate,
     string Type,
     decimal QuantityChange,
     decimal BalanceAfter,
+    string? LocationPath,
     string? SourceDocumentNumber
+);
+
+public record KardexResponse(
+    List<KardexTransactionDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    decimal TotalInputs,
+    decimal TotalOutputs,
+    decimal NetChange
 );
