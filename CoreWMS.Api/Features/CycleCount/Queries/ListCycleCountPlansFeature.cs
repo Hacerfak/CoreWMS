@@ -7,16 +7,40 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.CycleCount.Queries;
 
-public record TaskSummaryDto(
-    Guid Id, Guid LocationId, string LocationPath, Guid ProductId, string ProductSku,
-    int ExpectedQuantity, int CurrentRound, bool IsStrictLpnMode, string Status);
+public record CycleCountTaskDto(
+    Guid Id,
+    Guid LocationId,
+    string LocationPath,
+    Guid ProductId,
+    string ProductSku,
+    string ProductDescription,
+    decimal ExpectedQuantity,
+    decimal? CountedQuantity,
+    decimal DivergenceQuantity,
+    int CurrentRound,
+    bool IsDynamicStorage,
+    string Status,
+    string AdjustmentType,
+    string? FiscalDocumentNumber,
+    string? FiscalNotes
+);
 
 public record CycleCountPlanDto(
-    Guid Id, string Name, string Status, Guid? CustomerId, string? CustomerName,
-    Guid? ProductId, string? ProductSku, string? Batch, int TotalTasks, int ResolvedTasks,
-    List<TaskSummaryDto> Tasks);
+    Guid Id,
+    string Name,
+    string Status,
+    Guid? CustomerId,
+    string? CustomerName,
+    Guid? ProductId,
+    string? ProductSku,
+    string? Batch,
+    int TotalTasks,
+    int ResolvedTasks,
+    int DivergentTasks,
+    List<CycleCountTaskDto> Tasks
+);
 
-public record ListCycleCountPlansQuery(Guid? CustomerId) : IRequest<IResult>;
+public record ListCycleCountPlansQuery(Guid? CustomerId, string? Status) : IRequest<IResult>;
 
 public class ListCycleCountPlansHandler : IRequestHandler<ListCycleCountPlansQuery, IResult>
 {
@@ -49,21 +73,41 @@ public class ListCycleCountPlansHandler : IRequestHandler<ListCycleCountPlansQue
         }
 
         if (request.CustomerId.HasValue)
-        {
             query = query.Where(p => p.CustomerId == request.CustomerId.Value);
-        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<CycleCountPlanStatus>(request.Status, true, out var statusEnum))
+            query = query.Where(p => p.Status == statusEnum);
 
         var plans = await query
             .OrderByDescending(p => p.CreatedAt)
             .Select(p => new CycleCountPlanDto(
-                p.Id, p.Name, p.Status.ToString(), p.CustomerId,
+                p.Id,
+                p.Name,
+                p.Status.ToString(),
+                p.CustomerId,
                 p.Customer != null ? p.Customer.CorporateName : null,
-                p.ProductId, p.Product != null ? p.Product.Sku : null,
-                p.Batch, p.Tasks.Count,
+                p.ProductId,
+                p.Product != null ? p.Product.Sku : null,
+                p.Batch,
+                p.Tasks.Count,
                 p.Tasks.Count(t => t.Status == CycleCountTaskStatus.Resolved),
-                p.Tasks.Select(t => new TaskSummaryDto(
-                    t.Id, t.LocationId, t.Location.FullPath, t.ProductId, t.Product.Sku,
-                    t.ExpectedQuantity, t.CurrentRound, t.IsStrictLpnMode, t.Status.ToString()
+                p.Tasks.Count(t => t.Status == CycleCountTaskStatus.CountedWithDivergence),
+                p.Tasks.Select(t => new CycleCountTaskDto(
+                    t.Id,
+                    t.LocationId,
+                    t.Location.FullPath,
+                    t.ProductId,
+                    t.Product.Sku,
+                    t.Product.Description,
+                    t.ExpectedQuantity,
+                    t.CountedQuantity,
+                    t.DivergenceQuantity,
+                    t.CurrentRound,
+                    t.IsDynamicStorage,
+                    t.Status.ToString(),
+                    t.AdjustmentType.ToString(),
+                    t.FiscalDocumentNumber,
+                    t.FiscalNotes
                 )).ToList()
             ))
             .ToListAsync(ct);

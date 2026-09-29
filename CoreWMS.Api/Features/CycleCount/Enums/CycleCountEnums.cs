@@ -2,16 +2,24 @@ namespace CoreWMS.Api.Features.CycleCount.Enums;
 
 public enum CycleCountPlanStatus
 {
-    Scheduled = 1,
-    InProgress = 2,
-    Review = 3,     // Aguardando aprovação do gestor para tarefas divergentes
-    Closed = 4
+    Draft = 1,                 // Rascunho cadastrado pela Gestão
+    ApprovedForCounting = 2,   // Aprovado e liberado para os coletores
+    InCounting = 3,            // Em execução no chão de fábrica
+    InReview = 4,              // Contagem finalizada, sob análise da Gestão
+    Closed = 5                 // Ajustes fiscais aplicados e plano encerrado
 }
 
 public enum CycleCountTaskStatus
 {
-    Pending = 1,
-    Counted_With_Divergence = 2,
-    Escalated_To_Manager = 3,   // Rodada 1 e 2 falharam, aguarda liberação do desmanche
-    Resolved = 4                // Contagem bateu ou ajuste (quarentena) foi realizado
+    Pending = 1,                  // Aguardando operador contar
+    CountedWithDivergence = 2,    // Contado com divergência entre físico e sistêmico
+    AwaitingFiscalAdjustment = 3, // Aguardando NF de Remessa (Sobra) ou Retorno Simbólico (Falta)
+    Resolved = 4                  // Finalizado e ajustado
+}
+
+public enum AdjustmentType
+{
+    None = 0,
+    Surplus_InboundNfe = 1,       // Sobra: Exige NF-e de Remessa
+    Shortage_ReturnNfe = 2        // Falta: Exige NF-e de Retorno Simbólico
 }

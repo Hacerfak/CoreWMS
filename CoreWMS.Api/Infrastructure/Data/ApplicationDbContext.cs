@@ -464,6 +464,7 @@ public class ApplicationDbContext : DbContext
         {
             b.HasKey(x => x.Id);
             b.Property(x => x.Name).IsRequired().HasMaxLength(150);
+            b.Property(x => x.Batch).HasMaxLength(50);
 
             b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
@@ -475,6 +476,11 @@ public class ApplicationDbContext : DbContext
         {
             b.HasKey(x => x.Id);
 
+            b.Property(x => x.ExpectedQuantity).HasPrecision(18, 10);
+            b.Property(x => x.CountedQuantity).HasPrecision(18, 10);
+            b.Property(x => x.FiscalDocumentNumber).HasMaxLength(100);
+            b.Property(x => x.FiscalNotes).HasMaxLength(1000);
+
             b.HasOne(x => x.CycleCountPlan).WithMany(x => x.Tasks).HasForeignKey(x => x.CycleCountPlanId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
@@ -485,8 +491,6 @@ public class ApplicationDbContext : DbContext
             b.HasKey(x => x.Id);
 
             b.HasOne<CycleCountTask>().WithMany(x => x.Records).HasForeignKey(x => x.CycleCountTaskId).OnDelete(DeleteBehavior.Cascade);
-
-            // Relacionamento com a HU escaneada (opcional, só para Rodada 3+)
             b.HasOne<HandlingUnit>().WithMany().HasForeignKey(x => x.ScannedHandlingUnitId).OnDelete(DeleteBehavior.Restrict);
         });
 

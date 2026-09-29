@@ -24,7 +24,8 @@ import EstoquePage from '@/pages/Estoque/EstoquePage';
 import QualidadePage from '@/pages/Qualidade/QualidadePage';
 import TarifasECiclosPage from '@/pages/Billing/TarifasECiclosPage';
 import ExtratoFaturamentoPage from '@/pages/Billing/ExtratoFaturamentoPage';
-import InventarioPage from '@/pages/Inventario/InventarioPage';
+import InventarioGestaoPage from '@/pages/Inventario/InventarioGestaoPage';
+import InventarioOperacaoPage from '@/pages/Inventario/InventarioOperacaoPage';
 import OutboundListPage from '@/pages/Outbound/OutboundListPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
 import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
@@ -109,9 +110,15 @@ export default function App() {
                 <Route path="/estoque" element={<EstoquePage />} />
               </Route>
 
-              {/* Rotas de Inventário*/}
+              {/* ROTAS SEPARADAS DE INVENTÁRIO CÍCLICO */}
+              <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
+                <Route path="/inventario/gestao" element={<InventarioGestaoPage />} />
+              </Route>
+
               <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
-                <Route path="/inventario" element={<InventarioPage />} />
+                <Route path="/inventario/operacao" element={<InventarioOperacaoPage />} />
+                {/* Redirecionamento da rota antiga para a visão gerencial */}
+                <Route path="/inventario" element={<Navigate to="/inventario/gestao" replace />} />
               </Route>
 
               {/* ROTAS DO INBOUND */}
@@ -120,7 +127,6 @@ export default function App() {
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="inbound:review" />}>
-                {/* Permite tanto a entrada sem ID (todas as pendências) quanto focada numa ordem específica */}
                 <Route path="/inbound/revisao" element={<ReviewInbound />} />
                 <Route path="/inbound/revisao/:id" element={<ReviewInbound />} />
               </Route>

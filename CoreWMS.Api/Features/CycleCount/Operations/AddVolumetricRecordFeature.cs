@@ -9,14 +9,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.CycleCount.Operations;
 
-public record AddVolumetricRecordCommand(Guid TaskId, int CountedQuantity) : IRequest<IResult>;
+public record AddVolumetricRecordCommand(Guid TaskId, decimal CountedQuantity) : IRequest<IResult>;
 
 public class AddVolumetricRecordCommandValidator : AbstractValidator<AddVolumetricRecordCommand>
 {
     public AddVolumetricRecordCommandValidator()
     {
         RuleFor(x => x.TaskId).NotEmpty();
-        RuleFor(x => x.CountedQuantity).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.CountedQuantity).GreaterThanOrEqualTo(0).WithMessage("A quantidade contada não pode ser negativa.");
     }
 }
 
@@ -34,23 +34,36 @@ public class AddVolumetricRecordHandler : IRequestHandler<AddVolumetricRecordCom
     public async Task<IResult> Handle(AddVolumetricRecordCommand request, CancellationToken ct)
     {
         var userIdClaim = _http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out _))
             return Results.Unauthorized();
 
-        var task = await _db.CycleCountTasks.Include(t => t.Records).FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
-        if (task == null) return Results.NotFound();
+        var task = await _db.CycleCountTasks
+            .Include(t => t.CycleCountPlan)
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+
+        if (task == null)
+            return Results.NotFound(new { Message = "Tarefa de inventário não encontrada." });
 
         if (task.Status == CycleCountTaskStatus.Resolved)
-            return Results.BadRequest(new { Message = "Esta tarefa já foi concluída." });
+            return Results.BadRequest(new { Message = "Esta tarefa já foi concluída e conciliada." });
 
-        task.AddVolumetricRecord(userId, request.CountedQuantity);
+        if (task.CycleCountPlan.Status == CycleCountPlanStatus.Draft)
+            return Results.BadRequest(new { Message = "Este inventário está em Rascunho e aguarda aprovação da Gestão." });
+
+        task.CycleCountPlan.StartCounting();
+        task.RecordPositionCount(request.CountedQuantity);
+        task.CycleCountPlan.CheckCompletion();
+
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new
         {
-            task.Status,
+            Status = task.Status.ToString(),
             task.CurrentRound,
-            IsResolved = task.Status == CycleCountTaskStatus.Resolved
+            task.AdjustmentType,
+            IsResolved = task.Status == CycleCountTaskStatus.Resolved,
+            IsDivergent = task.Status == CycleCountTaskStatus.CountedWithDivergence,
+            Message = "Apontamento volumétrico registrado com sucesso."
         });
     }
 }

@@ -7,6 +7,7 @@
 
 export * from './addStrictLpnRecordCommand';
 export * from './addVolumetricRecordCommand';
+export * from './applyFiscalAdjustmentCommand';
 export * from './assignUserRequest';
 export * from './billingServiceType';
 export * from './changeQualityCommand';
@@ -73,6 +74,7 @@ export * from './qualityImageDto';
 export * from './qualityStatus';
 export * from './receiveLoteCommand';
 export * from './receiveVolumeDto';
+export * from './recordPositionCountCommand';
 export * from './refreshTokenCommand';
 export * from './refreshTokenRequest';
 export * from './refreshTokenResponse';

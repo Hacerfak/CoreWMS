@@ -5,7 +5,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
-    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine, Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck
+    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine,
+    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -55,15 +56,15 @@ export default function MainLayout() {
             scope: 'Operação',
             items: [
                 { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
-                { icon: ClipboardCheck, label: 'Inventário', path: '/inventario', permission: 'inventory:view' },
-                { icon: Truck, label: 'Expedição (Outbound)', path: '/outbound', permission: 'outbound:view' },
-
+                { icon: Barcode, label: 'Inventário', path: '/inventario/operacao', permission: 'inventory:view' },
+                { icon: Truck, label: 'Expedição', path: '/outbound', permission: 'outbound:view' },
             ]
         },
         {
             scope: 'Gestão',
             items: [
                 { icon: Boxes, label: 'Estoque e Relatórios', path: '/estoque', permission: 'inventory:view' },
+                { icon: ClipboardCheck, label: 'Gestão de Inventário', path: '/inventario/gestao', permission: 'inventory:manageQuality' },
                 { icon: ShieldAlert, label: 'Controle de Qualidade', path: '/qualidade', permission: 'inventory:manageQuality' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
             ]

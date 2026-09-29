@@ -28,13 +28,24 @@ public class EscalateTaskHandler : IRequestHandler<EscalateTaskCommand, IResult>
 
     public async Task<IResult> Handle(EscalateTaskCommand request, CancellationToken ct)
     {
-        var task = await _db.CycleCountTasks.FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
-        if (task == null) return Results.NotFound();
+        var task = await _db.CycleCountTasks
+            .Include(t => t.CycleCountPlan)
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
 
-        task.EscalateToStrictMode();
+        if (task == null)
+            return Results.NotFound(new { Message = "Tarefa não encontrada." });
+
+        task.RequestRecount();
+        task.CycleCountPlan.StartCounting();
+
         await _db.SaveChangesAsync(ct);
 
-        return Results.NoContent();
+        return Results.Ok(new
+        {
+            task.CurrentRound,
+            Status = task.Status.ToString(),
+            Message = $"Recontagem solicitada com sucesso! A tarefa retornou para a Rodada {task.CurrentRound}."
+        });
     }
 }
 

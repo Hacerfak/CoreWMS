@@ -141,6 +141,14 @@ public class InventoryBalance : AuditableEntity
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
+    public void AdjustAvailable(decimal delta)
+    {
+        TotalAvailable += delta;
+        if (TotalAvailable < 0) TotalAvailable = 0;
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
     public void AllocateForPicking(decimal quantity)
     {
         if (quantity > TotalAvailable) throw new InvalidOperationException("Saldo disponível insuficiente.");

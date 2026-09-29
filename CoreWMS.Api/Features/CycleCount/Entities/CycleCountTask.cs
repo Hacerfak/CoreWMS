@@ -16,58 +16,67 @@ public class CycleCountTask : AuditableEntity
     public Guid ProductId { get; private set; }
     public Product Product { get; private set; } = null!;
 
-    public int ExpectedQuantity { get; private set; }
+    public decimal ExpectedQuantity { get; private set; }
+    public decimal? CountedQuantity { get; private set; }
+    public decimal DivergenceQuantity => (CountedQuantity ?? 0m) - ExpectedQuantity;
+
     public int CurrentRound { get; private set; }
-    public bool IsStrictLpnMode { get; private set; }
+    public bool IsDynamicStorage { get; private set; } // Armazenamento Blocado / Dinâmico
     public CycleCountTaskStatus Status { get; private set; }
 
+    // Amarração Fiscal do Ajuste
+    public AdjustmentType AdjustmentType { get; private set; }
+    public Guid? FiscalDocumentId { get; private set; }
+    public string? FiscalDocumentNumber { get; private set; }
+    public string? FiscalNotes { get; private set; }
+
+    // Coleção do Histórico de Apontamentos / Bipagens (Records)
     private readonly List<CycleCountRecord> _records = new();
     public IReadOnlyCollection<CycleCountRecord> Records => _records.AsReadOnly();
 
     protected CycleCountTask() { }
 
-    public CycleCountTask(Guid cycleCountPlanId, Guid locationId, Guid productId, int expectedQuantity)
+    public CycleCountTask(Guid cycleCountPlanId, Guid locationId, Guid productId, decimal expectedQuantity, bool isDynamicStorage)
     {
         CycleCountPlanId = cycleCountPlanId;
         LocationId = locationId;
         ProductId = productId;
         ExpectedQuantity = expectedQuantity;
+        IsDynamicStorage = isDynamicStorage;
         CurrentRound = 1;
-        IsStrictLpnMode = false;
         Status = CycleCountTaskStatus.Pending;
+        AdjustmentType = AdjustmentType.None;
     }
 
-    // Registra contagem volumétrica (Rodadas 1 e 2)
-    public void AddVolumetricRecord(Guid inspectorId, int countedQuantity)
+    // Apontamento Cego da Posição (Volumétrico)
+    public void RecordPositionCount(decimal countedQuantity, Guid? inspectorId = null)
     {
-        if (IsStrictLpnMode) throw new InvalidOperationException("Esta tarefa exige contagem por LPN (Desmanche).");
+        CountedQuantity = countedQuantity;
 
-        _records.Add(new CycleCountRecord(Id, CurrentRound, inspectorId, countedQuantity, null));
+        if (inspectorId.HasValue)
+        {
+            _records.Add(new CycleCountRecord(Id, CurrentRound, inspectorId.Value, (int)countedQuantity, null));
+        }
 
         if (countedQuantity == ExpectedQuantity)
         {
             Status = CycleCountTaskStatus.Resolved;
+            AdjustmentType = AdjustmentType.None;
         }
         else
         {
-            Status = CycleCountTaskStatus.Counted_With_Divergence;
-            CurrentRound++;
-
-            // Se falhou na rodada 2, pausa para o gestor avaliar
-            if (CurrentRound > 2)
-            {
-                Status = CycleCountTaskStatus.Escalated_To_Manager;
-            }
+            Status = CycleCountTaskStatus.CountedWithDivergence;
+            AdjustmentType = countedQuantity > ExpectedQuantity
+                ? AdjustmentType.Surplus_InboundNfe
+                : AdjustmentType.Shortage_ReturnNfe;
         }
+
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // Registra bipagem de HU individual (Rodadas 3+)
+    // Registro de Bipagem Estrita de HU/LPN Individual
     public void AddStrictLpnRecord(Guid inspectorId, Guid handlingUnitId)
     {
-        if (!IsStrictLpnMode) throw new InvalidOperationException("O modo LPN restrito não está ativado para esta tarefa.");
-
-        // Verifica se a HU já foi bipada nesta mesma rodada para evitar duplicidade
         if (_records.Any(r => r.Round == CurrentRound && r.ScannedHandlingUnitId == handlingUnitId))
             return;
 
@@ -75,19 +84,22 @@ public class CycleCountTask : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // Ação do Gestor
-    public void EscalateToStrictMode()
+    // Recontagem (Nova Rodada solicitada pela Gestão)
+    public void RequestRecount()
     {
-        if (Status != CycleCountTaskStatus.Escalated_To_Manager) throw new InvalidOperationException("A tarefa não está aguardando revisão do gestor.");
-
-        IsStrictLpnMode = true;
-        Status = CycleCountTaskStatus.Pending; // Volta para os coletores, agora exigindo desmanche
+        CurrentRound++;
+        CountedQuantity = null;
+        Status = CycleCountTaskStatus.Pending;
+        AdjustmentType = AdjustmentType.None;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // Fechamento manual/forçado após tratamento de Quarentena
-    public void ResolveTask()
+    // Aplicação do Ajuste Fiscal e Baixa
+    public void ApplyFiscalAdjustment(Guid documentId, string documentNumber, string? notes)
     {
+        FiscalDocumentId = documentId;
+        FiscalDocumentNumber = documentNumber;
+        FiscalNotes = notes;
         Status = CycleCountTaskStatus.Resolved;
         UpdatedAt = DateTime.UtcNow;
     }

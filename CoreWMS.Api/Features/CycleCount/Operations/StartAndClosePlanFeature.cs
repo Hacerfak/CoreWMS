@@ -1,3 +1,4 @@
+using CoreWMS.Api.Features.CycleCount.Enums;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -23,21 +24,41 @@ public class StartAndClosePlanHandler :
     public async Task<IResult> Handle(StartCycleCountPlanCommand request, CancellationToken ct)
     {
         var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.Id, ct);
-        if (plan == null) return Results.NotFound();
+        if (plan == null)
+            return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
 
-        plan.Start();
+        if (plan.Status == CycleCountPlanStatus.Draft)
+        {
+            plan.ApproveForCounting();
+        }
+        else
+        {
+            plan.StartCounting();
+        }
+
         await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { Message = "Plano de inventário iniciado." });
+        return Results.Ok(new { Message = "Plano de inventário iniciado e liberado para contagem." });
     }
 
     public async Task<IResult> Handle(CloseCycleCountPlanCommand request, CancellationToken ct)
     {
-        var plan = await _db.CycleCountPlans.Include(p => p.Tasks).FirstOrDefaultAsync(p => p.Id == request.Id, ct);
-        if (plan == null) return Results.NotFound();
+        var plan = await _db.CycleCountPlans
+            .Include(p => p.Tasks)
+            .FirstOrDefaultAsync(p => p.Id == request.Id, ct);
 
-        plan.Close();
-        await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { Message = "Plano de inventário encerrado com sucesso." });
+        if (plan == null)
+            return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
+
+        try
+        {
+            plan.Close();
+            await _db.SaveChangesAsync(ct);
+            return Results.Ok(new { Message = "Plano de inventário encerrado com sucesso." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { Message = ex.Message });
+        }
     }
 }
 

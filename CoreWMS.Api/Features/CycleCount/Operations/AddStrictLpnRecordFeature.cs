@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using CoreWMS.Api.Features.CycleCount.Enums;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -15,7 +16,7 @@ public class AddStrictLpnRecordCommandValidator : AbstractValidator<AddStrictLpn
     public AddStrictLpnRecordCommandValidator()
     {
         RuleFor(x => x.TaskId).NotEmpty();
-        RuleFor(x => x.Lpn).NotEmpty().WithMessage("Informe ou bipe o LPN.");
+        RuleFor(x => x.Lpn).NotEmpty().WithMessage("Informe ou bipe o código LPN.");
     }
 }
 
@@ -37,27 +38,38 @@ public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordComma
             return Results.Unauthorized();
 
         var task = await _db.CycleCountTasks
-            .Include(t => t.Records)
+            .Include(t => t.CycleCountPlan)
             .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
 
-        if (task == null) return Results.NotFound(new { Message = "Tarefa de inventário não encontrada." });
-        if (!task.IsStrictLpnMode)
-            return Results.BadRequest(new { Message = "Esta tarefa não está em modo estrito de bipagem de LPN." });
+        if (task == null)
+            return Results.NotFound(new { Message = "Tarefa de inventário não encontrada." });
 
-        var hu = await _db.HandlingUnits
-            .FirstOrDefaultAsync(h => h.Lpn == request.Lpn.Trim().ToUpper(), ct);
+        if (task.Status == CycleCountTaskStatus.Resolved)
+            return Results.BadRequest(new { Message = "Esta tarefa já foi concluída e conciliada." });
 
+        var hu = await _db.HandlingUnits.FirstOrDefaultAsync(h => h.Lpn == request.Lpn.Trim().ToUpper(), ct);
         if (hu == null)
-            return Results.BadRequest(new { Message = $"LPN '{request.Lpn}' não encontrado no sistema." });
+            return Results.BadRequest(new { Message = $"LPN '{request.Lpn}' não encontrado no estoque." });
 
-        task.AddStrictLpnRecord(userId, hu.Id);
+        if (hu.CurrentLocationId != task.LocationId)
+            return Results.BadRequest(new { Message = $"O LPN '{hu.Lpn}' está no endereço '{hu.CurrentLocation?.FullPath ?? "Outro"}' e não pertence à posição contada." });
+
+        // Incrementa o saldo contado acumulado por LPN
+        decimal newTotal = (task.CountedQuantity ?? 0m) + hu.CurrentQuantity;
+
+        task.CycleCountPlan.StartCounting();
+        task.RecordPositionCount(newTotal);
+        task.CycleCountPlan.CheckCompletion();
+
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new
         {
-            task.Status,
+            Status = task.Status.ToString(),
             ScannedLpn = hu.Lpn,
-            Message = $"LPN '{hu.Lpn}' bipado com sucesso na rodada {task.CurrentRound}."
+            AddedQuantity = hu.CurrentQuantity,
+            TotalCountedQuantity = task.CountedQuantity,
+            Message = $"LPN '{hu.Lpn}' bipado e computado com sucesso."
         });
     }
 }

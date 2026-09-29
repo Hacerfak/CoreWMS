@@ -12,22 +12,17 @@ public class CycleCountPlan : AuditableEntity
     public string Name { get; private set; } = string.Empty;
     public CycleCountPlanStatus Status { get; private set; }
 
-    // Filtros de Geração do Inventário
+    // Filtros do Inventário
     public Guid? CustomerId { get; private set; }
     public Customer? Customer { get; private set; }
-
     public Guid? ProductId { get; private set; }
     public Product? Product { get; private set; }
-
     public string? Batch { get; private set; }
-
     public Guid? ZoneId { get; private set; }
     public Zone? Zone { get; private set; }
-
     public Guid? LocationId { get; private set; }
     public Location? Location { get; private set; }
 
-    // Tarefas
     private readonly List<CycleCountTask> _tasks = new();
     public IReadOnlyCollection<CycleCountTask> Tasks => _tasks.AsReadOnly();
 
@@ -37,8 +32,7 @@ public class CycleCountPlan : AuditableEntity
     {
         CompanyId = companyId;
         Name = name;
-        Status = CycleCountPlanStatus.Scheduled;
-
+        Status = CycleCountPlanStatus.Draft; // Inicia sempre como Rascunho
         CustomerId = customerId;
         ProductId = productId;
         Batch = batch;
@@ -46,17 +40,41 @@ public class CycleCountPlan : AuditableEntity
         LocationId = locationId;
     }
 
-    public void Start()
+    public void ApproveForCounting()
     {
-        if (Status != CycleCountPlanStatus.Scheduled) throw new InvalidOperationException("O plano já foi iniciado.");
-        Status = CycleCountPlanStatus.InProgress;
+        if (Status != CycleCountPlanStatus.Draft)
+            throw new InvalidOperationException("Apenas planos em Rascunho podem ser aprovados para contagem.");
+
+        Status = CycleCountPlanStatus.ApprovedForCounting;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void StartCounting()
+    {
+        if (Status == CycleCountPlanStatus.ApprovedForCounting)
+        {
+            Status = CycleCountPlanStatus.InCounting;
+            UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    public void CheckCompletion()
+    {
+        if (_tasks.All(t => t.Status == CycleCountTaskStatus.Resolved))
+        {
+            Status = CycleCountPlanStatus.Closed;
+        }
+        else if (_tasks.All(t => t.Status != CycleCountTaskStatus.Pending))
+        {
+            Status = CycleCountPlanStatus.InReview;
+        }
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void Close()
     {
-        if (_tasks.Any(t => t.Status != CycleCountTaskStatus.Resolved))
-            throw new InvalidOperationException("Não é possível fechar o plano com tarefas pendentes ou em revisão.");
+        if (_tasks.Any(t => t.Status == CycleCountTaskStatus.Pending || t.Status == CycleCountTaskStatus.CountedWithDivergence))
+            throw new InvalidOperationException("Não é possível fechar o plano com tarefas pendentes de contagem ou divergências sem tratamento fiscal.");
 
         Status = CycleCountPlanStatus.Closed;
         UpdatedAt = DateTime.UtcNow;

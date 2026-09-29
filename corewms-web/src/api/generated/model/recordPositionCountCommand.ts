@@ -5,7 +5,7 @@
  * OpenAPI spec version: v1
  */
 
-export type GetApiCycleCountPlansParams = {
-CustomerId?: string;
-Status?: string;
-};
+export interface RecordPositionCountCommand {
+  taskId?: string;
+  countedQuantity?: number;
+}
