@@ -21,6 +21,12 @@ export interface CreateOutboundOrderCommand {
   /** @nullable */
   destinationZipCode?: string | null;
   /** @nullable */
+  carrierCnpjCpf?: string | null;
+  /** @nullable */
+  carrierName?: string | null;
+  /** @nullable */
+  additionalNotes?: string | null;
+  /** @nullable */
   expectedShipDate?: string | null;
   /** @nullable */
   items?: CreateOutboundOrderItemCommand[] | null;

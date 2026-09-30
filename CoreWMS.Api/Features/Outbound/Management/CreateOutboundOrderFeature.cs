@@ -9,9 +9,19 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreWMS.Api.Features.Outbound.Management;
 
 public record CreateOutboundOrderCommand(
-    Guid CustomerId, string OrderNumber, string DestinationCnpjCpf, string DestinationName,
-    string DestinationCity, string DestinationState, string? DestinationZipCode,
-    DateTime? ExpectedShipDate, List<CreateOutboundOrderItemCommand> Items) : IRequest<IResult>;
+    Guid CustomerId,
+    string OrderNumber,
+    string DestinationCnpjCpf,
+    string DestinationName,
+    string DestinationCity,
+    string DestinationState,
+    string? DestinationZipCode,
+    string? CarrierCnpjCpf,
+    string? CarrierName,
+    string? AdditionalNotes,
+    DateTime? ExpectedShipDate,
+    List<CreateOutboundOrderItemCommand> Items
+) : IRequest<IResult>;
 
 public class CreateOutboundOrderCommandValidator : AbstractValidator<CreateOutboundOrderCommand>
 {
@@ -49,9 +59,21 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
             return Results.BadRequest(new { Message = "Já existe um pedido de saída com este número." });
 
         var order = new OutboundOrder(
-            companyId, request.CustomerId, request.OrderNumber, null, null,
-            request.DestinationCnpjCpf, request.DestinationName, request.DestinationCity, request.DestinationState, request.DestinationZipCode,
-            DateTime.UtcNow, request.ExpectedShipDate
+            companyId,
+            request.CustomerId,
+            request.OrderNumber,
+            accessKey: null,
+            rawXml: null,
+            request.DestinationCnpjCpf,
+            request.DestinationName,
+            request.DestinationCity,
+            request.DestinationState,
+            request.DestinationZipCode,
+            request.CarrierCnpjCpf,
+            request.CarrierName,
+            request.AdditionalNotes,
+            issueDate: DateTime.UtcNow,
+            request.ExpectedShipDate
         );
 
         var productIds = request.Items.Select(i => i.ProductId).ToList();

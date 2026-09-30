@@ -2,17 +2,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
-
-import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import {
-    Truck, UploadCloud, Search, Loader2, Play,
-    Box, ArrowUpFromLine, RefreshCw, XCircle, CheckCircle2, Eye
-} from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban, PackageCheck, Plus, Play, Box, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
 
@@ -20,19 +16,21 @@ export default function OutboundListPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    const [selectedCustomer, setSelectedCustomer] = useState('ALL');
-    const [selectedStatus, setSelectedStatus] = useState('ALL');
     const [search, setSearch] = useState('');
+    const [customerFilter, setCustomerFilter] = useState('ALL');
+    const [statusFilter, setStatusFilter] = useState('ALL');
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 20;
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [orderToCancel, setOrderToCancel] = useState(null);
+
     const [orders, setOrders] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Carrega a lista resumida de depositantes para o Select
+    // Carrega a lista resumida de depositantes para o filtro
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
             .then(res => setCustomers(res || []))
@@ -45,8 +43,8 @@ export default function OutboundListPage() {
             const params = new URLSearchParams();
             params.append('Page', page);
             params.append('PageSize', PAGE_SIZE);
-            if (selectedCustomer !== 'ALL') params.append('CustomerId', selectedCustomer);
-            if (selectedStatus !== 'ALL') params.append('Status', selectedStatus);
+            if (customerFilter !== 'ALL') params.append('CustomerId', customerFilter);
+            if (statusFilter !== 'ALL') params.append('Status', statusFilter);
             if (search.trim()) params.append('Search', search.trim());
 
             const res = await customInstance({
@@ -57,7 +55,7 @@ export default function OutboundListPage() {
             setOrders(res?.items || []);
             setTotalCount(res?.totalCount || 0);
         } catch {
-            toast.error('Erro ao carregar lista de pedidos de saída.');
+            toast.error('Erro ao carregar pedidos de saída.');
         } finally {
             setIsLoading(false);
         }
@@ -65,8 +63,9 @@ export default function OutboundListPage() {
 
     useEffect(() => {
         loadOrders();
-    }, [page, selectedCustomer, selectedStatus]);
+    }, [page, customerFilter, statusFilter]);
 
+    // Executa Alocação FEFO/FIFO
     const handleAllocateOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -74,15 +73,15 @@ export default function OutboundListPage() {
                 url: `/api/outbound/orders/${orderId}/allocate`,
                 method: 'POST'
             });
-
-            toast.success(res?.message || 'Reserva de estoque concluída com sucesso!');
+            toast.success(res?.message || 'Estoque alocado com sucesso!');
             loadOrders();
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao alocar estoque para o pedido.');
+            toast.error(error.response?.data?.message || 'Erro ao alocar estoque.');
             setIsLoading(false);
         }
     };
 
+    // Expedir Definitivo
     const handleShipOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -90,7 +89,6 @@ export default function OutboundListPage() {
                 url: `/api/outbound/orders/${orderId}/ship`,
                 method: 'POST'
             });
-
             toast.success('Pedido expedido com sucesso! Saldo baixado do estoque.');
             loadOrders();
         } catch (error) {
@@ -99,15 +97,17 @@ export default function OutboundListPage() {
         }
     };
 
-    const handleCancelOrder = async (orderId) => {
+    // Cancelar Pedido
+    const handleCancelOrder = async () => {
+        if (!orderToCancel) return;
         try {
             setIsLoading(true);
             await customInstance({
-                url: `/api/outbound/orders/${orderId}/cancel`,
+                url: `/api/outbound/orders/${orderToCancel.id}/cancel`,
                 method: 'DELETE'
             });
-
-            toast.success('Pedido cancelado e reservas liberadas.');
+            toast.success('Pedido de saída cancelado com sucesso.');
+            setOrderToCancel(null);
             loadOrders();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao cancelar pedido.');
@@ -117,186 +117,228 @@ export default function OutboundListPage() {
 
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-    return (
-        <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* CABEÇALHO */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                        <Truck className="text-orange-600" size={26} /> Gestão de Expedição & Saídas (Outbound)
-                    </h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                        Importe NF-es de venda, aloque o estoque por FEFO/FIFO, gerencie a separação e finalize o packing.
-                    </p>
-                </div>
+    const renderStatusBadge = (status) => {
+        switch (status) {
+            case 'Pending':
+                return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Aguardando Alocação</Badge>;
+            case 'Allocated':
+                return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Alocado (Pronto p/ Separar)</Badge>;
+            case 'Picking':
+                return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-medium">Em Separação</Badge>;
+            case 'ReadyToShip':
+                return <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-medium">Na Doca (Pronto p/ Expedir)</Badge>;
+            case 'Shipped':
+                return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">Expedido</Badge>;
+            case 'Canceled':
+                return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-medium">Cancelado</Badge>;
+            default:
+                return <Badge variant="outline">{status}</Badge>;
+        }
+    };
 
-                <Button
-                    onClick={() => setIsImportModalOpen(true)}
-                    className="bg-orange-600 hover:bg-orange-700 text-white shadow-xs font-bold"
-                >
-                    <UploadCloud className="mr-2 h-4 w-4" /> Importar XML NF-e
-                </Button>
+    return (
+        <div className="flex flex-col h-full space-y-6">
+            {/* CABEÇALHO PADRONIZADO */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">Outbound (Expedição)</h1>
+                    <p className="text-sm text-slate-500 mt-1">Gestão de ordens de saída, alocação de estoque, separação e expedição.</p>
+                </div>
+                <div className="flex gap-2">
+                    <Button
+                        onClick={() => navigate('/outbound/novo')}
+                        variant="outline"
+                        className="border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-medium"
+                    >
+                        <Plus className="mr-2 h-4 w-4 text-orange-600" /> Nova Ordem Manual
+                    </Button>
+                    <Button
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="bg-orange-600 hover:bg-orange-700 text-white shadow-xs font-bold"
+                    >
+                        <Upload className="mr-2 h-4 w-4" /> Importar XML NF-e
+                    </Button>
+                </div>
             </div>
 
-            {/* FILTROS */}
-            <Card className="border-slate-200/80 shadow-xs bg-white">
-                <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-3 flex-1">
-                        <div className="relative flex-1 min-w-[220px]">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                            <Input
-                                placeholder="Buscar por Nº Pedido, Cliente ou NF-e..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && loadOrders()}
-                                className="pl-9 bg-slate-50 border-slate-200 h-9 text-xs"
-                            />
-                        </div>
-
-                        <div className="w-[200px]">
-                            <Select value={selectedCustomer} onValueChange={(v) => { setSelectedCustomer(v); setPage(1); }}>
-                                <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
-                                    <SelectValue placeholder="Depositante" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL">Todos os Depositantes</SelectItem>
-                                    {customers.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="w-[180px]">
-                            <Select value={selectedStatus} onValueChange={(v) => { setSelectedStatus(v); setPage(1); }}>
-                                <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
-                                    <SelectValue placeholder="Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL">Todos os Status</SelectItem>
-                                    <SelectItem value="Pending">⏳ Pendente</SelectItem>
-                                    <SelectItem value="Allocated">🔒 Alocado</SelectItem>
-                                    <SelectItem value="Picking">📦 Em Separação</SelectItem>
-                                    <SelectItem value="ReadyToShip">🚚 Na Doca / Expedir</SelectItem>
-                                    <SelectItem value="Shipped">✅ Expedido</SelectItem>
-                                    <SelectItem value="Canceled">❌ Cancelado</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
+            {/* CONTAINER DA TABELA PADRONIZADO */}
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {/* BARRA DE FILTROS */}
+                <div className="p-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50 shrink-0">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                            placeholder="Buscar por Pedido, Cliente ou Destinatário..."
+                            value={search}
+                            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                            onKeyDown={(e) => e.key === 'Enter' && loadOrders()}
+                            className="pl-9 bg-white border-slate-200 text-xs"
+                        />
                     </div>
 
-                    <Button onClick={loadOrders} variant="outline" size="sm" className="bg-white h-9">
-                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-                    </Button>
-                </CardContent>
-            </Card>
+                    <div className="w-[200px]">
+                        <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v); setPage(1); }}>
+                            <SelectTrigger className="bg-white text-xs">
+                                <SelectValue placeholder="Depositante" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">Todos os Depositantes</SelectItem>
+                                {customers.map(c => (
+                                    <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-            {/* TABELA DE PEDIDOS */}
-            <div className="bg-white border border-slate-200/80 rounded-xl shadow-xs overflow-hidden">
-                <Table>
-                    <TableHeader className="bg-slate-50/80">
-                        <TableRow>
-                            <TableHead>Nº Pedido / Emissão</TableHead>
-                            <TableHead>Depositante</TableHead>
-                            <TableHead>Destinatário Final</TableHead>
-                            <TableHead>Cidade / UF</TableHead>
-                            <TableHead className="text-center">Itens</TableHead>
-                            <TableHead>Status Operacional</TableHead>
-                            <TableHead className="text-right w-52">Ações</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                            <TableRow><TableCell colSpan={7} className="h-28 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
-                        ) : orders.length === 0 ? (
-                            <TableRow><TableCell colSpan={7} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
-                        ) : orders.map((o) => (
-                            <TableRow key={o.id} className="hover:bg-slate-50/60">
-                                <TableCell>
-                                    <div className="flex flex-col">
-                                        <span className="font-bold font-mono text-slate-900">NF {o.orderNumber}</span>
-                                        <span className="text-[10px] text-slate-400">{new Date(o.issueDate).toLocaleDateString('pt-BR')}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="font-medium text-slate-800 text-xs truncate max-w-[160px]">
-                                    {o.customerName}
-                                </TableCell>
-                                <TableCell className="font-semibold text-slate-800 text-xs truncate max-w-[180px]">
-                                    {o.destinationName}
-                                </TableCell>
-                                <TableCell className="text-xs text-slate-600 font-mono">
-                                    {o.destinationCity} / {o.destinationState}
-                                </TableCell>
-                                <TableCell className="text-center font-mono text-xs font-bold text-slate-700">
-                                    {o.itemsCount}
-                                </TableCell>
-                                <TableCell>
-                                    <Badge className={`text-[10px] px-2 py-0.5 border ${o.status === 'Pending' ? 'bg-amber-50 text-amber-800 border-amber-200' :
-                                        o.status === 'Allocated' ? 'bg-blue-50 text-blue-800 border-blue-200' :
-                                            o.status === 'Picking' ? 'bg-purple-50 text-purple-800 border-purple-200' :
-                                                o.status === 'ReadyToShip' ? 'bg-orange-50 text-orange-800 border-orange-200' :
-                                                    o.status === 'Shipped' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
-                                        }`}>
-                                        {o.status}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                        {o.status === 'Pending' && (
+                    <div className="w-[180px]">
+                        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                            <SelectTrigger className="bg-white text-xs">
+                                <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">Todos os Status</SelectItem>
+                                <SelectItem value="Pending">Aguardando Alocação</SelectItem>
+                                <SelectItem value="Allocated">Alocado</SelectItem>
+                                <SelectItem value="Picking">Em Separação</SelectItem>
+                                <SelectItem value="ReadyToShip">Pronto p/ Expedir</SelectItem>
+                                <SelectItem value="Shipped">Expedido</SelectItem>
+                                <SelectItem value="Canceled">Cancelado</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
+                {/* TABELA DE ORDENS */}
+                <div className="flex-1 overflow-auto">
+                    <Table>
+                        <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-xs z-10">
+                            <TableRow>
+                                <TableHead className="w-[220px]">Pedido / Emissão</TableHead>
+                                <TableHead>Depositante</TableHead>
+                                <TableHead>Destinatário Final</TableHead>
+                                <TableHead>Cidade / UF</TableHead>
+                                <TableHead className="text-center">Itens</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Ações</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {isLoading ? (
+                                <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
+                            ) : orders.length === 0 ? (
+                                <TableRow><TableCell colSpan={7} className="h-24 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
+                            ) : orders.map((order) => (
+                                <TableRow key={order.id} className="hover:bg-slate-50/50 transition-colors">
+                                    <TableCell>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-md bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                                                <ArrowUpFromLine size={16} />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-slate-900 font-mono">NF {order.orderNumber}</span>
+                                                <span className="text-xs text-slate-400">
+                                                    {order.issueDate ? new Date(order.issueDate).toLocaleDateString('pt-BR') : '-'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm font-medium text-slate-800">{order.customerName}</span>
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm font-semibold text-slate-900 truncate max-w-[180px] block" title={order.destinationName}>
+                                            {order.destinationName}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-slate-600 font-mono">
+                                        {order.destinationCity} / {order.destinationState}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono text-xs font-bold text-slate-700">
+                                        {order.itemsCount}
+                                    </TableCell>
+                                    <TableCell>
+                                        {renderStatusBadge(order.status)}
+                                    </TableCell>
+                                    <TableCell className="text-right space-x-1">
+                                        {/* Ação 1: Alocar Estoque FEFO/FIFO */}
+                                        {order.status === 'Pending' && (
                                             <Button
-                                                onClick={() => handleAllocateOrder(o.id)}
-                                                size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+                                                size="sm"
+                                                onClick={() => handleAllocateOrder(order.id)}
+                                                className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs font-medium"
                                             >
-                                                <Play size={13} className="mr-1" /> Alocar FEFO
+                                                <Play className="h-3.5 w-3.5 mr-1" /> Alocar FEFO
                                             </Button>
                                         )}
 
-                                        {(o.status === 'Allocated' || o.status === 'Picking') && (
+                                        {/* Ação 2: Ir para Coletor de Separação */}
+                                        {(order.status === 'Allocated' || order.status === 'Picking') && (
                                             <Button
-                                                onClick={() => navigate(`/outbound/picking/${o.id}`)}
-                                                size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
+                                                size="sm"
+                                                onClick={() => navigate(`/outbound/picking/${order.id}`)}
+                                                className="bg-purple-600 hover:bg-purple-700 text-white shadow-2xs font-medium"
                                             >
-                                                <Box size={13} className="mr-1" /> Coletor / Separar
+                                                <Box className="h-3.5 w-3.5 mr-1" /> Separar
                                             </Button>
                                         )}
 
-                                        {o.status === 'Picking' && (
+                                        {/* Ação 3: Ir para Conferência / Packing */}
+                                        {order.status === 'Picking' && (
                                             <Button
-                                                onClick={() => navigate(`/outbound/packing/${o.id}`)}
-                                                size="sm" className="h-7 text-xs bg-orange-600 hover:bg-orange-700 text-white shadow-2xs"
+                                                size="sm"
+                                                onClick={() => navigate(`/outbound/packing/${order.id}`)}
+                                                className="bg-orange-600 hover:bg-orange-700 text-white shadow-2xs font-medium"
                                             >
-                                                <ArrowUpFromLine size={13} className="mr-1" /> Packing
+                                                <PackageCheck className="h-3.5 w-3.5 mr-1" /> Packing
                                             </Button>
                                         )}
 
-                                        {o.status === 'ReadyToShip' && (
+                                        {/* Ação 4: Expedir na Doca */}
+                                        {order.status === 'ReadyToShip' && (
                                             <Button
-                                                onClick={() => handleShipOrder(o.id)}
-                                                size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                                                size="sm"
+                                                onClick={() => handleShipOrder(order.id)}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs font-medium"
                                             >
-                                                <CheckCircle2 size={13} className="mr-1" /> Expedir
+                                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Expedir
                                             </Button>
                                         )}
 
-                                        {o.status !== 'Shipped' && o.status !== 'Canceled' && (
+                                        {/* Botão Ver Detalhes */}
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => navigate(`/outbound/detalhes/${order.id}`)}
+                                            className="border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs"
+                                        >
+                                            <Eye className="h-3.5 w-3.5 text-slate-500" />
+                                        </Button>
+
+                                        {/* Botão Cancelar */}
+                                        {order.status !== 'Shipped' && order.status !== 'Canceled' && (
                                             <Button
-                                                onClick={() => handleCancelOrder(o.id)}
-                                                variant="ghost" size="sm" className="h-7 text-xs text-rose-600 hover:bg-rose-50 p-1.5"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setOrderToCancel(order)}
+                                                className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                                                 title="Cancelar Pedido"
                                             >
-                                                <XCircle size={15} />
+                                                <Ban className="h-4 w-4" />
                                             </Button>
                                         )}
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
 
+                {/* RODAPÉ DE PAGINAÇÃO */}
                 {totalCount > 0 && (
-                    <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-                        <span>Mostrando {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} pedidos</span>
+                    <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+                        <span className="text-xs text-slate-500 font-medium">
+                            Mostrando {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} pedidos
+                        </span>
                         <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-7 text-xs bg-white">Anterior</Button>
                             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || totalPages === 0} className="h-7 text-xs bg-white">Próxima</Button>
@@ -306,6 +348,24 @@ export default function OutboundListPage() {
             </div>
 
             <ImportXmlModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+
+            {/* Modal de Cancelamento */}
+            <AlertDialog open={!!orderToCancel} onOpenChange={(open) => !open && setOrderToCancel(null)}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Cancelar Pedido de Saída?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Deseja cancelar a saída do pedido <strong className="text-slate-800">{orderToCancel?.orderNumber}</strong>? Todas as reservas de estoque e alocações serão estornadas.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isLoading}>Voltar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleCancelOrder} disabled={isLoading} className="bg-rose-600 hover:bg-rose-700 text-white">
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
