@@ -18,9 +18,9 @@ import ClienteFormSheet from './ClienteFormSheet';
 export default function ClientesList() {
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('ACTIVE'); // ACTIVE, INACTIVE, ALL
+    const [statusFilter, setStatusFilter] = useState('ACTIVE');
     const [isSheetOpen, setIsSheetOpen] = useState(false);
-    const [selectedCliente, setSelectedCliente] = useState(null);
+    const [selectedClienteId, setSelectedClienteId] = useState(null);
     const [clienteToDelete, setClienteToDelete] = useState(null);
 
     const queryParams = {
@@ -59,12 +59,12 @@ export default function ClientesList() {
     };
 
     const handleCreate = () => {
-        setSelectedCliente(null);
+        setSelectedClienteId(null);
         setIsSheetOpen(true);
     };
 
     const handleEdit = (cliente) => {
-        setSelectedCliente(cliente);
+        setSelectedClienteId(cliente.id);
         setIsSheetOpen(true);
     };
 
@@ -75,12 +75,12 @@ export default function ClientesList() {
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clientes Depositantes</h1>
                     <p className="text-sm text-slate-500 mt-1">Gerencie os depositantes, contratos SLA e parceiros de negócio.</p>
                 </div>
-                <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs">
                     <Plus className="mr-2 h-4 w-4" /> Novo Cliente
                 </Button>
             </div>
 
-            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {/* BARRA DE FILTROS */}
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4">
                     <div className="relative flex-1 max-w-md">
@@ -92,16 +92,15 @@ export default function ClientesList() {
                             className="pl-9 bg-slate-50 border-slate-200 text-xs"
                         />
                     </div>
-
                     <div className="w-[180px]">
                         <Select value={statusFilter} onValueChange={setStatusFilter}>
                             <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
                                 <SelectValue placeholder="Filtrar por Status" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="ACTIVE">🟢 Apenas Ativos</SelectItem>
-                                <SelectItem value="INACTIVE">🔴 Apenas Inativos</SelectItem>
-                                <SelectItem value="ALL">📋 Todos os Registros</SelectItem>
+                                <SelectItem value="ACTIVE">Apenas Ativos</SelectItem>
+                                <SelectItem value="INACTIVE">Apenas Inativos</SelectItem>
+                                <SelectItem value="ALL">Todos os Registros</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -110,7 +109,7 @@ export default function ClientesList() {
                 {/* TABELA DE CLIENTES */}
                 <div className="flex-1 overflow-auto">
                     <Table>
-                        <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-sm z-10">
+                        <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-xs z-10">
                             <TableRow>
                                 <TableHead className="w-[350px]">Razão Social / Fantasia</TableHead>
                                 <TableHead>CNPJ</TableHead>
@@ -152,7 +151,7 @@ export default function ClientesList() {
                                         <TableCell>
                                             <div className="flex items-center gap-1.5 text-sm text-slate-600">
                                                 <MapPin size={14} className="text-slate-400" />
-                                                {cliente.cityName} - {cliente.state}
+                                                {cliente.cityName || 'N/I'} - {cliente.state}
                                             </div>
                                         </TableCell>
                                         <TableCell>
@@ -164,7 +163,6 @@ export default function ClientesList() {
                                             <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)} className="text-blue-600 hover:bg-blue-50">
                                                 <Edit className="h-4 w-4 mr-1" /> Editar
                                             </Button>
-
                                             {cliente.isActive ? (
                                                 <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
                                                     <Trash2 className="h-4 w-4 mr-1" /> Inativar
@@ -186,7 +184,7 @@ export default function ClientesList() {
             <ClienteFormSheet
                 open={isSheetOpen}
                 onOpenChange={setIsSheetOpen}
-                clienteToEdit={selectedCliente}
+                clienteId={selectedClienteId}
             />
 
             <AlertDialog open={!!clienteToDelete} onOpenChange={(open) => !open && setClienteToDelete(null)}>

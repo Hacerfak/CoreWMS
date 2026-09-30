@@ -3,11 +3,20 @@ using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
-using Mapster;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Customers;
+
+public record CustomerListDto(
+    Guid Id,
+    string CorporateName,
+    string? TradeName,
+    string Cnpj,
+    string? CityName,
+    string State,
+    bool IsActive
+);
 
 public record ListCustomersQuery(string? Search, bool? OnlyActive, string? Status, int Page = 1, int PageSize = 20) : IRequest<IResult>;
 
@@ -63,14 +72,24 @@ public class ListCustomersHandler : IRequestHandler<ListCustomersQuery, IResult>
         }
 
         var totalCount = await q.CountAsync(ct);
+
+        // Projeção leve otimizada para listagem
         var items = await q
             .OrderBy(c => c.CorporateName)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .ProjectToType<CustomerDto>()
+            .Select(c => new CustomerListDto(
+                c.Id,
+                c.CorporateName,
+                c.TradeName,
+                c.Cnpj,
+                c.CityName,
+                c.State,
+                c.IsActive
+            ))
             .ToListAsync(ct);
 
-        var response = new PaginatedResult<CustomerDto>(items, totalCount, request.Page, request.PageSize);
+        var response = new PaginatedResult<CustomerListDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

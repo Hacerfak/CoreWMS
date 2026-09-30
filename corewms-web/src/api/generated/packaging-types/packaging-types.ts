@@ -260,7 +260,93 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiPackagingTypesIdMutationOptions(options), queryClient);
     }
-    export const putApiPackagingTypesId = (
+    export const getApiPackagingTypesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/packaging-types/${id}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiPackagingTypesIdQueryKey = (id: string,) => {
+    return [
+    `/api/packaging-types/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiPackagingTypesIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiPackagingTypesIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiPackagingTypesId>>> = ({ signal }) => getApiPackagingTypesId(id, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiPackagingTypesIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiPackagingTypesId>>>
+export type GetApiPackagingTypesIdQueryError = unknown
+
+
+export function useGetApiPackagingTypesId<TData = Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiPackagingTypesId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiPackagingTypesId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiPackagingTypesId<TData = Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiPackagingTypesId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiPackagingTypesId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiPackagingTypesId<TData = Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiPackagingTypesId<TData = Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiPackagingTypesIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const putApiPackagingTypesId = (
     id: string,
     updatePackagingTypeCommand: UpdatePackagingTypeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -322,3 +408,89 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiPackagingTypesIdMutationOptions(options), queryClient);
     }
+    export const getApiPackagingTypesSummary = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/packaging-types/summary`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiPackagingTypesSummaryQueryKey = () => {
+    return [
+    `/api/packaging-types/summary`
+    ] as const;
+    }
+
+
+export const getGetApiPackagingTypesSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiPackagingTypesSummaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>> = ({ signal }) => getApiPackagingTypesSummary(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiPackagingTypesSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>>
+export type GetApiPackagingTypesSummaryQueryError = unknown
+
+
+export function useGetApiPackagingTypesSummary<TData = Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiPackagingTypesSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getApiPackagingTypesSummary>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiPackagingTypesSummary<TData = Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiPackagingTypesSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getApiPackagingTypesSummary>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiPackagingTypesSummary<TData = Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiPackagingTypesSummary<TData = Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPackagingTypesSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiPackagingTypesSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
