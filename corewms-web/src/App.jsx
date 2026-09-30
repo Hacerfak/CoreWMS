@@ -28,6 +28,7 @@ import InventarioGestaoPage from '@/pages/Inventario/InventarioGestaoPage';
 import NovoInventarioPage from '@/pages/Inventario/NovoInventarioPage';
 import InventarioDetalhesPage from '@/pages/Inventario/InventarioDetalhesPage';
 import InventarioOperacaoPage from '@/pages/Inventario/InventarioOperacaoPage';
+import ExecucaoContagemPage from '@/pages/Inventario/ExecucaoContagemPage';
 import OutboundListPage from '@/pages/Outbound/OutboundListPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
 import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
@@ -121,8 +122,7 @@ export default function App() {
 
               <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
                 <Route path="/inventario/operacao" element={<InventarioOperacaoPage />} />
-                {/* Redirecionamento da rota antiga para a visão gerencial */}
-                <Route path="/inventario" element={<Navigate to="/inventario/gestao" replace />} />
+                <Route path="/inventario/operacao/:taskId" element={<ExecucaoContagemPage />} />
               </Route>
 
               {/* ROTAS DO INBOUND */}
