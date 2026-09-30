@@ -7,7 +7,6 @@
 
 export interface ApplyFiscalAdjustmentCommand {
   taskId?: string;
-  fiscalDocumentId?: string;
   /** @nullable */
   fiscalDocumentNumber?: string | null;
   /** @nullable */

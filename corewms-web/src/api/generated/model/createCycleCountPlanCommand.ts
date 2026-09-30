@@ -8,14 +8,17 @@
 export interface CreateCycleCountPlanCommand {
   /** @nullable */
   name?: string | null;
+  blockMovements?: boolean;
+  maxRounds?: number;
+  enableAdjustments?: boolean;
   /** @nullable */
-  customerId?: string | null;
+  assignedUserId?: string | null;
   /** @nullable */
-  productId?: string | null;
+  customerIds?: string[] | null;
+  /** @nullable */
+  productIds?: string[] | null;
+  /** @nullable */
+  locationIds?: string[] | null;
   /** @nullable */
   batch?: string | null;
-  /** @nullable */
-  zoneId?: string | null;
-  /** @nullable */
-  locationId?: string | null;
 }

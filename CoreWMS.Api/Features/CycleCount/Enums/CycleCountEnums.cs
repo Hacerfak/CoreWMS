@@ -11,10 +11,12 @@ public enum CycleCountPlanStatus
 
 public enum CycleCountTaskStatus
 {
-    Pending = 1,                  // Aguardando operador contar
-    CountedWithDivergence = 2,    // Contado com divergência entre físico e sistêmico
-    AwaitingFiscalAdjustment = 3, // Aguardando NF de Remessa (Sobra) ou Retorno Simbólico (Falta)
-    Resolved = 4                  // Finalizado e ajustado
+    Pending = 1,               // Aguardando operador iniciar
+    InCounting = 2,            // Operador abriu o modal e está contando
+    CountedWithDivergence = 3, // Rodadas finalizadas com divergência física
+    AwaitingFiscalAdjustment = 4,// Aguardando vínculo/emissão de NF-e
+    Resolved = 5,              // Conciliado sem divergência ou com ajuste fiscal efetuado
+    Recounted = 6              // Recontada (Histórico mantido; gerada nova tarefa)
 }
 
 public enum AdjustmentType

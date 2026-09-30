@@ -34,7 +34,7 @@ public class AddVolumetricRecordHandler : IRequestHandler<AddVolumetricRecordCom
     public async Task<IResult> Handle(AddVolumetricRecordCommand request, CancellationToken ct)
     {
         var userIdClaim = _http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out _))
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return Results.Unauthorized();
 
         var task = await _db.CycleCountTasks
@@ -51,7 +51,7 @@ public class AddVolumetricRecordHandler : IRequestHandler<AddVolumetricRecordCom
             return Results.BadRequest(new { Message = "Este inventário está em Rascunho e aguarda aprovação da Gestão." });
 
         task.CycleCountPlan.StartCounting();
-        task.RecordPositionCount(request.CountedQuantity);
+        task.RecordRoundCount(request.CountedQuantity, userId, task.CycleCountPlan.MaxRounds);
         task.CycleCountPlan.CheckCompletion();
 
         await _db.SaveChangesAsync(ct);

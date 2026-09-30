@@ -28,6 +28,7 @@ import type {
   AddVolumetricRecordCommand,
   ApplyFiscalAdjustmentCommand,
   CreateCycleCountPlanCommand,
+  GetApiCycleCountMetricsParams,
   GetApiCycleCountPlansParams,
   RecordPositionCountCommand
 } from '../model';
@@ -57,6 +58,179 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getApiCycleCountMetrics = (
+    params?: GetApiCycleCountMetricsParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/metrics`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiCycleCountMetricsQueryKey = (params?: GetApiCycleCountMetricsParams,) => {
+    return [
+    `/api/cycle-count/metrics`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiCycleCountMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError = unknown>(params?: GetApiCycleCountMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiCycleCountMetricsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCycleCountMetrics>>> = ({ signal }) => getApiCycleCountMetrics(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiCycleCountMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiCycleCountMetrics>>>
+export type GetApiCycleCountMetricsQueryError = unknown
+
+
+export function useGetApiCycleCountMetrics<TData = Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError = unknown>(
+ params: undefined |  GetApiCycleCountMetricsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCycleCountMetrics>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCycleCountMetrics>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCycleCountMetrics<TData = Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError = unknown>(
+ params?: GetApiCycleCountMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCycleCountMetrics>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCycleCountMetrics>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCycleCountMetrics<TData = Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError = unknown>(
+ params?: GetApiCycleCountMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiCycleCountMetrics<TData = Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError = unknown>(
+ params?: GetApiCycleCountMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiCycleCountMetricsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiCycleCountPlansId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/plans/${id}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiCycleCountPlansIdQueryKey = (id: string,) => {
+    return [
+    `/api/cycle-count/plans/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiCycleCountPlansIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiCycleCountPlansIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCycleCountPlansId>>> = ({ signal }) => getApiCycleCountPlansId(id, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiCycleCountPlansIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiCycleCountPlansId>>>
+export type GetApiCycleCountPlansIdQueryError = unknown
+
+
+export function useGetApiCycleCountPlansId<TData = Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCycleCountPlansId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCycleCountPlansId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCycleCountPlansId<TData = Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCycleCountPlansId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCycleCountPlansId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCycleCountPlansId<TData = Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiCycleCountPlansId<TData = Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiCycleCountPlansIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
 
 export const getApiCycleCountPlans = (
     params?: GetApiCycleCountPlansParams,
@@ -206,7 +380,93 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCycleCountPlansMutationOptions(options), queryClient);
     }
-    export const postApiCycleCountTasksTaskIdRecordLpn = (
+    export const getApiCycleCountTasksOperator = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/tasks/operator`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiCycleCountTasksOperatorQueryKey = () => {
+    return [
+    `/api/cycle-count/tasks/operator`
+    ] as const;
+    }
+
+
+export const getGetApiCycleCountTasksOperatorQueryOptions = <TData = Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiCycleCountTasksOperatorQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>> = ({ signal }) => getApiCycleCountTasksOperator(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiCycleCountTasksOperatorQueryResult = NonNullable<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>>
+export type GetApiCycleCountTasksOperatorQueryError = unknown
+
+
+export function useGetApiCycleCountTasksOperator<TData = Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCycleCountTasksOperator<TData = Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCycleCountTasksOperator<TData = Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiCycleCountTasksOperator<TData = Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiCycleCountTasksOperatorQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiCycleCountTasksTaskIdRecordLpn = (
     taskId: string,
     addStrictLpnRecordCommand: AddStrictLpnRecordCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -330,14 +590,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCycleCountTasksTaskIdRecordVolumetricMutationOptions(options), queryClient);
     }
-    export const postApiCycleCountPlansPlanIdApprove = (
-    planId: string,
+    export const postApiCycleCountTasksTaskIdStart = (
+    taskId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/cycle-count/plans/${planId}/approve`, method: 'POST', signal
+      {url: `/api/cycle-count/tasks/${taskId}/start`, method: 'POST', signal
     },
       options);
     }
@@ -345,13 +605,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiCycleCountPlansPlanIdApproveMutationKey = () => ['postApiCycleCountPlansPlanIdApprove'] as const;
+export const getPostApiCycleCountTasksTaskIdStartMutationKey = () => ['postApiCycleCountTasksTaskIdStart'] as const;
 
-export const getPostApiCycleCountPlansPlanIdApproveMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, TError,PostApiCycleCountPlansPlanIdApproveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, TError,PostApiCycleCountPlansPlanIdApproveMutationVariables, TContext> => {
+export const getPostApiCycleCountTasksTaskIdStartMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdStart>>, TError,PostApiCycleCountTasksTaskIdStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdStart>>, TError,PostApiCycleCountTasksTaskIdStartMutationVariables, TContext> => {
 
-const mutationKey = getPostApiCycleCountPlansPlanIdApproveMutationKey();
+const mutationKey = getPostApiCycleCountTasksTaskIdStartMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -361,10 +621,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, PostApiCycleCountPlansPlanIdApproveMutationVariables> = (props) => {
-          const {planId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdStart>>, PostApiCycleCountTasksTaskIdStartMutationVariables> = (props) => {
+          const {taskId} = props ?? {};
 
-          return  postApiCycleCountPlansPlanIdApprove(planId,requestOptions)
+          return  postApiCycleCountTasksTaskIdStart(taskId,requestOptions)
         }
 
 
@@ -374,20 +634,79 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiCycleCountPlansPlanIdApproveMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>>
+    export type PostApiCycleCountTasksTaskIdStartMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdStart>>>
 
-    export type PostApiCycleCountPlansPlanIdApproveMutationError = unknown
-    export type PostApiCycleCountPlansPlanIdApproveMutationVariables = {planId: string}
+    export type PostApiCycleCountTasksTaskIdStartMutationError = unknown
+    export type PostApiCycleCountTasksTaskIdStartMutationVariables = {taskId: string}
 
-    export const usePostApiCycleCountPlansPlanIdApprove = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, TError,PostApiCycleCountPlansPlanIdApproveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiCycleCountTasksTaskIdStart = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdStart>>, TError,PostApiCycleCountTasksTaskIdStartMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>,
+        Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdStart>>,
         TError,
-        PostApiCycleCountPlansPlanIdApproveMutationVariables,
+        PostApiCycleCountTasksTaskIdStartMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiCycleCountPlansPlanIdApproveMutationOptions(options), queryClient);
+      return useMutation(getPostApiCycleCountTasksTaskIdStartMutationOptions(options), queryClient);
+    }
+    export const postApiCycleCountTasksTaskIdCancelCounting = (
+    taskId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/tasks/${taskId}/cancel-counting`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCycleCountTasksTaskIdCancelCountingMutationKey = () => ['postApiCycleCountTasksTaskIdCancelCounting'] as const;
+
+export const getPostApiCycleCountTasksTaskIdCancelCountingMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdCancelCounting>>, TError,PostApiCycleCountTasksTaskIdCancelCountingMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdCancelCounting>>, TError,PostApiCycleCountTasksTaskIdCancelCountingMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCycleCountTasksTaskIdCancelCountingMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdCancelCounting>>, PostApiCycleCountTasksTaskIdCancelCountingMutationVariables> = (props) => {
+          const {taskId} = props ?? {};
+
+          return  postApiCycleCountTasksTaskIdCancelCounting(taskId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCycleCountTasksTaskIdCancelCountingMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdCancelCounting>>>
+
+    export type PostApiCycleCountTasksTaskIdCancelCountingMutationError = unknown
+    export type PostApiCycleCountTasksTaskIdCancelCountingMutationVariables = {taskId: string}
+
+    export const usePostApiCycleCountTasksTaskIdCancelCounting = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdCancelCounting>>, TError,PostApiCycleCountTasksTaskIdCancelCountingMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCycleCountTasksTaskIdCancelCounting>>,
+        TError,
+        PostApiCycleCountTasksTaskIdCancelCountingMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCycleCountTasksTaskIdCancelCountingMutationOptions(options), queryClient);
     }
     export const postApiCycleCountTasksTaskIdRecordPosition = (
     taskId: string,
@@ -451,6 +770,65 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCycleCountTasksTaskIdRecordPositionMutationOptions(options), queryClient);
     }
+    export const postApiCycleCountPlansPlanIdApprove = (
+    planId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/plans/${planId}/approve`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCycleCountPlansPlanIdApproveMutationKey = () => ['postApiCycleCountPlansPlanIdApprove'] as const;
+
+export const getPostApiCycleCountPlansPlanIdApproveMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, TError,PostApiCycleCountPlansPlanIdApproveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, TError,PostApiCycleCountPlansPlanIdApproveMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCycleCountPlansPlanIdApproveMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, PostApiCycleCountPlansPlanIdApproveMutationVariables> = (props) => {
+          const {planId} = props ?? {};
+
+          return  postApiCycleCountPlansPlanIdApprove(planId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCycleCountPlansPlanIdApproveMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>>
+
+    export type PostApiCycleCountPlansPlanIdApproveMutationError = unknown
+    export type PostApiCycleCountPlansPlanIdApproveMutationVariables = {planId: string}
+
+    export const usePostApiCycleCountPlansPlanIdApprove = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>, TError,PostApiCycleCountPlansPlanIdApproveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdApprove>>,
+        TError,
+        PostApiCycleCountPlansPlanIdApproveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCycleCountPlansPlanIdApproveMutationOptions(options), queryClient);
+    }
     export const postApiCycleCountTasksTaskIdRecount = (
     taskId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -509,6 +887,124 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiCycleCountTasksTaskIdRecountMutationOptions(options), queryClient);
+    }
+    export const postApiCycleCountPlansPlanIdCancel = (
+    planId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/plans/${planId}/cancel`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCycleCountPlansPlanIdCancelMutationKey = () => ['postApiCycleCountPlansPlanIdCancel'] as const;
+
+export const getPostApiCycleCountPlansPlanIdCancelMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdCancel>>, TError,PostApiCycleCountPlansPlanIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdCancel>>, TError,PostApiCycleCountPlansPlanIdCancelMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCycleCountPlansPlanIdCancelMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdCancel>>, PostApiCycleCountPlansPlanIdCancelMutationVariables> = (props) => {
+          const {planId} = props ?? {};
+
+          return  postApiCycleCountPlansPlanIdCancel(planId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCycleCountPlansPlanIdCancelMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdCancel>>>
+
+    export type PostApiCycleCountPlansPlanIdCancelMutationError = unknown
+    export type PostApiCycleCountPlansPlanIdCancelMutationVariables = {planId: string}
+
+    export const usePostApiCycleCountPlansPlanIdCancel = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdCancel>>, TError,PostApiCycleCountPlansPlanIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCycleCountPlansPlanIdCancel>>,
+        TError,
+        PostApiCycleCountPlansPlanIdCancelMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCycleCountPlansPlanIdCancelMutationOptions(options), queryClient);
+    }
+    export const deleteApiCycleCountPlansPlanId = (
+    planId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/plans/${planId}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiCycleCountPlansPlanIdMutationKey = () => ['deleteApiCycleCountPlansPlanId'] as const;
+
+export const getDeleteApiCycleCountPlansPlanIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCycleCountPlansPlanId>>, TError,DeleteApiCycleCountPlansPlanIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiCycleCountPlansPlanId>>, TError,DeleteApiCycleCountPlansPlanIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiCycleCountPlansPlanIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiCycleCountPlansPlanId>>, DeleteApiCycleCountPlansPlanIdMutationVariables> = (props) => {
+          const {planId} = props ?? {};
+
+          return  deleteApiCycleCountPlansPlanId(planId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiCycleCountPlansPlanIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiCycleCountPlansPlanId>>>
+
+    export type DeleteApiCycleCountPlansPlanIdMutationError = unknown
+    export type DeleteApiCycleCountPlansPlanIdMutationVariables = {planId: string}
+
+    export const useDeleteApiCycleCountPlansPlanId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiCycleCountPlansPlanId>>, TError,DeleteApiCycleCountPlansPlanIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiCycleCountPlansPlanId>>,
+        TError,
+        DeleteApiCycleCountPlansPlanIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiCycleCountPlansPlanIdMutationOptions(options), queryClient);
     }
     export const postApiCycleCountTasksTaskIdApplyFiscalAdjustment = (
     taskId: string,

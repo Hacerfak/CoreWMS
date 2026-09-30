@@ -68,7 +68,6 @@ public class ApplicationDbContext : DbContext
     public DbSet<BillingItem> BillingItems => Set<BillingItem>();
     public DbSet<CycleCountPlan> CycleCountPlans => Set<CycleCountPlan>();
     public DbSet<CycleCountTask> CycleCountTasks => Set<CycleCountTask>();
-    public DbSet<CycleCountRecord> CycleCountRecords => Set<CycleCountRecord>();
     public DbSet<InboundOrder> InboundOrders => Set<InboundOrder>();
     public DbSet<InboundOrderItem> InboundOrderItems => Set<InboundOrderItem>();
     public DbSet<UserCustomer> UserCustomers => Set<UserCustomer>();
@@ -461,16 +460,15 @@ public class ApplicationDbContext : DbContext
         // MÓDULO DE INVENTÁRIO (CYCLE COUNT)
         // ==========================================
         builder.Entity<CycleCountPlan>(b =>
-        {
-            b.HasKey(x => x.Id);
-            b.Property(x => x.Name).IsRequired().HasMaxLength(150);
-            b.Property(x => x.Batch).HasMaxLength(50);
+{
+    b.HasKey(x => x.Id);
+    b.Property(x => x.Name).IsRequired().HasMaxLength(150);
+    b.Property(x => x.Batch).HasMaxLength(50);
 
-            b.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
-            b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-            b.HasOne(x => x.Zone).WithMany().HasForeignKey(x => x.ZoneId).OnDelete(DeleteBehavior.Restrict);
-            b.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
-        });
+    b.Property(x => x.CustomerIds);
+    b.Property(x => x.ProductIds);
+    b.Property(x => x.LocationIds);
+});
 
         builder.Entity<CycleCountTask>(b =>
         {
@@ -478,20 +476,16 @@ public class ApplicationDbContext : DbContext
 
             b.Property(x => x.ExpectedQuantity).HasPrecision(18, 10);
             b.Property(x => x.CountedQuantity).HasPrecision(18, 10);
+            b.Property(x => x.CountRound1).HasPrecision(18, 10);
+            b.Property(x => x.CountRound2).HasPrecision(18, 10);
+            b.Property(x => x.CountRound3).HasPrecision(18, 10);
+
             b.Property(x => x.FiscalDocumentNumber).HasMaxLength(100);
             b.Property(x => x.FiscalNotes).HasMaxLength(1000);
 
             b.HasOne(x => x.CycleCountPlan).WithMany(x => x.Tasks).HasForeignKey(x => x.CycleCountPlanId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Location).WithMany().HasForeignKey(x => x.LocationId).OnDelete(DeleteBehavior.Restrict);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        builder.Entity<CycleCountRecord>(b =>
-        {
-            b.HasKey(x => x.Id);
-
-            b.HasOne<CycleCountTask>().WithMany(x => x.Records).HasForeignKey(x => x.CycleCountTaskId).OnDelete(DeleteBehavior.Cascade);
-            b.HasOne<HandlingUnit>().WithMany().HasForeignKey(x => x.ScannedHandlingUnitId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // ==========================================

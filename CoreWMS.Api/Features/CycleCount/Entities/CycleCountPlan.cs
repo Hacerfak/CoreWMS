@@ -1,8 +1,5 @@
 using CoreWMS.Api.Core.Entities;
-using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.CycleCount.Enums;
-using CoreWMS.Api.Features.Topology.Entities;
-using CoreWMS.Api.Features.Products.Entities;
 
 namespace CoreWMS.Api.Features.CycleCount.Entities;
 
@@ -12,38 +9,51 @@ public class CycleCountPlan : AuditableEntity
     public string Name { get; private set; } = string.Empty;
     public CycleCountPlanStatus Status { get; private set; }
 
-    // Filtros do Inventário
-    public Guid? CustomerId { get; private set; }
-    public Customer? Customer { get; private set; }
-    public Guid? ProductId { get; private set; }
-    public Product? Product { get; private set; }
+    public bool BlockMovements { get; private set; }
+    public int MaxRounds { get; private set; }
+    public bool EnableAdjustments { get; private set; }
+    public Guid? AssignedUserId { get; private set; }
+
+    public List<Guid> CustomerIds { get; private set; } = new();
+    public List<Guid> ProductIds { get; private set; } = new();
+    public List<Guid> LocationIds { get; private set; } = new();
     public string? Batch { get; private set; }
-    public Guid? ZoneId { get; private set; }
-    public Zone? Zone { get; private set; }
-    public Guid? LocationId { get; private set; }
-    public Location? Location { get; private set; }
 
     private readonly List<CycleCountTask> _tasks = new();
     public IReadOnlyCollection<CycleCountTask> Tasks => _tasks.AsReadOnly();
 
     protected CycleCountPlan() { }
 
-    public CycleCountPlan(Guid companyId, string name, Guid? customerId, Guid? productId, string? batch, Guid? zoneId, Guid? locationId)
+    public CycleCountPlan(
+        Guid companyId,
+        string name,
+        bool blockMovements,
+        int maxRounds,
+        bool enableAdjustments,
+        Guid? assignedUserId,
+        List<Guid>? customerIds,
+        List<Guid>? productIds,
+        List<Guid>? locationIds,
+        string? batch)
     {
         CompanyId = companyId;
         Name = name;
-        Status = CycleCountPlanStatus.Draft; // Inicia sempre como Rascunho
-        CustomerId = customerId;
-        ProductId = productId;
+        Status = CycleCountPlanStatus.Draft;
+        BlockMovements = blockMovements;
+        MaxRounds = Math.Clamp(maxRounds, 1, 3);
+        EnableAdjustments = enableAdjustments;
+        AssignedUserId = assignedUserId;
+
+        if (customerIds != null) CustomerIds = customerIds;
+        if (productIds != null) ProductIds = productIds;
+        if (locationIds != null) LocationIds = locationIds;
         Batch = batch;
-        ZoneId = zoneId;
-        LocationId = locationId;
     }
 
     public void ApproveForCounting()
     {
         if (Status != CycleCountPlanStatus.Draft)
-            throw new InvalidOperationException("Apenas planos em Rascunho podem ser aprovados para contagem.");
+            throw new InvalidOperationException("Apenas planos em rascunho podem ser aprovados.");
 
         Status = CycleCountPlanStatus.ApprovedForCounting;
         UpdatedAt = DateTime.UtcNow;
@@ -58,24 +68,49 @@ public class CycleCountPlan : AuditableEntity
         }
     }
 
+    public void ReopenForCounting()
+    {
+        Status = CycleCountPlanStatus.InCounting;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Valida se o plano terminou todas as tarefas
     public void CheckCompletion()
     {
-        if (_tasks.All(t => t.Status == CycleCountTaskStatus.Resolved))
+        var activeTasks = _tasks.Where(t => t.Status != CycleCountTaskStatus.Recounted).ToList();
+
+        if (!activeTasks.Any())
+            return;
+
+        bool allTasksFinished = activeTasks.All(t =>
+            t.Status == CycleCountTaskStatus.Resolved ||
+            t.Status == CycleCountTaskStatus.CountedWithDivergence);
+
+        if (allTasksFinished)
         {
-            Status = CycleCountPlanStatus.Closed;
+            Status = CycleCountPlanStatus.InReview; // Muda para Em Análise
         }
-        else if (_tasks.All(t => t.Status != CycleCountTaskStatus.Pending))
+        else
         {
-            Status = CycleCountPlanStatus.InReview;
+            Status = CycleCountPlanStatus.InCounting; // Mantém Em Contagem
+        }
+
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Cancela e volta para Rascunho
+    public void CancelToDraft()
+    {
+        Status = CycleCountPlanStatus.Draft;
+        foreach (var task in _tasks)
+        {
+            task.ResetTask();
         }
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void Close()
     {
-        if (_tasks.Any(t => t.Status == CycleCountTaskStatus.Pending || t.Status == CycleCountTaskStatus.CountedWithDivergence))
-            throw new InvalidOperationException("Não é possível fechar o plano com tarefas pendentes de contagem ou divergências sem tratamento fiscal.");
-
         Status = CycleCountPlanStatus.Closed;
         UpdatedAt = DateTime.UtcNow;
     }

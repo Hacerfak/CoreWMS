@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using CoreWMS.Api.Features.CycleCount.Enums;
+using CoreWMS.Api.Features.CycleCount.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Infrastructure.Data;
@@ -9,39 +11,43 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.CycleCount.Operations;
 
-// 1. Aprovação do Plano pela Gestão
+// Commands
 public record ApproveCycleCountPlanCommand(Guid PlanId) : IRequest<IResult>;
-
-// 2. Contagem Cega da Posição pelo Coletor
+public record StartTaskCountingCommand(Guid TaskId) : IRequest<IResult>;
+public record CancelTaskCountingCommand(Guid TaskId) : IRequest<IResult>;
 public record RecordPositionCountCommand(Guid TaskId, decimal CountedQuantity) : IRequest<IResult>;
-
-// 3. Solicitação de Recontagem pela Gestão
 public record RequestRecountCommand(Guid TaskId) : IRequest<IResult>;
-
-// 4. Efetivação do Ajuste Fiscal e Baixa
-public record ApplyFiscalAdjustmentCommand(
-    Guid TaskId,
-    Guid FiscalDocumentId,
-    string FiscalDocumentNumber,
-    string? Notes
-) : IRequest<IResult>;
+public record CancelPlanToDraftCommand(Guid PlanId) : IRequest<IResult>;
+public record DeleteCycleCountPlanCommand(Guid PlanId) : IRequest<IResult>;
+public record ApplyFiscalAdjustmentCommand(Guid TaskId, string FiscalDocumentNumber, string? Notes) : IRequest<IResult>;
 
 public class ApproveAndAdjustPlanHandler :
     IRequestHandler<ApproveCycleCountPlanCommand, IResult>,
+    IRequestHandler<StartTaskCountingCommand, IResult>,
+    IRequestHandler<CancelTaskCountingCommand, IResult>,
     IRequestHandler<RecordPositionCountCommand, IResult>,
     IRequestHandler<RequestRecountCommand, IResult>,
+    IRequestHandler<CancelPlanToDraftCommand, IResult>,
+    IRequestHandler<DeleteCycleCountPlanCommand, IResult>,
     IRequestHandler<ApplyFiscalAdjustmentCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly KardexChannel _kardex;
+    private readonly IHttpContextAccessor _http;
 
-    public ApproveAndAdjustPlanHandler(ApplicationDbContext db, KardexChannel kardex)
+    public ApproveAndAdjustPlanHandler(ApplicationDbContext db, KardexChannel kardex, IHttpContextAccessor http)
     {
         _db = db;
         _kardex = kardex;
+        _http = http;
     }
 
-    // 1. APROVAÇÃO DO PLANO
+    private Guid GetCurrentUserId()
+    {
+        var userIdClaim = _http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdClaim, out var id) ? id : Guid.Empty;
+    }
+
     public async Task<IResult> Handle(ApproveCycleCountPlanCommand request, CancellationToken ct)
     {
         var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.PlanId, ct);
@@ -53,34 +59,52 @@ public class ApproveAndAdjustPlanHandler :
         return Results.Ok(new { Message = "Plano aprovado e liberado para contagem dos coletores." });
     }
 
-    // 2. CONTAGEM CEGA DA POSIÇÃO
-    public async Task<IResult> Handle(RecordPositionCountCommand request, CancellationToken ct)
+    public async Task<IResult> Handle(StartTaskCountingCommand request, CancellationToken ct)
     {
+        var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Results.Unauthorized();
+
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
             .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
 
-        if (task == null) return Results.NotFound(new { Message = "Tarefa de inventário não encontrada." });
-
-        if (task.CycleCountPlan.Status == CycleCountPlanStatus.Draft)
-            return Results.BadRequest(new { Message = "Este inventário ainda está em Rascunho e aguarda aprovação da Gestão." });
+        if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
         task.CycleCountPlan.StartCounting();
-        task.RecordPositionCount(request.CountedQuantity);
+        task.StartCounting(userId);
+        await _db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { Message = "Tarefa atribuída e em contagem." });
+    }
+
+    public async Task<IResult> Handle(CancelTaskCountingCommand request, CancellationToken ct)
+    {
+        var task = await _db.CycleCountTasks.FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+        if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
+
+        task.CancelCounting();
+        await _db.SaveChangesAsync(ct);
+
+        return Results.Ok(new { Message = "Contagem cancelada e tarefa liberada." });
+    }
+
+    public async Task<IResult> Handle(RecordPositionCountCommand request, CancellationToken ct)
+    {
+        var userId = GetCurrentUserId();
+        var task = await _db.CycleCountTasks
+            .Include(t => t.CycleCountPlan)
+                .ThenInclude(p => p.Tasks)
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+
+        if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
+
+        task.RecordRoundCount(request.CountedQuantity, userId, task.CycleCountPlan.MaxRounds);
         task.CycleCountPlan.CheckCompletion();
 
         await _db.SaveChangesAsync(ct);
-
-        return Results.Ok(new
-        {
-            task.Status,
-            task.AdjustmentType,
-            IsDivergent = task.Status == CycleCountTaskStatus.CountedWithDivergence,
-            Message = "Contagem registrada com sucesso."
-        });
+        return Results.Ok(new { Message = "Contagem registrada com sucesso." });
     }
 
-    // 3. SOLICITAR RECONTAGEM
     public async Task<IResult> Handle(RequestRecountCommand request, CancellationToken ct)
     {
         var task = await _db.CycleCountTasks
@@ -89,30 +113,62 @@ public class ApproveAndAdjustPlanHandler :
 
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
-        task.RequestRecount();
-        task.CycleCountPlan.StartCounting();
+        task.MarkAsRecounted();
+
+        var newTask = new CycleCountTask(
+            task.CycleCountPlanId,
+            task.LocationId,
+            task.ProductId,
+            task.ExpectedQuantity,
+            task.IsDynamicStorage,
+            task.CycleCountPlan.AssignedUserId
+        );
+
+        _db.CycleCountTasks.Add(newTask);
+        task.CycleCountPlan.ReopenForCounting();
 
         await _db.SaveChangesAsync(ct);
-
-        return Results.Ok(new { Message = $"Recontagem solicitada! A tarefa voltou para a Rodada {task.CurrentRound}." });
+        return Results.Ok(new { Message = "Recontagem solicitada com sucesso!" });
     }
 
-    // 4. TRATAMENTO FISCAL (SOBRA / FALTA)
+    public async Task<IResult> Handle(CancelPlanToDraftCommand request, CancellationToken ct)
+    {
+        var plan = await _db.CycleCountPlans.Include(p => p.Tasks).FirstOrDefaultAsync(p => p.Id == request.PlanId, ct);
+        if (plan == null) return Results.NotFound(new { Message = "Plano não encontrado." });
+
+        plan.CancelToDraft();
+        await _db.SaveChangesAsync(ct);
+        return Results.Ok(new { Message = "Plano cancelado e retornado para Rascunho." });
+    }
+
+    public async Task<IResult> Handle(DeleteCycleCountPlanCommand request, CancellationToken ct)
+    {
+        var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.PlanId, ct);
+        if (plan == null) return Results.NotFound(new { Message = "Plano não encontrado." });
+
+        if (plan.Status != CycleCountPlanStatus.Draft)
+            return Results.BadRequest(new { Message = "Apenas planos em Rascunho podem ser excluídos." });
+
+        _db.CycleCountPlans.Remove(plan);
+        await _db.SaveChangesAsync(ct);
+        return Results.Ok(new { Message = "Plano excluído com sucesso." });
+    }
+
     public async Task<IResult> Handle(ApplyFiscalAdjustmentCommand request, CancellationToken ct)
     {
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
+                .ThenInclude(p => p.Tasks)
             .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
 
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
-        task.ApplyFiscalAdjustment(request.FiscalDocumentId, request.FiscalDocumentNumber.Trim(), request.Notes);
+        task.ApplyFiscalAdjustment(request.FiscalDocumentNumber.Trim(), request.Notes);
         task.CycleCountPlan.CheckCompletion();
 
-        // Recálculo do Saldo Sistêmico
         var balance = await _db.InventoryBalances
             .FirstOrDefaultAsync(b => b.CompanyId == task.CycleCountPlan.CompanyId &&
-                                      b.CustomerId == task.CycleCountPlan.CustomerId &&
+                                      b.CustomerId == task.CycleCountPlan.CustomerIds.FirstOrDefault() &&
                                       b.ProductId == task.ProductId, ct);
 
         if (balance != null)
@@ -120,31 +176,25 @@ public class ApproveAndAdjustPlanHandler :
             decimal divergence = task.DivergenceQuantity;
             balance.AdjustAvailable(divergence);
 
-            var transType = divergence > 0
-                ? TransactionType.Inventory_Adjustment_In
-                : TransactionType.Inventory_Adjustment_Out;
-
-            var actionMsg = divergence > 0
-                ? $"AJUSTE FISCAL (SOBRA): Vinculada NF-e Remessa {request.FiscalDocumentNumber}"
-                : $"AJUSTE FISCAL (FALTA): Gerada NF-e Retorno Simbólico {request.FiscalDocumentNumber}";
+            var transType = divergence > 0 ? TransactionType.Inventory_Adjustment_In : TransactionType.Inventory_Adjustment_Out;
+            var actionMsg = divergence > 0 ? $"AJUSTE FISCAL (SOBRA): Remessa {request.FiscalDocumentNumber}" : $"AJUSTE FISCAL (FALTA): Retorno Simbólico {request.FiscalDocumentNumber}";
 
             await _kardex.WriteAsync(new Features.Inventory.Entities.InventoryTransaction(
                 task.CycleCountPlan.CompanyId,
-                task.CycleCountPlan.CustomerId ?? Guid.Empty,
+                task.CycleCountPlan.CustomerIds.FirstOrDefault(),
                 task.ProductId,
                 null,
                 task.LocationId,
                 transType,
                 divergence,
                 balance.TotalAvailable,
-                request.FiscalDocumentId,
+                null,
                 actionMsg
             ), ct);
         }
 
         await _db.SaveChangesAsync(ct);
-
-        return Results.Ok(new { Message = "Ajuste fiscal aplicado com sucesso! Saldo e Kardex atualizados." });
+        return Results.Ok(new { Message = "Ajuste fiscal efetuado com sucesso." });
     }
 }
 
@@ -152,11 +202,18 @@ public static class ApproveAndAdjustPlanEndpoints
 {
     public static void MapApproveAndAdjustPlanEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/cycle-count/plans/{planId:guid}/approve", async (Guid planId, IMediator mediator) =>
-            await mediator.Send(new ApproveCycleCountPlanCommand(planId)))
+        // Endpoints do Coletor / Operação
+        app.MapPost("/api/cycle-count/tasks/{taskId:guid}/start", async (Guid taskId, IMediator mediator) =>
+            await mediator.Send(new StartTaskCountingCommand(taskId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.Inventory.View);
+
+        app.MapPost("/api/cycle-count/tasks/{taskId:guid}/cancel-counting", async (Guid taskId, IMediator mediator) =>
+            await mediator.Send(new CancelTaskCountingCommand(taskId)))
+           .WithTags("CycleCount")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Inventory.View);
 
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/record-position", async (Guid taskId, RecordPositionCountCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd with { TaskId = taskId }))
@@ -164,8 +221,27 @@ public static class ApproveAndAdjustPlanEndpoints
            .RequireAuthorization()
            .RequirePermission(Permissions.Inventory.View);
 
+        // Endpoints da Gestão / Auditoria
+        app.MapPost("/api/cycle-count/plans/{planId:guid}/approve", async (Guid planId, IMediator mediator) =>
+            await mediator.Send(new ApproveCycleCountPlanCommand(planId)))
+           .WithTags("CycleCount")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Inventory.ManageQuality);
+
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/recount", async (Guid taskId, IMediator mediator) =>
             await mediator.Send(new RequestRecountCommand(taskId)))
+           .WithTags("CycleCount")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Inventory.ManageQuality);
+
+        app.MapPost("/api/cycle-count/plans/{planId:guid}/cancel", async (Guid planId, IMediator mediator) =>
+            await mediator.Send(new CancelPlanToDraftCommand(planId)))
+           .WithTags("CycleCount")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Inventory.ManageQuality);
+
+        app.MapDelete("/api/cycle-count/plans/{planId:guid}", async (Guid planId, IMediator mediator) =>
+            await mediator.Send(new DeleteCycleCountPlanCommand(planId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
            .RequirePermission(Permissions.Inventory.ManageQuality);

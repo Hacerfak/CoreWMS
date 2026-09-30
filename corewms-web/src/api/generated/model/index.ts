@@ -38,6 +38,7 @@ export * from './getApiAuditLogsParams';
 export * from './getApiBillingCyclesParams';
 export * from './getApiBillingTariffsParams';
 export * from './getApiCustomersParams';
+export * from './getApiCycleCountMetricsParams';
 export * from './getApiCycleCountPlansParams';
 export * from './getApiInboundParams';
 export * from './getApiInventoryBalancesExportParams';

@@ -54,11 +54,10 @@ public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordComma
         if (hu.CurrentLocationId != task.LocationId)
             return Results.BadRequest(new { Message = $"O LPN '{hu.Lpn}' está no endereço '{hu.CurrentLocation?.FullPath ?? "Outro"}' e não pertence à posição contada." });
 
-        // Incrementa o saldo contado acumulado por LPN
         decimal newTotal = (task.CountedQuantity ?? 0m) + hu.CurrentQuantity;
 
         task.CycleCountPlan.StartCounting();
-        task.RecordPositionCount(newTotal);
+        task.RecordRoundCount(newTotal, userId, task.CycleCountPlan.MaxRounds);
         task.CycleCountPlan.CheckCompletion();
 
         await _db.SaveChangesAsync(ct);

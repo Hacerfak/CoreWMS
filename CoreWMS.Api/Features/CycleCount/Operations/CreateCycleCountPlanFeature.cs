@@ -11,11 +11,14 @@ namespace CoreWMS.Api.Features.CycleCount.Operations;
 
 public record CreateCycleCountPlanCommand(
     string Name,
-    Guid? CustomerId,
-    Guid? ProductId,
-    string? Batch,
-    Guid? ZoneId,
-    Guid? LocationId
+    bool BlockMovements,
+    int MaxRounds,
+    bool EnableAdjustments,
+    Guid? AssignedUserId,
+    List<Guid>? CustomerIds,
+    List<Guid>? ProductIds,
+    List<Guid>? LocationIds,
+    string? Batch
 ) : IRequest<IResult>;
 
 public class CreateCycleCountPlanCommandValidator : AbstractValidator<CreateCycleCountPlanCommand>
@@ -23,6 +26,7 @@ public class CreateCycleCountPlanCommandValidator : AbstractValidator<CreateCycl
     public CreateCycleCountPlanCommandValidator()
     {
         RuleFor(x => x.Name).NotEmpty().WithMessage("Informe o nome do plano de inventário.").MaximumLength(150);
+        RuleFor(x => x.MaxRounds).InclusiveBetween(1, 3).WithMessage("O número máximo de rodadas deve ser entre 1 e 3.");
     }
 }
 
@@ -44,26 +48,35 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
         var plan = new CycleCountPlan(
             companyId,
             request.Name.Trim(),
-            request.CustomerId,
-            request.ProductId,
-            request.Batch?.Trim(),
-            request.ZoneId,
-            request.LocationId
+            request.BlockMovements,
+            request.MaxRounds,
+            request.EnableAdjustments,
+            request.AssignedUserId,
+            request.CustomerIds,
+            request.ProductIds,
+            request.LocationIds,
+            request.Batch?.Trim()
         );
 
         _db.CycleCountPlans.Add(plan);
 
-        // Snapshot de Saldos por Posição
+        // Snapshot de Saldos por Posição cruzando as listas selecionadas
         var huQuery = _db.HandlingUnits.AsNoTracking()
             .Include(h => h.CurrentLocation)
                 .ThenInclude(l => l!.StorageType)
             .Where(h => h.CompanyId == companyId && h.CurrentLocationId.HasValue);
 
-        if (request.CustomerId.HasValue) huQuery = huQuery.Where(h => h.CustomerId == request.CustomerId);
-        if (request.ProductId.HasValue) huQuery = huQuery.Where(h => h.ProductId == request.ProductId);
-        if (!string.IsNullOrWhiteSpace(request.Batch)) huQuery = huQuery.Where(h => h.Batch == request.Batch.Trim());
-        if (request.LocationId.HasValue) huQuery = huQuery.Where(h => h.CurrentLocationId == request.LocationId);
-        if (request.ZoneId.HasValue) huQuery = huQuery.Where(h => h.CurrentLocation != null && h.CurrentLocation.ZoneId == request.ZoneId);
+        if (request.CustomerIds != null && request.CustomerIds.Count > 0)
+            huQuery = huQuery.Where(h => request.CustomerIds.Contains(h.CustomerId));
+
+        if (request.ProductIds != null && request.ProductIds.Count > 0)
+            huQuery = huQuery.Where(h => request.ProductIds.Contains(h.ProductId));
+
+        if (request.LocationIds != null && request.LocationIds.Count > 0)
+            huQuery = huQuery.Where(h => request.LocationIds.Contains(h.CurrentLocationId!.Value));
+
+        if (!string.IsNullOrWhiteSpace(request.Batch))
+            huQuery = huQuery.Where(h => h.Batch == request.Batch.Trim());
 
         var snapshot = await huQuery
             .GroupBy(h => new
@@ -86,11 +99,10 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
             .ToListAsync(ct);
 
         if (!snapshot.Any())
-            return Results.BadRequest(new { Message = "Nenhum saldo encontrado no estoque para os filtros informados." });
+            return Results.BadRequest(new { Message = "Nenhum saldo encontrado no estoque para os filtros selecionados." });
 
         foreach (var item in snapshot)
         {
-            // Identifica se a armazenagem é Blocada/Dinâmica
             bool isDynamic = item.StorageRole == StorageRole.Storage &&
                              (item.CapacityStrategy == StorageCapacityStrategy.DynamicStacking || item.StorageTypeName.Contains("Blocado", StringComparison.OrdinalIgnoreCase));
 
@@ -99,7 +111,8 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
                 item.LocationId,
                 item.ProductId,
                 item.ExpectedQty,
-                isDynamic
+                isDynamic,
+                request.AssignedUserId
             );
 
             _db.CycleCountTasks.Add(task);
@@ -113,7 +126,7 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
             PlanName = plan.Name,
             Status = plan.Status.ToString(),
             TasksGenerated = snapshot.Count,
-            Message = $"Plano criado em modo Rascunho com {snapshot.Count} posições mapeadas."
+            Message = $"Plano criado em Rascunho com {snapshot.Count} posições mapeadas."
         });
     }
 }

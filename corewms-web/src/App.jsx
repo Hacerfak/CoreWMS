@@ -25,6 +25,8 @@ import QualidadePage from '@/pages/Qualidade/QualidadePage';
 import TarifasECiclosPage from '@/pages/Billing/TarifasECiclosPage';
 import ExtratoFaturamentoPage from '@/pages/Billing/ExtratoFaturamentoPage';
 import InventarioGestaoPage from '@/pages/Inventario/InventarioGestaoPage';
+import NovoInventarioPage from '@/pages/Inventario/NovoInventarioPage';
+import InventarioDetalhesPage from '@/pages/Inventario/InventarioDetalhesPage';
 import InventarioOperacaoPage from '@/pages/Inventario/InventarioOperacaoPage';
 import OutboundListPage from '@/pages/Outbound/OutboundListPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
@@ -113,6 +115,8 @@ export default function App() {
               {/* ROTAS SEPARADAS DE INVENTÁRIO CÍCLICO */}
               <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
                 <Route path="/inventario/gestao" element={<InventarioGestaoPage />} />
+                <Route path="/inventario/gestao/novo" element={<NovoInventarioPage />} />
+                <Route path="/inventario/gestao/:id" element={<InventarioDetalhesPage />} />
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
