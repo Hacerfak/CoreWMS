@@ -1,6 +1,7 @@
 using System.Text;
-using CoreWMS.Api.Features.Outbound.Entities;
+using System.Xml.Linq;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Security;
@@ -13,6 +14,7 @@ public record ImportOutboundOrderCommand(byte[] FileBytes) : IRequest<IResult>;
 
 public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCommand, IResult>
 {
+    private static readonly XNamespace Ns = "http://www.portalfiscal.inf.br/nfe";
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly INfeParserService _parser;
@@ -30,62 +32,127 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
 
         string xmlContent;
         try { xmlContent = Encoding.UTF8.GetString(request.FileBytes); }
-        catch { return Results.BadRequest(new { Message = "Arquivo inválido ou corrompido." }); }
+        catch { return Results.BadRequest(new { Message = "Arquivo XML inválido ou corrompido." }); }
 
         NfeParsedData parsedData;
         try { parsedData = _parser.ParseXml(xmlContent); }
         catch (Exception ex) { return Results.BadRequest(new { Message = $"Erro ao interpretar o XML da NF-e: {ex.Message}" }); }
 
+        // 1. Valida se o pedido/NF-e já foi importado no WMS
         if (await _db.OutboundOrders.AnyAsync(o => o.CompanyId == companyId && o.AccessKey == parsedData.AccessKey, ct))
         {
-            return Results.Conflict(new { Message = "Este pedido/NF-e já foi importado no sistema." });
+            return Results.Conflict(new { Message = "Este pedido/NF-e já foi importado anteriormente no sistema." });
         }
 
+        // 2. REGRA CRÍTICA: O emitente da nota DEVE ser um Depositante cadastrado na empresa
         var customer = await _db.Customers
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.CompanyId == companyId && c.Cnpj == parsedData.IssuerCnpj, ct);
 
         if (customer == null)
-            return Results.BadRequest(new { Message = $"O emitente do XML (CNPJ {parsedData.IssuerCnpj}) não está cadastrado como cliente nesta empresa." });
+        {
+            return Results.BadRequest(new { Message = $"O emitente da NF-e (CNPJ {parsedData.IssuerCnpj}) não está cadastrado como cliente depositante nesta empresa." });
+        }
 
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(customer.Id))
         {
             return Results.Forbid();
         }
 
-        var orderNumber = parsedData.AccessKey.Substring(25, 9);
+        // 3. Extração das Informações de Transportadora e Observações (infAdic / infCpl) diretamente do XML
+        var doc = XDocument.Parse(xmlContent);
+        var infNfe = doc.Descendants(Ns + "infNFe").FirstOrDefault();
+
+        string? carrierCnpjCpf = null;
+        string? carrierName = null;
+
+        var transporta = infNfe?.Element(Ns + "transp")?.Element(Ns + "transporta");
+        if (transporta != null)
+        {
+            carrierCnpjCpf = transporta.Element(Ns + "CNPJ")?.Value ?? transporta.Element(Ns + "CPF")?.Value;
+            carrierName = transporta.Element(Ns + "xNome")?.Value;
+        }
+
+        var additionalNotes = infNfe?.Element(Ns + "infAdic")?.Element(Ns + "infCpl")?.Value;
+
+        // Extrai o número da NF-e a partir da Chave de Acesso (posição 25 a 33)
+        var orderNumber = parsedData.AccessKey.Length >= 34
+            ? parsedData.AccessKey.Substring(25, 9).TrimStart('0')
+            : $"OUT-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+
+        // 4. Criação da Ordem de Saída com todos os metadados e o XML integral
         var order = new OutboundOrder(
-            companyId, customer.Id, orderNumber, parsedData.AccessKey, xmlContent,
-            parsedData.DestCnpj, parsedData.DestName, parsedData.DestCity, parsedData.DestState, parsedData.DestZipCode,
-            parsedData.IssueDate, null
+            companyId,
+            customer.Id,
+            orderNumber,
+            parsedData.AccessKey,
+            xmlContent, // Salva o XML inteiro do cliente
+            parsedData.DestCnpj,
+            parsedData.DestName,
+            parsedData.DestCity,
+            parsedData.DestState,
+            parsedData.DestZipCode,
+            carrierCnpjCpf,
+            carrierName,
+            additionalNotes,
+            parsedData.IssueDate,
+            expectedShipDate: null
         );
 
+        // 5. Validação dos Produtos (Vínculo SKU/GTIN + Depositante)
+        var existingProducts = await _db.Products
+            .AsNoTracking()
+            .Where(p => p.CompanyId == companyId && p.CustomerId == customer.Id)
+            .ToListAsync(ct);
+
         var errors = new List<string>();
+
         foreach (var xmlItem in parsedData.Items)
         {
-            var product = await _db.Products
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.CompanyId == companyId && p.CustomerId == customer.Id && p.Sku == xmlItem.SkuCode, ct);
+            var product = existingProducts.FirstOrDefault(p =>
+                p.Sku.Equals(xmlItem.SkuCode, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(xmlItem.Barcode) && p.BaseBarcode == xmlItem.Barcode)
+            );
 
             if (product == null)
             {
-                errors.Add($"Linha {xmlItem.LineNumber}: Produto SKU '{xmlItem.SkuCode}' não cadastrado para este Depositante.");
+                errors.Add($"Item #{xmlItem.LineNumber}: SKU '{xmlItem.SkuCode}' (GTIN: {xmlItem.Barcode ?? "N/I"}) não está cadastrado para o depositante {customer.CorporateName}.");
                 continue;
             }
 
-            var orderItem = new OutboundOrderItem(order.Id, product.Id, xmlItem.LineNumber, xmlItem.SkuCode, xmlItem.Quantity, xmlItem.UnitValue);
+            var orderItem = new OutboundOrderItem(
+                order.Id,
+                product.Id,
+                xmlItem.LineNumber,
+                product.Sku,
+                xmlItem.Quantity,
+                xmlItem.UnitValue
+            );
+
             order.AddItem(orderItem);
         }
 
         if (errors.Any())
         {
-            return Results.BadRequest(new { Message = "A importação falhou pois existem produtos não mapeados no sistema.", Errors = errors });
+            return Results.BadRequest(new
+            {
+                Message = "A importação do pedido falhou pois existem produtos não cadastrados para este Depositante.",
+                Errors = errors
+            });
         }
 
         _db.OutboundOrders.Add(order);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Created($"/api/outbound/orders/{order.Id}", new { order.Id, order.OrderNumber, order.DestinationName, ItemsCount = order.Items.Count });
+        return Results.Created($"/api/outbound/orders/{order.Id}", new
+        {
+            order.Id,
+            order.OrderNumber,
+            CustomerName = customer.CorporateName,
+            DestinationName = order.DestinationName,
+            ItemsCount = order.Items.Count,
+            Message = "Pedido de saída importado com sucesso a partir do XML de venda."
+        });
     }
 }
 
@@ -95,7 +162,7 @@ public static class ImportOutboundOrderEndpoints
     {
         app.MapPost("/api/outbound/orders/import-xml", async (Microsoft.AspNetCore.Http.IFormFile file, IMediator mediator) =>
         {
-            if (file == null || file.Length == 0) return Results.BadRequest(new { Message = "Arquivo obrigatório." });
+            if (file == null || file.Length == 0) return Results.BadRequest(new { Message = "Arquivo XML obrigatório." });
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms);
             return await mediator.Send(new ImportOutboundOrderCommand(ms.ToArray()));

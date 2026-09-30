@@ -7,6 +7,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
 
+public record OutboundOrderSummaryDto(
+    Guid Id,
+    Guid CustomerId,
+    string CustomerName,
+    string OrderNumber,
+    string DestinationName,
+    string DestinationCity,
+    string DestinationState,
+    DateTime IssueDate,
+    string Status,
+    int ItemsCount
+);
+
 public record ListOutboundOrdersQuery(Guid? CustomerId, string? Search, string? Status, int Page = 1, int PageSize = 20) : IRequest<IResult>;
 
 public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery, IResult>
@@ -23,7 +36,10 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
     public async Task<IResult> Handle(ListOutboundOrdersQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-        var q = _db.OutboundOrders.AsNoTracking().Where(o => o.CompanyId == companyId);
+        var q = _db.OutboundOrders
+            .AsNoTracking()
+            .Include(o => o.Customer)
+            .Where(o => o.CompanyId == companyId);
 
         if (_tenant.IsPartnerUser())
         {
@@ -31,7 +47,9 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
             q = q.Where(o => allowedIds.Contains(o.CustomerId));
         }
 
-        if (request.CustomerId.HasValue) q = q.Where(o => o.CustomerId == request.CustomerId);
+        if (request.CustomerId.HasValue)
+            q = q.Where(o => o.CustomerId == request.CustomerId);
+
         if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<Enums.OutboundOrderStatus>(request.Status, true, out var statusEnum))
             q = q.Where(o => o.Status == statusEnum);
 
@@ -43,19 +61,26 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
                              (o.AccessKey != null && EF.Functions.ILike(o.AccessKey, s)));
         }
 
-        // Execução sequencial para evitar exceção de thread-safety no DbContext
         var totalCount = await q.CountAsync(ct);
 
         var items = await q
             .OrderByDescending(o => o.IssueDate)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(o => new OutboundOrderDto(
-                o.Id, o.CustomerId, o.OrderNumber, o.DestinationName, o.DestinationCity, o.DestinationState,
-                o.IssueDate, o.Status.ToString(), o.Items.Count
+            .Select(o => new OutboundOrderSummaryDto(
+                o.Id,
+                o.CustomerId,
+                o.Customer.CorporateName,
+                o.OrderNumber,
+                o.DestinationName,
+                o.DestinationCity,
+                o.DestinationState,
+                o.IssueDate,
+                o.Status.ToString(),
+                o.Items.Count
             )).ToListAsync(ct);
 
-        var response = new PaginatedResult<OutboundOrderDto>(items, totalCount, request.Page, request.PageSize);
+        var response = new PaginatedResult<OutboundOrderSummaryDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);
     }
 }

@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
-import { useGetApiCustomers } from '@/api/generated/customers/customers';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -12,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
     Truck, UploadCloud, Search, Loader2, Play,
-    Box, ArrowUpFromLine, RefreshCw, XCircle, CheckCircle2
+    Box, ArrowUpFromLine, RefreshCw, XCircle, CheckCircle2, Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
@@ -29,11 +28,16 @@ export default function OutboundListPage() {
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [orders, setOrders] = useState([]);
+    const [customers, setCustomers] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
 
-    const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
-    const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
+    // Carrega a lista resumida de depositantes para o Select
+    useEffect(() => {
+        customInstance({ url: '/api/customers/summary', method: 'GET' })
+            .then(res => setCustomers(res || []))
+            .catch(() => toast.error('Erro ao carregar depositantes.'));
+    }, []);
 
     const loadOrders = async () => {
         try {
@@ -59,11 +63,10 @@ export default function OutboundListPage() {
         }
     };
 
-    useState(() => {
+    useEffect(() => {
         loadOrders();
     }, [page, selectedCustomer, selectedStatus]);
 
-    // Executar Alocação FEFO/FIFO
     const handleAllocateOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -80,7 +83,6 @@ export default function OutboundListPage() {
         }
     };
 
-    // Expedir Definitivo (Ship)
     const handleShipOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -97,7 +99,6 @@ export default function OutboundListPage() {
         }
     };
 
-    // Cancelar Pedido
     const handleCancelOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -131,14 +132,14 @@ export default function OutboundListPage() {
 
                 <Button
                     onClick={() => setIsImportModalOpen(true)}
-                    className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
+                    className="bg-orange-600 hover:bg-orange-700 text-white shadow-xs font-bold"
                 >
                     <UploadCloud className="mr-2 h-4 w-4" /> Importar XML NF-e
                 </Button>
             </div>
 
             {/* FILTROS */}
-            <Card className="border-slate-200/80 shadow-sm bg-white">
+            <Card className="border-slate-200/80 shadow-xs bg-white">
                 <CardContent className="p-4 flex flex-wrap items-center justify-between gap-4">
                     <div className="flex flex-wrap items-center gap-3 flex-1">
                         <div className="relative flex-1 min-w-[220px]">
@@ -191,11 +192,12 @@ export default function OutboundListPage() {
             </Card>
 
             {/* TABELA DE PEDIDOS */}
-            <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden">
+            <div className="bg-white border border-slate-200/80 rounded-xl shadow-xs overflow-hidden">
                 <Table>
                     <TableHeader className="bg-slate-50/80">
                         <TableRow>
                             <TableHead>Nº Pedido / Emissão</TableHead>
+                            <TableHead>Depositante</TableHead>
                             <TableHead>Destinatário Final</TableHead>
                             <TableHead>Cidade / UF</TableHead>
                             <TableHead className="text-center">Itens</TableHead>
@@ -205,18 +207,21 @@ export default function OutboundListPage() {
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
-                            <TableRow><TableCell colSpan={6} className="h-28 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="h-28 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
                         ) : orders.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={7} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
                         ) : orders.map((o) => (
                             <TableRow key={o.id} className="hover:bg-slate-50/60">
                                 <TableCell>
                                     <div className="flex flex-col">
-                                        <span className="font-bold font-mono text-slate-900">{o.orderNumber}</span>
+                                        <span className="font-bold font-mono text-slate-900">NF {o.orderNumber}</span>
                                         <span className="text-[10px] text-slate-400">{new Date(o.issueDate).toLocaleDateString('pt-BR')}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell className="font-semibold text-slate-800 text-xs truncate max-w-[200px]">
+                                <TableCell className="font-medium text-slate-800 text-xs truncate max-w-[160px]">
+                                    {o.customerName}
+                                </TableCell>
+                                <TableCell className="font-semibold text-slate-800 text-xs truncate max-w-[180px]">
                                     {o.destinationName}
                                 </TableCell>
                                 <TableCell className="text-xs text-slate-600 font-mono">
@@ -240,16 +245,16 @@ export default function OutboundListPage() {
                                         {o.status === 'Pending' && (
                                             <Button
                                                 onClick={() => handleAllocateOrder(o.id)}
-                                                size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                                                size="sm" className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
                                             >
-                                                <Play size={13} className="mr-1" /> Aloquar FEFO
+                                                <Play size={13} className="mr-1" /> Alocar FEFO
                                             </Button>
                                         )}
 
                                         {(o.status === 'Allocated' || o.status === 'Picking') && (
                                             <Button
                                                 onClick={() => navigate(`/outbound/picking/${o.id}`)}
-                                                size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white"
+                                                size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
                                             >
                                                 <Box size={13} className="mr-1" /> Coletor / Separar
                                             </Button>
@@ -258,7 +263,7 @@ export default function OutboundListPage() {
                                         {o.status === 'Picking' && (
                                             <Button
                                                 onClick={() => navigate(`/outbound/packing/${o.id}`)}
-                                                size="sm" className="h-7 text-xs bg-orange-600 hover:bg-orange-700 text-white"
+                                                size="sm" className="h-7 text-xs bg-orange-600 hover:bg-orange-700 text-white shadow-2xs"
                                             >
                                                 <ArrowUpFromLine size={13} className="mr-1" /> Packing
                                             </Button>
@@ -267,7 +272,7 @@ export default function OutboundListPage() {
                                         {o.status === 'ReadyToShip' && (
                                             <Button
                                                 onClick={() => handleShipOrder(o.id)}
-                                                size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                                size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
                                             >
                                                 <CheckCircle2 size={13} className="mr-1" /> Expedir
                                             </Button>
@@ -277,6 +282,7 @@ export default function OutboundListPage() {
                                             <Button
                                                 onClick={() => handleCancelOrder(o.id)}
                                                 variant="ghost" size="sm" className="h-7 text-xs text-rose-600 hover:bg-rose-50 p-1.5"
+                                                title="Cancelar Pedido"
                                             >
                                                 <XCircle size={15} />
                                             </Button>
