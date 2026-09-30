@@ -22,19 +22,52 @@ public record ReceiveVolumeDto(
 );
 
 public record InboundOrderDto(
-    Guid Id, Guid? CustomerId, string? CustomerName, string IssuerCnpj, string IssuerName,
-    string AccessKey, DateTime IssueDate, string Status, bool HasPendingReview
+    Guid Id,
+    Guid? CustomerId,
+    string? CustomerName,
+    string IssuerCnpj,
+    string IssuerName,
+    string AccessKey,
+    DateTime IssueDate,
+    string Status,
+    bool HasPendingReview,
+    int? LastSefazManifestType,
+    string? SefazManifestProtocol,
+    DateTime? SefazManifestDate
 );
 
 public record InboundOrderItemDto(
-    Guid Id, Guid? ProductId, int LineNumber, string Sku, string Description, string Unit,
-    decimal ExpectedQuantity, decimal ReceivedQuantity, string Status,
-    Guid? LockedByUserId, Guid? DockLocationId, string? DockLocationPath,
-    string? ExpectedBatch, DateTime? ExpectedManufactureDate, DateTime? ExpectedExpirationDate
+    Guid Id,
+    Guid? ProductId,
+    int LineNumber,
+    string Sku,
+    string Description,
+    string Unit,
+    decimal ExpectedQuantity,
+    decimal ReceivedQuantity,
+    string Status,
+    Guid? LockedByUserId,
+    Guid? DockLocationId,
+    string? DockLocationPath,
+    string? ExpectedBatch,
+    DateTime? ExpectedManufactureDate,
+    DateTime? ExpectedExpirationDate
 );
 
 public record InboundOrderDetailsDto(
-    Guid Id, Guid? CustomerId, string? CustomerName, string IssuerCnpj, string IssuerName,
-    string AccessKey, string RawXml, DateTime IssueDate, DateTime CreatedAt, string Status,
+    Guid Id,
+    Guid? CustomerId,
+    string? CustomerName,
+    string IssuerCnpj,
+    string IssuerName,
+    string AccessKey,
+    string RawXml,
+    DateTime IssueDate,
+    DateTime CreatedAt,
+    string Status,
+    int? LastSefazManifestType,
+    string? SefazManifestProtocol,
+    DateTime? SefazManifestDate,
+    string? SefazManifestJustification,
     List<InboundOrderItemDto> Items
 );

@@ -12,11 +12,15 @@ import { useGetApiCustomers } from '@/api/generated/customers/customers';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
     Loader2, ArrowLeft, Warehouse, Play, PauseCircle, PackageCheck,
-    CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw, EyeOff
+    CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw, EyeOff,
+    FileText, ShieldAlert, AlertTriangle, FileSearch
 } from 'lucide-react';
+import { customInstance } from '@/api/orval-mutator';
 import { toast } from 'sonner';
 
 export default function InboundOperacaoPage() {
@@ -26,10 +30,15 @@ export default function InboundOperacaoPage() {
 
     const [selectedDocks, setSelectedDocks] = useState({});
 
-    // 1. Detalhes da Ordem (já traz item.unit atualizado do backend)
+    // Estados de Manifestação SEFAZ
+    const [isManifesting, setIsManifesting] = useState(false);
+    const [isNotRealizedModalOpen, setIsNotRealizedModalOpen] = useState(false);
+    const [justification, setJustification] = useState('');
+
+    // 1. Detalhes da Ordem
     const { data: order, isLoading } = useGetApiInboundId(orderId);
 
-    // 2. Busca Cadastro do Cliente para verificar se "Exige Conferência Cega"
+    // 2. Busca Cadastro do Cliente
     const { data: customersResponse } = useGetApiCustomers(
         { PageSize: 500 },
         { query: { enabled: Boolean(order?.customerId) } }
@@ -64,6 +73,38 @@ export default function InboundOperacaoPage() {
         }
     });
 
+    // Função de Disparo da Manifestação SEFAZ
+    const handleSendManifest = async (eventTypeCode, customJustification = '') => {
+        if (!orderId) return;
+
+        setIsManifesting(true);
+        try {
+            const res = await customInstance({
+                url: `/api/inbound/${orderId}/manifest`,
+                method: 'POST',
+                data: {
+                    inboundOrderId: orderId,
+                    eventTypeCode,
+                    justification: customJustification
+                }
+            });
+
+            toast.success(res?.message || 'Manifestação transmitida para a SEFAZ com sucesso!');
+
+            // Invalida e força a re-busca de todas as queries de Inbound no TanStack Query
+            await queryClient.invalidateQueries({
+                predicate: (query) => Array.isArray(query.queryKey) && String(query.queryKey[0]).startsWith('/api/inbound')
+            });
+
+            setIsNotRealizedModalOpen(false);
+            setJustification('');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Erro ao transmitir manifestação para a SEFAZ.');
+        } finally {
+            setIsManifesting(false);
+        }
+    };
+
     const handleDockSelect = (itemId, dockId) => {
         setSelectedDocks(prev => ({ ...prev, [itemId]: dockId }));
     };
@@ -97,6 +138,21 @@ export default function InboundOperacaoPage() {
                 return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-medium">Cancelado</Badge>;
             default:
                 return <Badge variant="outline">{status}</Badge>;
+        }
+    };
+
+    const renderSefazManifestBadge = (manifestType) => {
+        switch (manifestType) {
+            case 210200:
+                return <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 font-mono text-xs gap-1"><CheckCircle2 size={13} /> Operação Confirmada (210200)</Badge>;
+            case 210210:
+                return <Badge className="bg-blue-100 text-blue-900 border-blue-300 font-mono text-xs gap-1"><FileSearch size={13} /> Ciência Registrada (210210)</Badge>;
+            case 210220:
+                return <Badge className="bg-rose-100 text-rose-900 border-rose-300 font-mono text-xs gap-1"><ShieldAlert size={13} /> Desconhecimento (210220)</Badge>;
+            case 210240:
+                return <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-mono text-xs gap-1"><AlertTriangle size={13} /> Operação Não Realizada (210240)</Badge>;
+            default:
+                return <Badge variant="outline" className="bg-slate-100 text-slate-600 font-mono text-xs">Sem Manifestação</Badge>;
         }
     };
 
@@ -138,7 +194,7 @@ export default function InboundOperacaoPage() {
         : 'N/A';
 
     return (
-        <div className="flex flex-col h-full space-y-6">
+        <div className="flex flex-col h-full space-y-5">
             {/* CABEÇALHO */}
             <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
@@ -192,8 +248,59 @@ export default function InboundOperacaoPage() {
                 </div>
             </div>
 
+            {/* CARD DE PAINEL SEFAZ / MANIFESTAÇÃO DO DESTINATÁRIO */}
+            <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <FileText size={18} className="text-blue-600" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Manifestação do Destinatário (SEFAZ)</h3>
+                        {renderSefazManifestBadge(order.lastSefazManifestType)}
+                    </div>
+                    <p className="text-xs text-slate-500 font-mono">
+                        Chave: {order.accessKey || 'N/A'} {order.sefazManifestProtocol && `| Protocolo: ${order.sefazManifestProtocol}`}
+                    </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    {/* Botão Confirmação (210200) */}
+                    <Button
+                        size="sm"
+                        onClick={() => handleSendManifest(210200)}
+                        disabled={isManifesting || order.lastSefazManifestType === 210200}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
+                    >
+                        {isManifesting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                        Confirmar Operação (210200)
+                    </Button>
+
+                    {/* Botão Operação Não Realizada (210240) */}
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsNotRealizedModalOpen(true)}
+                        disabled={isManifesting || order.lastSefazManifestType === 210240}
+                        className="border-amber-300 text-amber-900 hover:bg-amber-50 font-semibold text-xs h-8"
+                    >
+                        <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                        Op. Não Realizada (210240)
+                    </Button>
+
+                    {/* Botão Desconhecimento (210220) */}
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSendManifest(210220)}
+                        disabled={isManifesting || order.lastSefazManifestType === 210220}
+                        className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs h-8"
+                    >
+                        <ShieldAlert className="h-3.5 w-3.5 mr-1" />
+                        Desconhecimento (210220)
+                    </Button>
+                </div>
+            </div>
+
             {/* TABELA DE ITENS DA ORDEM */}
-            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                     <h3 className="font-semibold text-slate-800 text-sm flex items-center gap-2">
                         <Warehouse className="text-blue-600" size={18} /> Itens da Nota Fiscal ({order.items?.length || 0})
@@ -223,7 +330,7 @@ export default function InboundOperacaoPage() {
                                 const isReady = !isCompleted && !isPendingReview && !isReceiving;
 
                                 const currentDockValue = selectedDocks[item.id] || item.dockLocationId || '';
-                                const displayUnit = item.unit || 'UN'; // Unidade do produto WMS enviada pelo backend
+                                const displayUnit = item.unit || 'UN';
 
                                 return (
                                     <TableRow key={item.id} className="hover:bg-slate-50/50 transition-colors">
@@ -240,7 +347,6 @@ export default function InboundOperacaoPage() {
                                             </div>
                                         </TableCell>
 
-                                        {/* PROGRESSO DE DESCARGA */}
                                         <TableCell>
                                             {isBlindInbound ? (
                                                 <div className="flex items-center gap-2 w-36">
@@ -267,7 +373,6 @@ export default function InboundOperacaoPage() {
                                             )}
                                         </TableCell>
 
-                                        {/* DOCA */}
                                         <TableCell>
                                             {(isReceiving || isCompleted) ? (
                                                 <Badge variant="outline" className="bg-slate-50 text-slate-800 font-mono border-slate-300 flex items-center w-fit gap-1">
@@ -355,6 +460,45 @@ export default function InboundOperacaoPage() {
                     </Table>
                 </div>
             </div>
+
+            {/* MODAL OPERAÇÃO NÃO REALIZADA (210240) */}
+            <Dialog open={isNotRealizedModalOpen} onOpenChange={setIsNotRealizedModalOpen}>
+                <DialogContent className="sm:max-w-md bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-slate-900 flex items-center gap-2">
+                            <AlertTriangle className="text-amber-600" size={20} /> Transmitir Operação Não Realizada (210240)
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Informe a justificativa técnica para a recusa da carga. A SEFAZ exige no mínimo 15 caracteres.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-2 space-y-2">
+                        <label className="text-xs font-bold uppercase text-slate-700">Justificativa da Recusa *</label>
+                        <Input
+                            placeholder="Ex: Carga recusada na doca devido a avaria no transporte..."
+                            value={justification}
+                            onChange={(e) => setJustification(e.target.value)}
+                            className="text-xs"
+                        />
+                        <span className="text-[10px] text-slate-400 block font-mono">
+                            Mínimo de 15 caracteres ({justification.trim().length}/15)
+                        </span>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsNotRealizedModalOpen(false)} disabled={isManifesting}>Cancelar</Button>
+                        <Button
+                            onClick={() => handleSendManifest(210240, justification)}
+                            disabled={isManifesting || justification.trim().length < 15}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                        >
+                            {isManifesting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Transmitir para SEFAZ
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

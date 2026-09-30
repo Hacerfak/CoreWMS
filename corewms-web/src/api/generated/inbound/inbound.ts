@@ -25,7 +25,9 @@ import type {
 
 import type {
   GetApiInboundParams,
+  ImportNfeByAccessKeyCommand,
   LinkProductToItemCommand,
+  ManifestInboundOrderCommand,
   PostApiInboundImportBody,
   PostApiInboundLegacyImportBody,
   ReceiveLoteCommand,
@@ -928,4 +930,127 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiInboundImportMutationOptions(options), queryClient);
+    }
+    export const postApiInboundImportByKey = (
+    importNfeByAccessKeyCommand: ImportNfeByAccessKeyCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/import-by-key`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: importNfeByAccessKeyCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundImportByKeyMutationKey = () => ['postApiInboundImportByKey'] as const;
+
+export const getPostApiInboundImportByKeyMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImportByKey>>, TError,PostApiInboundImportByKeyMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImportByKey>>, TError,PostApiInboundImportByKeyMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundImportByKeyMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundImportByKey>>, PostApiInboundImportByKeyMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInboundImportByKey(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundImportByKeyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundImportByKey>>>
+    export type PostApiInboundImportByKeyMutationBody = ImportNfeByAccessKeyCommand
+    export type PostApiInboundImportByKeyMutationError = unknown
+    export type PostApiInboundImportByKeyMutationVariables = {data: ImportNfeByAccessKeyCommand}
+
+    export const usePostApiInboundImportByKey = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundImportByKey>>, TError,PostApiInboundImportByKeyMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundImportByKey>>,
+        TError,
+        PostApiInboundImportByKeyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundImportByKeyMutationOptions(options), queryClient);
+    }
+    export const postApiInboundInboundOrderIdManifest = (
+    inboundOrderId: string,
+    manifestInboundOrderCommand: ManifestInboundOrderCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inbound/${inboundOrderId}/manifest`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: manifestInboundOrderCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInboundInboundOrderIdManifestMutationKey = () => ['postApiInboundInboundOrderIdManifest'] as const;
+
+export const getPostApiInboundInboundOrderIdManifestMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundInboundOrderIdManifest>>, TError,PostApiInboundInboundOrderIdManifestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInboundInboundOrderIdManifest>>, TError,PostApiInboundInboundOrderIdManifestMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInboundInboundOrderIdManifestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInboundInboundOrderIdManifest>>, PostApiInboundInboundOrderIdManifestMutationVariables> = (props) => {
+          const {inboundOrderId,data} = props ?? {};
+
+          return  postApiInboundInboundOrderIdManifest(inboundOrderId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInboundInboundOrderIdManifestMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInboundInboundOrderIdManifest>>>
+    export type PostApiInboundInboundOrderIdManifestMutationBody = ManifestInboundOrderCommand
+    export type PostApiInboundInboundOrderIdManifestMutationError = unknown
+    export type PostApiInboundInboundOrderIdManifestMutationVariables = {inboundOrderId: string;data: ManifestInboundOrderCommand}
+
+    export const usePostApiInboundInboundOrderIdManifest = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInboundInboundOrderIdManifest>>, TError,PostApiInboundInboundOrderIdManifestMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInboundInboundOrderIdManifest>>,
+        TError,
+        PostApiInboundInboundOrderIdManifestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInboundInboundOrderIdManifestMutationOptions(options), queryClient);
     }

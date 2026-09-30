@@ -5,9 +5,7 @@
  * OpenAPI spec version: v1
  */
 
-export interface AddStrictLpnRecordCommand {
-  taskId?: string;
+export interface ImportNfeByAccessKeyCommand {
   /** @nullable */
-  lpn?: string | null;
-  countedQuantity?: number;
+  accessKey?: string | null;
 }

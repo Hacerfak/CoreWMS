@@ -21,6 +21,11 @@ public class InboundOrder : AuditableEntity
 
     public InboundOrderStatus Status { get; private set; }
 
+    public int? LastSefazManifestType { get; private set; }
+    public string? SefazManifestProtocol { get; private set; }
+    public DateTime? SefazManifestDate { get; private set; }
+    public string? SefazManifestJustification { get; private set; }
+
     private readonly List<InboundOrderItem> _items = new();
     public IReadOnlyCollection<InboundOrderItem> Items => _items.AsReadOnly();
 
@@ -51,5 +56,26 @@ public class InboundOrder : AuditableEntity
     {
         Status = newStatus;
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateSefazManifestStatus(int manifestType, string? protocol, DateTime? eventDate, string? justification = null)
+    {
+        LastSefazManifestType = manifestType;
+        SefazManifestProtocol = protocol;
+        SefazManifestDate = eventDate?.ToUniversalTime();
+        SefazManifestJustification = string.IsNullOrWhiteSpace(justification) ? null : justification.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public string GetSefazManifestDescription()
+    {
+        return LastSefazManifestType switch
+        {
+            210200 => "Confirmação da Operação",
+            210210 => "Ciência da Operação",
+            210220 => "Desconhecimento da Operação",
+            210240 => "Operação Não Realizada",
+            _ => "Sem Manifestação"
+        };
     }
 }

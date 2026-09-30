@@ -122,6 +122,7 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
 builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
+builder.Services.AddScoped<ISefazDistDFeService, SefazDistDFeService>();
 
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();

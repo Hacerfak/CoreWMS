@@ -62,9 +62,18 @@ public class ListInboundOrdersHandler : IRequestHandler<ListInboundOrdersQuery, 
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(o => new InboundOrderDto(
-                o.Id, o.CustomerId, o.Customer != null ? o.Customer.CorporateName : null,
-                o.IssuerCnpj, o.IssuerName, o.AccessKey, o.IssueDate, o.Status.ToString(),
-                o.Items.Any(i => i.Status == InboundOrderItemStatus.Pending_Review)
+                o.Id,
+                o.CustomerId,
+                o.Customer != null ? o.Customer.CorporateName : null,
+                o.IssuerCnpj,
+                o.IssuerName,
+                o.AccessKey,
+                o.IssueDate,
+                o.Status.ToString(),
+                o.Items.Any(i => i.Status == InboundOrderItemStatus.Pending_Review),
+                o.LastSefazManifestType,
+                o.SefazManifestProtocol,
+                o.SefazManifestDate
             )).ToListAsync(ct);
 
         var response = new PaginatedResult<InboundOrderDto>(items, totalCount, request.Page, request.PageSize);

@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     ArrowLeft, CheckCircle2, Play, RefreshCw, FileText,
-    ArrowDownLeft, ArrowUpRight, Loader2, BarChart2, Trash2, RotateCcw, AlertTriangle, ChevronDown, ChevronUp, User, CheckCheck
+    ArrowDownLeft, ArrowUpRight, Loader2, BarChart2, Trash2, RotateCcw, AlertTriangle, ChevronDown, ChevronUp, User, CheckCheck, QrCode
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
 import { renderPlanStatusBadge } from './InventarioGestaoPage';
@@ -265,10 +265,21 @@ export default function InventarioDetalhesPage() {
                                                 {!hasCount || (!isFinishedDivergent && !isResolved) ? '-' : divergence > 0 ? `+${divergence.toLocaleString('pt-BR')}` : divergence.toLocaleString('pt-BR')}
                                             </TableCell>
 
+                                            {/* STATUS DA POSIÇÃO E ALERTA DE DIVERGÊNCIA DE HU FORA DE POSIÇÃO */}
                                             <TableCell>
-                                                <Badge className={`text-[10px] ${isResolved ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : isFinishedDivergent ? 'bg-amber-100 text-amber-800 border-amber-200' : isRecounted ? 'bg-slate-200 text-slate-700 border-slate-300' : t.status === 'InCounting' ? 'bg-amber-50 text-amber-900 border-amber-300 animate-pulse' : 'bg-slate-100 text-slate-700'}`}>
-                                                    {isResolved ? '✅ Conciliado' : isFinishedDivergent ? '⚠️ Divergente' : isRecounted ? '🔄 Recontada' : t.status === 'InCounting' ? '⏳ Em Contagem' : '⏳ Pendente'}
-                                                </Badge>
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    <Badge className={`text-[10px] ${isResolved ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : isFinishedDivergent ? 'bg-amber-100 text-amber-800 border-amber-200' : isRecounted ? 'bg-slate-200 text-slate-700 border-slate-300' : t.status === 'InCounting' ? 'bg-amber-50 text-amber-900 border-amber-300 animate-pulse' : 'bg-slate-100 text-slate-700'}`}>
+                                                        {isResolved ? '✅ Conciliado' : isFinishedDivergent ? '⚠️ Divergente' : isRecounted ? '🔄 Recontada' : t.status === 'InCounting' ? '⏳ Em Contagem' : '⏳ Pendente'}
+                                                    </Badge>
+
+                                                    {/* SINALIZAÇÃO EXCLUSIVA PARA A GESTÃO: HU FORA DE POSIÇÃO */}
+                                                    {t.isHuMismatch && (
+                                                        <Badge className="bg-rose-100 text-rose-900 border-rose-300 text-[10px] font-mono gap-1">
+                                                            <QrCode size={11} className="text-rose-600" />
+                                                            HU Fora de Posição ({t.scannedLpn || 'Inexistente'})
+                                                        </Badge>
+                                                    )}
+                                                </div>
                                             </TableCell>
 
                                             {/* BOTÃO EXPANDIR DETALHES DAS RODADAS */}

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CoreWMS.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930125026_AddLPNTaskRecord")]
+    partial class AddLPNTaskRecord
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -906,20 +909,8 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
-                    b.Property<int?>("LastSefazManifestType")
-                        .HasColumnType("integer");
-
                     b.Property<string>("RawXml")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("SefazManifestDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("SefazManifestJustification")
-                        .HasColumnType("text");
-
-                    b.Property<string>("SefazManifestProtocol")
                         .HasColumnType("text");
 
                     b.Property<int>("Status")

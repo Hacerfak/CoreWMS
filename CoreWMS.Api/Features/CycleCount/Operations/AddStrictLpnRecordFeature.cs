@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.CycleCount.Operations;
 
-public record AddStrictLpnRecordCommand(Guid TaskId, string Lpn) : IRequest<IResult>;
+public record AddStrictLpnRecordCommand(Guid TaskId, string Lpn, decimal CountedQuantity) : IRequest<IResult>;
 
 public class AddStrictLpnRecordCommandValidator : AbstractValidator<AddStrictLpnRecordCommand>
 {
@@ -17,6 +17,7 @@ public class AddStrictLpnRecordCommandValidator : AbstractValidator<AddStrictLpn
     {
         RuleFor(x => x.TaskId).NotEmpty();
         RuleFor(x => x.Lpn).NotEmpty().WithMessage("Informe ou bipe o código LPN.");
+        RuleFor(x => x.CountedQuantity).GreaterThanOrEqualTo(0).WithMessage("A quantidade contada não pode ser negativa.");
     }
 }
 
@@ -39,6 +40,7 @@ public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordComma
 
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
+                .ThenInclude(p => p.Tasks)
             .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
 
         if (task == null)
@@ -47,17 +49,17 @@ public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordComma
         if (task.Status == CycleCountTaskStatus.Resolved)
             return Results.BadRequest(new { Message = "Esta tarefa já foi concluída e conciliada." });
 
-        var hu = await _db.HandlingUnits.FirstOrDefaultAsync(h => h.Lpn == request.Lpn.Trim().ToUpper(), ct);
-        if (hu == null)
-            return Results.BadRequest(new { Message = $"LPN '{request.Lpn}' não encontrado no estoque." });
+        var scannedLpn = request.Lpn.Trim().ToUpper();
 
-        if (hu.CurrentLocationId != task.LocationId)
-            return Results.BadRequest(new { Message = $"O LPN '{hu.Lpn}' está no endereço '{hu.CurrentLocation?.FullPath ?? "Outro"}' e não pertence à posição contada." });
+        // 1. Verifica se a HU existe e se pertence a este endereço
+        var hu = await _db.HandlingUnits.FirstOrDefaultAsync(h => h.Lpn == scannedLpn, ct);
 
-        decimal newTotal = (task.CountedQuantity ?? 0m) + hu.CurrentQuantity;
+        // Se a HU não existe ou está fisicamente em outro endereço, registra divergência de HU
+        bool isHuMismatch = hu == null || hu.CurrentLocationId != task.LocationId;
 
+        // 2. Registra o apontamento normalmente (Sem dar mensagem de erro para o operador)
         task.CycleCountPlan.StartCounting();
-        task.RecordRoundCount(newTotal, userId, task.CycleCountPlan.MaxRounds);
+        task.RecordRoundCount(request.CountedQuantity, userId, task.CycleCountPlan.MaxRounds, scannedLpn, isHuMismatch);
         task.CycleCountPlan.CheckCompletion();
 
         await _db.SaveChangesAsync(ct);
@@ -65,10 +67,7 @@ public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordComma
         return Results.Ok(new
         {
             Status = task.Status.ToString(),
-            ScannedLpn = hu.Lpn,
-            AddedQuantity = hu.CurrentQuantity,
-            TotalCountedQuantity = task.CountedQuantity,
-            Message = $"LPN '{hu.Lpn}' bipado e computado com sucesso."
+            Message = "Contagem registrada com sucesso."
         });
     }
 }

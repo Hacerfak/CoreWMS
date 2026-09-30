@@ -65,7 +65,7 @@ public class ZeusConfigurator : IZeusConfigurator
                 TipoCertificado = TipoCertificado.A1ByteArray,
                 ArrayBytesArquivo = certBytes,
                 Senha = certPassword,
-                ManterDadosEmCache = true
+                ManterDadosEmCache = false
             }
         };
     }

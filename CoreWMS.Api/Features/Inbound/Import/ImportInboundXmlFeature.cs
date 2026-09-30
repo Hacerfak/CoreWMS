@@ -5,7 +5,9 @@ using CoreWMS.Api.Features.Products.Enums;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
+using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Security;
+using DFe.Classes.Flags;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -27,147 +29,217 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly INfeParserService _parser;
+    private readonly ISefazDistDFeService _sefazService;
 
-    public ImportInboundXmlHandler(ApplicationDbContext db, ITenantProvider tenant, INfeParserService parser)
+    public ImportInboundXmlHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        INfeParserService parser,
+        ISefazDistDFeService sefazService)
     {
         _db = db;
         _tenant = tenant;
         _parser = parser;
+        _sefazService = sefazService;
     }
 
     public async Task<IResult> Handle(ImportInboundXmlCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-        var company = await _db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == companyId, ct);
+        var company = await _db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, ct);
         if (company == null) return Results.BadRequest(new { Message = "Empresa não encontrada." });
 
         var processedOrders = new List<Guid>();
         var errors = new List<string>();
+
         var existingCustomers = await _db.Customers.Where(c => c.CompanyId == companyId).ToListAsync(ct);
         var existingProducts = await _db.Products.AsNoTracking()
             .Where(p => p.CompanyId == companyId)
             .Select(p => new { p.Id, p.CustomerId, p.Sku, p.BaseBarcode })
             .ToListAsync(ct);
 
-        foreach (var xmlString in request.XmlFiles)
+        // ====================================================================
+        // OTIMIZAÇÃO: PROCESSAMENTO EM LOTES DE ATÉ 5 XMLS POR VEZ
+        // ====================================================================
+        const int BATCH_SIZE = 5;
+        var xmlBatches = request.XmlFiles.Chunk(BATCH_SIZE);
+
+        foreach (var xmlBatch in xmlBatches)
         {
-            try
+            var batchOrdersToManifest = new List<(InboundOrder Order, string AccessKey)>();
+
+            foreach (var xmlString in xmlBatch)
             {
-                var parsedNfe = _parser.ParseXml(xmlString);
-                var issuer = parsedNfe.Issuer;
+                if (string.IsNullOrWhiteSpace(xmlString)) continue;
 
-                if (parsedNfe.DestCnpj != company.Cnpj)
+                try
                 {
-                    errors.Add($"NF-e {parsedNfe.AccessKey}: O CNPJ destinatário ({parsedNfe.DestCnpj}) não pertence a esta empresa.");
-                    continue;
-                }
+                    var parsedNfe = _parser.ParseXml(xmlString);
+                    var issuer = parsedNfe.Issuer;
 
-                if (await _db.InboundOrders.AnyAsync(o => o.CompanyId == companyId && o.AccessKey == parsedNfe.AccessKey, ct))
-                {
-                    errors.Add($"NF-e {parsedNfe.AccessKey}: Já importada anteriormente.");
-                    continue;
-                }
-
-                var customer = existingCustomers.FirstOrDefault(c => c.Cnpj == issuer.Cnpj);
-
-                // 1. Cadastra o depositante com TODOS os dados do XML se não existir
-                if (customer == null)
-                {
-                    customer = new Customer(
-                        companyId,
-                        issuer.Cnpj,
-                        issuer.CorporateName,
-                        issuer.TradeName,
-                        issuer.StateRegistration,
-                        string.IsNullOrWhiteSpace(issuer.StateRegistration) ? 9 : 1, // ieIndicator
-                        issuer.MunicipalRegistration,
-                        issuer.Crt ?? 1,
-                        issuer.Cnae,
-                        issuer.Street,
-                        issuer.Number,
-                        issuer.Complement,
-                        issuer.Neighborhood,
-                        issuer.CityCode ?? 0,
-                        issuer.CityName,
-                        string.IsNullOrWhiteSpace(issuer.State) ? "RS" : issuer.State,
-                        issuer.ZipCode,
-                        null,
-                        issuer.Phone,
-                        false, false, false, false, false, false, false, false,
-                        PickingStrategy.Fifo, PickingBaseDate.ReceiptDate,
-                        null, null, null, null, false, false, false
-                    );
-
-                    _db.Customers.Add(customer);
-                    existingCustomers.Add(customer);
-                }
-                else
-                {
-                    // 2. Se já existir, enriquece o cadastro com dados do endereço/inscrições caso estejam vazios
-                    customer.UpdateFiscalDetails(
-                        issuer.CorporateName,
-                        issuer.TradeName,
-                        issuer.StateRegistration,
-                        issuer.MunicipalRegistration,
-                        issuer.Crt,
-                        issuer.Cnae,
-                        issuer.Street,
-                        issuer.Number,
-                        issuer.Complement,
-                        issuer.Neighborhood,
-                        issuer.CityCode,
-                        issuer.CityName,
-                        issuer.State,
-                        issuer.ZipCode,
-                        issuer.Phone
-                    );
-                }
-
-                var order = new InboundOrder(companyId, customer.Id, issuer.Cnpj, issuer.CorporateName, parsedNfe.AccessKey, xmlString, parsedNfe.IssueDate);
-                _db.InboundOrders.Add(order);
-
-                foreach (var item in parsedNfe.Items)
-                {
-                    var matchedProduct = existingProducts.FirstOrDefault(p =>
-                        p.CustomerId == customer.Id &&
-                        ((!string.IsNullOrWhiteSpace(item.Barcode) && p.BaseBarcode == item.Barcode) || p.Sku == item.SkuCode)
-                    );
-
-                    var orderItem = new InboundOrderItem(
-                        order.Id, item.LineNumber, item.SkuCode, item.Barcode, item.Description,
-                        item.Ncm, item.Cest, item.Unit,
-                        item.Quantity, item.UnitValue, item.Batch, item.ManufactureDate, item.ExpirationDate
-                    );
-
-                    if (matchedProduct != null)
+                    // 1. Validação do CNPJ Destinatário[cite: 25]
+                    if (parsedNfe.DestCnpj != company.Cnpj)
                     {
-                        orderItem.LinkProduct(matchedProduct.Id);
-
-                        // LANÇAMENTO DA EXPECTATIVA DE ENTRADA (TotalExpected)
-                        var balance = await GetOrCreateBalanceAsync(companyId, customer.Id, matchedProduct.Id, ct);
-                        balance.AddExpected(orderItem.ExpectedQuantity);
+                        errors.Add($"NF-e {parsedNfe.AccessKey}: Ignorada. O CNPJ destinatário ({parsedNfe.DestCnpj}) não pertence a esta empresa ({company.Cnpj}).");
+                        continue;
                     }
 
-                    _db.InboundOrderItems.Add(orderItem);
-                }
+                    // 2. Validação de Duplicidade
+                    if (await _db.InboundOrders.AnyAsync(o => o.CompanyId == companyId && o.AccessKey == parsedNfe.AccessKey, ct))
+                    {
+                        errors.Add($"NF-e {parsedNfe.AccessKey}: Ignorada. Já foi importada anteriormente.");
+                        continue;
+                    }
 
-                processedOrders.Add(order.Id);
+                    var customer = existingCustomers.FirstOrDefault(c => c.Cnpj == issuer.Cnpj);
+
+                    // 3. Cadastra ou Atualiza o Depositante[cite: 25]
+                    if (customer == null)
+                    {
+                        customer = new Customer(
+                            companyId,
+                            issuer.Cnpj,
+                            issuer.CorporateName,
+                            issuer.TradeName,
+                            issuer.StateRegistration,
+                            string.IsNullOrWhiteSpace(issuer.StateRegistration) ? 9 : 1,
+                            issuer.MunicipalRegistration,
+                            issuer.Crt ?? 1,
+                            issuer.Cnae,
+                            issuer.Street,
+                            issuer.Number,
+                            issuer.Complement,
+                            issuer.Neighborhood,
+                            issuer.CityCode ?? 0,
+                            issuer.CityName,
+                            string.IsNullOrWhiteSpace(issuer.State) ? "RS" : issuer.State,
+                            issuer.ZipCode,
+                            null,
+                            issuer.Phone,
+                            false, false, false, false, false, false, false, false,
+                            PickingStrategy.Fifo, PickingBaseDate.ReceiptDate,
+                            null, null, null, null, false, false, false
+                        );
+
+                        _db.Customers.Add(customer);
+                        existingCustomers.Add(customer);
+                    }
+                    else
+                    {
+                        customer.UpdateFiscalDetails(
+                            issuer.CorporateName,
+                            issuer.TradeName,
+                            issuer.StateRegistration,
+                            issuer.MunicipalRegistration,
+                            issuer.Crt,
+                            issuer.Cnae,
+                            issuer.Street,
+                            issuer.Number,
+                            issuer.Complement,
+                            issuer.Neighborhood,
+                            issuer.CityCode,
+                            issuer.CityName,
+                            issuer.State,
+                            issuer.ZipCode,
+                            issuer.Phone
+                        );
+                    }
+
+                    // 4. Cria a Ordem de Recebimento[cite: 25]
+                    var order = new InboundOrder(
+                        companyId,
+                        customer.Id,
+                        issuer.Cnpj,
+                        issuer.CorporateName,
+                        parsedNfe.AccessKey,
+                        xmlString,
+                        parsedNfe.IssueDate
+                    );
+                    _db.InboundOrders.Add(order);
+
+                    // 5. Itens da Nota[cite: 25]
+                    foreach (var item in parsedNfe.Items)
+                    {
+                        var matchedProduct = existingProducts.FirstOrDefault(p =>
+                            p.CustomerId == customer.Id &&
+                            ((!string.IsNullOrWhiteSpace(item.Barcode) && p.BaseBarcode == item.Barcode) || p.Sku == item.SkuCode)
+                        );
+
+                        var orderItem = new InboundOrderItem(
+                            order.Id, item.LineNumber, item.SkuCode, item.Barcode, item.Description,
+                            item.Ncm, item.Cest, item.Unit,
+                            item.Quantity, item.UnitValue, item.Batch, item.ManufactureDate, item.ExpirationDate
+                        );
+
+                        if (matchedProduct != null)
+                        {
+                            orderItem.LinkProduct(matchedProduct.Id);
+
+                            var balance = await GetOrCreateBalanceAsync(companyId, customer.Id, matchedProduct.Id, ct);
+                            balance.AddExpected(orderItem.ExpectedQuantity);
+                        }
+
+                        _db.InboundOrderItems.Add(orderItem);
+                    }
+
+                    processedOrders.Add(order.Id);
+                    batchOrdersToManifest.Add((order, parsedNfe.AccessKey));
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Falha ao processar arquivo XML: {ex.Message}");
+                }
             }
-            catch (Exception ex)
+
+            // Persiste no banco o lote atual de 5 ordens antes de ir para a SEFAZ[cite: 25]
+            await _db.SaveChangesAsync(ct);
+
+            // 6. DISPARO PARALELO DAS CIÊNCIAS (210210) PARA O LOTE DE 5 NOTAS
+            if (company.CertificateBytes != null && batchOrdersToManifest.Any())
             {
-                errors.Add($"Falha ao processar arquivo: {ex.Message}");
+                var manifestTasks = batchOrdersToManifest.Select(async item =>
+                {
+                    try
+                    {
+                        var manifestResult = await _sefazService.EnviarManifestacaoAsync(
+                            company,
+                            item.AccessKey,
+                            210210, // Ciência da Operação
+                            justificativa: "",
+                            ambiente: TipoAmbiente.Producao,
+                            ct: ct
+                        );
+
+                        if (manifestResult.Sucesso)
+                        {
+                            item.Order.UpdateSefazManifestStatus(
+                                210210,
+                                manifestResult.Protocolo ?? "CIENCIA_AUTOMATICA_XML",
+                                manifestResult.DataEvento ?? DateTime.UtcNow
+                            );
+                        }
+                    }
+                    catch
+                    {
+                        // Falhas na SEFAZ não travam o lançamento do WMS
+                    }
+                });
+
+                await Task.WhenAll(manifestTasks);
+                await _db.SaveChangesAsync(ct);
             }
         }
 
-        await _db.SaveChangesAsync(ct);
-
         return Results.Ok(new
         {
-            Message = $"Processamento concluído. {processedOrders.Count} ordens importadas.",
+            Message = $"Processamento em lote concluído. {processedOrders.Count} ordem(ns) importada(s) com sucesso.",
+            ProcessedCount = processedOrders.Count,
+            IgnoredCount = errors.Count,
             ImportedIds = processedOrders,
             Errors = errors
         });
     }
+
     private async Task<InventoryBalance> GetOrCreateBalanceAsync(Guid companyId, Guid customerId, Guid productId, CancellationToken ct)
     {
         var balance = await _db.InventoryBalances
@@ -181,6 +253,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
         return balance;
     }
 }
+
 public static class ImportInboundXmlEndpoints
 {
     public static void MapImportInboundXmlEndpoints(this IEndpointRouteBuilder app)

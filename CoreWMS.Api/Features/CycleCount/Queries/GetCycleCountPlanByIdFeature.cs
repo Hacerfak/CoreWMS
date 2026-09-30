@@ -28,7 +28,9 @@ public record CycleCountTaskDetailDto(
     decimal? CountRound2,
     string? UserRound2Name,
     decimal? CountRound3,
-    string? UserRound3Name
+    string? UserRound3Name,
+    string? ScannedLpn,
+    bool IsHuMismatch
 );
 
 public record CycleCountPlanDetailDto(
@@ -116,7 +118,9 @@ public class GetCycleCountPlanByIdHandler : IRequestHandler<GetCycleCountPlanByI
             t.CountRound2,
             t.UserRound2.HasValue && userNames.TryGetValue(t.UserRound2.Value, out var u2) ? u2 : null,
             t.CountRound3,
-            t.UserRound3.HasValue && userNames.TryGetValue(t.UserRound3.Value, out var u3) ? u3 : null
+            t.UserRound3.HasValue && userNames.TryGetValue(t.UserRound3.Value, out var u3) ? u3 : null,
+            t.ScannedLpn,
+            t.IsHuMismatch
         )).ToList();
 
         var result = new CycleCountPlanDetailDto(

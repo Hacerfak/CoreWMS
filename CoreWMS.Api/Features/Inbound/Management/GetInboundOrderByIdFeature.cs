@@ -49,13 +49,17 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
                 o.IssueDate,
                 o.CreatedAt,
                 o.Status.ToString(),
+                o.LastSefazManifestType,
+                o.SefazManifestProtocol,
+                o.SefazManifestDate,
+                o.SefazManifestJustification,
                 o.Items.OrderBy(i => i.LineNumber).Select(i => new InboundOrderItemDto(
                     i.Id,
                     i.ProductId,
                     i.LineNumber,
                     i.Product != null ? i.Product.Sku : i.RawSkuCode,
                     i.Product != null ? i.Product.Description : i.RawDescription,
-                    i.Product != null ? i.Product.BaseUnit : i.RawUnit, // Projeta a Unidade Base WMS (ex: PAL, KG, CX)
+                    i.Product != null ? i.Product.BaseUnit : i.RawUnit,
                     i.ExpectedQuantity,
                     i.ReceivedQuantity,
                     i.Status.ToString(),

@@ -21,14 +21,17 @@ public class CycleCountTask : AuditableEntity
     public decimal ExpectedQuantity { get; private set; }
     public decimal? CountedQuantity { get; private set; }
 
-    // Divergência calculada SOMENTE quando há contagem finalizada
     public decimal DivergenceQuantity => CountedQuantity.HasValue ? CountedQuantity.Value - ExpectedQuantity : 0m;
 
     public int CurrentRound { get; private set; }
     public bool IsDynamicStorage { get; private set; }
     public CycleCountTaskStatus Status { get; private set; }
 
-    // Histórico de Rodadas (1ª, 2ª e 3ª Contagens)
+    // Rastreamento da HU bipada pelo operador
+    public string? ScannedLpn { get; private set; }
+    public bool IsHuMismatch { get; private set; }
+
+    // Histórico de Rodadas
     public decimal? CountRound1 { get; private set; }
     public Guid? UserRound1 { get; private set; }
     public decimal? CountRound2 { get; private set; }
@@ -62,7 +65,6 @@ public class CycleCountTask : AuditableEntity
         AdjustmentType = AdjustmentType.None;
     }
 
-    // 1. Iniciar Contagem (Atribui usuário e altera para Em Contagem)
     public void StartCounting(Guid userId)
     {
         AssignedUserId = userId;
@@ -70,7 +72,6 @@ public class CycleCountTask : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // 2. Cancelar Contagem no Modal (Libera para outro operador)
     public void CancelCounting()
     {
         AssignedUserId = null;
@@ -78,10 +79,11 @@ public class CycleCountTask : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // 3. Registrar Contagem da Rodada Atual
-    public void RecordRoundCount(decimal quantity, Guid userId, int maxPlanRounds)
+    public void RecordRoundCount(decimal quantity, Guid userId, int maxPlanRounds, string? scannedLpn = null, bool isHuMismatch = false)
     {
         CountedQuantity = quantity;
+        ScannedLpn = scannedLpn;
+        IsHuMismatch = isHuMismatch;
 
         if (CurrentRound == 1)
         {
@@ -99,7 +101,8 @@ public class CycleCountTask : AuditableEntity
             UserRound3 = userId;
         }
 
-        if (quantity == ExpectedQuantity)
+        // É conciliado APENAS se a quantidade bater E não houver divergência de HU
+        if (quantity == ExpectedQuantity && !isHuMismatch)
         {
             Status = CycleCountTaskStatus.Resolved;
             AdjustmentType = AdjustmentType.None;
@@ -109,23 +112,25 @@ public class CycleCountTask : AuditableEntity
             if (CurrentRound < maxPlanRounds)
             {
                 CurrentRound++;
-                CountedQuantity = null; // Reseta para próxima rodada
-                AssignedUserId = null;  // Libera para outro operador
+                CountedQuantity = null;
+                AssignedUserId = null;
                 Status = CycleCountTaskStatus.Pending;
             }
             else
             {
                 Status = CycleCountTaskStatus.CountedWithDivergence;
-                AdjustmentType = quantity > ExpectedQuantity
-                    ? AdjustmentType.Surplus_InboundNfe
-                    : AdjustmentType.Shortage_ReturnNfe;
+                if (quantity > ExpectedQuantity)
+                    AdjustmentType = AdjustmentType.Surplus_InboundNfe;
+                else if (quantity < ExpectedQuantity)
+                    AdjustmentType = AdjustmentType.Shortage_ReturnNfe;
+                else
+                    AdjustmentType = AdjustmentType.None; // Divergência exclusiva de HU (LPN trocado)
             }
         }
 
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // 4. Pedir Recontagem
     public void RequestRecount()
     {
         CurrentRound++;
@@ -136,7 +141,6 @@ public class CycleCountTask : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // 5. Aplicar Ajuste Fiscal
     public void ApplyFiscalAdjustment(string documentNumber, string? notes)
     {
         FiscalDocumentNumber = documentNumber;
@@ -151,7 +155,6 @@ public class CycleCountTask : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    // 6. Resetar Tarefa ao Cancelar Plano
     public void ResetTask()
     {
         CurrentRound = 1;
@@ -160,6 +163,8 @@ public class CycleCountTask : AuditableEntity
         CountRound1 = null; UserRound1 = null;
         CountRound2 = null; UserRound2 = null;
         CountRound3 = null; UserRound3 = null;
+        ScannedLpn = null;
+        IsHuMismatch = false;
         Status = CycleCountTaskStatus.Pending;
         AdjustmentType = AdjustmentType.None;
         FiscalDocumentNumber = null;
