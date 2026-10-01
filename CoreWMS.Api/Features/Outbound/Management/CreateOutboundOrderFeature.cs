@@ -10,30 +10,30 @@ namespace CoreWMS.Api.Features.Outbound.Management;
 
 public record CreateOutboundOrderCommand(
     Guid CustomerId,
-    string OrderNumber,
-    string DestinationCnpjCpf,
-    string DestinationName,
-    string DestinationCity,
-    string DestinationState,
+    DateTime ExpectedShipDate,
+    string? OrderNumber,
+    string? InvoiceNumber,
+    string? InvoiceSerie,
+    string? AccessKey,
+    bool IsReturnToCustomer,
+    string? DestinationCnpjCpf,
+    string? DestinationName,
+    string? DestinationCity,
+    string? DestinationState,
     string? DestinationZipCode,
     string? CarrierCnpjCpf,
     string? CarrierName,
-    string? AdditionalNotes,
-    DateTime? ExpectedShipDate,
-    List<CreateOutboundOrderItemCommand> Items
+    string? VehiclePlate,
+    string? VehiclePlateState,
+    string? AdditionalNotes
 ) : IRequest<IResult>;
 
 public class CreateOutboundOrderCommandValidator : AbstractValidator<CreateOutboundOrderCommand>
 {
     public CreateOutboundOrderCommandValidator()
     {
-        RuleFor(x => x.CustomerId).NotEmpty();
-        RuleFor(x => x.OrderNumber).NotEmpty().MaximumLength(50);
-        RuleFor(x => x.DestinationCnpjCpf).NotEmpty().MaximumLength(14);
-        RuleFor(x => x.DestinationName).NotEmpty().MaximumLength(150);
-        RuleFor(x => x.DestinationCity).NotEmpty();
-        RuleFor(x => x.DestinationState).NotEmpty().MaximumLength(2);
-        RuleFor(x => x.Items).NotEmpty().WithMessage("O pedido deve conter pelo menos um item.");
+        RuleFor(x => x.CustomerId).NotEmpty().WithMessage("O depositante é obrigatório.");
+        RuleFor(x => x.ExpectedShipDate).NotEmpty().WithMessage("A data prevista de envio é obrigatória.");
     }
 }
 
@@ -55,41 +55,55 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(request.CustomerId))
             return Results.Forbid();
 
-        if (await _db.OutboundOrders.AnyAsync(o => o.CompanyId == companyId && o.OrderNumber == request.OrderNumber, ct))
-            return Results.BadRequest(new { Message = "Já existe um pedido de saída com este número." });
+        // Se o utilizador informou um número de pedido, valida duplicidade
+        if (!string.IsNullOrWhiteSpace(request.OrderNumber) &&
+            await _db.OutboundOrders.AnyAsync(o => o.CompanyId == companyId && o.OrderNumber == request.OrderNumber.Trim(), ct))
+        {
+            return Results.BadRequest(new { Message = "Já existe um pedido de saída cadastrado com este número." });
+        }
+
+        // Se for retorno para o próprio depositante, preenche os dados do destinatário com os dados do depositante
+        string? destCnpj = request.DestinationCnpjCpf;
+        string? destName = request.DestinationName;
+        string? destCity = request.DestinationCity;
+        string? destState = request.DestinationState;
+        string? destZip = request.DestinationZipCode;
+
+        if (request.IsReturnToCustomer)
+        {
+            var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.CustomerId && c.CompanyId == companyId, ct);
+            if (customer != null)
+            {
+                destCnpj = customer.Cnpj;
+                destName = customer.CorporateName;
+                destCity = customer.CityName;
+                destState = customer.State;
+                destZip = customer.ZipCode;
+            }
+        }
 
         var order = new OutboundOrder(
             companyId,
             request.CustomerId,
             request.OrderNumber,
-            accessKey: null,
+            request.InvoiceNumber,
+            request.InvoiceSerie,
+            request.AccessKey,
             rawXml: null,
-            request.DestinationCnpjCpf,
-            request.DestinationName,
-            request.DestinationCity,
-            request.DestinationState,
-            request.DestinationZipCode,
+            request.IsReturnToCustomer,
+            destCnpj,
+            destName,
+            destCity,
+            destState,
+            destZip,
             request.CarrierCnpjCpf,
             request.CarrierName,
+            request.VehiclePlate,
+            request.VehiclePlateState,
             request.AdditionalNotes,
             issueDate: DateTime.UtcNow,
             request.ExpectedShipDate
         );
-
-        var productIds = request.Items.Select(i => i.ProductId).ToList();
-        var validProducts = await _db.Products
-            .AsNoTracking()
-            .Where(p => p.CompanyId == companyId && p.CustomerId == request.CustomerId && productIds.Contains(p.Id))
-            .ToDictionaryAsync(p => p.Id, p => p.Sku, ct);
-
-        foreach (var itemCmd in request.Items)
-        {
-            if (!validProducts.TryGetValue(itemCmd.ProductId, out var sku))
-                return Results.BadRequest(new { Message = $"Produto com ID {itemCmd.ProductId} é inválido ou não pertence a este depositante." });
-
-            var item = new OutboundOrderItem(order.Id, itemCmd.ProductId, itemCmd.LineNumber, sku, itemCmd.Quantity, itemCmd.UnitValue);
-            order.AddItem(item);
-        }
 
         _db.OutboundOrders.Add(order);
         await _db.SaveChangesAsync(ct);

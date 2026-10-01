@@ -12,10 +12,12 @@ public record OutboundOrderSummaryDto(
     Guid CustomerId,
     string CustomerName,
     string OrderNumber,
-    string DestinationName,
-    string DestinationCity,
-    string DestinationState,
+    string? InvoiceNumber,
+    string? DestinationName,
+    string? DestinationCity,
+    string? DestinationState,
     DateTime IssueDate,
+    DateTime ExpectedShipDate,
     string Status,
     int ItemsCount
 );
@@ -57,7 +59,8 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
         {
             var s = $"%{request.Search.Trim()}%";
             q = q.Where(o => EF.Functions.ILike(o.OrderNumber, s) ||
-                             EF.Functions.ILike(o.DestinationName, s) ||
+                             (o.InvoiceNumber != null && EF.Functions.ILike(o.InvoiceNumber, s)) ||
+                             (o.DestinationName != null && EF.Functions.ILike(o.DestinationName, s)) ||
                              (o.AccessKey != null && EF.Functions.ILike(o.AccessKey, s)));
         }
 
@@ -72,10 +75,12 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
                 o.CustomerId,
                 o.Customer.CorporateName,
                 o.OrderNumber,
+                o.InvoiceNumber,
                 o.DestinationName,
                 o.DestinationCity,
                 o.DestinationState,
                 o.IssueDate,
+                o.ExpectedShipDate,
                 o.Status.ToString(),
                 o.Items.Count
             )).ToListAsync(ct);

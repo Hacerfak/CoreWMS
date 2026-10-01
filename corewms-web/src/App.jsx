@@ -30,6 +30,7 @@ import InventarioDetalhesPage from '@/pages/Inventario/InventarioDetalhesPage';
 import InventarioOperacaoPage from '@/pages/Inventario/InventarioOperacaoPage';
 import ExecucaoContagemPage from '@/pages/Inventario/ExecucaoContagemPage';
 import OutboundListPage from '@/pages/Outbound/OutboundListPage';
+import CreateOutboundOrderPage from '@/pages/Outbound/CreateOutboundOrderPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
 import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
 import AlocacaoInteligentePage from '@/pages/Inbound/AlocacaoInteligentePage';
@@ -70,7 +71,7 @@ export default function App() {
             <Route element={<MainLayout />}>
 
               <Route path="/dashboard" element={
-                <div className="bg-white border border-slate-200/60 rounded-xl p-8 h-full shadow-sm flex items-center justify-center text-slate-400">
+                <div className="bg-white border border-slate-200/60 rounded-xl p-8 h-full shadow-xs flex items-center justify-center text-slate-400">
                   Painel do Dashboard em construção
                 </div>
               } />
@@ -158,6 +159,10 @@ export default function App() {
                 <Route path="/outbound" element={<OutboundListPage />} />
                 <Route path="/outbound/picking/:id" element={<OutboundPickingPage />} />
                 <Route path="/outbound/packing/:id" element={<OutboundPackingPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="outbound:manage" />}>
+                <Route path="/outbound/novo" element={<CreateOutboundOrderPage />} />
               </Route>
 
             </Route>

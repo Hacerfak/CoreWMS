@@ -14,29 +14,36 @@ public class OutboundOrder : AuditableEntity
     public Guid CustomerId { get; private set; }
     public Customer Customer { get; private set; } = null!;
 
-    // Identificação do Pedido / NF-e
+    // Identificação do Pedido e Documentos Fiscais
     public string OrderNumber { get; private set; } = string.Empty;
+    public string? InvoiceNumber { get; private set; }
+    public string? InvoiceSerie { get; private set; }
     public string? AccessKey { get; private set; }
     public string? RawXml { get; private set; }
 
+    // Tipo de Operação
+    public bool IsReturnToCustomer { get; private set; }
+
     // Dados do Destinatário Final
-    public string DestinationCnpjCpf { get; private set; } = string.Empty;
-    public string DestinationName { get; private set; } = string.Empty;
-    public string DestinationCity { get; private set; } = string.Empty;
-    public string DestinationState { get; private set; } = string.Empty;
+    public string? DestinationCnpjCpf { get; private set; }
+    public string? DestinationName { get; private set; }
+    public string? DestinationCity { get; private set; }
+    public string? DestinationState { get; private set; }
     public string? DestinationZipCode { get; private set; }
 
-    // Dados da Transportadora (Sem necessidade de cadastro em tabela)
+    // Dados da Transportadora e Veículo
     public string? CarrierCnpjCpf { get; private set; }
     public string? CarrierName { get; private set; }
+    public string? VehiclePlate { get; private set; }
+    public string? VehiclePlateState { get; private set; }
 
-    // Observações Fiscais e Operacionais da NF-e (infAdic / infCpl)
+    // Observações Fiscais e Operacionais
     public string? AdditionalNotes { get; private set; }
 
     public DateTime IssueDate { get; private set; }
-    public DateTime? ExpectedShipDate { get; private set; }
+    public DateTime ExpectedShipDate { get; private set; }
 
-    // Localização de Doca onde os volumes aguardam expedição
+    // Localização na Doca
     public Guid? DockLocationId { get; private set; }
     public Location? DockLocation { get; private set; }
 
@@ -51,35 +58,45 @@ public class OutboundOrder : AuditableEntity
     public OutboundOrder(
         Guid companyId,
         Guid customerId,
-        string orderNumber,
+        string? orderNumber,
+        string? invoiceNumber,
+        string? invoiceSerie,
         string? accessKey,
         string? rawXml,
-        string destCnpjCpf,
-        string destName,
-        string destCity,
-        string destState,
+        bool isReturnToCustomer,
+        string? destCnpjCpf,
+        string? destName,
+        string? destCity,
+        string? destState,
         string? destZipCode,
         string? carrierCnpjCpf,
         string? carrierName,
+        string? vehiclePlate,
+        string? vehiclePlateState,
         string? additionalNotes,
         DateTime issueDate,
-        DateTime? expectedShipDate)
+        DateTime expectedShipDate)
     {
         CompanyId = companyId;
         CustomerId = customerId;
-        OrderNumber = orderNumber;
-        AccessKey = accessKey;
+        OrderNumber = string.IsNullOrWhiteSpace(orderNumber) ? $"PED-{DateTime.UtcNow:yyyyMMddHHmmss}" : orderNumber.Trim();
+        InvoiceNumber = invoiceNumber?.Trim();
+        InvoiceSerie = invoiceSerie?.Trim();
+        AccessKey = accessKey?.Trim();
         RawXml = rawXml;
-        DestinationCnpjCpf = destCnpjCpf;
-        DestinationName = destName;
-        DestinationCity = destCity;
-        DestinationState = destState;
-        DestinationZipCode = destZipCode;
-        CarrierCnpjCpf = carrierCnpjCpf;
-        CarrierName = carrierName;
-        AdditionalNotes = additionalNotes;
+        IsReturnToCustomer = isReturnToCustomer;
+        DestinationCnpjCpf = destCnpjCpf?.Trim();
+        DestinationName = destName?.Trim();
+        DestinationCity = destCity?.Trim();
+        DestinationState = destState?.Trim();
+        DestinationZipCode = destZipCode?.Trim();
+        CarrierCnpjCpf = carrierCnpjCpf?.Trim();
+        CarrierName = carrierName?.Trim();
+        VehiclePlate = vehiclePlate?.Trim().ToUpper();
+        VehiclePlateState = vehiclePlateState?.Trim().ToUpper();
+        AdditionalNotes = additionalNotes?.Trim();
         IssueDate = issueDate.ToUniversalTime();
-        ExpectedShipDate = expectedShipDate?.ToUniversalTime();
+        ExpectedShipDate = expectedShipDate.ToUniversalTime();
         Status = OutboundOrderStatus.Pending;
     }
 

@@ -4,12 +4,19 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
-import type { CreateOutboundOrderItemCommand } from './createOutboundOrderItemCommand';
 
 export interface CreateOutboundOrderCommand {
   customerId?: string;
+  expectedShipDate?: string;
   /** @nullable */
   orderNumber?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  /** @nullable */
+  invoiceSerie?: string | null;
+  /** @nullable */
+  accessKey?: string | null;
+  isReturnToCustomer?: boolean;
   /** @nullable */
   destinationCnpjCpf?: string | null;
   /** @nullable */
@@ -25,9 +32,9 @@ export interface CreateOutboundOrderCommand {
   /** @nullable */
   carrierName?: string | null;
   /** @nullable */
+  vehiclePlate?: string | null;
+  /** @nullable */
+  vehiclePlateState?: string | null;
+  /** @nullable */
   additionalNotes?: string | null;
-  /** @nullable */
-  expectedShipDate?: string | null;
-  /** @nullable */
-  items?: CreateOutboundOrderItemCommand[] | null;
 }

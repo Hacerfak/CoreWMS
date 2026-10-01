@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
@@ -8,47 +8,52 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, Save, Loader2, Plus, Trash2, Truck, UserCheck, PackagePlus } from 'lucide-react';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, FileText
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 const ESTADOS_BR = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
 
-const itemSchema = z.object({
-    productId: z.string().min(1, 'Selecione o produto.'),
-    lineNumber: z.coerce.number().min(1),
-    quantity: z.coerce.number().min(0.0001, 'Informe a quantidade.'),
-    unitValue: z.coerce.number().min(0, 'Valor não pode ser negativo.')
-});
-
-const outboundOrderSchema = z.object({
+const outboundOrderHeaderSchema = z.object({
     customerId: z.string().min(1, 'Selecione o depositante.'),
-    orderNumber: z.string().min(1, 'Número do pedido é obrigatório.').max(50),
-    destinationCnpjCpf: z.string().min(11, 'Informe o CNPJ ou CPF do destinatário.'),
-    destinationName: z.string().min(3, 'Nome do destinatário é obrigatório.'),
-    destinationCity: z.string().min(2, 'Cidade é obrigatória.'),
-    destinationState: z.string().length(2, 'UF é obrigatória.'),
+    expectedShipDate: z.string().min(1, 'Data prevista de envio é obrigatória.'),
+    orderNumber: z.string().optional().nullable(),
+    invoiceNumber: z.string().optional().nullable(),
+    invoiceSerie: z.string().optional().nullable(),
+    accessKey: z.string().optional().nullable(),
+    isReturnToCustomer: z.boolean().default(false),
+    destinationCnpjCpf: z.string().optional().nullable(),
+    destinationName: z.string().optional().nullable(),
+    destinationCity: z.string().optional().nullable(),
+    destinationState: z.string().optional().nullable(),
     destinationZipCode: z.string().optional().nullable(),
     carrierCnpjCpf: z.string().optional().nullable(),
     carrierName: z.string().optional().nullable(),
-    additionalNotes: z.string().optional().nullable(),
-    expectedShipDate: z.string().optional().nullable(),
-    items: z.array(itemSchema).min(1, 'Adicione pelo menos um produto ao pedido.')
+    vehiclePlate: z.string().optional().nullable(),
+    vehiclePlateState: z.string().optional().nullable(),
+    additionalNotes: z.string().optional().nullable()
 });
 
 export default function CreateOutboundOrderPage() {
     const navigate = useNavigate();
     const [isSaving, setIsSaving] = useState(false);
+    const [isConsultingDestSefaz, setIsConsultingDestSefaz] = useState(false);
+    const [isConsultingCarrierSefaz, setIsConsultingCarrierSefaz] = useState(false);
 
     const [customers, setCustomers] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [isLoadingProducts, setIsLoadingCustomerProducts] = useState(false);
 
-    const { register, control, handleSubmit, setValue, watch, formState: { errors } } = useForm({
-        resolver: zodResolver(outboundOrderSchema),
+    const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+        resolver: zodResolver(outboundOrderHeaderSchema),
         defaultValues: {
             customerId: '',
+            expectedShipDate: '',
             orderNumber: '',
+            invoiceNumber: '',
+            invoiceSerie: '',
+            accessKey: '',
+            isReturnToCustomer: false,
             destinationCnpjCpf: '',
             destinationName: '',
             destinationCity: '',
@@ -56,38 +61,69 @@ export default function CreateOutboundOrderPage() {
             destinationZipCode: '',
             carrierCnpjCpf: '',
             carrierName: '',
-            additionalNotes: '',
-            expectedShipDate: '',
-            items: [{ productId: '', lineNumber: 1, quantity: 1, unitValue: 0 }]
+            vehiclePlate: '',
+            vehiclePlateState: 'RS',
+            additionalNotes: ''
         }
     });
 
-    const { fields, append, remove } = useFieldArray({ control, name: 'items' });
+    const isReturnToCustomer = watch('isReturnToCustomer');
     const selectedCustomerId = watch('customerId');
+    const destCnpjCpf = watch('destinationCnpjCpf');
+    const destState = watch('destinationState');
+    const carrierCnpjCpf = watch('carrierCnpjCpf');
+    const carrierState = watch('vehiclePlateState');
 
-    // 1. Carrega a lista resumida de depositantes ao montar a página
+    // Carrega a lista de depositantes no início
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
             .then(res => setCustomers(res || []))
             .catch(() => toast.error('Erro ao carregar depositantes.'));
     }, []);
 
-    // 2. Quando o depositante é alterado, busca os SKUs/Produtos daquele depositante sob demanda
-    useEffect(() => {
-        if (!selectedCustomerId) {
-            setProducts([]);
-            return;
+    // Consulta SEFAZ para Destinatário
+    const handleConsultDestSefaz = async () => {
+        const cleanCnpj = (destCnpjCpf || '').replace(/\D/g, '');
+        if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
+
+        setIsConsultingDestSefaz(true);
+        try {
+            const sefazData = await customInstance({
+                url: `/api/customers/consult-sefaz/${cleanCnpj}?uf=${destState}`,
+                method: 'POST'
+            });
+
+            toast.success('Dados do destinatário sincronizados da SEFAZ!');
+            setValue('destinationName', sefazData.corporateName || '');
+            setValue('destinationCity', sefazData.cityName || '');
+            setValue('destinationState', sefazData.state || destState);
+            setValue('destinationZipCode', sefazData.zipCode || '');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Não foi possível consultar os dados na SEFAZ.');
+        } finally {
+            setIsConsultingDestSefaz(false);
         }
+    };
 
-        setIsLoadingCustomerProducts(true);
-        customInstance({ url: `/api/products?CustomerId=${selectedCustomerId}&PageSize=500`, method: 'GET' })
-            .then(res => setProducts(res?.items || []))
-            .catch(() => toast.error('Erro ao carregar produtos do depositante.'))
-            .finally(() => setIsLoadingCustomerProducts(false));
-    }, [selectedCustomerId]);
+    // Consulta SEFAZ para Transportadora
+    const handleConsultCarrierSefaz = async () => {
+        const cleanCnpj = (carrierCnpjCpf || '').replace(/\D/g, '');
+        if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
 
-    const handleProductChange = (index, productId) => {
-        setValue(`items.${index}.productId`, productId, { shouldValidate: true });
+        setIsConsultingCarrierSefaz(true);
+        try {
+            const sefazData = await customInstance({
+                url: `/api/customers/consult-sefaz/${cleanCnpj}?uf=${carrierState || 'RS'}`,
+                method: 'POST'
+            });
+
+            toast.success('Dados da transportadora sincronizados da SEFAZ!');
+            setValue('carrierName', sefazData.corporateName || '');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Não foi possível consultar a transportadora na SEFAZ.');
+        } finally {
+            setIsConsultingCarrierSefaz(false);
+        }
     };
 
     const onSubmit = async (data) => {
@@ -95,9 +131,9 @@ export default function CreateOutboundOrderPage() {
             setIsSaving(true);
             const cleanPayload = {
                 ...data,
-                destinationCnpjCpf: data.destinationCnpjCpf.replace(/\D/g, ''),
+                destinationCnpjCpf: data.destinationCnpjCpf ? data.destinationCnpjCpf.replace(/\D/g, '') : null,
                 carrierCnpjCpf: data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
-                expectedShipDate: data.expectedShipDate ? new Date(data.expectedShipDate).toISOString() : null
+                expectedShipDate: new Date(data.expectedShipDate).toISOString()
             };
 
             const res = await customInstance({
@@ -106,10 +142,11 @@ export default function CreateOutboundOrderPage() {
                 data: cleanPayload
             });
 
-            toast.success(`Pedido NF ${data.orderNumber} criado com sucesso!`);
-            navigate('/outbound');
+            toast.success(`Cabeçalho da Ordem ${res.orderNumber} criado com sucesso!`);
+            // Redireciona para o painel interativo de seleção de itens/estoque
+            navigate(`/outbound/ordem/${res.id}/itens`);
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao criar pedido de saída.');
+            toast.error(error.response?.data?.message || 'Erro ao criar ordem de saída.');
         } finally {
             setIsSaving(false);
         }
@@ -129,32 +166,30 @@ export default function CreateOutboundOrderPage() {
                     </Button>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nova Ordem de Saída Manual</h1>
-                        <p className="text-xs text-slate-500 mt-0.5">Cadastre o pedido de envio, destinatário e itens para reserva de estoque WMS.</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Etapa 1 de 2: Defina as informações básicas do pedido, destinatário e transporte.</p>
                     </div>
                 </div>
 
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => navigate('/outbound')} disabled={isSaving}>Cancelar</Button>
-                    <Button onClick={handleSubmit(onSubmit)} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold">
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                        Salvar Ordem
+                    <Button onClick={handleSubmit(onSubmit)} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold min-w-[170px]">
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ArrowRight className="h-4 w-4 mr-2" />}
+                        Avançar para Itens
                     </Button>
                 </div>
             </div>
 
             {/* FORMULÁRIO */}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 overflow-y-auto pr-1 flex-1">
-                {/* BLOCOS 1 e 2: ORIGEM E DESTINATÁRIO */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* BLOCO 1: ORIGEM & IDENTIFICAÇÃO */}
+                <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
+                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
+                        <UserCheck className="text-orange-600" size={18} /> 1. Origem & Identificação
+                    </h3>
 
-                    {/* DADOS DE ORIGEM E PEDIDO */}
-                    <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-                            <UserCheck className="text-orange-600" size={18} /> 1. Origem & Identificação
-                        </h3>
-
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                            <Label>Depositante (Dono do Estoque) *</Label>
+                            <Label className="text-slate-800 font-semibold">Depositante (Dono do Estoque) *</Label>
                             <Select value={selectedCustomerId} onValueChange={(val) => setValue('customerId', val, { shouldValidate: true })}>
                                 <SelectTrigger className={errors.customerId ? 'border-rose-500' : ''}>
                                     <SelectValue placeholder="Selecione o depositante..." />
@@ -168,184 +203,169 @@ export default function CreateOutboundOrderPage() {
                             {errors.customerId && <p className="text-xs text-rose-500">{errors.customerId.message}</p>}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                                <Label>Nº do Pedido / NF-e *</Label>
-                                <Input {...register('orderNumber')} placeholder="Ex: 10542" className={`font-mono ${errors.orderNumber ? 'border-rose-500' : ''}`} />
-                                {errors.orderNumber && <p className="text-xs text-rose-500">{errors.orderNumber.message}</p>}
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <Label>Data Prevista de Envio</Label>
-                                <Input type="date" {...register('expectedShipDate')} className="text-xs" />
-                            </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-slate-800 font-semibold">Data Prevista de Envio *</Label>
+                            <Input type="date" {...register('expectedShipDate')} className={errors.expectedShipDate ? 'border-rose-500 text-xs' : 'text-xs'} />
+                            {errors.expectedShipDate && <p className="text-xs text-rose-500">{errors.expectedShipDate.message}</p>}
                         </div>
                     </div>
 
-                    {/* DADOS DO DESTINATÁRIO */}
-                    <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-                            <Truck className="text-orange-600" size={18} /> 2. Destinatário Final & Entrega
-                        </h3>
-
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="col-span-1 space-y-1.5">
-                                <Label>CNPJ / CPF *</Label>
-                                <Input {...register('destinationCnpjCpf')} placeholder="00.000.000/0000-00" className={`font-mono ${errors.destinationCnpjCpf ? 'border-rose-500' : ''}`} />
-                                {errors.destinationCnpjCpf && <p className="text-xs text-rose-500">{errors.destinationCnpjCpf.message}</p>}
-                            </div>
-
-                            <div className="col-span-2 space-y-1.5">
-                                <Label>Nome / Razão Social Destinatário *</Label>
-                                <Input {...register('destinationName')} className={errors.destinationName ? 'border-rose-500' : ''} />
-                                {errors.destinationName && <p className="text-xs text-rose-500">{errors.destinationName.message}</p>}
-                            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                        <div className="space-y-1.5">
+                            <Label>Nº do Pedido</Label>
+                            <Input {...register('orderNumber')} placeholder="Opcional (ex: PED-1001)" className="font-mono text-xs" />
                         </div>
 
-                        <div className="grid grid-cols-4 gap-4">
-                            <div className="col-span-2 space-y-1.5">
-                                <Label>Cidade *</Label>
-                                <Input {...register('destinationCity')} className={errors.destinationCity ? 'border-rose-500' : ''} />
-                            </div>
+                        <div className="space-y-1.5">
+                            <Label>Nº da NF-e</Label>
+                            <Input {...register('invoiceNumber')} placeholder="Ex: 1250" className="font-mono text-xs" />
+                        </div>
 
-                            <div className="col-span-1 space-y-1.5">
-                                <Label>UF *</Label>
-                                <Select value={watch('destinationState')} onValueChange={(val) => setValue('destinationState', val)}>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                        <div className="space-y-1.5">
+                            <Label>Série NF-e</Label>
+                            <Input {...register('invoiceSerie')} placeholder="Ex: 1" className="font-mono text-xs" />
+                        </div>
 
-                            <div className="col-span-1 space-y-1.5">
-                                <Label>CEP</Label>
-                                <Input {...register('destinationZipCode')} className="font-mono text-xs" />
-                            </div>
+                        <div className="space-y-1.5">
+                            <Label>Chave de Acesso (44 dígitos)</Label>
+                            <Input
+                                maxLength={44}
+                                {...register('accessKey')}
+                                placeholder="3523..."
+                                className="font-mono text-xs"
+                            />
                         </div>
                     </div>
                 </div>
 
-                {/* BLOCO 3: TRANSPORTADORA E OBSERVAÇÕES */}
+                {/* BLOCO 2: TIPO DE ENVIO & DESTINATÁRIO */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                    <h3 className="font-bold text-slate-900 text-sm border-b pb-3">3. Transportadora & Observações Fiscais</h3>
+                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
+                        <Building2 className="text-orange-600" size={18} /> 2. Tipo de Envio & Destinatário Final *
+                    </h3>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                        <Label className="text-xs font-bold uppercase text-slate-700">Selecione a Finalidade do Envio *</Label>
+                        <RadioGroup
+                            value={isReturnToCustomer ? 'return' : 'third_party'}
+                            onValueChange={(v) => setValue('isReturnToCustomer', v === 'return')}
+                            className="flex gap-6 pt-1"
+                        >
+                            <div className="flex items-center space-x-2 cursor-pointer">
+                                <RadioGroupItem value="return" id="r-return" />
+                                <Label htmlFor="r-return" className="cursor-pointer font-semibold text-slate-800 text-xs">
+                                    Retorno para o Próprio Depositante (Devolução / Retorno Simbólico)
+                                </Label>
+                            </div>
+                            <div className="flex items-center space-x-2 cursor-pointer">
+                                <RadioGroupItem value="third_party" id="r-third" />
+                                <Label htmlFor="r-third" className="cursor-pointer font-semibold text-slate-800 text-xs">
+                                    Entrega a Terceiros (Cliente Final)
+                                </Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+
+                    {!isReturnToCustomer && (
+                        <div className="space-y-4 animate-in fade-in duration-200 pt-1">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label>CNPJ / CPF Destinatário</Label>
+                                    <div className="flex gap-2">
+                                        <Input {...register('destinationCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1" />
+                                        <Button
+                                            type="button" variant="outline"
+                                            onClick={handleConsultDestSefaz}
+                                            disabled={isConsultingDestSefaz}
+                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9"
+                                        >
+                                            {isConsultingDestSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                            SEFAZ
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label>Nome / Razão Social Destinatário</Label>
+                                    <Input {...register('destinationName')} className="text-xs" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-2 space-y-1.5">
+                                    <Label>Cidade</Label>
+                                    <Input {...register('destinationCity')} className="text-xs" />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label>UF</Label>
+                                    <Select value={watch('destinationState')} onValueChange={(val) => setValue('destinationState', val)}>
+                                        <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label>CEP</Label>
+                                    <Input {...register('destinationZipCode')} className="font-mono text-xs" />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* BLOCO 3: TRANSPORTADORA & VEÍCULO */}
+                <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
+                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
+                        <Truck className="text-orange-600" size={18} /> 3. Transportadora & Veículo
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                             <Label>CNPJ Transportadora</Label>
-                            <Input {...register('carrierCnpjCpf')} className="font-mono text-xs" />
+                            <div className="flex gap-2">
+                                <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1" />
+                                <Button
+                                    type="button" variant="outline"
+                                    onClick={handleConsultCarrierSefaz}
+                                    disabled={isConsultingCarrierSefaz}
+                                    className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9"
+                                >
+                                    {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                    SEFAZ
+                                </Button>
+                            </div>
                         </div>
 
-                        <div className="col-span-2 space-y-1.5">
+                        <div className="md:col-span-2 space-y-1.5">
                             <Label>Nome Transportadora</Label>
                             <Input {...register('carrierName')} className="text-xs" />
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <Label>Observações Adicionais / Instruções de Entrega</Label>
-                        <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs" />
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                        <div className="space-y-1.5">
+                            <Label>Placa do Veículo</Label>
+                            <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs" />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label>UF da Placa</Label>
+                            <Select value={watch('vehiclePlateState')} onValueChange={(val) => setValue('vehiclePlateState', val)}>
+                                <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="md:col-span-2 space-y-1.5">
+                            <Label>Observações Adicionais / Instruções de Entrega</Label>
+                            <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs" />
+                        </div>
                     </div>
-                </div>
-
-                {/* BLOCO 4: ITENS DO PEDIDO */}
-                <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                    <div className="flex items-center justify-between border-b pb-3">
-                        <div>
-                            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                                <PackagePlus className="text-orange-600" size={18} /> 4. Itens do Pedido ({fields.length})
-                            </h3>
-                            <p className="text-xs text-slate-500">Selecione os produtos cadastrados do depositante e as quantidades desejadas.</p>
-                        </div>
-
-                        <Button
-                            type="button"
-                            onClick={() => append({ productId: '', lineNumber: fields.length + 1, quantity: 1, unitValue: 0 })}
-                            disabled={!selectedCustomerId || isLoadingProducts}
-                            className="bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100 text-xs h-8"
-                        >
-                            <Plus size={14} className="mr-1 text-orange-600" /> Adicionar Produto
-                        </Button>
-                    </div>
-
-                    {errors.items && <p className="text-xs text-rose-500 font-semibold">{errors.items.root?.message || 'Verifique os produtos informados.'}</p>}
-
-                    {!selectedCustomerId ? (
-                        <div className="p-8 text-center text-slate-400 border-2 border-dashed rounded-xl bg-slate-50 text-xs">
-                            Selecione o <strong>Depositante</strong> no bloco 1 para carregar a lista de produtos disponíveis.
-                        </div>
-                    ) : (
-                        <div className="border border-slate-200 rounded-lg overflow-hidden">
-                            <Table>
-                                <TableHeader className="bg-slate-50">
-                                    <TableRow>
-                                        <TableHead className="w-12">#</TableHead>
-                                        <TableHead>Produto / SKU *</TableHead>
-                                        <TableHead className="w-36">Quantidade *</TableHead>
-                                        <TableHead className="w-36">Valor Unitário (R$)</TableHead>
-                                        <TableHead className="w-12 text-right"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {fields.map((item, index) => (
-                                        <TableRow key={item.id}>
-                                            <TableCell className="font-mono font-bold text-slate-500 text-xs">
-                                                #{index + 1}
-                                            </TableCell>
-
-                                            <TableCell>
-                                                <Select
-                                                    value={watch(`items.${index}.productId`)}
-                                                    onValueChange={(v) => handleProductChange(index, v)}
-                                                >
-                                                    <SelectTrigger className={errors.items?.[index]?.productId ? 'border-rose-500' : ''}>
-                                                        <SelectValue placeholder={isLoadingProducts ? "Carregando produtos..." : "Selecione o produto SKU..."} />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {products.map(p => (
-                                                            <SelectItem key={p.id} value={p.id}>
-                                                                <span className="font-mono font-bold">{p.sku}</span> - {p.description}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-
-                                            <TableCell>
-                                                <Input
-                                                    type="number"
-                                                    step="0.0001"
-                                                    {...register(`items.${index}.quantity`)}
-                                                    className="font-mono text-xs"
-                                                />
-                                            </TableCell>
-
-                                            <TableCell>
-                                                <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    {...register(`items.${index}.unitValue`)}
-                                                    className="font-mono text-xs"
-                                                />
-                                            </TableCell>
-
-                                            <TableCell className="text-right">
-                                                {fields.length > 1 && (
-                                                    <Button
-                                                        type="button" variant="ghost" size="sm"
-                                                        onClick={() => remove(index)}
-                                                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md"
-                                                    >
-                                                        <Trash2 size={15} />
-                                                    </Button>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    )}
                 </div>
             </form>
         </div>

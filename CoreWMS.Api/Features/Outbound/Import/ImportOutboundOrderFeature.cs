@@ -59,34 +59,53 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
             return Results.Forbid();
         }
 
-        // 3. Extração das Informações de Transportadora e Observações (infAdic / infCpl) diretamente do XML
+        // 3. Extração detalhada do XML (Ide, Transportadora, Veículo e Observações Fiscais)
         var doc = XDocument.Parse(xmlContent);
         var infNfe = doc.Descendants(Ns + "infNFe").FirstOrDefault();
+        var ide = infNfe?.Element(Ns + "ide");
+        var transp = infNfe?.Element(Ns + "transp");
+
+        string? invoiceNumber = ide?.Element(Ns + "nNF")?.Value;
+        string? invoiceSerie = ide?.Element(Ns + "serie")?.Value;
 
         string? carrierCnpjCpf = null;
         string? carrierName = null;
+        string? vehiclePlate = null;
+        string? vehiclePlateState = null;
 
-        var transporta = infNfe?.Element(Ns + "transp")?.Element(Ns + "transporta");
+        var transporta = transp?.Element(Ns + "transporta");
         if (transporta != null)
         {
             carrierCnpjCpf = transporta.Element(Ns + "CNPJ")?.Value ?? transporta.Element(Ns + "CPF")?.Value;
             carrierName = transporta.Element(Ns + "xNome")?.Value;
         }
 
+        var veicTransp = transp?.Element(Ns + "veicTransp");
+        if (veicTransp != null)
+        {
+            vehiclePlate = veicTransp.Element(Ns + "placa")?.Value;
+            vehiclePlateState = veicTransp.Element(Ns + "UF")?.Value;
+        }
+
         var additionalNotes = infNfe?.Element(Ns + "infAdic")?.Element(Ns + "infCpl")?.Value;
 
-        // Extrai o número da NF-e a partir da Chave de Acesso (posição 25 a 33)
-        var orderNumber = parsedData.AccessKey.Length >= 34
-            ? parsedData.AccessKey.Substring(25, 9).TrimStart('0')
-            : $"OUT-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}";
+        // Número da Ordem de Saída
+        var orderNumber = !string.IsNullOrWhiteSpace(invoiceNumber)
+            ? invoiceNumber.TrimStart('0')
+            : (parsedData.AccessKey.Length >= 34 ? parsedData.AccessKey.Substring(25, 9).TrimStart('0') : $"OUT-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}");
 
-        // 4. Criação da Ordem de Saída com todos os metadados e o XML integral
+        bool isReturnToCustomer = parsedData.DestCnpj == customer.Cnpj;
+
+        // 4. Instanciação da Ordem de Saída com todos os dados fiscais e logísticos
         var order = new OutboundOrder(
             companyId,
             customer.Id,
             orderNumber,
+            invoiceNumber,
+            invoiceSerie,
             parsedData.AccessKey,
-            xmlContent, // Salva o XML inteiro do cliente
+            xmlContent,
+            isReturnToCustomer,
             parsedData.DestCnpj,
             parsedData.DestName,
             parsedData.DestCity,
@@ -94,12 +113,14 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
             parsedData.DestZipCode,
             carrierCnpjCpf,
             carrierName,
+            vehiclePlate,
+            vehiclePlateState,
             additionalNotes,
             parsedData.IssueDate,
-            expectedShipDate: null
+            expectedShipDate: parsedData.IssueDate
         );
 
-        // 5. Validação dos Produtos (Vínculo SKU/GTIN + Depositante)
+        // 5. Mapeamento e Validação dos Produtos
         var existingProducts = await _db.Products
             .AsNoTracking()
             .Where(p => p.CompanyId == companyId && p.CustomerId == customer.Id)

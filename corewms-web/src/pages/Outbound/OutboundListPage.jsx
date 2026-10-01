@@ -235,7 +235,7 @@ export default function OutboundListPage() {
                                                 <ArrowUpFromLine size={16} />
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="font-bold text-slate-900 font-mono">NF {order.orderNumber}</span>
+                                                <span className="font-bold text-slate-900 font-mono">{order.orderNumber}</span>
                                                 <span className="text-xs text-slate-400">
                                                     {order.issueDate ? new Date(order.issueDate).toLocaleDateString('pt-BR') : '-'}
                                                 </span>
