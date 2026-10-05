@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban, PackageCheck, Plus, Play, Box, CheckCircle2 } from 'lucide-react';
+import { Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban, PackageCheck, Plus, Play, Box, CheckCircle2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
 
@@ -24,13 +24,13 @@ export default function OutboundListPage() {
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [orderToCancel, setOrderToCancel] = useState(null);
+    const [orderToDelete, setOrderToDelete] = useState(null);
 
     const [orders, setOrders] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Carrega a lista resumida de depositantes para o filtro
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
             .then(res => setCustomers(res || []))
@@ -65,7 +65,6 @@ export default function OutboundListPage() {
         loadOrders();
     }, [page, customerFilter, statusFilter]);
 
-    // Executa Alocação FEFO/FIFO
     const handleAllocateOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -81,7 +80,6 @@ export default function OutboundListPage() {
         }
     };
 
-    // Expedir Definitivo
     const handleShipOrder = async (orderId) => {
         try {
             setIsLoading(true);
@@ -97,7 +95,6 @@ export default function OutboundListPage() {
         }
     };
 
-    // Cancelar Pedido
     const handleCancelOrder = async () => {
         if (!orderToCancel) return;
         try {
@@ -111,6 +108,23 @@ export default function OutboundListPage() {
             loadOrders();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao cancelar pedido.');
+            setIsLoading(false);
+        }
+    };
+
+    const handleDeleteOrder = async () => {
+        if (!orderToDelete) return;
+        try {
+            setIsLoading(true);
+            await customInstance({
+                url: `/api/outbound/orders/${orderToDelete.id}`,
+                method: 'DELETE'
+            });
+            toast.success('Ordem de saída excluída permanentemente.');
+            setOrderToDelete(null);
+            loadOrders();
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao excluir ordem de saída.');
             setIsLoading(false);
         }
     };
@@ -138,7 +152,6 @@ export default function OutboundListPage() {
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            {/* CABEÇALHO PADRONIZADO */}
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Outbound (Expedição)</h1>
@@ -161,9 +174,7 @@ export default function OutboundListPage() {
                 </div>
             </div>
 
-            {/* CONTAINER DA TABELA PADRONIZADO */}
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {/* BARRA DE FILTROS */}
                 <div className="p-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50 shrink-0">
                     <div className="relative flex-1 max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -208,7 +219,6 @@ export default function OutboundListPage() {
                     </div>
                 </div>
 
-                {/* TABELA DE ORDENS */}
                 <div className="flex-1 overflow-auto">
                     <Table>
                         <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-xs z-10">
@@ -226,7 +236,7 @@ export default function OutboundListPage() {
                             {isLoading ? (
                                 <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
                             ) : orders.length === 0 ? (
-                                <TableRow><TableCell colSpan={7} className="h-24 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={7} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
                             ) : orders.map((order) => (
                                 <TableRow key={order.id} className="hover:bg-slate-50/50 transition-colors">
                                     <TableCell>
@@ -260,7 +270,6 @@ export default function OutboundListPage() {
                                         {renderStatusBadge(order.status)}
                                     </TableCell>
                                     <TableCell className="text-right space-x-1">
-                                        {/* Ação 1: Alocar Estoque FEFO/FIFO */}
                                         {order.status === 'Pending' && (
                                             <Button
                                                 size="sm"
@@ -271,7 +280,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Ação 2: Ir para Coletor de Separação */}
                                         {(order.status === 'Allocated' || order.status === 'Picking') && (
                                             <Button
                                                 size="sm"
@@ -282,7 +290,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Ação 3: Ir para Conferência / Packing */}
                                         {order.status === 'Picking' && (
                                             <Button
                                                 size="sm"
@@ -293,7 +300,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Ação 4: Expedir na Doca */}
                                         {order.status === 'ReadyToShip' && (
                                             <Button
                                                 size="sm"
@@ -304,7 +310,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Botão Ver Detalhes */}
                                         <Button
                                             size="sm"
                                             variant="outline"
@@ -314,16 +319,29 @@ export default function OutboundListPage() {
                                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                                         </Button>
 
-                                        {/* Botão Cancelar */}
+                                        {/* Botão Cancelar (Apenas se não faturado ou cancelado) */}
                                         {order.status !== 'Shipped' && order.status !== 'Canceled' && (
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => setOrderToCancel(order)}
-                                                className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                className="text-amber-600 hover:bg-amber-50 hover:text-amber-700"
                                                 title="Cancelar Pedido"
                                             >
                                                 <Ban className="h-4 w-4" />
+                                            </Button>
+                                        )}
+
+                                        {/* Botão Excluir (Apenas se já estiver Cancelado) */}
+                                        {order.status === 'Canceled' && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setOrderToDelete(order)}
+                                                className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                                title="Excluir Ordem Cancelada"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
                                             </Button>
                                         )}
                                     </TableCell>
@@ -333,7 +351,6 @@ export default function OutboundListPage() {
                     </Table>
                 </div>
 
-                {/* RODAPÉ DE PAGINAÇÃO */}
                 {totalCount > 0 && (
                     <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
                         <span className="text-xs text-slate-500 font-medium">
@@ -360,8 +377,26 @@ export default function OutboundListPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={isLoading}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleCancelOrder} disabled={isLoading} className="bg-rose-600 hover:bg-rose-700 text-white">
+                        <AlertDialogAction onClick={handleCancelOrder} disabled={isLoading} className="bg-amber-600 hover:bg-amber-700 text-white">
                             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Modal de Exclusão Definitiva */}
+            <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir definitivamente a ordem cancelada <strong className="text-slate-800">{orderToDelete?.orderNumber}</strong>? Esta ação removerá o registro do sistema e não poderá ser desfeita.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteOrder} disabled={isLoading} className="bg-rose-600 hover:bg-rose-700 text-white">
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir Definitivamente'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

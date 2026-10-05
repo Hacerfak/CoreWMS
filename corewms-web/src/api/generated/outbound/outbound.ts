@@ -24,6 +24,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddOutboundOrderItemsBatchCommand,
   CreateOutboundOrderCommand,
   GetApiOutboundOrdersParams,
   PackOrderCommand,
@@ -265,6 +266,68 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiOutboundPackingPackMutationOptions(options), queryClient);
     }
+    export const postApiOutboundOrdersOrderIdItemsBatch = (
+    orderId: string,
+    addOutboundOrderItemsBatchCommand: AddOutboundOrderItemsBatchCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/items/batch`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addOutboundOrderItemsBatchCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundOrdersOrderIdItemsBatchMutationKey = () => ['postApiOutboundOrdersOrderIdItemsBatch'] as const;
+
+export const getPostApiOutboundOrdersOrderIdItemsBatchMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, TError,PostApiOutboundOrdersOrderIdItemsBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, TError,PostApiOutboundOrdersOrderIdItemsBatchMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundOrdersOrderIdItemsBatchMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, PostApiOutboundOrdersOrderIdItemsBatchMutationVariables> = (props) => {
+          const {orderId,data} = props ?? {};
+
+          return  postApiOutboundOrdersOrderIdItemsBatch(orderId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundOrdersOrderIdItemsBatchMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>>
+    export type PostApiOutboundOrdersOrderIdItemsBatchMutationBody = AddOutboundOrderItemsBatchCommand
+    export type PostApiOutboundOrdersOrderIdItemsBatchMutationError = unknown
+    export type PostApiOutboundOrdersOrderIdItemsBatchMutationVariables = {orderId: string;data: AddOutboundOrderItemsBatchCommand}
+
+    export const usePostApiOutboundOrdersOrderIdItemsBatch = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, TError,PostApiOutboundOrdersOrderIdItemsBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>,
+        TError,
+        PostApiOutboundOrdersOrderIdItemsBatchMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundOrdersOrderIdItemsBatchMutationOptions(options), queryClient);
+    }
     export const deleteApiOutboundOrdersIdCancel = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -472,6 +535,151 @@ export function useGetApiOutboundOrders<TData = Awaited<ReturnType<typeof getApi
 
 
 
+export const deleteApiOutboundOrdersId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiOutboundOrdersIdMutationKey = () => ['deleteApiOutboundOrdersId'] as const;
+
+export const getDeleteApiOutboundOrdersIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersId>>, TError,DeleteApiOutboundOrdersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersId>>, TError,DeleteApiOutboundOrdersIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiOutboundOrdersIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiOutboundOrdersId>>, DeleteApiOutboundOrdersIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiOutboundOrdersId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiOutboundOrdersIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiOutboundOrdersId>>>
+
+    export type DeleteApiOutboundOrdersIdMutationError = unknown
+    export type DeleteApiOutboundOrdersIdMutationVariables = {id: string}
+
+    export const useDeleteApiOutboundOrdersId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersId>>, TError,DeleteApiOutboundOrdersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiOutboundOrdersId>>,
+        TError,
+        DeleteApiOutboundOrdersIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiOutboundOrdersIdMutationOptions(options), queryClient);
+    }
+    export const getApiOutboundOrdersId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${id}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiOutboundOrdersIdQueryKey = (id: string,) => {
+    return [
+    `/api/outbound/orders/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiOutboundOrdersIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundOrdersIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundOrdersId>>> = ({ signal }) => getApiOutboundOrdersId(id, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiOutboundOrdersIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundOrdersId>>>
+export type GetApiOutboundOrdersIdQueryError = unknown
+
+
+export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundOrdersId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundOrdersId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundOrdersId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundOrdersId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiOutboundOrdersIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export const getApiOutboundOrdersOrderIdAvailableStockProductId = (
     orderId: string,
     productId: string,
@@ -554,92 +762,6 @@ export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Aw
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetApiOutboundOrdersOrderIdAvailableStockProductIdQueryOptions(orderId,productId,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getApiOutboundOrdersId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/outbound/orders/${id}`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiOutboundOrdersIdQueryKey = (id: string,) => {
-    return [
-    `/api/outbound/orders/${id}`
-    ] as const;
-    }
-
-
-export const getGetApiOutboundOrdersIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundOrdersIdQueryKey(id);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundOrdersId>>> = ({ signal }) => getApiOutboundOrdersId(id, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiOutboundOrdersIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundOrdersId>>>
-export type GetApiOutboundOrdersIdQueryError = unknown
-
-
-export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
- id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiOutboundOrdersId>>,
-          TError,
-          Awaited<ReturnType<typeof getApiOutboundOrdersId>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiOutboundOrdersId>>,
-          TError,
-          Awaited<ReturnType<typeof getApiOutboundOrdersId>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiOutboundOrdersIdQueryOptions(id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -121,4 +121,11 @@ public class OutboundOrder : AuditableEntity
         if (item == null) throw new ArgumentNullException(nameof(item));
         _items.Add(item);
     }
+
+    // Limpa a coleção interna para sincronização segura do Change Tracker
+    public void ClearItems()
+    {
+        _items.Clear();
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

@@ -5,6 +5,7 @@
  * OpenAPI spec version: v1
  */
 
+export * from './addOutboundOrderItemsBatchCommand';
 export * from './addStrictLpnRecordCommand';
 export * from './addVolumetricRecordCommand';
 export * from './applyFiscalAdjustmentCommand';
@@ -61,6 +62,7 @@ export * from './loginRequest';
 export * from './loginResponse';
 export * from './manifestInboundOrderCommand';
 export * from './moveHandlingUnitCommand';
+export * from './outboundOrderItemBatchDto';
 export * from './packOrderCommand';
 export * from './pickItemCommand';
 export * from './postApiCompaniesBody';
