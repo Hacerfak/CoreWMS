@@ -13,7 +13,6 @@ public record AvailableHuDto(
     string Lpn,
     string PackagingTypeCode,
     decimal CurrentQuantity,
-    decimal GrossWeight,
     string LocationPath
 );
 
@@ -26,18 +25,12 @@ public record StockReceiptGroupDto(
     List<AvailableHuDto> AvailableHus
 );
 
-public record CustomerOrderLimitsDto(
-    decimal? MaxWeightKg,
-    Dictionary<string, int> PackagingTypeLimits // Ex: { "PAL": 32, "CX": 1350 }
-);
-
 public record AvailableStockResponseDto(
     Guid ProductId,
     string Sku,
     string Description,
     string BaseUnit,
     string PickingStrategy,
-    CustomerOrderLimitsDto Limits,
     List<StockReceiptGroupDto> ReceiptGroups
 );
 
@@ -58,33 +51,19 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Busca a Ordem de Saída
         var order = await _db.OutboundOrders
             .AsNoTracking()
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
 
-        // 2. Busca o Produto e suas regras
         var product = await _db.Products
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == request.ProductId && p.CompanyId == companyId, ct);
 
         if (product == null) return Results.NotFound(new { Message = "Produto não encontrado." });
 
-        // 3. Busca os limites do Depositante (Peso + Limites por tipo de volume)
-        var customerLimits = await _db.Customers
-            .AsNoTracking()
-            .Where(c => c.Id == order.CustomerId && c.CompanyId == companyId)
-            .Select(c => new CustomerOrderLimitsDto(
-                c.MaxStockVolume, // Ou campo específico de Peso Máximo por Pedido
-                _db.Set<Entities.CustomerPackagingLimit>()
-                    .Where(l => l.CustomerId == c.Id)
-                    .ToDictionary(l => l.PackagingType.Code, l => l.MaxQuantityPerOrder)
-            ))
-            .FirstOrDefaultAsync(ct) ?? new CustomerOrderLimitsDto(null, new Dictionary<string, int>());
-
-        // 4. Busca os HUs em estoque disponíveis para este Produto + Depositante
+        // Busca HUs em estoque (Stored + Available + Saldo > 0)
         var huQuery = _db.HandlingUnits
             .AsNoTracking()
             .Include(h => h.CurrentLocation)
@@ -96,7 +75,7 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
                         h.QualityStatus == QualityStatus.Available &&
                         h.CurrentQuantity > 0);
 
-        // Aplicação da estratégia de ordenação (FIFO, FEFO, LIFO)
+        // Aplica ordenação pela estratégia logistica (FEFO, FIFO, LIFO)
         if (product.PickingStrategy == PickingStrategy.Fefo)
             huQuery = huQuery.OrderBy(h => h.ExpirationDate).ThenBy(h => h.CreatedAt);
         else if (product.PickingStrategy == PickingStrategy.Fifo)
@@ -106,7 +85,7 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
 
         var husList = await huQuery.ToListAsync(ct);
 
-        // 5. Agrupamento por Nota de Entrada / Lote
+        // Agrupamento por Nota de Entrada / Lote
         var receiptGroups = husList
             .GroupBy(h => new { h.ReceiptDocumentId, h.Batch, h.ExpirationDate })
             .Select(g => new StockReceiptGroupDto(
@@ -120,7 +99,6 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
                     h.Lpn,
                     h.PackagingType != null ? h.PackagingType.Code : "UN",
                     h.CurrentQuantity,
-                    h.GrossWeight,
                     h.CurrentLocation != null ? h.CurrentLocation.FullPath : "SEM ENDEREÇO"
                 )).ToList()
             )).ToList();
@@ -131,7 +109,6 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
             product.Description,
             product.BaseUnit,
             product.PickingStrategy.ToString(),
-            customerLimits,
             receiptGroups
         );
 

@@ -472,6 +472,99 @@ export function useGetApiOutboundOrders<TData = Awaited<ReturnType<typeof getApi
 
 
 
+export const getApiOutboundOrdersOrderIdAvailableStockProductId = (
+    orderId: string,
+    productId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/available-stock/${productId}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiOutboundOrdersOrderIdAvailableStockProductIdQueryKey = (orderId: string,
+    productId: string,) => {
+    return [
+    `/api/outbound/orders/${orderId}/available-stock/${productId}`
+    ] as const;
+    }
+
+
+export const getGetApiOutboundOrdersOrderIdAvailableStockProductIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError = unknown>(orderId: string,
+    productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundOrdersOrderIdAvailableStockProductIdQueryKey(orderId,productId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>> = ({ signal }) => getApiOutboundOrdersOrderIdAvailableStockProductId(orderId,productId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orderId !== null && orderId !== undefined && productId !== null && productId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiOutboundOrdersOrderIdAvailableStockProductIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>>
+export type GetApiOutboundOrdersOrderIdAvailableStockProductIdQueryError = unknown
+
+
+export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError = unknown>(
+ orderId: string,
+    productId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError = unknown>(
+ orderId: string,
+    productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError = unknown>(
+ orderId: string,
+    productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError = unknown>(
+ orderId: string,
+    productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiOutboundOrdersOrderIdAvailableStockProductIdQueryOptions(orderId,productId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export const getApiOutboundOrdersId = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
