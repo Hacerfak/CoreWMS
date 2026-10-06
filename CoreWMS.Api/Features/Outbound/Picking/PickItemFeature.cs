@@ -43,7 +43,7 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Carrega a Ordem e o Item
+        // 1. Carrega a Ordem e todos os seus Itens para validação de encerramento
         var order = await _db.OutboundOrders
             .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
@@ -55,13 +55,13 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
         var orderItem = order.Items.FirstOrDefault(i => i.Id == request.OrderItemId);
         if (orderItem == null) return Results.NotFound(new { Message = "Item do pedido não encontrado." });
 
-        // Valida se o item ainda tem saldo pendente para separação
+        // Valida se o item ainda possui quantidade pendente
         decimal pendingQty = orderItem.ExpectedQuantity - orderItem.PickedQuantity;
         if (pendingQty <= 0)
             return Results.BadRequest(new { Message = "A quantidade deste item já foi totalmente separada." });
 
         if (request.PickedQuantity > pendingQty)
-            return Results.BadRequest(new { Message = $"A quantidade informada ({request.PickedQuantity}) excede a quantidade pendente do item ({pendingQty})." });
+            return Results.BadRequest(new { Message = $"A quantidade informada ({request.PickedQuantity}) excede a quantidade pendente ({pendingQty})." });
 
         // 2. Busca e Valida a HU lida no Coletor
         var lpnClean = request.ScannedLpn.Trim().ToUpper();
@@ -90,44 +90,55 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
         if (request.PickedQuantity > freeQtyOnHu)
             return Results.BadRequest(new { Message = $"A etiqueta '{lpnClean}' não possui saldo livre suficiente. Disponível livre: {freeQtyOnHu}, Solicitado: {request.PickedQuantity}." });
 
-        // 4. Vinculação da Alocação / Troca Dinâmica
-        var existingUnpickedAlloc = await _db.OutboundAllocations
+        // 4. A) Registrar ou Consolidar a Linha SEPARADA (IsPicked = true)
+        var existingPickedAlloc = await _db.OutboundAllocations
             .FirstOrDefaultAsync(a => a.OutboundOrderId == order.Id &&
                                       a.OutboundOrderItemId == orderItem.Id &&
                                       a.HandlingUnitId == hu.Id &&
-                                      !a.IsPicked, ct);
+                                      a.IsPicked, ct);
 
-        if (existingUnpickedAlloc != null)
+        if (existingPickedAlloc != null)
         {
-            // O operador bipou a exata HU que estava pré-alocada
-            if (existingUnpickedAlloc.Quantity == request.PickedQuantity)
-            {
-                existingUnpickedAlloc.MarkAsPicked();
-            }
-            else if (existingUnpickedAlloc.Quantity > request.PickedQuantity)
-            {
-                // Abate parcial da sugestão e grava a fração separada
-                var remainingAllocQty = existingUnpickedAlloc.Quantity - request.PickedQuantity;
-                existingUnpickedAlloc.GetType().GetProperty("Quantity")?.SetValue(existingUnpickedAlloc, remainingAllocQty);
-
-                var pickedAlloc = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, request.PickedQuantity);
-                pickedAlloc.MarkAsPicked();
-                _db.OutboundAllocations.Add(pickedAlloc);
-            }
-            else
-            {
-                existingUnpickedAlloc.MarkAsPicked();
-            }
+            existingPickedAlloc.UpdateQuantity(existingPickedAlloc.Quantity + request.PickedQuantity);
         }
         else
         {
-            // Operador bipou uma HU diferente da sugerida (Troca / Escolha no Chão)
-            var newAlloc = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, request.PickedQuantity);
-            newAlloc.MarkAsPicked();
-            _db.OutboundAllocations.Add(newAlloc);
+            var pickedAlloc = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, request.PickedQuantity);
+            pickedAlloc.MarkAsPicked();
+            _db.OutboundAllocations.Add(pickedAlloc);
         }
 
-        // 5. Atualização dos Baldes do Item e Status da Ordem
+        // 4. B) ABATER ou ELIMINAR as Alocações Pendentes (IsPicked = false) deste Item
+        // Dá preferência para abater a pendência da mesma HU primeiro, depois as demais pendências
+        var unpickedAllocations = await _db.OutboundAllocations
+            .Where(a => a.OutboundOrderId == order.Id &&
+                        a.OutboundOrderItemId == orderItem.Id &&
+                        !a.IsPicked)
+            .OrderByDescending(a => a.HandlingUnitId == hu.Id)
+            .ThenBy(a => a.CreatedAt)
+            .ToListAsync(ct);
+
+        decimal remainingToAbate = request.PickedQuantity;
+
+        foreach (var unpickedAlloc in unpickedAllocations)
+        {
+            if (remainingToAbate <= 0) break;
+
+            if (unpickedAlloc.Quantity <= remainingToAbate)
+            {
+                // A coleta cobre ou excede o saldo da pendência -> Remove a pendência do banco!
+                remainingToAbate -= unpickedAlloc.Quantity;
+                _db.OutboundAllocations.Remove(unpickedAlloc);
+            }
+            else
+            {
+                // Abate parcial da pendência -> Reduz a quantidade restante
+                unpickedAlloc.UpdateQuantity(unpickedAlloc.Quantity - remainingToAbate);
+                remainingToAbate = 0;
+            }
+        }
+
+        // 5. Atualiza Baldes de Progresso do Item
         if (orderItem.AllocatedQuantity < orderItem.PickedQuantity + request.PickedQuantity)
         {
             decimal missingAlloc = (orderItem.PickedQuantity + request.PickedQuantity) - orderItem.AllocatedQuantity;
@@ -136,7 +147,12 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
 
         orderItem.AddPickedQuantity(request.PickedQuantity);
 
-        if (order.Status == OutboundOrderStatus.Allocated || order.Status == OutboundOrderStatus.Pending)
+        // 6. Atualização Automática do Status da Ordem Principal
+        if (order.Items.All(i => i.PickedQuantity >= i.ExpectedQuantity))
+        {
+            order.UpdateStatus(OutboundOrderStatus.Packing);
+        }
+        else if (order.Status == OutboundOrderStatus.Allocated || order.Status == OutboundOrderStatus.Pending)
         {
             order.UpdateStatus(OutboundOrderStatus.Picking);
         }
@@ -151,14 +167,19 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
         }
 
         decimal newPendingQty = orderItem.ExpectedQuantity - orderItem.PickedQuantity;
+        bool isOrderFullyPicked = order.Status == OutboundOrderStatus.Packing;
 
         return Results.Ok(new
         {
-            Message = $"Coleta de {request.PickedQuantity} realizada com sucesso do LPN {lpnClean}.",
+            Message = isOrderFullyPicked
+                ? $"Coleta efetuada! Todos os itens do pedido #{order.OrderNumber} foram separados com sucesso."
+                : $"Coleta de {request.PickedQuantity} realizada do LPN {lpnClean}.",
             OrderItemId = orderItem.Id,
             PickedQuantity = orderItem.PickedQuantity,
             PendingQuantity = newPendingQty,
-            IsItemFullyPicked = newPendingQty == 0
+            IsItemFullyPicked = newPendingQty == 0,
+            IsOrderFullyPicked = isOrderFullyPicked,
+            OrderStatus = order.Status.ToString()
         });
     }
 }

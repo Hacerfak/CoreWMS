@@ -15,17 +15,14 @@ public class OutboundAllocation : AuditableEntity
     public Guid HandlingUnitId { get; private set; }
     public HandlingUnit HandlingUnit { get; private set; } = null!;
 
-    // Precisão de 28,10 para suportar nosso fracionamento químico/agrícola
     public decimal Quantity { get; private set; }
-
-    // Status da tarefa (Se o operador já foi lá e bipou essa etiqueta)
     public bool IsPicked { get; private set; }
 
     protected OutboundAllocation() { }
 
     public OutboundAllocation(Guid outboundOrderId, Guid outboundOrderItemId, Guid handlingUnitId, decimal quantity)
     {
-        Id = FastGuid.NewPostgreSqlGuid(); // Garante ID válido antes da inserção no BD
+        Id = FastGuid.NewPostgreSqlGuid();
         OutboundOrderId = outboundOrderId;
         OutboundOrderItemId = outboundOrderItemId;
         HandlingUnitId = handlingUnitId;
@@ -38,6 +35,13 @@ public class OutboundAllocation : AuditableEntity
         if (orderItem == null) throw new ArgumentNullException(nameof(orderItem));
         OutboundOrderItemId = orderItem.Id;
         OutboundOrderItem = orderItem;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateQuantity(decimal newQuantity)
+    {
+        if (newQuantity <= 0) throw new ArgumentException("A quantidade deve ser maior que zero.");
+        Quantity = newQuantity;
         UpdatedAt = DateTime.UtcNow;
     }
 
