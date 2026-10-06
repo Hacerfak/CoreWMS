@@ -136,11 +136,11 @@ export default function OutboundListPage() {
             case 'Pending':
                 return <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-medium">Aguardando Alocação</Badge>;
             case 'Allocated':
-                return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Alocado (Pronto p/ Separar)</Badge>;
+                return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Pronto p/ Separar</Badge>;
             case 'Picking':
                 return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-medium">Em Separação</Badge>;
             case 'ReadyToShip':
-                return <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-medium">Na Doca (Pronto p/ Expedir)</Badge>;
+                return <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-medium">Pronto p/ Expedir</Badge>;
             case 'Shipped':
                 return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">Expedido</Badge>;
             case 'Canceled':
@@ -276,7 +276,7 @@ export default function OutboundListPage() {
                                                 onClick={() => handleAllocateOrder(order.id)}
                                                 className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs font-medium"
                                             >
-                                                <Play className="h-3.5 w-3.5 mr-1" /> Alocar FEFO
+                                                <Play className="h-3.5 w-3.5 mr-1" /> Alocar
                                             </Button>
                                         )}
 

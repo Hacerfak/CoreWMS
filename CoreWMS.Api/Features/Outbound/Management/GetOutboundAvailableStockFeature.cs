@@ -63,7 +63,7 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
 
         if (product == null) return Results.NotFound(new { Message = "Produto não encontrado." });
 
-        // Busca HUs em estoque (Stored + Available + Saldo > 0)
+        // Busca HUs em estoque descontando a quantidade que já está reservada em OutboundAllocations
         var huQuery = _db.HandlingUnits
             .AsNoTracking()
             .Include(h => h.CurrentLocation)
@@ -72,34 +72,39 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
                         h.CustomerId == order.CustomerId &&
                         h.ProductId == request.ProductId &&
                         h.Status == HuStatus.Stored &&
-                        h.QualityStatus == QualityStatus.Available &&
-                        h.CurrentQuantity > 0);
+                        h.QualityStatus == QualityStatus.Available)
+            .Select(h => new
+            {
+                Hu = h,
+                AllocatedQty = _db.OutboundAllocations.Where(a => a.HandlingUnitId == h.Id && !a.IsPicked).Sum(a => (decimal?)a.Quantity) ?? 0m
+            })
+            .Where(x => x.Hu.CurrentQuantity > x.AllocatedQty);
 
-        // Aplica ordenação pela estratégia logistica (FEFO, FIFO, LIFO)
+        // Aplica ordenação pela estratégia logística (FEFO, FIFO, LIFO)
         if (product.PickingStrategy == PickingStrategy.Fefo)
-            huQuery = huQuery.OrderBy(h => h.ExpirationDate).ThenBy(h => h.CreatedAt);
+            huQuery = huQuery.OrderBy(x => x.Hu.ExpirationDate).ThenBy(x => x.Hu.CreatedAt);
         else if (product.PickingStrategy == PickingStrategy.Fifo)
-            huQuery = huQuery.OrderBy(h => h.CreatedAt);
+            huQuery = huQuery.OrderBy(x => x.Hu.CreatedAt);
         else
-            huQuery = huQuery.OrderByDescending(h => h.CreatedAt);
+            huQuery = huQuery.OrderByDescending(x => x.Hu.CreatedAt);
 
         var husList = await huQuery.ToListAsync(ct);
 
         // Agrupamento por Nota de Entrada / Lote
         var receiptGroups = husList
-            .GroupBy(h => new { h.ReceiptDocumentId, h.Batch, h.ExpirationDate })
+            .GroupBy(h => new { h.Hu.ReceiptDocumentId, h.Hu.Batch, h.Hu.ExpirationDate })
             .Select(g => new StockReceiptGroupDto(
                 g.Key.ReceiptDocumentId,
-                g.First().Batch ?? "SEM LOTE",
-                g.First().CreatedAt,
+                g.First().Hu.Batch ?? "SEM LOTE",
+                g.First().Hu.CreatedAt,
                 g.Key.Batch,
                 g.Key.ExpirationDate,
-                g.Select(h => new AvailableHuDto(
-                    h.Id,
-                    h.Lpn,
-                    h.PackagingType != null ? h.PackagingType.Code : "UN",
-                    h.CurrentQuantity,
-                    h.CurrentLocation != null ? h.CurrentLocation.FullPath : "SEM ENDEREÇO"
+                g.Select(x => new AvailableHuDto(
+                    x.Hu.Id,
+                    x.Hu.Lpn,
+                    x.Hu.PackagingType != null ? x.Hu.PackagingType.Code : "UN",
+                    x.Hu.CurrentQuantity - x.AllocatedQty, // Retorna apenas o saldo livre não reservado
+                    x.Hu.CurrentLocation != null ? x.Hu.CurrentLocation.FullPath : "SEM ENDEREÇO"
                 )).ToList()
             )).ToList();
 

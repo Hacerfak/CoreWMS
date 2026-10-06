@@ -8,25 +8,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2, ArrowRight, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OutboundPickingPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
-    const [tasks, setTasks] = useState([]);
+    const [orderData, setOrderData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [activeTask, setActiveTask] = useState(null);
+    const [activeItem, setActiveItem] = useState(null);
 
-    // Form Bipagem
+    // Form Bipagem Coletor
     const [scannedLpn, setScannedLpn] = useState('');
-    const [pickedQuantity, setPickedQuantity] = useState(0);
+    const [pickedQuantity, setPickedQuantity] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // Override Warning Modal
-    const [overrideWarning, setOverrideWarning] = useState(null);
 
     const loadTasks = async () => {
         try {
@@ -35,9 +33,9 @@ export default function OutboundPickingPage() {
                 url: `/api/outbound/picking/${orderId}/tasks`,
                 method: 'GET'
             });
-            setTasks(res || []);
+            setOrderData(res);
         } catch {
-            toast.error('Erro ao carregar tarefas de separação.');
+            toast.error('Erro ao carregar dados de separação.');
         } finally {
             setIsLoading(false);
         }
@@ -47,17 +45,27 @@ export default function OutboundPickingPage() {
         if (orderId) loadTasks();
     }, [orderId]);
 
-    const handleExecuteScan = async (confirmOverride = false) => {
-        if (!activeTask || !scannedLpn) return;
+    const handleOpenScanDialog = (item) => {
+        setActiveItem(item);
+        const pending = item.expectedQuantity - item.pickedQuantity;
+        setPickedQuantity(pending > 0 ? pending.toString() : '');
+        setScannedLpn('');
+    };
+
+    const handleExecuteScan = async (e) => {
+        e?.preventDefault();
+        if (!activeItem || !scannedLpn || !pickedQuantity) return;
+
+        const qtyNum = parseFloat(pickedQuantity);
+        if (isNaN(qtyNum) || qtyNum <= 0) return toast.warning('Informe uma quantidade válida.');
 
         try {
             setIsSubmitting(true);
             const payload = {
                 orderId,
-                allocationId: activeTask.allocationId,
+                orderItemId: activeItem.orderItemId,
                 scannedLpn: scannedLpn.trim().toUpperCase(),
-                pickedQuantity: Number(pickedQuantity),
-                confirmOverride
+                pickedQuantity: qtyNum
             };
 
             const res = await customInstance({
@@ -66,153 +74,194 @@ export default function OutboundPickingPage() {
                 data: payload
             });
 
-            toast.success(res?.message || 'Item separado com sucesso!');
-            setActiveTask(null);
-            setOverrideWarning(null);
+            toast.success(res?.message || 'Coleta efetuada com sucesso!');
+            setActiveItem(null);
             setScannedLpn('');
             loadTasks();
         } catch (error) {
-            const errData = error.response?.data;
-            if (errData?.code === 'LPN_MISMATCH_WARNING') {
-                setOverrideWarning(errData.message);
-            } else {
-                toast.error(errData?.message || 'Erro ao bipar item.');
-            }
+            toast.error(error.response?.data?.message || 'Erro ao bipar LPN.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+                <p className="text-xs text-slate-500 font-medium">Carregando mapa de separação...</p>
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex items-center justify-between">
+            {/* CABEÇALHO */}
+            <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="sm" onClick={() => navigate('/outbound')} className="bg-white">
-                        <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
+                        <ArrowLeft className="h-4 w-4 mr-1.5" /> Voltar
                     </Button>
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                            <Box className="text-purple-600" size={24} /> Coletor de Separação (Picking)
-                        </h1>
-                        <p className="text-sm text-slate-500 mt-0.5">Siga a rota otimizada e bipe o LPN dos endereços sugeridos.</p>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                <Box className="text-purple-600" size={22} /> Coletor de Separação (Picking)
+                            </h1>
+                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs">
+                                Pedido #{orderData?.orderNumber}
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            Depositante: <strong>{orderData?.customerName}</strong>
+                        </p>
                     </div>
                 </div>
+
+                <Button onClick={() => navigate('/outbound')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
+                    <CheckCircle2 size={16} className="mr-1.5" /> Finalizar Separação
+                </Button>
             </div>
 
-            <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden">
-                <Table>
-                    <TableHeader className="bg-slate-50/80">
-                        <TableRow>
-                            <TableHead>Endereço / Rota</TableHead>
-                            <TableHead>SKU / Descrição</TableHead>
-                            <TableHead>LPN Sugerido</TableHead>
-                            <TableHead className="text-right">Qtd Solicitada</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right w-36">Ação</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isLoading ? (
-                            <TableRow><TableCell colSpan={6} className="h-28 text-center"><Loader2 className="h-6 w-6 animate-spin text-purple-600 mx-auto" /></TableCell></TableRow>
-                        ) : tasks.length === 0 ? (
-                            <TableRow><TableCell colSpan={6} className="h-28 text-center text-slate-500">Nenhuma tarefa de separação encontrada.</TableCell></TableRow>
-                        ) : tasks.map((t) => (
-                            <TableRow key={t.allocationId} className="hover:bg-slate-50/60">
-                                <TableCell>
-                                    <Badge variant="outline" className="bg-slate-50 font-mono text-slate-800 gap-1 text-xs">
-                                        <MapPin size={12} className="text-blue-600" /> {t.locationPath}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell>
-                                    <div className="flex flex-col">
-                                        <span className="font-bold font-mono text-slate-900">{t.skuCode}</span>
-                                        <span className="text-[10px] text-slate-400">{t.description}</span>
+            {/* LISTA DE ITENS DA ORDEM COM BARRA DE PROGRESSO E HUS */}
+            <div className="space-y-4">
+                {orderData?.items?.map((item) => {
+                    const percent = Math.min(100, (item.pickedQuantity / item.expectedQuantity) * 100);
+                    const isComplete = item.pickedQuantity >= item.expectedQuantity;
+                    const pendingQty = item.expectedQuantity - item.pickedQuantity;
+
+                    const pickedAllocations = item.allocations?.filter(a => a.isPicked) || [];
+                    const suggestedAllocations = item.allocations?.filter(a => !a.isPicked) || [];
+
+                    return (
+                        <Card key={item.orderItemId} className={`border transition-all ${isComplete ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-200 bg-white'}`}>
+                            <CardHeader className="p-4 border-b bg-slate-50/60 flex flex-row items-center justify-between">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-sm text-slate-900">{item.skuCode}</span>
+                                        <Badge variant="outline" className="text-[10px] font-mono">{item.baseUnit}</Badge>
+                                        {isComplete && <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px]"><Check size={12} className="mr-1" /> Concluído</Badge>}
                                     </div>
-                                </TableCell>
-                                <TableCell className="font-mono text-xs font-semibold text-purple-700">{t.expectedLpn}</TableCell>
-                                <TableCell className="text-right font-mono font-bold text-slate-900 text-xs">{t.quantityToPick}</TableCell>
-                                <TableCell>
-                                    <Badge className={`text-[10px] ${t.isPicked ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                                        {t.isPicked ? '✅ Separado' : '⏳ Pendente'}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    {!t.isPicked && (
+                                    <p className="text-xs text-slate-500">{item.description}</p>
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                    <div className="text-right font-mono text-xs">
+                                        <span className="font-bold text-slate-900">{item.pickedQuantity}</span> / {item.expectedQuantity} {item.baseUnit}
+                                        <span className="block text-[10px] text-slate-400 font-sans">
+                                            {isComplete ? 'Totalmente Separado' : `Pendente: ${pendingQty} ${item.baseUnit}`}
+                                        </span>
+                                    </div>
+
+                                    {!isComplete && (
                                         <Button
-                                            onClick={() => { setActiveTask(t); setPickedQuantity(t.quantityToPick); setScannedLpn(''); setIsCountModalOpen(true); }}
-                                            size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white"
+                                            onClick={() => handleOpenScanDialog(item)}
+                                            size="sm"
+                                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 px-4"
                                         >
-                                            <Barcode size={13} className="mr-1" /> Bipar LPN
+                                            <Barcode size={15} className="mr-1.5" /> Bipar LPN
                                         </Button>
                                     )}
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                                </div>
+                            </CardHeader>
+
+                            <CardContent className="p-4 space-y-3">
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-[11px] font-semibold text-slate-500">
+                                        <span>Progresso de Separação do SKU</span>
+                                        <span>{percent.toFixed(0)}%</span>
+                                    </div>
+                                    <Progress value={percent} className="h-1.5" />
+                                </div>
+
+                                {/* DETALHAMENTO DE HUS ORIGEM (SUGERIDAS X SEPARADAS) */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 text-xs">
+                                    {/* HUS JÁ SEPARADAS */}
+                                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-2">
+                                        <span className="font-bold text-slate-800 uppercase text-[10px] tracking-wider block flex items-center gap-1">
+                                            <CheckCircle2 size={13} className="text-emerald-600" /> HUs Coletadas ({pickedAllocations.length})
+                                        </span>
+                                        {pickedAllocations.length === 0 ? (
+                                            <p className="text-[11px] text-slate-400 italic">Nenhum LPN bipado ainda.</p>
+                                        ) : (
+                                            <div className="space-y-1 font-mono text-[11px]">
+                                                {pickedAllocations.map(a => (
+                                                    <div key={a.allocationId} className="flex justify-between items-center bg-white p-1.5 rounded border border-slate-200">
+                                                        <span>LPN: <strong>{a.lpn}</strong> ({a.locationPath})</span>
+                                                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">{a.quantity} {item.baseUnit}</Badge>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* HUS SUGERIDAS PELO WMS */}
+                                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-2">
+                                        <span className="font-bold text-slate-800 uppercase text-[10px] tracking-wider block flex items-center gap-1">
+                                            <MapPin size={13} className="text-blue-600" /> Sugestões de Rota no Armazém ({suggestedAllocations.length})
+                                        </span>
+                                        {suggestedAllocations.length === 0 ? (
+                                            <p className="text-[11px] text-slate-400 italic">Sem sugestões pendentes.</p>
+                                        ) : (
+                                            <div className="space-y-1 font-mono text-[11px]">
+                                                {suggestedAllocations.map(a => (
+                                                    <div key={a.allocationId} className="flex justify-between items-center bg-white p-1.5 rounded border border-slate-200">
+                                                        <span><strong>{a.lpn}</strong> @ {a.locationPath}</span>
+                                                        <span className="text-slate-600">{a.quantity} {item.baseUnit}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    );
+                })}
             </div>
 
             {/* MODAL BIPAGEM COLETOR */}
-            <Dialog open={Boolean(activeTask)} onOpenChange={() => setActiveTask(null)}>
+            <Dialog open={Boolean(activeItem)} onOpenChange={() => setActiveItem(null)}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
                         <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <Barcode className="text-purple-600" size={20} /> Bipagem de Picking
+                            <Barcode className="text-purple-600" size={20} /> Leitura de Etiqueta LPN
                         </DialogTitle>
                         <DialogDescription className="text-slate-500 text-xs">
-                            Endereço: <strong className="font-mono text-slate-800">{activeTask?.locationPath}</strong> | SKU: <strong className="font-mono text-slate-800">{activeTask?.skuCode}</strong>
+                            SKU: <strong className="font-mono text-slate-800">{activeItem?.skuCode}</strong> - {activeItem?.description}
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-2">
-                        {overrideWarning ? (
-                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs space-y-2 text-amber-900">
-                                <p className="font-bold flex items-center gap-1">
-                                    <AlertTriangle size={15} className="text-amber-600" /> Troca de Etiqueta Detectada!
-                                </p>
-                                <p>{overrideWarning}</p>
-                                <Button
-                                    onClick={() => handleExecuteScan(true)}
-                                    disabled={isSubmitting}
-                                    className="w-full bg-amber-600 hover:bg-amber-700 text-white h-8 text-xs mt-2"
-                                >
-                                    Confirmar Troca e Separar Novo LPN
-                                </Button>
-                            </div>
-                        ) : (
-                            <>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold text-slate-700">Código LPN Bipado *</Label>
-                                    <Input
-                                        placeholder="Bipe o código do palete..."
-                                        value={scannedLpn}
-                                        onChange={(e) => setScannedLpn(e.target.value)}
-                                        className="bg-white font-mono text-sm"
-                                    />
-                                </div>
+                    <form onSubmit={handleExecuteScan} className="space-y-4 py-2">
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-700">Código LPN Bipado (Etiqueta) *</Label>
+                            <Input
+                                placeholder="Bipe ou digite o LPN..."
+                                value={scannedLpn}
+                                onChange={(e) => setScannedLpn(e.target.value)}
+                                autoFocus
+                                className="bg-white font-mono text-sm h-10 border-slate-300 focus-visible:ring-purple-600"
+                            />
+                        </div>
 
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold text-slate-700">Quantidade Retirada *</Label>
-                                    <Input
-                                        type="number"
-                                        value={pickedQuantity}
-                                        onChange={(e) => setPickedQuantity(e.target.value)}
-                                        className="bg-white font-mono text-sm"
-                                    />
-                                </div>
-                            </>
-                        )}
-                    </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-slate-700">Quantidade Retirada ({activeItem?.baseUnit}) *</Label>
+                            <Input
+                                type="number"
+                                step="0.0001"
+                                value={pickedQuantity}
+                                onChange={(e) => setPickedQuantity(e.target.value)}
+                                className="bg-white font-mono text-sm h-10 border-slate-300"
+                            />
+                        </div>
 
-                    {!overrideWarning && (
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setActiveTask(null)} disabled={isSubmitting}>Cancelar</Button>
-                            <Button onClick={() => handleExecuteScan(false)} disabled={isSubmitting} className="bg-purple-600 hover:bg-purple-700 text-white">
+                        <DialogFooter className="pt-2">
+                            <Button type="button" variant="outline" onClick={() => setActiveItem(null)} disabled={isSubmitting}>Cancelar</Button>
+                            <Button type="submit" disabled={isSubmitting || !scannedLpn || !pickedQuantity} className="bg-purple-600 hover:bg-purple-700 text-white font-bold">
                                 {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                                Confirmar Coleta
+                                Confirmar Bipagem
                             </Button>
                         </DialogFooter>
-                    )}
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

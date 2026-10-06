@@ -5,10 +5,9 @@
  * OpenAPI spec version: v1
  */
 
-export interface PickItemCommand {
+export interface ReserveClosedVolumesCommand {
   orderId?: string;
-  orderItemId?: string;
+  productId?: string;
   /** @nullable */
-  scannedLpn?: string | null;
-  pickedQuantity?: number;
+  handlingUnitIds?: string[] | null;
 }

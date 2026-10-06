@@ -1,5 +1,6 @@
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Inventory.Entities;
+using SecurityDriven;
 
 namespace CoreWMS.Api.Features.Outbound.Entities;
 
@@ -24,11 +25,20 @@ public class OutboundAllocation : AuditableEntity
 
     public OutboundAllocation(Guid outboundOrderId, Guid outboundOrderItemId, Guid handlingUnitId, decimal quantity)
     {
+        Id = FastGuid.NewPostgreSqlGuid(); // Garante ID válido antes da inserção no BD
         OutboundOrderId = outboundOrderId;
         OutboundOrderItemId = outboundOrderItemId;
         HandlingUnitId = handlingUnitId;
         Quantity = quantity;
         IsPicked = false;
+    }
+
+    public void BindToOrderItem(OutboundOrderItem orderItem)
+    {
+        if (orderItem == null) throw new ArgumentNullException(nameof(orderItem));
+        OutboundOrderItemId = orderItem.Id;
+        OutboundOrderItem = orderItem;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void MarkAsPicked()

@@ -84,6 +84,8 @@ export * from './refreshTokenCommand';
 export * from './refreshTokenRequest';
 export * from './refreshTokenResponse';
 export * from './releaseHandlingUnitCommand';
+export * from './reserveClosedVolumesCommand';
+export * from './reserveFractionalCommand';
 export * from './resetUserPasswordRequest';
 export * from './rollbackHandlingUnitsCommand';
 export * from './sendTestPrintCommand';

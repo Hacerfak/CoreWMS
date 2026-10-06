@@ -34,6 +34,7 @@ public class OutboundOrderItem : AuditableEntity
 
     public OutboundOrderItem(Guid outboundOrderId, Guid productId, int lineNumber, string skuCode, decimal expectedQuantity, decimal unitValue)
     {
+        Id = FastGuid.NewPostgreSqlGuid(); // Garante ID válido antes de persistir relacionamentos
         OutboundOrderId = outboundOrderId;
         ProductId = productId;
         LineNumber = lineNumber;
@@ -45,6 +46,15 @@ public class OutboundOrderItem : AuditableEntity
         PickedQuantity = 0;
         PackedQuantity = 0;
         Status = OutboundOrderItemStatus.Pending;
+    }
+
+    public void IncreaseExpectedQuantity(decimal additionalQuantity)
+    {
+        if (additionalQuantity <= 0) throw new ArgumentException("A quantidade adicional deve ser maior que zero.");
+        ExpectedQuantity += additionalQuantity;
+        if (AllocatedQuantity < ExpectedQuantity) Status = OutboundOrderItemStatus.Pending;
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 
     public void AddAllocatedQuantity(decimal quantity)

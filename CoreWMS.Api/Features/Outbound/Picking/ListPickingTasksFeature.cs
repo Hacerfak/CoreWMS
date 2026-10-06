@@ -6,6 +6,39 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Picking;
 
+public record PickingAllocatedHuDto(
+    Guid AllocationId,
+    Guid HandlingUnitId,
+    string Lpn,
+    string? LocationPath,
+    string? Batch,
+    DateTime? ExpirationDate,
+    decimal Quantity,
+    bool IsPicked
+);
+
+public record PickingItemTaskDto(
+    Guid OrderItemId,
+    Guid ProductId,
+    string SkuCode,
+    string Description,
+    string BaseUnit,
+    decimal ExpectedQuantity,
+    decimal AllocatedQuantity,
+    decimal PickedQuantity,
+    string Status,
+    List<PickingAllocatedHuDto> Allocations
+);
+
+public record PickingOrderSummaryDto(
+    Guid OrderId,
+    string OrderNumber,
+    string CustomerName,
+    string? DestinationName,
+    string Status,
+    List<PickingItemTaskDto> Items
+);
+
 public record ListPickingTasksQuery(Guid OrderId) : IRequest<IResult>;
 
 public class ListPickingTasksHandler : IRequestHandler<ListPickingTasksQuery, IResult>
@@ -23,23 +56,61 @@ public class ListPickingTasksHandler : IRequestHandler<ListPickingTasksQuery, IR
     {
         var companyId = _tenant.GetCompanyId();
 
-        var tasks = await _db.OutboundAllocations
+        var order = await _db.OutboundOrders
+            .AsNoTracking()
+            .Include(o => o.Customer)
+            .Include(o => o.Items)
+                .ThenInclude(i => i.Product)
+            .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.OrderId, ct);
+
+        if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
+
+        var allocations = await _db.OutboundAllocations
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
                 .ThenInclude(h => h.CurrentLocation)
-            .Include(a => a.OutboundOrderItem)
-                .ThenInclude(i => i.Product)
-            .Where(a => a.OutboundOrder.CompanyId == companyId && a.OutboundOrderId == request.OrderId)
-            .OrderBy(a => a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "ZZZ")
-            .Select(a => new PickingTaskDto(
-                a.Id, a.OutboundOrderItemId, a.OutboundOrderItem.SkuCode, a.OutboundOrderItem.Product.Description,
-                a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
-                a.HandlingUnit.Lpn, a.HandlingUnit.Batch, a.HandlingUnit.ExpirationDate,
-                a.Quantity, a.IsPicked
-            ))
+            .Where(a => a.OutboundOrderId == order.Id)
             .ToListAsync(ct);
 
-        return Results.Ok(tasks);
+        var itemTasks = order.Items.OrderBy(i => i.LineNumber).Select(item =>
+        {
+            var itemAllocations = allocations
+                .Where(a => a.OutboundOrderItemId == item.Id)
+                .Select(a => new PickingAllocatedHuDto(
+                    a.Id,
+                    a.HandlingUnitId,
+                    a.HandlingUnit.Lpn,
+                    a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
+                    a.HandlingUnit.Batch,
+                    a.HandlingUnit.ExpirationDate,
+                    a.Quantity,
+                    a.IsPicked
+                )).ToList();
+
+            return new PickingItemTaskDto(
+                item.Id,
+                item.ProductId,
+                item.SkuCode,
+                item.Product != null ? item.Product.Description : item.SkuCode,
+                item.Product != null ? item.Product.BaseUnit : "UN",
+                item.ExpectedQuantity,
+                item.AllocatedQuantity,
+                item.PickedQuantity,
+                item.Status.ToString(),
+                itemAllocations
+            );
+        }).ToList();
+
+        var result = new PickingOrderSummaryDto(
+            order.Id,
+            order.OrderNumber,
+            order.Customer.CorporateName,
+            order.DestinationName,
+            order.Status.ToString(),
+            itemTasks
+        );
+
+        return Results.Ok(result);
     }
 }
 

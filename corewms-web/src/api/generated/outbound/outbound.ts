@@ -24,12 +24,13 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AddOutboundOrderItemsBatchCommand,
   CreateOutboundOrderCommand,
   GetApiOutboundOrdersParams,
   PackOrderCommand,
   PickItemCommand,
-  PostApiOutboundOrdersImportXmlBody
+  PostApiOutboundOrdersImportXmlBody,
+  ReserveClosedVolumesCommand,
+  ReserveFractionalCommand
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -265,68 +266,6 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiOutboundPackingPackMutationOptions(options), queryClient);
-    }
-    export const postApiOutboundOrdersOrderIdItemsBatch = (
-    orderId: string,
-    addOutboundOrderItemsBatchCommand: AddOutboundOrderItemsBatchCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/outbound/orders/${orderId}/items/batch`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: addOutboundOrderItemsBatchCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiOutboundOrdersOrderIdItemsBatchMutationKey = () => ['postApiOutboundOrdersOrderIdItemsBatch'] as const;
-
-export const getPostApiOutboundOrdersOrderIdItemsBatchMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, TError,PostApiOutboundOrdersOrderIdItemsBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, TError,PostApiOutboundOrdersOrderIdItemsBatchMutationVariables, TContext> => {
-
-const mutationKey = getPostApiOutboundOrdersOrderIdItemsBatchMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, PostApiOutboundOrdersOrderIdItemsBatchMutationVariables> = (props) => {
-          const {orderId,data} = props ?? {};
-
-          return  postApiOutboundOrdersOrderIdItemsBatch(orderId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiOutboundOrdersOrderIdItemsBatchMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>>
-    export type PostApiOutboundOrdersOrderIdItemsBatchMutationBody = AddOutboundOrderItemsBatchCommand
-    export type PostApiOutboundOrdersOrderIdItemsBatchMutationError = unknown
-    export type PostApiOutboundOrdersOrderIdItemsBatchMutationVariables = {orderId: string;data: AddOutboundOrderItemsBatchCommand}
-
-    export const usePostApiOutboundOrdersOrderIdItemsBatch = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>, TError,PostApiOutboundOrdersOrderIdItemsBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsBatch>>,
-        TError,
-        PostApiOutboundOrdersOrderIdItemsBatchMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiOutboundOrdersOrderIdItemsBatchMutationOptions(options), queryClient);
     }
     export const deleteApiOutboundOrdersIdCancel = (
     id: string,
@@ -773,7 +712,191 @@ export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Aw
 
 
 
-export const postApiOutboundOrdersOrderIdShip = (
+export const postApiOutboundOrdersOrderIdItemsReserveVolumes = (
+    orderId: string,
+    reserveClosedVolumesCommand: ReserveClosedVolumesCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/items/reserve-volumes`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: reserveClosedVolumesCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundOrdersOrderIdItemsReserveVolumesMutationKey = () => ['postApiOutboundOrdersOrderIdItemsReserveVolumes'] as const;
+
+export const getPostApiOutboundOrdersOrderIdItemsReserveVolumesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveVolumes>>, TError,PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveVolumes>>, TError,PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundOrdersOrderIdItemsReserveVolumesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveVolumes>>, PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationVariables> = (props) => {
+          const {orderId,data} = props ?? {};
+
+          return  postApiOutboundOrdersOrderIdItemsReserveVolumes(orderId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveVolumes>>>
+    export type PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationBody = ReserveClosedVolumesCommand
+    export type PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationError = unknown
+    export type PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationVariables = {orderId: string;data: ReserveClosedVolumesCommand}
+
+    export const usePostApiOutboundOrdersOrderIdItemsReserveVolumes = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveVolumes>>, TError,PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveVolumes>>,
+        TError,
+        PostApiOutboundOrdersOrderIdItemsReserveVolumesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundOrdersOrderIdItemsReserveVolumesMutationOptions(options), queryClient);
+    }
+    export const postApiOutboundOrdersOrderIdItemsReserveFractional = (
+    orderId: string,
+    reserveFractionalCommand: ReserveFractionalCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/items/reserve-fractional`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: reserveFractionalCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundOrdersOrderIdItemsReserveFractionalMutationKey = () => ['postApiOutboundOrdersOrderIdItemsReserveFractional'] as const;
+
+export const getPostApiOutboundOrdersOrderIdItemsReserveFractionalMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveFractional>>, TError,PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveFractional>>, TError,PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundOrdersOrderIdItemsReserveFractionalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveFractional>>, PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationVariables> = (props) => {
+          const {orderId,data} = props ?? {};
+
+          return  postApiOutboundOrdersOrderIdItemsReserveFractional(orderId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveFractional>>>
+    export type PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationBody = ReserveFractionalCommand
+    export type PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationError = unknown
+    export type PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationVariables = {orderId: string;data: ReserveFractionalCommand}
+
+    export const usePostApiOutboundOrdersOrderIdItemsReserveFractional = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveFractional>>, TError,PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdItemsReserveFractional>>,
+        TError,
+        PostApiOutboundOrdersOrderIdItemsReserveFractionalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundOrdersOrderIdItemsReserveFractionalMutationOptions(options), queryClient);
+    }
+    export const deleteApiOutboundOrdersOrderIdItemsOrderItemId = (
+    orderId: string,
+    orderItemId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/items/${orderItemId}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationKey = () => ['deleteApiOutboundOrdersOrderIdItemsOrderItemId'] as const;
+
+export const getDeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersOrderIdItemsOrderItemId>>, TError,DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersOrderIdItemsOrderItemId>>, TError,DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiOutboundOrdersOrderIdItemsOrderItemId>>, DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationVariables> = (props) => {
+          const {orderId,orderItemId} = props ?? {};
+
+          return  deleteApiOutboundOrdersOrderIdItemsOrderItemId(orderId,orderItemId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiOutboundOrdersOrderIdItemsOrderItemId>>>
+
+    export type DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationError = unknown
+    export type DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationVariables = {orderId: string;orderItemId: string}
+
+    export const useDeleteApiOutboundOrdersOrderIdItemsOrderItemId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersOrderIdItemsOrderItemId>>, TError,DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiOutboundOrdersOrderIdItemsOrderItemId>>,
+        TError,
+        DeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationOptions(options), queryClient);
+    }
+    export const postApiOutboundOrdersOrderIdShip = (
     orderId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
