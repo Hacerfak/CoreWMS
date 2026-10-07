@@ -34,6 +34,7 @@ export * from './createUserCommand';
 export * from './createWarehouseCommand';
 export * from './createZoneCommand';
 export * from './fiscalOperationType';
+export * from './fracionadoBoxPackingDto';
 export * from './generateBillingCycleCommand';
 export * from './getApiAuditLogsParams';
 export * from './getApiBillingCyclesParams';

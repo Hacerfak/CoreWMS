@@ -19,12 +19,17 @@ public class OutboundVolume : AuditableEntity
 
     protected OutboundVolume() { }
 
-    public OutboundVolume(Guid outboundOrderId, Guid packagingTypeId, string volumeLpn, decimal grossWeight, bool usedStretchFilm)
+    public OutboundVolume(
+        Guid outboundOrderId,
+        Guid packagingTypeId,
+        string volumeLpn,
+        decimal grossWeight = 0m,
+        bool usedStretchFilm = false)
     {
         OutboundOrderId = outboundOrderId;
         PackagingTypeId = packagingTypeId;
-        VolumeLpn = volumeLpn;
-        GrossWeight = grossWeight;
+        VolumeLpn = volumeLpn.Trim().ToUpper();
+        GrossWeight = grossWeight >= 0 ? grossWeight : 0m;
         UsedStretchFilm = usedStretchFilm;
     }
 }

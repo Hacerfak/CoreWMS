@@ -139,6 +139,8 @@ export default function OutboundListPage() {
                 return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Pronto p/ Separar</Badge>;
             case 'Picking':
                 return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-medium">Em Separação</Badge>;
+            case 'Packing':
+                return <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-medium">Aguardando Packing</Badge>;
             case 'ReadyToShip':
                 return <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-medium">Pronto p/ Expedir</Badge>;
             case 'Shipped':
@@ -211,6 +213,7 @@ export default function OutboundListPage() {
                                 <SelectItem value="Pending">Aguardando Alocação</SelectItem>
                                 <SelectItem value="Allocated">Alocado</SelectItem>
                                 <SelectItem value="Picking">Em Separação</SelectItem>
+                                <SelectItem value="Packing">Aguardando Packing</SelectItem>
                                 <SelectItem value="ReadyToShip">Pronto p/ Expedir</SelectItem>
                                 <SelectItem value="Shipped">Expedido</SelectItem>
                                 <SelectItem value="Canceled">Cancelado</SelectItem>
@@ -270,6 +273,7 @@ export default function OutboundListPage() {
                                         {renderStatusBadge(order.status)}
                                     </TableCell>
                                     <TableCell className="text-right space-x-1">
+                                        {/* Ação 1: Alocar Estoque quando o pedido entra zerado/pendente */}
                                         {order.status === 'Pending' && (
                                             <Button
                                                 size="sm"
@@ -280,6 +284,7 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
+                                        {/* Ação 2: Bipagem/Coletor de Separação */}
                                         {(order.status === 'Allocated' || order.status === 'Picking') && (
                                             <Button
                                                 size="sm"
@@ -290,7 +295,8 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {order.status === 'Picking' && (
+                                        {/* Ação 3: Iniciar Conferência & Packing */}
+                                        {order.status === 'Packing' && (
                                             <Button
                                                 size="sm"
                                                 onClick={() => navigate(`/outbound/packing/${order.id}`)}
@@ -300,6 +306,7 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
+                                        {/* Ação 4: Expedição Final na Doca */}
                                         {order.status === 'ReadyToShip' && (
                                             <Button
                                                 size="sm"

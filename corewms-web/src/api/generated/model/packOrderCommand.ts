@@ -4,12 +4,12 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
+import type { FracionadoBoxPackingDto } from './fracionadoBoxPackingDto';
 
 export interface PackOrderCommand {
   orderId?: string;
-  packagingTypeId?: string;
-  volumeCount?: number;
-  totalGrossWeight?: number;
-  usedStretchFilm?: boolean;
   dockLocationId?: string;
+  usedStretchFilm?: boolean;
+  /** @nullable */
+  fracionadoBoxes?: FracionadoBoxPackingDto[] | null;
 }
