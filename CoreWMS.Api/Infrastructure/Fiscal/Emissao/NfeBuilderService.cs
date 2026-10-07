@@ -40,12 +40,20 @@ public class NfeBuilderService
             .FirstOrDefaultAsync(o => o.Id == outboundOrderId, ct)
             ?? throw new InvalidOperationException("Pedido de saída não encontrado.");
 
+        if (order.Company == null)
+            throw new InvalidOperationException("A empresa emitente não está vinculada a este pedido.");
+
         var destState = !string.IsNullOrWhiteSpace(order.DestinationState)
             ? order.DestinationState.Trim().ToUpper()
             : (order.Customer?.State?.Trim().ToUpper() ?? "EX");
 
-        var isInterstate = order.Company.State.Trim().ToUpper() != destState;
+        var companyState = !string.IsNullOrWhiteSpace(order.Company.State)
+            ? order.Company.State.Trim().ToUpper()
+            : "RS";
 
+        var isInterstate = companyState != destState;
+
+        // Busca as chaves de acesso das NF-es de Entrada originais (NFref) para Devoluções/Retornos
         var originAccessKeys = await _db.OutboundAllocations
             .AsNoTracking()
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
@@ -65,7 +73,7 @@ public class NfeBuilderService
         nfe.infNFe.ide = BuildIde(order, originAccessKeys, destState);
         nfe.infNFe.emit = BuildEmitente(order.Company);
         nfe.infNFe.dest = BuildDestinatario(order);
-        nfe.infNFe.transp = BuildTransporte(order, order.Volumes.ToList());
+        nfe.infNFe.transp = BuildTransporte(order, order.Volumes?.ToList() ?? new List<OutboundVolume>());
 
         if (!string.IsNullOrWhiteSpace(order.AdditionalNotes))
         {
@@ -73,11 +81,25 @@ public class NfeBuilderService
             nfe.infNFe.infAdic.infCpl = order.AdditionalNotes.Trim();
         }
 
+        // Garante que a lista de itens da nota está instanciada antes de adicionar
+        nfe.infNFe.det = nfe.infNFe.det ?? new List<det>();
+
         int nItem = 1;
-        foreach (var item in order.Items.Where(i => i.PackedQuantity > 0))
+        var packedItems = order.Items.Where(i => i.PackedQuantity > 0).ToList();
+
+        if (!packedItems.Any())
         {
+            throw new InvalidOperationException("Nenhum item empacotado/separado foi encontrado para este pedido de saída.");
+        }
+
+        foreach (var item in packedItems)
+        {
+            if (item.Product == null)
+                throw new InvalidOperationException($"Produto não encontrado para o item SKU {item.SkuCode}.");
+
             var rule = await GetBestFiscalRuleAsync(order.CompanyId, order.CustomerId, destState, item.Product.Ncm, operationType, ct);
-            if (rule == null) throw new InvalidOperationException($"Nenhuma Regra Fiscal encontrada para o produto {item.Product.Sku}.");
+            if (rule == null)
+                throw new InvalidOperationException($"Nenhuma Regra Fiscal encontrada para o produto SKU {item.Product.Sku}.");
 
             var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode;
             var valorTotalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
@@ -90,14 +112,14 @@ public class NfeBuilderService
                     cProd = item.Product.Sku,
                     cEAN = cEan,
                     xProd = item.Product.Description,
-                    NCM = item.Product.Ncm ?? "00000000",
+                    NCM = string.IsNullOrWhiteSpace(item.Product.Ncm) ? "00000000" : item.Product.Ncm,
                     CFOP = isInterstate ? int.Parse(rule.CfopInterstate) : int.Parse(rule.CfopStateInternal),
-                    uCom = item.Product.BaseUnit,
+                    uCom = item.Product.BaseUnit ?? "UN",
                     qCom = item.PackedQuantity,
                     vUnCom = item.UnitValue,
                     vProd = valorTotalItem,
                     cEANTrib = cEan,
-                    uTrib = item.Product.BaseUnit,
+                    uTrib = item.Product.BaseUnit ?? "UN",
                     qTrib = item.PackedQuantity,
                     vUnTrib = item.UnitValue,
                     indTot = IndicadorTotal.ValorDoItemCompoeTotalNF
@@ -117,11 +139,10 @@ public class NfeBuilderService
         }
 
         var totalVProd = nfe.infNFe.det.Sum(d => d.prod.vProd);
-
-        var temReformaTributaria = nfe.infNFe.det.Any(d => d.imposto.IBSCBS != null);
-        var totalVBCIbsCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.vBC) : 0m;
-        var totalVIbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gIBSUF.vIBSUF) : 0m;
-        var totalVCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gCBS.vCBS) : 0m;
+        var temReformaTributaria = nfe.infNFe.det.Any(d => d.imposto?.IBSCBS != null);
+        var totalVBCIbsCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.vBC) : 0m;
+        var totalVIbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gIBSUF.vIBSUF) : 0m;
+        var totalVCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gCBS.vCBS) : 0m;
 
         nfe.infNFe.total = new total
         {
@@ -194,32 +215,38 @@ public class NfeBuilderService
 
     private ide BuildIde(OutboundOrder order, List<string> originAccessKeys, string destState)
     {
-        int nNf = 0;
-        if (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf))
+        int nNf = order.Company.NfeNextNumber;
+        if (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf) && parsedNf > 0)
         {
             nNf = parsedNf;
         }
 
-        int serie = 1;
-        if (!string.IsNullOrWhiteSpace(order.InvoiceSerie) && int.TryParse(order.InvoiceSerie, out var parsedSerie))
+        int serie = order.Company.NfeSerie;
+        if (!string.IsNullOrWhiteSpace(order.InvoiceSerie) && int.TryParse(order.InvoiceSerie, out var parsedSerie) && parsedSerie > 0)
         {
             serie = parsedSerie;
         }
 
+        var companyState = !string.IsNullOrWhiteSpace(order.Company.State) ? order.Company.State.Trim().ToUpper() : "RS";
+        if (!Enum.TryParse<DFe.Classes.Entidades.Estado>(companyState, out var ufEnum))
+        {
+            ufEnum = DFe.Classes.Entidades.Estado.RS;
+        }
+
         var ide = new ide
         {
-            cUF = Enum.Parse<DFe.Classes.Entidades.Estado>(order.Company.State.ToUpper()),
+            cUF = ufEnum,
             natOp = "RETORNO DE ARMAZEM GERAL",
             mod = ModeloDocumento.NFe,
             serie = serie,
             nNF = nNf,
             dhEmi = DateTimeOffset.Now,
             tpNF = TipoNFe.tnSaida,
-            idDest = order.Company.State.Trim().ToUpper() == destState ? DestinoOperacao.doInterna : DestinoOperacao.doInterestadual,
-            cMunFG = order.Company.CityCode,
+            idDest = companyState == destState ? DestinoOperacao.doInterna : DestinoOperacao.doInterestadual,
+            cMunFG = order.Company.CityCode > 0 ? order.Company.CityCode : 4305108,
             tpImp = TipoImpressao.tiRetrato,
             tpEmis = TipoEmissao.teNormal,
-            tpAmb = TipoAmbiente.Homologacao,
+            tpAmb = order.Company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao,
             finNFe = FinalidadeNFe.fnNormal,
             indFinal = ConsumidorFinal.cfNao,
             indPres = PresencaComprador.pcOutros,
@@ -227,9 +254,14 @@ public class NfeBuilderService
             verProc = "CoreWMS 1.0"
         };
 
-        foreach (var key in originAccessKeys)
+        if (originAccessKeys != null && originAccessKeys.Any())
         {
-            ide.NFref.Add(new NFref { refNFe = key });
+            ide.NFref = ide.NFref ?? new List<NFref>();
+            foreach (var key in originAccessKeys)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                    ide.NFref.Add(new NFref { refNFe = key.Trim() });
+            }
         }
 
         return ide;
@@ -237,25 +269,31 @@ public class NfeBuilderService
 
     private emit BuildEmitente(Features.Identity.Entities.Company company)
     {
+        var companyState = !string.IsNullOrWhiteSpace(company.State) ? company.State.Trim().ToUpper() : "RS";
+        if (!Enum.TryParse<DFe.Classes.Entidades.Estado>(companyState, out var ufEnum))
+        {
+            ufEnum = DFe.Classes.Entidades.Estado.RS;
+        }
+
         var foneLimpo = string.IsNullOrWhiteSpace(company.Phone) ? null : new string(company.Phone.Where(char.IsDigit).ToArray());
 
         return new emit
         {
-            CNPJ = company.Cnpj,
-            xNome = company.CorporateName,
+            CNPJ = company.Cnpj ?? "",
+            xNome = company.CorporateName ?? "",
             xFant = company.TradeName,
             IE = company.StateRegistration,
             CRT = CRT.SimplesNacional,
             enderEmit = new enderEmit
             {
-                xLgr = company.Street,
-                nro = company.Number,
+                xLgr = company.Street ?? "NÃO INFORMADO",
+                nro = company.Number ?? "S/N",
                 xCpl = company.Complement,
-                xBairro = company.Neighborhood,
-                cMun = company.CityCode,
-                xMun = company.CityName,
-                UF = Enum.Parse<DFe.Classes.Entidades.Estado>(company.State.ToUpper()),
-                CEP = company.ZipCode,
+                xBairro = company.Neighborhood ?? "NÃO INFORMADO",
+                cMun = company.CityCode > 0 ? company.CityCode : 4305108,
+                xMun = company.CityName ?? "NÃO INFORMADO",
+                UF = ufEnum,
+                CEP = company.ZipCode ?? "00000000",
                 cPais = 1058,
                 xPais = "BRASIL",
                 fone = string.IsNullOrEmpty(foneLimpo) ? null : long.Parse(foneLimpo)
@@ -269,13 +307,33 @@ public class NfeBuilderService
             ? order.DestinationName.Trim()
             : (order.Customer?.CorporateName ?? "NÃO INFORMADO");
 
+        string street = !string.IsNullOrWhiteSpace(order.DestinationStreet)
+            ? order.DestinationStreet.Trim()
+            : (order.Customer?.Street ?? "NÃO INFORMADO");
+
+        string number = !string.IsNullOrWhiteSpace(order.DestinationNumber)
+            ? order.DestinationNumber.Trim()
+            : (order.Customer?.Number ?? "S/N");
+
+        string? complement = !string.IsNullOrWhiteSpace(order.DestinationComplement)
+            ? order.DestinationComplement.Trim()
+            : order.Customer?.Complement;
+
+        string neighborhood = !string.IsNullOrWhiteSpace(order.DestinationNeighborhood)
+            ? order.DestinationNeighborhood.Trim()
+            : (order.Customer?.Neighborhood ?? "NÃO INFORMADO");
+
+        int cityCode = order.DestinationCityCode > 0
+            ? order.DestinationCityCode
+            : (order.Customer?.CityCode ?? 9999999);
+
         string city = !string.IsNullOrWhiteSpace(order.DestinationCity)
             ? order.DestinationCity.Trim()
             : (order.Customer?.CityName ?? "NÃO INFORMADO");
 
         string state = !string.IsNullOrWhiteSpace(order.DestinationState)
             ? order.DestinationState.Trim().ToUpper()
-            : (order.Customer?.State?.Trim().ToUpper() ?? "EX");
+            : (order.Customer?.State?.Trim().ToUpper() ?? "RS");
 
         string? cnpjCpf = !string.IsNullOrWhiteSpace(order.DestinationCnpjCpf)
             ? order.DestinationCnpjCpf.Trim()
@@ -285,16 +343,29 @@ public class NfeBuilderService
             ? order.DestinationZipCode.Trim()
             : order.Customer?.ZipCode;
 
+        string? ie = !string.IsNullOrWhiteSpace(order.DestinationStateRegistration)
+            ? order.DestinationStateRegistration.Trim()
+            : order.Customer?.StateRegistration;
+
+        indIEDest indIe = order.DestinationIeIndicator switch
+        {
+            1 => indIEDest.ContribuinteICMS,
+            2 => indIEDest.Isento,
+            _ => indIEDest.NaoContribuinte
+        };
+
         var d = new dest(VersaoServico.Versao400)
         {
             xNome = name,
-            indIEDest = indIEDest.NaoContribuinte,
+            IE = ie,
+            indIEDest = indIe,
             enderDest = new enderDest
             {
-                xLgr = order.Customer?.Street ?? "NÃO INFORMADO",
-                nro = order.Customer?.Number ?? "S/N",
-                xBairro = order.Customer?.Neighborhood ?? "NÃO INFORMADO",
-                cMun = order.Customer?.CityCode ?? 9999999,
+                xLgr = street,
+                nro = number,
+                xCpl = complement,
+                xBairro = neighborhood,
+                cMun = cityCode,
                 xMun = city,
                 UF = state,
                 CEP = zipCode,
@@ -315,18 +386,25 @@ public class NfeBuilderService
 
     private transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
     {
+        ModalidadeFrete modFrete = order.FreightModality switch
+        {
+            0 => ModalidadeFrete.mfContaEmitenteOumfContaRemetente,
+            1 => ModalidadeFrete.mfContaDestinatario,
+            2 => ModalidadeFrete.mfContaTerceiros,
+            _ => ModalidadeFrete.mfSemFrete
+        };
+
         var t = new transp
         {
-            modFrete = !string.IsNullOrWhiteSpace(order.CarrierCnpjCpf)
-                ? ModalidadeFrete.mfProprioContaDestinatario
-                : ModalidadeFrete.mfSemFrete
+            modFrete = modFrete
         };
 
         if (!string.IsNullOrWhiteSpace(order.CarrierCnpjCpf) || !string.IsNullOrWhiteSpace(order.CarrierName))
         {
             t.transporta = new transporta
             {
-                xNome = order.CarrierName?.Trim()
+                xNome = order.CarrierName?.Trim(),
+                IE = order.CarrierStateRegistration?.Trim()
             };
 
             if (!string.IsNullOrWhiteSpace(order.CarrierCnpjCpf))
@@ -337,7 +415,6 @@ public class NfeBuilderService
             }
         }
 
-        // Atribuição corrigida: passa a string diretamente
         if (!string.IsNullOrWhiteSpace(order.VehiclePlate))
         {
             t.veicTransp = new veicTransp
@@ -349,8 +426,10 @@ public class NfeBuilderService
             };
         }
 
-        if (volumes.Any())
+        // Garante a inicialização prévia da lista t.vol para evitar NullReferenceException
+        if (volumes != null && volumes.Any())
         {
+            t.vol = t.vol ?? new List<vol>();
             t.vol.Add(new vol
             {
                 qVol = volumes.Count,
@@ -377,7 +456,7 @@ public class NfeBuilderService
             COFINS = new COFINS { TipoCOFINS = new COFINSOutr { CST = CSTCOFINS.cofins99, vBC = 0, pCOFINS = 0, vCOFINS = 0 } }
         };
 
-        if (!string.IsNullOrEmpty(rule.CstIbs) || !string.IsNullOrEmpty(rule.CstCbs))
+        if (rule != null && (!string.IsNullOrEmpty(rule.CstIbs) || !string.IsNullOrEmpty(rule.CstCbs)))
         {
             var cstText = "cst" + (rule.CstIbs ?? "000");
             if (!Enum.TryParse<CSTIBSCBS>(cstText, true, out var parsedCst))
@@ -387,7 +466,6 @@ public class NfeBuilderService
 
             var aliqIbs = rule.AliqIbs > 0 ? rule.AliqIbs : 0.10m;
             var aliqCbs = rule.AliqCbs > 0 ? rule.AliqCbs : 0.90m;
-
             var vIbsUf = Math.Round(valorTotalItem * (aliqIbs / 100), 2);
             var vCbs = Math.Round(valorTotalItem * (aliqCbs / 100), 2);
 

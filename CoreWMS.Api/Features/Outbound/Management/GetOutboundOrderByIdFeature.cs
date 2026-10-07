@@ -42,6 +42,16 @@ public record OutboundOrderVolumeDetailDto(
     bool UsedStretchFilm
 );
 
+public record OutboundFiscalDocumentDto(
+    Guid Id,
+    string Type,
+    string Status,
+    string? AccessKey,
+    string? Protocol,
+    string? ReturnMessage,
+    DateTime CreatedAt
+);
+
 public record OutboundOrderFullDetailDto(
     Guid Id,
     Guid CustomerId,
@@ -77,7 +87,8 @@ public record OutboundOrderFullDetailDto(
     string? DockLocationName,
     bool HasRawXml,
     List<OutboundOrderItemDetailDto> Items,
-    List<OutboundOrderVolumeDetailDto> Volumes
+    List<OutboundOrderVolumeDetailDto> Volumes,
+    List<OutboundFiscalDocumentDto> FiscalDocuments
 );
 
 public record GetOutboundOrderByIdQuery(Guid Id) : IRequest<IResult>;
@@ -112,7 +123,6 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
             return Results.Forbid();
 
-        // Busca todas as alocações e HUs vinculadas
         var allocations = await _db.OutboundAllocations
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
@@ -161,6 +171,20 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             v.UsedStretchFilm
         )).ToList();
 
+        var fiscalDocDtos = await _db.OutboundFiscalDocuments
+            .AsNoTracking()
+            .Where(f => f.OutboundOrderId == order.Id)
+            .OrderByDescending(f => f.CreatedAt)
+            .Select(f => new OutboundFiscalDocumentDto(
+                f.Id,
+                f.Type.ToString(),
+                f.Status.ToString(),
+                f.AccessKey,
+                f.Protocol,
+                f.ReturnMessage,
+                f.CreatedAt
+            )).ToListAsync(ct);
+
         var dto = new OutboundOrderFullDetailDto(
             order.Id,
             order.CustomerId,
@@ -196,7 +220,8 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             order.DockLocation != null ? order.DockLocation.FullPath : null,
             !string.IsNullOrWhiteSpace(order.RawXml),
             itemDtos,
-            volumeDtos
+            volumeDtos,
+            fiscalDocDtos
         );
 
         return Results.Ok(dto);

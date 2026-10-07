@@ -13,15 +13,16 @@ public interface IZeusConfigurator
 {
     X509Certificate2 LoadCertificate(byte[] certBytes, string certPassword);
     ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente, byte[] certBytes, string certPassword);
-
-    // CORREÇÃO: Receber o ambiente dinamicamente
     ConfiguracaoServico GetCompanyConfiguration(Company company, TipoAmbiente ambiente);
 }
 
 public class ZeusConfigurator : IZeusConfigurator
 {
-    public ZeusConfigurator()
+    private readonly IWebHostEnvironment _env;
+
+    public ZeusConfigurator(IWebHostEnvironment env)
     {
+        _env = env;
 #pragma warning disable SYSLIB0014
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 #pragma warning restore SYSLIB0014
@@ -45,12 +46,21 @@ public class ZeusConfigurator : IZeusConfigurator
 
     public ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente, byte[] certBytes, string certPassword)
     {
+        string schemasPath = Path.Combine(_env.ContentRootPath, "Schemas");
+        if (!Directory.Exists(schemasPath))
+        {
+            schemasPath = Path.Combine(AppContext.BaseDirectory, "Schemas");
+        }
+
+        using var cert = LoadCertificate(certBytes, certPassword);
+
         return new ConfiguracaoServico
         {
             ValidarCertificadoDoServidor = false,
             DiretorioSalvarXml = "",
             SalvarXmlServicos = false,
             ValidarSchemas = false,
+            DiretorioSchemas = schemasPath,
             ProtocoloDeSeguranca = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13,
             RemoverAcentos = true,
             DefineVersaoServicosAutomaticamente = true,

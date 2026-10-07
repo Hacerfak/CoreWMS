@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, MapPin
+    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, MapPin, Save
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -25,7 +25,6 @@ const outboundOrderHeaderSchema = z.object({
     accessKey: z.string().optional().nullable(),
     isReturnToCustomer: z.boolean().default(false),
 
-    // Destinatário
     destinationCnpjCpf: z.string().optional().nullable(),
     destinationName: z.string().optional().nullable(),
     destinationStateRegistration: z.string().optional().nullable(),
@@ -39,7 +38,6 @@ const outboundOrderHeaderSchema = z.object({
     destinationState: z.string().optional().nullable(),
     destinationZipCode: z.string().optional().nullable(),
 
-    // Transportadora
     carrierCnpjCpf: z.string().optional().nullable(),
     carrierName: z.string().optional().nullable(),
     carrierStateRegistration: z.string().optional().nullable(),
@@ -50,14 +48,18 @@ const outboundOrderHeaderSchema = z.object({
 });
 
 export default function CreateOutboundOrderPage() {
+    const { id: orderId } = useParams();
     const navigate = useNavigate();
+    const isEditMode = !!orderId;
+
+    const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isConsultingDestSefaz, setIsConsultingDestSefaz] = useState(false);
     const [isConsultingCarrierSefaz, setIsConsultingCarrierSefaz] = useState(false);
 
     const [customers, setCustomers] = useState([]);
 
-    const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
+    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(outboundOrderHeaderSchema),
         defaultValues: {
             customerId: '',
@@ -96,14 +98,56 @@ export default function CreateOutboundOrderPage() {
     const carrierCnpjCpf = watch('carrierCnpjCpf');
     const carrierState = watch('vehiclePlateState');
 
-    // Carrega depositantes
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
             .then(res => setCustomers(res || []))
             .catch(() => toast.error('Erro ao carregar depositantes.'));
     }, []);
 
-    // Consulta SEFAZ Destinatário
+    // Carrega dados da ordem se for Edição
+    useEffect(() => {
+        if (isEditMode) {
+            setIsLoading(true);
+            customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
+                .then(order => {
+                    const formattedDate = order.expectedShipDate
+                        ? new Date(order.expectedShipDate).toISOString().split('T')[0]
+                        : '';
+
+                    reset({
+                        customerId: order.customerId || '',
+                        expectedShipDate: formattedDate,
+                        orderNumber: order.orderNumber || '',
+                        invoiceNumber: order.invoiceNumber || '',
+                        invoiceSerie: order.invoiceSerie || '',
+                        accessKey: order.accessKey || '',
+                        isReturnToCustomer: !!order.isReturnToCustomer,
+                        destinationCnpjCpf: order.destinationCnpjCpf || '',
+                        destinationName: order.destinationName || '',
+                        destinationStateRegistration: order.destinationStateRegistration || '',
+                        destinationIeIndicator: order.destinationIeIndicator ?? 9,
+                        destinationStreet: order.destinationStreet || '',
+                        destinationNumber: order.destinationNumber || '',
+                        destinationComplement: order.destinationComplement || '',
+                        destinationNeighborhood: order.destinationNeighborhood || '',
+                        destinationCityCode: order.destinationCityCode || 0,
+                        destinationCity: order.destinationCity || '',
+                        destinationState: order.destinationState || 'RS',
+                        destinationZipCode: order.destinationZipCode || '',
+                        carrierCnpjCpf: order.carrierCnpjCpf || '',
+                        carrierName: order.carrierName || '',
+                        carrierStateRegistration: order.carrierStateRegistration || '',
+                        vehiclePlate: order.vehiclePlate || '',
+                        vehiclePlateState: order.vehiclePlateState || 'RS',
+                        freightModality: order.freightModality ?? 9,
+                        additionalNotes: order.additionalNotes || ''
+                    });
+                })
+                .catch(() => toast.error('Erro ao carregar dados da ordem para edição.'))
+                .finally(() => setIsLoading(false));
+        }
+    }, [orderId, isEditMode, reset]);
+
     const handleConsultDestSefaz = async () => {
         const cleanCnpj = (destCnpjCpf || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
@@ -134,7 +178,6 @@ export default function CreateOutboundOrderPage() {
         }
     };
 
-    // Consulta SEFAZ Transportadora
     const handleConsultCarrierSefaz = async () => {
         const cleanCnpj = (carrierCnpjCpf || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
@@ -170,20 +213,38 @@ export default function CreateOutboundOrderPage() {
                 expectedShipDate: new Date(data.expectedShipDate).toISOString()
             };
 
-            const res = await customInstance({
-                url: '/api/outbound/orders',
-                method: 'POST',
-                data: cleanPayload
-            });
-
-            toast.success(`Ordem ${res.orderNumber} criada com sucesso!`);
-            navigate(`/outbound/ordem/${res.id}/itens`);
+            if (isEditMode) {
+                await customInstance({
+                    url: `/api/outbound/orders/${orderId}`,
+                    method: 'PUT',
+                    data: { id: orderId, ...cleanPayload }
+                });
+                toast.success('Cabeçalho da Ordem de Saída atualizado com sucesso!');
+                navigate(`/outbound/ordem/${orderId}/itens`);
+            } else {
+                const res = await customInstance({
+                    url: '/api/outbound/orders',
+                    method: 'POST',
+                    data: cleanPayload
+                });
+                toast.success(`Ordem ${res.orderNumber} criada com sucesso!`);
+                navigate(`/outbound/ordem/${res.id}/itens`);
+            }
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao criar ordem de saída.');
+            toast.error(error.response?.data?.message || 'Erro ao salvar ordem de saída.');
         } finally {
             setIsSaving(false);
         }
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
+                <p className="text-xs text-slate-500 font-medium">Carregando dados da ordem...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-full space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -198,16 +259,18 @@ export default function CreateOutboundOrderPage() {
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nova Ordem de Saída Manual</h1>
-                        <p className="text-xs text-slate-500 mt-0.5">Etapa 1 de 2: Defina as informações cadastrais, fiscais e de transporte.</p>
+                        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                            {isEditMode ? 'Editar Ordem de Saída' : 'Nova Ordem de Saída Manual'}
+                        </h1>
+                        <p className="text-xs text-slate-500 mt-0.5">Defina as informações cadastrais, fiscais e de transporte da ordem.</p>
                     </div>
                 </div>
 
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => navigate('/outbound')} disabled={isSaving}>Cancelar</Button>
                     <Button onClick={handleSubmit(onSubmit)} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold min-w-[170px]">
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ArrowRight className="h-4 w-4 mr-2" />}
-                        Avançar para Itens
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : isEditMode ? <Save className="h-4 w-4 mr-2" /> : <ArrowRight className="h-4 w-4 mr-2" />}
+                        {isEditMode ? 'Salvar Alterações' : 'Avançar para Itens'}
                     </Button>
                 </div>
             </div>
@@ -223,7 +286,11 @@ export default function CreateOutboundOrderPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <Label className="text-slate-800 font-semibold text-xs">Depositante (Dono do Estoque) *</Label>
-                            <Select value={selectedCustomerId} onValueChange={(val) => setValue('customerId', val, { shouldValidate: true })}>
+                            <Select
+                                disabled={isEditMode}
+                                value={selectedCustomerId}
+                                onValueChange={(val) => setValue('customerId', val, { shouldValidate: true })}
+                            >
                                 <SelectTrigger className={errors.customerId ? 'border-rose-500 text-xs' : 'text-xs bg-white'}>
                                     <SelectValue placeholder="Selecione o depositante..." />
                                 </SelectTrigger>
@@ -301,7 +368,6 @@ export default function CreateOutboundOrderPage() {
 
                     {!isReturnToCustomer && (
                         <div className="space-y-4 animate-in fade-in duration-200 pt-1">
-                            {/* DADOS FISCAIS DESTINATÁRIO */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div className="space-y-1.5 md:col-span-2">
                                     <Label className="text-xs">CNPJ / CPF Destinatário *</Label>
@@ -344,7 +410,6 @@ export default function CreateOutboundOrderPage() {
                                 </div>
                             </div>
 
-                            {/* ENDEREÇO COMPLETO DESTINATÁRIO */}
                             <div className="pt-2 border-t border-slate-100 space-y-3">
                                 <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                                     <MapPin size={14} className="text-orange-600" /> Endereço de Entrega Destinatário

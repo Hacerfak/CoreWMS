@@ -25,12 +25,15 @@ import type {
 
 import type {
   CreateOutboundOrderCommand,
+  GetApiOutboundOrdersOrderIdFiscalPreviewParams,
   GetApiOutboundOrdersParams,
   PackOrderCommand,
   PickItemCommand,
   PostApiOutboundOrdersImportXmlBody,
   ReserveClosedVolumesCommand,
-  ReserveFractionalCommand
+  ReserveFractionalCommand,
+  ShipOutboundOrderCommand,
+  UpdateOutboundOrderCommand
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -619,7 +622,69 @@ export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getA
 
 
 
-export const getApiOutboundOrdersOrderIdAvailableStockProductId = (
+export const putApiOutboundOrdersId = (
+    id: string,
+    updateOutboundOrderCommand: UpdateOutboundOrderCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateOutboundOrderCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiOutboundOrdersIdMutationKey = () => ['putApiOutboundOrdersId'] as const;
+
+export const getPutApiOutboundOrdersIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiOutboundOrdersId>>, TError,PutApiOutboundOrdersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiOutboundOrdersId>>, TError,PutApiOutboundOrdersIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiOutboundOrdersIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiOutboundOrdersId>>, PutApiOutboundOrdersIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiOutboundOrdersId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiOutboundOrdersIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiOutboundOrdersId>>>
+    export type PutApiOutboundOrdersIdMutationBody = UpdateOutboundOrderCommand
+    export type PutApiOutboundOrdersIdMutationError = unknown
+    export type PutApiOutboundOrdersIdMutationVariables = {id: string;data: UpdateOutboundOrderCommand}
+
+    export const usePutApiOutboundOrdersId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiOutboundOrdersId>>, TError,PutApiOutboundOrdersIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiOutboundOrdersId>>,
+        TError,
+        PutApiOutboundOrdersIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiOutboundOrdersIdMutationOptions(options), queryClient);
+    }
+    export const getApiOutboundOrdersOrderIdAvailableStockProductId = (
     orderId: string,
     productId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -701,6 +766,100 @@ export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Aw
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetApiOutboundOrdersOrderIdAvailableStockProductIdQueryOptions(orderId,productId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiOutboundOrdersOrderIdFiscalPreview = (
+    orderId: string,
+    params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/fiscal-preview`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiOutboundOrdersOrderIdFiscalPreviewQueryKey = (orderId: string,
+    params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams,) => {
+    return [
+    `/api/outbound/orders/${orderId}/fiscal-preview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiOutboundOrdersOrderIdFiscalPreviewQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError = unknown>(orderId: string,
+    params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundOrdersOrderIdFiscalPreviewQueryKey(orderId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>> = ({ signal }) => getApiOutboundOrdersOrderIdFiscalPreview(orderId,params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orderId !== null && orderId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiOutboundOrdersOrderIdFiscalPreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>>
+export type GetApiOutboundOrdersOrderIdFiscalPreviewQueryError = unknown
+
+
+export function useGetApiOutboundOrdersOrderIdFiscalPreview<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError = unknown>(
+ orderId: string,
+    params: undefined |  GetApiOutboundOrdersOrderIdFiscalPreviewParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundOrdersOrderIdFiscalPreview<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError = unknown>(
+ orderId: string,
+    params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundOrdersOrderIdFiscalPreview<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError = unknown>(
+ orderId: string,
+    params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiOutboundOrdersOrderIdFiscalPreview<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError = unknown>(
+ orderId: string,
+    params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiOutboundOrdersOrderIdFiscalPreviewQueryOptions(orderId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -898,12 +1057,15 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     }
     export const postApiOutboundOrdersOrderIdShip = (
     orderId: string,
+    shipOutboundOrderCommand?: ShipOutboundOrderCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/outbound/orders/${orderId}/ship`, method: 'POST', signal
+      {url: `/api/outbound/orders/${orderId}/ship`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: shipOutboundOrderCommand, signal
     },
       options);
     }
@@ -928,9 +1090,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>, PostApiOutboundOrdersOrderIdShipMutationVariables> = (props) => {
-          const {orderId} = props ?? {};
+          const {orderId,data} = props ?? {};
 
-          return  postApiOutboundOrdersOrderIdShip(orderId,requestOptions)
+          return  postApiOutboundOrdersOrderIdShip(orderId,data,requestOptions)
         }
 
 
@@ -941,9 +1103,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiOutboundOrdersOrderIdShipMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>>
-
+    export type PostApiOutboundOrdersOrderIdShipMutationBody = ShipOutboundOrderCommand | undefined
     export type PostApiOutboundOrdersOrderIdShipMutationError = unknown
-    export type PostApiOutboundOrdersOrderIdShipMutationVariables = {orderId: string}
+    export type PostApiOutboundOrdersOrderIdShipMutationVariables = {orderId: string;data?: ShipOutboundOrderCommand}
 
     export const usePostApiOutboundOrdersOrderIdShip = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdShip>>, TError,PostApiOutboundOrdersOrderIdShipMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}

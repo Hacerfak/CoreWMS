@@ -35,7 +35,9 @@ import CreateOutboundOrderPage from '@/pages/Outbound/CreateOutboundOrderPage';
 import OutboundItemsPanelPage from '@/pages/Outbound/OutboundItemsPanelPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
 import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
+import OutboundFiscalReviewPage from '@/pages/Outbound/OutboundFiscalReviewPage';
 import AlocacaoInteligentePage from '@/pages/Inbound/AlocacaoInteligentePage';
+import FiscalOperationRulesPage from '@/pages/Fiscal/FiscalOperationRulesPage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -166,7 +168,10 @@ export default function App() {
 
               <Route element={<PermissionGuard requiredPermission="outbound:manage" />}>
                 <Route path="/outbound/novo" element={<CreateOutboundOrderPage />} />
+                <Route path="/outbound/editar/:id" element={<CreateOutboundOrderPage />} />
                 <Route path="/outbound/ordem/:id/itens" element={<OutboundItemsPanelPage />} />
+                <Route path="/outbound/revisao-fiscal/:id" element={<OutboundFiscalReviewPage />} />
+                <Route path="/fiscal/regras" element={<FiscalOperationRulesPage />} />
               </Route>
 
             </Route>

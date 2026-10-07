@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban, PackageCheck, Plus, Play, Box, CheckCircle2, Trash2 } from 'lucide-react';
+import { Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban, PackageCheck, Plus, Play, Box, CheckCircle2, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
 
@@ -76,21 +76,6 @@ export default function OutboundListPage() {
             loadOrders();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao alocar estoque.');
-            setIsLoading(false);
-        }
-    };
-
-    const handleShipOrder = async (orderId) => {
-        try {
-            setIsLoading(true);
-            await customInstance({
-                url: `/api/outbound/orders/${orderId}/ship`,
-                method: 'POST'
-            });
-            toast.success('Pedido expedido com sucesso! Saldo baixado do estoque.');
-            loadOrders();
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao expedir pedido.');
             setIsLoading(false);
         }
     };
@@ -273,7 +258,19 @@ export default function OutboundListPage() {
                                         {renderStatusBadge(order.status)}
                                     </TableCell>
                                     <TableCell className="text-right space-x-1">
-                                        {/* Ação 1: Alocar Estoque quando o pedido entra zerado/pendente */}
+                                        {/* Botão de Edição do Cabeçalho (Status <= Allocated / 3) */}
+                                        {['Pending', 'Allocating', 'Allocated'].includes(order.status) && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => navigate(`/outbound/editar/${order.id}`)}
+                                                className="border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs"
+                                                title="Editar Ordem de Saída"
+                                            >
+                                                <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                                            </Button>
+                                        )}
+
                                         {order.status === 'Pending' && (
                                             <Button
                                                 size="sm"
@@ -284,7 +281,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Ação 2: Bipagem/Coletor de Separação */}
                                         {(order.status === 'Allocated' || order.status === 'Picking') && (
                                             <Button
                                                 size="sm"
@@ -295,7 +291,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Ação 3: Iniciar Conferência & Packing */}
                                         {order.status === 'Packing' && (
                                             <Button
                                                 size="sm"
@@ -306,11 +301,11 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Ação 4: Expedição Final na Doca */}
+                                        {/* Redirecionamento para a tela de Revisão e Emissão Fiscal */}
                                         {order.status === 'ReadyToShip' && (
                                             <Button
                                                 size="sm"
-                                                onClick={() => handleShipOrder(order.id)}
+                                                onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)}
                                                 className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs font-medium"
                                             >
                                                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Expedir
@@ -322,11 +317,11 @@ export default function OutboundListPage() {
                                             variant="outline"
                                             onClick={() => navigate(`/outbound/detalhes/${order.id}`)}
                                             className="border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs"
+                                            title="Ver Detalhes"
                                         >
                                             <Eye className="h-3.5 w-3.5 text-slate-500" />
                                         </Button>
 
-                                        {/* Botão Cancelar (Apenas se não faturado ou cancelado) */}
                                         {order.status !== 'Shipped' && order.status !== 'Canceled' && (
                                             <Button
                                                 variant="ghost"
@@ -339,7 +334,6 @@ export default function OutboundListPage() {
                                             </Button>
                                         )}
 
-                                        {/* Botão Excluir (Apenas se já estiver Cancelado) */}
                                         {order.status === 'Canceled' && (
                                             <Button
                                                 variant="ghost"
@@ -373,7 +367,6 @@ export default function OutboundListPage() {
 
             <ImportXmlModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
-            {/* Modal de Cancelamento */}
             <AlertDialog open={!!orderToCancel} onOpenChange={(open) => !open && setOrderToCancel(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>
@@ -391,7 +384,6 @@ export default function OutboundListPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Modal de Exclusão Definitiva */}
             <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>

@@ -136,6 +136,77 @@ public class OutboundOrder : AuditableEntity
         Status = OutboundOrderStatus.Pending;
     }
 
+    public void SetInvoiceDetails(string invoiceNumber, string invoiceSerie, string accessKey)
+    {
+        if (string.IsNullOrWhiteSpace(invoiceNumber))
+            throw new ArgumentException("O número da NF-e é obrigatório.", nameof(invoiceNumber));
+
+        InvoiceNumber = invoiceNumber.Trim();
+        InvoiceSerie = invoiceSerie?.Trim();
+        AccessKey = accessKey?.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateHeaderDetails(
+        DateTime expectedShipDate,
+        string? orderNumber,
+        string? invoiceNumber,
+        string? invoiceSerie,
+        string? accessKey,
+        bool isReturnToCustomer,
+        string? destCnpjCpf,
+        string? destName,
+        string? destIe,
+        int destIeIndicator,
+        string? destStreet,
+        string? destNumber,
+        string? destComplement,
+        string? destNeighborhood,
+        int destCityCode,
+        string? destCity,
+        string? destState,
+        string? destZipCode,
+        string? carrierCnpjCpf,
+        string? carrierName,
+        string? carrierIe,
+        string? vehiclePlate,
+        string? vehiclePlateState,
+        int freightModality,
+        string? additionalNotes)
+    {
+        if ((int)Status > (int)OutboundOrderStatus.Allocated)
+            throw new InvalidOperationException($"Não é possível alterar dados do cabeçalho quando o pedido está em status '{Status}'.");
+
+        ExpectedShipDate = expectedShipDate.ToUniversalTime();
+        if (!string.IsNullOrWhiteSpace(orderNumber)) OrderNumber = orderNumber.Trim();
+        InvoiceNumber = invoiceNumber?.Trim();
+        InvoiceSerie = invoiceSerie?.Trim();
+        AccessKey = accessKey?.Trim();
+        IsReturnToCustomer = isReturnToCustomer;
+
+        DestinationCnpjCpf = destCnpjCpf?.Trim();
+        DestinationName = destName?.Trim();
+        DestinationStateRegistration = destIe?.Trim();
+        DestinationIeIndicator = destIeIndicator;
+        DestinationStreet = destStreet?.Trim();
+        DestinationNumber = destNumber?.Trim();
+        DestinationComplement = destComplement?.Trim();
+        DestinationNeighborhood = destNeighborhood?.Trim();
+        DestinationCityCode = destCityCode;
+        DestinationCity = destCity?.Trim();
+        DestinationState = destState?.Trim();
+        DestinationZipCode = destZipCode?.Trim();
+
+        CarrierCnpjCpf = carrierCnpjCpf?.Trim();
+        CarrierName = carrierName?.Trim();
+        CarrierStateRegistration = carrierIe?.Trim();
+        VehiclePlate = vehiclePlate?.Trim().ToUpper();
+        VehiclePlateState = vehiclePlateState?.Trim().ToUpper();
+        FreightModality = freightModality;
+        AdditionalNotes = additionalNotes?.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void UpdateStatus(OutboundOrderStatus newStatus)
     {
         Status = newStatus;

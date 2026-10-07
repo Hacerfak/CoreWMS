@@ -30,11 +30,11 @@ public class FiscalOperationRule : AuditableEntity
     public string CstIpi { get; private set; } = "53";        // 53 - Saída não tributada
 
     // --- NOVOS CAMPOS REFORMA TRIBUTÁRIA (2026) ---
-    public string? CstIbs { get; set; } // Ex: "00" (Tributada)
-    public decimal AliqIbs { get; set; } // Ex: 0.10
+    public string? CstIbs { get; private set; }
+    public decimal AliqIbs { get; private set; }
 
-    public string? CstCbs { get; set; } // Ex: "00" (Tributada)
-    public decimal AliqCbs { get; set; } // Ex: 0.90
+    public string? CstCbs { get; private set; }
+    public decimal AliqCbs { get; private set; }
 
     public string? AdditionalNotes { get; private set; }      // Tag <infCpl> (Dados Adicionais)
 
@@ -45,14 +45,90 @@ public class FiscalOperationRule : AuditableEntity
     public string? SpecificDestinationState { get; private set; }
     public string? SpecificNcmStart { get; private set; }
 
-    public int Priority { get; private set; } // Define quem ganha se houver conflito (100 ganha de 10)
+    public int Priority { get; private set; } // Define quem ganha se houver conflito (ex: 100 para exceção, 10 para regra geral)
     public bool IsActive { get; private set; } = true;
 
     protected FiscalOperationRule() { }
 
-    public FiscalOperationRule(Guid companyId, string description, FiscalOperationType operationType, string cfopStateInternal, string cfopInterstate, int priority)
+    public FiscalOperationRule(
+        Guid companyId,
+        string description,
+        FiscalOperationType operationType,
+        string cfopStateInternal,
+        string cfopInterstate,
+        string cstCsosnIcms,
+        string cstPisCofins,
+        string cstIpi,
+        string? cstIbs,
+        decimal aliqIbs,
+        string? cstCbs,
+        decimal aliqCbs,
+        string? additionalNotes,
+        Guid? specificCustomerId,
+        string? specificDestinationState,
+        string? specificNcmStart,
+        int priority)
     {
-        CompanyId = companyId; Description = description; OperationType = operationType;
-        CfopStateInternal = cfopStateInternal; CfopInterstate = cfopInterstate; Priority = priority;
+        CompanyId = companyId;
+        Description = description.Trim();
+        OperationType = operationType;
+        CfopStateInternal = cfopStateInternal.Trim();
+        CfopInterstate = cfopInterstate.Trim();
+        CstCsosnIcms = cstCsosnIcms.Trim();
+        CstPisCofins = cstPisCofins.Trim();
+        CstIpi = cstIpi.Trim();
+        CstIbs = cstIbs?.Trim();
+        AliqIbs = aliqIbs;
+        CstCbs = cstCbs?.Trim();
+        AliqCbs = aliqCbs;
+        AdditionalNotes = additionalNotes?.Trim();
+        SpecificCustomerId = specificCustomerId;
+        SpecificDestinationState = specificDestinationState?.Trim().ToUpper();
+        SpecificNcmStart = specificNcmStart?.Trim();
+        Priority = priority;
+        IsActive = true;
+    }
+
+    public void Update(
+        string description,
+        FiscalOperationType operationType,
+        string cfopStateInternal,
+        string cfopInterstate,
+        string cstCsosnIcms,
+        string cstPisCofins,
+        string cstIpi,
+        string? cstIbs,
+        decimal aliqIbs,
+        string? cstCbs,
+        decimal aliqCbs,
+        string? additionalNotes,
+        Guid? specificCustomerId,
+        string? specificDestinationState,
+        string? specificNcmStart,
+        int priority)
+    {
+        Description = description.Trim();
+        OperationType = operationType;
+        CfopStateInternal = cfopStateInternal.Trim();
+        CfopInterstate = cfopInterstate.Trim();
+        CstCsosnIcms = cstCsosnIcms.Trim();
+        CstPisCofins = cstPisCofins.Trim();
+        CstIpi = cstIpi.Trim();
+        CstIbs = cstIbs?.Trim();
+        AliqIbs = aliqIbs;
+        CstCbs = cstCbs?.Trim();
+        AliqCbs = aliqCbs;
+        AdditionalNotes = additionalNotes?.Trim();
+        SpecificCustomerId = specificCustomerId;
+        SpecificDestinationState = specificDestinationState?.Trim().ToUpper();
+        SpecificNcmStart = specificNcmStart?.Trim();
+        Priority = priority;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ToggleActive()
+    {
+        IsActive = !IsActive;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

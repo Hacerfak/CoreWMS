@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
     ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine,
-    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode
+    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -82,6 +82,7 @@ export default function MainLayout() {
                 { icon: Shield, label: 'Perfis de Acesso', path: '/perfis', permission: 'roles:manage' },
                 { icon: ScrollText, label: 'Auditoria', path: '/auditoria', permission: 'audit:view' },
                 { icon: Building2, label: 'Empresas', path: '/empresas', permission: 'companies:manage' },
+                { icon: FileCode, label: 'Regras Fiscais', path: '/fiscal/regras', permission: 'outbound:manage' },
                 { icon: Printer, label: 'Impressão', path: '/impressao', permission: 'printing:manage' },
             ]
         }
