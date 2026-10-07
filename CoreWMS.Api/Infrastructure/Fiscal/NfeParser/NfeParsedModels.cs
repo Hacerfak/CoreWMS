@@ -34,16 +34,33 @@ public record NfeParsedIssuer(
     string? Phone              // emit > enderEmit > fone
 );
 
+public record NfeParsedRecipient(
+    string CnpjCpf,            // dest > CNPJ ou CPF
+    string Name,               // dest > xNome
+    string? StateRegistration, // dest > IE
+    int IeIndicator,           // dest > indIEDest (1=Contribuinte, 2=Isento, 9=Não Contribuinte)
+    string? Street,            // dest > enderDest > xLgr
+    string? Number,            // dest > enderDest > nro
+    string? Complement,        // dest > enderDest > xCmpl
+    string? Neighborhood,      // dest > enderDest > xBairro
+    int CityCode,              // dest > enderDest > cMun
+    string CityName,           // dest > enderDest > xMun
+    string State,              // dest > enderDest > UF
+    string? ZipCode            // dest > enderDest > CEP
+);
+
 public record NfeParsedData(
-    string AccessKey,          // Id da <infNFe> ou <chNFe>
+    string AccessKey,          // Id da <infNFe>
     DateTime IssueDate,        // dhEmi
-    string IssuerCnpj,         // Shortcut para emit > CNPJ/CPF (compatibilidade)
-    string IssuerName,         // Shortcut para emit > xNome (compatibilidade)
-    NfeParsedIssuer Issuer,    // Objeto completo com dados do depositante e endereço
-    string DestCnpj,           // dest > CNPJ ou CPF
-    string DestName,           // dest > xNome
-    string DestCity,           // dest > enderDest > xMun
-    string DestState,          // dest > enderDest > UF
-    string? DestZipCode,       // dest > enderDest > CEP
+    string IssuerCnpj,         // Shortcut para emit > CNPJ/CPF
+    string IssuerName,         // Shortcut para emit > xNome
+    NfeParsedIssuer Issuer,    // Dados completos do depositante
+    NfeParsedRecipient Recipient, // Dados completos do destinatário
+    int FreightModality,       // transp > modFrete (0=CIF, 1=FOB, etc)
+    string? CarrierCnpjCpf,    // transp > transporta > CNPJ/CPF
+    string? CarrierName,       // transp > transporta > xNome
+    string? CarrierIe,         // transp > transporta > IE
+    string? VehiclePlate,      // transp > veicTransp > placa
+    string? VehiclePlateState, // transp > veicTransp > UF
     List<NfeParsedItem> Items
 );

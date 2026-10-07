@@ -30,6 +30,7 @@ import InventarioDetalhesPage from '@/pages/Inventario/InventarioDetalhesPage';
 import InventarioOperacaoPage from '@/pages/Inventario/InventarioOperacaoPage';
 import ExecucaoContagemPage from '@/pages/Inventario/ExecucaoContagemPage';
 import OutboundListPage from '@/pages/Outbound/OutboundListPage';
+import OutboundOrderDetailsPage from '@/pages/Outbound/OutboundOrderDetailsPage';
 import CreateOutboundOrderPage from '@/pages/Outbound/CreateOutboundOrderPage';
 import OutboundItemsPanelPage from '@/pages/Outbound/OutboundItemsPanelPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
@@ -158,6 +159,7 @@ export default function App() {
               {/* Rotas de Outbound */}
               <Route element={<PermissionGuard requiredPermission="outbound:view" />}>
                 <Route path="/outbound" element={<OutboundListPage />} />
+                <Route path="/outbound/detalhes/:id" element={<OutboundOrderDetailsPage />} />
                 <Route path="/outbound/picking/:id" element={<OutboundPickingPage />} />
                 <Route path="/outbound/packing/:id" element={<OutboundPackingPage />} />
               </Route>

@@ -38,13 +38,11 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
         try { parsedData = _parser.ParseXml(xmlContent); }
         catch (Exception ex) { return Results.BadRequest(new { Message = $"Erro ao interpretar o XML da NF-e: {ex.Message}" }); }
 
-        // 1. Valida se o pedido/NF-e já foi importado no WMS
         if (await _db.OutboundOrders.AnyAsync(o => o.CompanyId == companyId && o.AccessKey == parsedData.AccessKey, ct))
         {
             return Results.Conflict(new { Message = "Este pedido/NF-e já foi importado anteriormente no sistema." });
         }
 
-        // 2. REGRA CRÍTICA: O emitente da nota DEVE ser um Depositante cadastrado na empresa
         var customer = await _db.Customers
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.CompanyId == companyId && c.Cnpj == parsedData.IssuerCnpj, ct);
@@ -59,44 +57,21 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
             return Results.Forbid();
         }
 
-        // 3. Extração detalhada do XML (Ide, Transportadora, Veículo e Observações Fiscais)
         var doc = XDocument.Parse(xmlContent);
         var infNfe = doc.Descendants(Ns + "infNFe").FirstOrDefault();
         var ide = infNfe?.Element(Ns + "ide");
-        var transp = infNfe?.Element(Ns + "transp");
 
         string? invoiceNumber = ide?.Element(Ns + "nNF")?.Value;
         string? invoiceSerie = ide?.Element(Ns + "serie")?.Value;
+        string? additionalNotes = infNfe?.Element(Ns + "infAdic")?.Element(Ns + "infCpl")?.Value;
 
-        string? carrierCnpjCpf = null;
-        string? carrierName = null;
-        string? vehiclePlate = null;
-        string? vehiclePlateState = null;
-
-        var transporta = transp?.Element(Ns + "transporta");
-        if (transporta != null)
-        {
-            carrierCnpjCpf = transporta.Element(Ns + "CNPJ")?.Value ?? transporta.Element(Ns + "CPF")?.Value;
-            carrierName = transporta.Element(Ns + "xNome")?.Value;
-        }
-
-        var veicTransp = transp?.Element(Ns + "veicTransp");
-        if (veicTransp != null)
-        {
-            vehiclePlate = veicTransp.Element(Ns + "placa")?.Value;
-            vehiclePlateState = veicTransp.Element(Ns + "UF")?.Value;
-        }
-
-        var additionalNotes = infNfe?.Element(Ns + "infAdic")?.Element(Ns + "infCpl")?.Value;
-
-        // Número da Ordem de Saída
         var orderNumber = !string.IsNullOrWhiteSpace(invoiceNumber)
             ? invoiceNumber.TrimStart('0')
             : (parsedData.AccessKey.Length >= 34 ? parsedData.AccessKey.Substring(25, 9).TrimStart('0') : $"OUT-{DateTime.UtcNow:yyyyMMdd}-{new Random().Next(1000, 9999)}");
 
-        bool isReturnToCustomer = parsedData.DestCnpj == customer.Cnpj;
+        bool isReturnToCustomer = parsedData.Recipient.CnpjCpf == customer.Cnpj;
 
-        // 4. Instanciação da Ordem de Saída com todos os dados fiscais e logísticos
+        // Instanciação da Ordem com o payload completo da SEFAZ
         var order = new OutboundOrder(
             companyId,
             customer.Id,
@@ -106,21 +81,29 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
             parsedData.AccessKey,
             xmlContent,
             isReturnToCustomer,
-            parsedData.DestCnpj,
-            parsedData.DestName,
-            parsedData.DestCity,
-            parsedData.DestState,
-            parsedData.DestZipCode,
-            carrierCnpjCpf,
-            carrierName,
-            vehiclePlate,
-            vehiclePlateState,
+            parsedData.Recipient.CnpjCpf,
+            parsedData.Recipient.Name,
+            parsedData.Recipient.StateRegistration,
+            parsedData.Recipient.IeIndicator,
+            parsedData.Recipient.Street,
+            parsedData.Recipient.Number,
+            parsedData.Recipient.Complement,
+            parsedData.Recipient.Neighborhood,
+            parsedData.Recipient.CityCode,
+            parsedData.Recipient.CityName,
+            parsedData.Recipient.State,
+            parsedData.Recipient.ZipCode,
+            parsedData.CarrierCnpjCpf,
+            parsedData.CarrierName,
+            parsedData.CarrierIe,
+            parsedData.VehiclePlate,
+            parsedData.VehiclePlateState,
+            parsedData.FreightModality,
             additionalNotes,
             parsedData.IssueDate,
             expectedShipDate: parsedData.IssueDate
         );
 
-        // 5. Mapeamento e Validação dos Produtos
         var existingProducts = await _db.Products
             .AsNoTracking()
             .Where(p => p.CompanyId == companyId && p.CustomerId == customer.Id)

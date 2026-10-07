@@ -22,6 +22,18 @@ export interface CreateOutboundOrderCommand {
   /** @nullable */
   destinationName?: string | null;
   /** @nullable */
+  destinationStateRegistration?: string | null;
+  destinationIeIndicator?: number;
+  /** @nullable */
+  destinationStreet?: string | null;
+  /** @nullable */
+  destinationNumber?: string | null;
+  /** @nullable */
+  destinationComplement?: string | null;
+  /** @nullable */
+  destinationNeighborhood?: string | null;
+  destinationCityCode?: number;
+  /** @nullable */
   destinationCity?: string | null;
   /** @nullable */
   destinationState?: string | null;
@@ -32,9 +44,12 @@ export interface CreateOutboundOrderCommand {
   /** @nullable */
   carrierName?: string | null;
   /** @nullable */
+  carrierStateRegistration?: string | null;
+  /** @nullable */
   vehiclePlate?: string | null;
   /** @nullable */
   vehiclePlateState?: string | null;
+  freightModality?: number;
   /** @nullable */
   additionalNotes?: string | null;
 }

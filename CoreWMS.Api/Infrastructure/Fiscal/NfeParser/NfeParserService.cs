@@ -16,7 +16,6 @@ public class NfeParserService : INfeParserService
     {
         var doc = XDocument.Parse(xmlContent);
 
-        // Pode vir dentro de nfeProc (Com protocolo) ou direto NFe (Sem protocolo)
         var infNfe = doc.Descendants(Ns + "infNFe").FirstOrDefault()
             ?? throw new ArgumentException("XML inválido. Tag <infNFe> não encontrada.");
 
@@ -33,15 +32,11 @@ public class NfeParserService : INfeParserService
         var enderEmit = emit.Element(Ns + "enderEmit");
         var enderDest = dest.Element(Ns + "enderDest");
 
-        // Parseamento dos Dados Cadastrais e Fiscais do Emitente (Depositante)
+        // Parse Emitente
         var issuerCnpj = emit.Element(Ns + "CNPJ")?.Value ?? emit.Element(Ns + "CPF")?.Value ?? "";
         var issuerName = emit.Element(Ns + "xNome")?.Value ?? "";
-
-        var crtStr = emit.Element(Ns + "CRT")?.Value;
-        int? crt = int.TryParse(crtStr, out var cVal) ? cVal : null;
-
-        var cityCodeStr = enderEmit?.Element(Ns + "cMun")?.Value;
-        int? cityCode = int.TryParse(cityCodeStr, out var codeVal) ? codeVal : null;
+        int? crt = int.TryParse(emit.Element(Ns + "CRT")?.Value, out var cVal) ? cVal : null;
+        int? cityCode = int.TryParse(enderEmit?.Element(Ns + "cMun")?.Value, out var codeVal) ? codeVal : null;
 
         var issuer = new NfeParsedIssuer(
             issuerCnpj,
@@ -62,6 +57,53 @@ public class NfeParserService : INfeParserService
             enderEmit?.Element(Ns + "fone")?.Value
         );
 
+        // Parse Destinatário
+        var destCnpjCpf = dest.Element(Ns + "CNPJ")?.Value ?? dest.Element(Ns + "CPF")?.Value ?? "";
+        var destName = dest.Element(Ns + "xNome")?.Value ?? "";
+        var destIe = dest.Element(Ns + "IE")?.Value;
+        int destIeIndicator = int.TryParse(dest.Element(Ns + "indIEDest")?.Value, out var indVal) ? indVal : 9;
+        int destCityCode = int.TryParse(enderDest?.Element(Ns + "cMun")?.Value, out var dCodeVal) ? dCodeVal : 0;
+
+        var recipient = new NfeParsedRecipient(
+            destCnpjCpf,
+            destName,
+            destIe,
+            destIeIndicator,
+            enderDest?.Element(Ns + "xLgr")?.Value,
+            enderDest?.Element(Ns + "nro")?.Value,
+            enderDest?.Element(Ns + "xCmpl")?.Value,
+            enderDest?.Element(Ns + "xBairro")?.Value,
+            destCityCode,
+            enderDest?.Element(Ns + "xMun")?.Value ?? "NÃO INFORMADO",
+            enderDest?.Element(Ns + "UF")?.Value ?? "EX",
+            enderDest?.Element(Ns + "CEP")?.Value
+        );
+
+        // Parse Transporte & Veículo
+        var transp = infNfe.Element(Ns + "transp");
+        int freightModality = int.TryParse(transp?.Element(Ns + "modFrete")?.Value, out var modVal) ? modVal : 9;
+
+        string? carrierCnpjCpf = null;
+        string? carrierName = null;
+        string? carrierIe = null;
+        var transporta = transp?.Element(Ns + "transporta");
+        if (transporta != null)
+        {
+            carrierCnpjCpf = transporta.Element(Ns + "CNPJ")?.Value ?? transporta.Element(Ns + "CPF")?.Value;
+            carrierName = transporta.Element(Ns + "xNome")?.Value;
+            carrierIe = transporta.Element(Ns + "IE")?.Value;
+        }
+
+        string? vehiclePlate = null;
+        string? vehiclePlateState = null;
+        var veicTransp = transp?.Element(Ns + "veicTransp");
+        if (veicTransp != null)
+        {
+            vehiclePlate = veicTransp.Element(Ns + "placa")?.Value;
+            vehiclePlateState = veicTransp.Element(Ns + "UF")?.Value;
+        }
+
+        // Parse Itens
         var items = new List<NfeParsedItem>();
         foreach (var det in infNfe.Elements(Ns + "det"))
         {
@@ -72,7 +114,6 @@ public class NfeParserService : INfeParserService
             var ean = prod.Element(Ns + "cEAN")?.Value;
             if (ean == "SEM GTIN") ean = null;
 
-            // Extração de Rastreabilidade (Medicamentos, Agrícolas, Bebidas)
             string? batch = null;
             DateTime? mfgDate = null;
             DateTime? expDate = null;
@@ -113,11 +154,13 @@ public class NfeParserService : INfeParserService
             issuerCnpj,
             issuerName,
             issuer,
-            dest.Element(Ns + "CNPJ")?.Value ?? dest.Element(Ns + "CPF")?.Value ?? "",
-            dest.Element(Ns + "xNome")?.Value ?? "",
-            enderDest?.Element(Ns + "xMun")?.Value ?? "NÃO INFORMADO",
-            enderDest?.Element(Ns + "UF")?.Value ?? "EX",
-            enderDest?.Element(Ns + "CEP")?.Value,
+            recipient,
+            freightModality,
+            carrierCnpjCpf,
+            carrierName,
+            carrierIe,
+            vehiclePlate,
+            vehiclePlateState,
             items
         );
     }
@@ -125,7 +168,6 @@ public class NfeParserService : INfeParserService
     private static decimal ParseDecimal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return 0;
-        // O XML da NF-e sempre usa Ponto '.' como separador decimal.
         return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : 0;
     }
 }

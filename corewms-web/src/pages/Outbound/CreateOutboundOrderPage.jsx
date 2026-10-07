@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
-    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, FileText
+    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,15 +24,28 @@ const outboundOrderHeaderSchema = z.object({
     invoiceSerie: z.string().optional().nullable(),
     accessKey: z.string().optional().nullable(),
     isReturnToCustomer: z.boolean().default(false),
+
+    // Destinatário
     destinationCnpjCpf: z.string().optional().nullable(),
     destinationName: z.string().optional().nullable(),
+    destinationStateRegistration: z.string().optional().nullable(),
+    destinationIeIndicator: z.coerce.number().default(9),
+    destinationStreet: z.string().optional().nullable(),
+    destinationNumber: z.string().optional().nullable(),
+    destinationComplement: z.string().optional().nullable(),
+    destinationNeighborhood: z.string().optional().nullable(),
+    destinationCityCode: z.coerce.number().default(0),
     destinationCity: z.string().optional().nullable(),
     destinationState: z.string().optional().nullable(),
     destinationZipCode: z.string().optional().nullable(),
+
+    // Transportadora
     carrierCnpjCpf: z.string().optional().nullable(),
     carrierName: z.string().optional().nullable(),
+    carrierStateRegistration: z.string().optional().nullable(),
     vehiclePlate: z.string().optional().nullable(),
     vehiclePlateState: z.string().optional().nullable(),
+    freightModality: z.coerce.number().default(9),
     additionalNotes: z.string().optional().nullable()
 });
 
@@ -56,13 +69,22 @@ export default function CreateOutboundOrderPage() {
             isReturnToCustomer: false,
             destinationCnpjCpf: '',
             destinationName: '',
+            destinationStateRegistration: '',
+            destinationIeIndicator: 9,
+            destinationStreet: '',
+            destinationNumber: '',
+            destinationComplement: '',
+            destinationNeighborhood: '',
+            destinationCityCode: 0,
             destinationCity: '',
             destinationState: 'RS',
             destinationZipCode: '',
             carrierCnpjCpf: '',
             carrierName: '',
+            carrierStateRegistration: '',
             vehiclePlate: '',
             vehiclePlateState: 'RS',
+            freightModality: 9,
             additionalNotes: ''
         }
     });
@@ -74,14 +96,14 @@ export default function CreateOutboundOrderPage() {
     const carrierCnpjCpf = watch('carrierCnpjCpf');
     const carrierState = watch('vehiclePlateState');
 
-    // Carrega a lista de depositantes no início
+    // Carrega depositantes
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
             .then(res => setCustomers(res || []))
             .catch(() => toast.error('Erro ao carregar depositantes.'));
     }, []);
 
-    // Consulta SEFAZ para Destinatário
+    // Consulta SEFAZ Destinatário
     const handleConsultDestSefaz = async () => {
         const cleanCnpj = (destCnpjCpf || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
@@ -95,6 +117,13 @@ export default function CreateOutboundOrderPage() {
 
             toast.success('Dados do destinatário sincronizados da SEFAZ!');
             setValue('destinationName', sefazData.corporateName || '');
+            setValue('destinationStateRegistration', sefazData.stateRegistration || '');
+            setValue('destinationIeIndicator', sefazData.stateRegistration ? 1 : 9);
+            setValue('destinationStreet', sefazData.street || '');
+            setValue('destinationNumber', sefazData.number || '');
+            setValue('destinationComplement', sefazData.complement || '');
+            setValue('destinationNeighborhood', sefazData.neighborhood || '');
+            setValue('destinationCityCode', sefazData.cityCode || 0);
             setValue('destinationCity', sefazData.cityName || '');
             setValue('destinationState', sefazData.state || destState);
             setValue('destinationZipCode', sefazData.zipCode || '');
@@ -105,7 +134,7 @@ export default function CreateOutboundOrderPage() {
         }
     };
 
-    // Consulta SEFAZ para Transportadora
+    // Consulta SEFAZ Transportadora
     const handleConsultCarrierSefaz = async () => {
         const cleanCnpj = (carrierCnpjCpf || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
@@ -119,6 +148,7 @@ export default function CreateOutboundOrderPage() {
 
             toast.success('Dados da transportadora sincronizados da SEFAZ!');
             setValue('carrierName', sefazData.corporateName || '');
+            setValue('carrierStateRegistration', sefazData.stateRegistration || '');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Não foi possível consultar a transportadora na SEFAZ.');
         } finally {
@@ -132,7 +162,11 @@ export default function CreateOutboundOrderPage() {
             const cleanPayload = {
                 ...data,
                 destinationCnpjCpf: data.destinationCnpjCpf ? data.destinationCnpjCpf.replace(/\D/g, '') : null,
+                destinationZipCode: data.destinationZipCode ? data.destinationZipCode.replace(/\D/g, '') : null,
                 carrierCnpjCpf: data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
+                destinationIeIndicator: Number(data.destinationIeIndicator),
+                destinationCityCode: Number(data.destinationCityCode),
+                freightModality: Number(data.freightModality),
                 expectedShipDate: new Date(data.expectedShipDate).toISOString()
             };
 
@@ -142,8 +176,7 @@ export default function CreateOutboundOrderPage() {
                 data: cleanPayload
             });
 
-            toast.success(`Cabeçalho da Ordem ${res.orderNumber} criado com sucesso!`);
-            // Redireciona para o painel interativo de seleção de itens/estoque
+            toast.success(`Ordem ${res.orderNumber} criada com sucesso!`);
             navigate(`/outbound/ordem/${res.id}/itens`);
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao criar ordem de saída.');
@@ -166,7 +199,7 @@ export default function CreateOutboundOrderPage() {
                     </Button>
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nova Ordem de Saída Manual</h1>
-                        <p className="text-xs text-slate-500 mt-0.5">Etapa 1 de 2: Defina as informações básicas do pedido, destinatário e transporte.</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Etapa 1 de 2: Defina as informações cadastrais, fiscais e de transporte.</p>
                     </div>
                 </div>
 
@@ -189,9 +222,9 @@ export default function CreateOutboundOrderPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                            <Label className="text-slate-800 font-semibold">Depositante (Dono do Estoque) *</Label>
+                            <Label className="text-slate-800 font-semibold text-xs">Depositante (Dono do Estoque) *</Label>
                             <Select value={selectedCustomerId} onValueChange={(val) => setValue('customerId', val, { shouldValidate: true })}>
-                                <SelectTrigger className={errors.customerId ? 'border-rose-500' : ''}>
+                                <SelectTrigger className={errors.customerId ? 'border-rose-500 text-xs' : 'text-xs bg-white'}>
                                     <SelectValue placeholder="Selecione o depositante..." />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -204,48 +237,48 @@ export default function CreateOutboundOrderPage() {
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-slate-800 font-semibold">Data Prevista de Envio *</Label>
-                            <Input type="date" {...register('expectedShipDate')} className={errors.expectedShipDate ? 'border-rose-500 text-xs' : 'text-xs'} />
+                            <Label className="text-slate-800 font-semibold text-xs">Data Prevista de Envio *</Label>
+                            <Input type="date" {...register('expectedShipDate')} className={errors.expectedShipDate ? 'border-rose-500 text-xs' : 'text-xs bg-white'} />
                             {errors.expectedShipDate && <p className="text-xs text-rose-500">{errors.expectedShipDate.message}</p>}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                         <div className="space-y-1.5">
-                            <Label>Nº do Pedido</Label>
-                            <Input {...register('orderNumber')} placeholder="Opcional (ex: PED-1001)" className="font-mono text-xs" />
+                            <Label className="text-xs">Nº do Pedido</Label>
+                            <Input {...register('orderNumber')} placeholder="Opcional (ex: PED-1001)" className="font-mono text-xs bg-white" />
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label>Nº da NF-e</Label>
-                            <Input {...register('invoiceNumber')} placeholder="Ex: 1250" className="font-mono text-xs" />
+                            <Label className="text-xs">Nº da NF-e Venda/ERP</Label>
+                            <Input {...register('invoiceNumber')} placeholder="Ex: 1250" className="font-mono text-xs bg-white" />
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label>Série NF-e</Label>
-                            <Input {...register('invoiceSerie')} placeholder="Ex: 1" className="font-mono text-xs" />
+                            <Label className="text-xs">Série NF-e</Label>
+                            <Input {...register('invoiceSerie')} placeholder="Ex: 1" className="font-mono text-xs bg-white" />
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label>Chave de Acesso (44 dígitos)</Label>
+                            <Label className="text-xs">Chave de Acesso (44 dígitos)</Label>
                             <Input
                                 maxLength={44}
                                 {...register('accessKey')}
                                 placeholder="3523..."
-                                className="font-mono text-xs"
+                                className="font-mono text-xs bg-white"
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* BLOCO 2: TIPO DE ENVIO & DESTINATÁRIO */}
+                {/* BLOCO 2: TIPO DE ENVIO & ENDEREÇO SEFAZ DESTINATÁRIO */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
                     <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-                        <Building2 className="text-orange-600" size={18} /> 2. Tipo de Envio & Destinatário Final *
+                        <Building2 className="text-orange-600" size={18} /> 2. Destinatário Final & Dados Fiscais *
                     </h3>
 
                     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                        <Label className="text-xs font-bold uppercase text-slate-700">Selecione a Finalidade do Envio *</Label>
+                        <Label className="text-xs font-bold uppercase text-slate-700">Finalidade da Operação *</Label>
                         <RadioGroup
                             value={isReturnToCustomer ? 'return' : 'third_party'}
                             onValueChange={(v) => setValue('isReturnToCustomer', v === 'return')}
@@ -254,13 +287,13 @@ export default function CreateOutboundOrderPage() {
                             <div className="flex items-center space-x-2 cursor-pointer">
                                 <RadioGroupItem value="return" id="r-return" />
                                 <Label htmlFor="r-return" className="cursor-pointer font-semibold text-slate-800 text-xs">
-                                    Retorno para o Próprio Depositante (Devolução / Retorno Simbólico)
+                                    Retorno para o Próprio Depositante (Devolução / Retorno Simbólico - CFOP 5906)
                                 </Label>
                             </div>
                             <div className="flex items-center space-x-2 cursor-pointer">
                                 <RadioGroupItem value="third_party" id="r-third" />
                                 <Label htmlFor="r-third" className="cursor-pointer font-semibold text-slate-800 text-xs">
-                                    Entrega a Terceiros (Cliente Final)
+                                    Entrega a Terceiros (Venda por Conta e Ordem - CFOP 5923)
                                 </Label>
                             </div>
                         </RadioGroup>
@@ -268,16 +301,17 @@ export default function CreateOutboundOrderPage() {
 
                     {!isReturnToCustomer && (
                         <div className="space-y-4 animate-in fade-in duration-200 pt-1">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label>CNPJ / CPF Destinatário</Label>
+                            {/* DADOS FISCAIS DESTINATÁRIO */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <Label className="text-xs">CNPJ / CPF Destinatário *</Label>
                                     <div className="flex gap-2">
-                                        <Input {...register('destinationCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1" />
+                                        <Input {...register('destinationCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white" />
                                         <Button
                                             type="button" variant="outline"
                                             onClick={handleConsultDestSefaz}
                                             disabled={isConsultingDestSefaz}
-                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9"
+                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
                                         >
                                             {isConsultingDestSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
                                             SEFAZ
@@ -285,53 +319,117 @@ export default function CreateOutboundOrderPage() {
                                     </div>
                                 </div>
 
-                                <div className="md:col-span-2 space-y-1.5">
-                                    <Label>Nome / Razão Social Destinatário</Label>
-                                    <Input {...register('destinationName')} className="text-xs" />
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <Label className="text-xs">Razão Social / Nome Completo *</Label>
+                                    <Input {...register('destinationName')} className="text-xs bg-white" placeholder="Razão social..." />
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="md:col-span-2 space-y-1.5">
-                                    <Label>Cidade</Label>
-                                    <Input {...register('destinationCity')} className="text-xs" />
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Inscrição Estadual (IE)</Label>
+                                    <Input {...register('destinationStateRegistration')} placeholder="Isento se vazio" className="font-mono text-xs bg-white" />
                                 </div>
 
-                                <div className="space-y-1.5">
-                                    <Label>UF</Label>
-                                    <Select value={watch('destinationState')} onValueChange={(val) => setValue('destinationState', val)}>
-                                        <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <Label className="text-xs">Indicador de IE SEFAZ *</Label>
+                                    <Select value={watch('destinationIeIndicator')?.toString()} onValueChange={(val) => setValue('destinationIeIndicator', Number(val))}>
+                                        <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                            <SelectItem value="1">1 - Contribuinte ICMS</SelectItem>
+                                            <SelectItem value="2">2 - Contribuinte Isento</SelectItem>
+                                            <SelectItem value="9">9 - Não Contribuinte</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
+                            </div>
 
-                                <div className="space-y-1.5">
-                                    <Label>CEP</Label>
-                                    <Input {...register('destinationZipCode')} className="font-mono text-xs" />
+                            {/* ENDEREÇO COMPLETO DESTINATÁRIO */}
+                            <div className="pt-2 border-t border-slate-100 space-y-3">
+                                <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                    <MapPin size={14} className="text-orange-600" /> Endereço de Entrega Destinatário
+                                </Label>
+
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <Label className="text-xs">Logradouro / Rua</Label>
+                                        <Input {...register('destinationStreet')} className="text-xs bg-white" placeholder="Ex: Av. Brasil" />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Número</Label>
+                                        <Input {...register('destinationNumber')} className="text-xs bg-white font-mono" placeholder="Ex: 1000" />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Complemento</Label>
+                                        <Input {...register('destinationComplement')} className="text-xs bg-white" placeholder="Ex: Sala 201" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <Label className="text-xs">Bairro</Label>
+                                        <Input {...register('destinationNeighborhood')} className="text-xs bg-white" placeholder="Ex: Centro" />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Cidade</Label>
+                                        <Input {...register('destinationCity')} className="text-xs bg-white" placeholder="Cidade..." />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Cód. IBGE Cidade</Label>
+                                        <Input type="number" {...register('destinationCityCode')} className="font-mono text-xs bg-white" placeholder="Ex: 4305108" />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">UF / CEP</Label>
+                                        <div className="flex gap-2">
+                                            <Select value={watch('destinationState')} onValueChange={(val) => setValue('destinationState', val)}>
+                                                <SelectTrigger className="text-xs bg-white w-20"><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                            <Input {...register('destinationZipCode')} placeholder="CEP..." className="font-mono text-xs bg-white flex-1" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* BLOCO 3: TRANSPORTADORA & VEÍCULO */}
+                {/* BLOCO 3: TRANSPORTADORA, VEÍCULO & FRETE */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
                     <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-                        <Truck className="text-orange-600" size={18} /> 3. Transportadora & Veículo
+                        <Truck className="text-orange-600" size={18} /> 3. Transportadora, Veículo & Frete
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1.5">
-                            <Label>CNPJ Transportadora</Label>
+                            <Label className="text-xs">Modalidade do Frete *</Label>
+                            <Select value={watch('freightModality')?.toString()} onValueChange={(val) => setValue('freightModality', Number(val))}>
+                                <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="0">0 - Contratação pelo Remetente (CIF)</SelectItem>
+                                    <SelectItem value="1">1 - Contratação pelo Destinatário (FOB)</SelectItem>
+                                    <SelectItem value="2">2 - Contratação por Terceiros</SelectItem>
+                                    <SelectItem value="9">9 - Sem Ocorrência de Transporte</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">CNPJ Transportadora</Label>
                             <div className="flex gap-2">
-                                <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1" />
+                                <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white" />
                                 <Button
                                     type="button" variant="outline"
                                     onClick={handleConsultCarrierSefaz}
                                     disabled={isConsultingCarrierSefaz}
-                                    className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9"
+                                    className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
                                 >
                                     {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
                                     SEFAZ
@@ -339,32 +437,37 @@ export default function CreateOutboundOrderPage() {
                             </div>
                         </div>
 
-                        <div className="md:col-span-2 space-y-1.5">
-                            <Label>Nome Transportadora</Label>
-                            <Input {...register('carrierName')} className="text-xs" />
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Inscrição Estadual Transportadora</Label>
+                            <Input {...register('carrierStateRegistration')} placeholder="IE..." className="font-mono text-xs bg-white" />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
-                        <div className="space-y-1.5">
-                            <Label>Placa do Veículo</Label>
-                            <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs" />
+                        <div className="space-y-1.5 md:col-span-2">
+                            <Label className="text-xs">Nome / Razão Social Transportadora</Label>
+                            <Input {...register('carrierName')} className="text-xs bg-white" />
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label>UF da Placa</Label>
+                            <Label className="text-xs">Placa do Veículo</Label>
+                            <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs bg-white" />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">UF da Placa</Label>
                             <Select value={watch('vehiclePlateState')} onValueChange={(val) => setValue('vehiclePlateState', val)}>
-                                <SelectTrigger className="text-xs"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
 
-                        <div className="md:col-span-2 space-y-1.5">
-                            <Label>Observações Adicionais / Instruções de Entrega</Label>
-                            <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs" />
-                        </div>
+                    <div className="space-y-1.5 border-t border-slate-100 pt-3">
+                        <Label className="text-xs">Observações Adicionais / Instruções de Entrega (infCpl)</Label>
+                        <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs bg-white" />
                     </div>
                 </div>
             </form>

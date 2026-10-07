@@ -77,10 +77,10 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     var parsedNfe = _parser.ParseXml(xmlString);
                     var issuer = parsedNfe.Issuer;
 
-                    // 1. Validação do CNPJ Destinatário[cite: 25]
-                    if (parsedNfe.DestCnpj != company.Cnpj)
+                    // 1. Validação do CNPJ Destinatário (Ajustado para o novo objeto Recipient)
+                    if (parsedNfe.Recipient.CnpjCpf != company.Cnpj)
                     {
-                        errors.Add($"NF-e {parsedNfe.AccessKey}: Ignorada. O CNPJ destinatário ({parsedNfe.DestCnpj}) não pertence a esta empresa ({company.Cnpj}).");
+                        errors.Add($"NF-e {parsedNfe.AccessKey}: Ignorada. O CNPJ destinatário ({parsedNfe.Recipient.CnpjCpf}) não pertence a esta empresa ({company.Cnpj}).");
                         continue;
                     }
 
@@ -93,7 +93,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
 
                     var customer = existingCustomers.FirstOrDefault(c => c.Cnpj == issuer.Cnpj);
 
-                    // 3. Cadastra ou Atualiza o Depositante[cite: 25]
+                    // 3. Cadastra ou Atualiza o Depositante
                     if (customer == null)
                     {
                         customer = new Customer(
@@ -145,7 +145,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                         );
                     }
 
-                    // 4. Cria a Ordem de Recebimento[cite: 25]
+                    // 4. Cria a Ordem de Recebimento
                     var order = new InboundOrder(
                         companyId,
                         customer.Id,
@@ -157,7 +157,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     );
                     _db.InboundOrders.Add(order);
 
-                    // 5. Itens da Nota[cite: 25]
+                    // 5. Itens da Nota
                     foreach (var item in parsedNfe.Items)
                     {
                         var matchedProduct = existingProducts.FirstOrDefault(p =>
@@ -191,7 +191,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                 }
             }
 
-            // Persiste no banco o lote atual de 5 ordens antes de ir para a SEFAZ[cite: 25]
+            // Persiste no banco o lote atual de 5 ordens antes de ir para a SEFAZ
             await _db.SaveChangesAsync(ct);
 
             // 6. DISPARO PARALELO DAS CIÊNCIAS (210210) PARA O LOTE DE 5 NOTAS

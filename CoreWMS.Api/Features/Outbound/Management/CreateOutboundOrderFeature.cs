@@ -1,5 +1,5 @@
-using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -18,13 +18,22 @@ public record CreateOutboundOrderCommand(
     bool IsReturnToCustomer,
     string? DestinationCnpjCpf,
     string? DestinationName,
+    string? DestinationStateRegistration,
+    int DestinationIeIndicator,
+    string? DestinationStreet,
+    string? DestinationNumber,
+    string? DestinationComplement,
+    string? DestinationNeighborhood,
+    int DestinationCityCode,
     string? DestinationCity,
     string? DestinationState,
     string? DestinationZipCode,
     string? CarrierCnpjCpf,
     string? CarrierName,
+    string? CarrierStateRegistration,
     string? VehiclePlate,
     string? VehiclePlateState,
+    int FreightModality,
     string? AdditionalNotes
 ) : IRequest<IResult>;
 
@@ -55,20 +64,26 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(request.CustomerId))
             return Results.Forbid();
 
-        // Se o utilizador informou um número de pedido, valida duplicidade
         if (!string.IsNullOrWhiteSpace(request.OrderNumber) &&
             await _db.OutboundOrders.AnyAsync(o => o.CompanyId == companyId && o.OrderNumber == request.OrderNumber.Trim(), ct))
         {
             return Results.BadRequest(new { Message = "Já existe um pedido de saída cadastrado com este número." });
         }
 
-        // Se for retorno para o próprio depositante, preenche os dados do destinatário com os dados do depositante
         string? destCnpj = request.DestinationCnpjCpf;
         string? destName = request.DestinationName;
+        string? destIe = request.DestinationStateRegistration;
+        int destIeIndicator = request.DestinationIeIndicator;
+        string? destStreet = request.DestinationStreet;
+        string? destNumber = request.DestinationNumber;
+        string? destComplement = request.DestinationComplement;
+        string? destNeighborhood = request.DestinationNeighborhood;
+        int destCityCode = request.DestinationCityCode;
         string? destCity = request.DestinationCity;
         string? destState = request.DestinationState;
         string? destZip = request.DestinationZipCode;
 
+        // Retorno Simbólico / Devolução para o Próprio Depositante
         if (request.IsReturnToCustomer)
         {
             var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.CustomerId && c.CompanyId == companyId, ct);
@@ -76,6 +91,13 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
             {
                 destCnpj = customer.Cnpj;
                 destName = customer.CorporateName;
+                destIe = customer.StateRegistration;
+                destIeIndicator = customer.IeIndicator;
+                destStreet = customer.Street;
+                destNumber = customer.Number;
+                destComplement = customer.Complement;
+                destNeighborhood = customer.Neighborhood;
+                destCityCode = customer.CityCode;
                 destCity = customer.CityName;
                 destState = customer.State;
                 destZip = customer.ZipCode;
@@ -93,13 +115,22 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
             request.IsReturnToCustomer,
             destCnpj,
             destName,
+            destIe,
+            destIeIndicator,
+            destStreet,
+            destNumber,
+            destComplement,
+            destNeighborhood,
+            destCityCode,
             destCity,
             destState,
             destZip,
             request.CarrierCnpjCpf,
             request.CarrierName,
+            request.CarrierStateRegistration,
             request.VehiclePlate,
             request.VehiclePlateState,
+            request.FreightModality,
             request.AdditionalNotes,
             issueDate: DateTime.UtcNow,
             request.ExpectedShipDate
