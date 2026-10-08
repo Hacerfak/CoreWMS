@@ -2,8 +2,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-RUN apt update && apt install -y libfontconfig1
-
 # Copia o arquivo de projeto e restaura as dependências
 COPY ["CoreWMS.Api.csproj", "./"]
 RUN dotnet restore "CoreWMS.Api.csproj"
@@ -16,6 +14,15 @@ RUN dotnet publish "CoreWMS.Api.csproj" -c Release -o /app/publish /p:UseAppHost
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 EXPOSE 8080
+
+RUN apt update && apt install -y \
+    libgdiplus \
+    libc6-dev \
+    ttf-mscorefonts-installer \
+    fontconfig \
+    libfontconfig1 \
+    libfreetype6 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copia os arquivos compilados da etapa anterior
 COPY --from=build /app/publish .

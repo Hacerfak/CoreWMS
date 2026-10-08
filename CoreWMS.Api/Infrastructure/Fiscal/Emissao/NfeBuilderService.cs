@@ -202,11 +202,11 @@ public class NfeBuilderService
 
         nfe.infNFe.infRespTec = new Shared.NFe.Classes.Informacoes.InfRespTec.infRespTec
         {
-            CNPJ = "12345678000199",
-            xContato = "Suporte CoreWMS",
+            CNPJ = "64615275000112",
+            xContato = "CoreWMS - Eder Gross Cichelero",
             email = "suporte@corewms.com.br",
-            fone = "11999999999",
-            hashCSRT = string.Empty,
+            fone = "54992221877",
+            hashCSRT = null,
             idCSRT = null
         };
 
@@ -236,6 +236,7 @@ public class NfeBuilderService
         var ide = new ide
         {
             cUF = ufEnum,
+            cNF = new Random().Next(10000000, 99999999).ToString("D8"),
             natOp = "RETORNO DE ARMAZEM GERAL",
             mod = ModeloDocumento.NFe,
             serie = serie,
@@ -250,11 +251,13 @@ public class NfeBuilderService
             finNFe = FinalidadeNFe.fnNormal,
             indFinal = ConsumidorFinal.cfNao,
             indPres = PresencaComprador.pcOutros,
+            indIntermed = IndicadorIntermediador.iiSemIntermediador,
             procEmi = ProcessoEmissao.peAplicativoContribuinte,
             verProc = "CoreWMS 1.0"
         };
 
-        if (originAccessKeys != null && originAccessKeys.Any())
+        // Adiciona NFref apenas em Produção para evitar a Rejeição 267 em Homologação
+        if (order.Company.Environment == 1 && originAccessKeys != null && originAccessKeys.Any())
         {
             ide.NFref = ide.NFref ?? new List<NFref>();
             foreach (var key in originAccessKeys)
@@ -281,7 +284,7 @@ public class NfeBuilderService
         {
             CNPJ = company.Cnpj ?? "",
             xNome = company.CorporateName ?? "",
-            xFant = company.TradeName,
+            xFant = string.IsNullOrWhiteSpace(company.TradeName) ? null : company.TradeName.Trim(),
             IE = company.StateRegistration,
             CRT = CRT.SimplesNacional,
             enderEmit = new enderEmit
@@ -306,6 +309,11 @@ public class NfeBuilderService
         string name = !string.IsNullOrWhiteSpace(order.DestinationName)
             ? order.DestinationName.Trim()
             : (order.Customer?.CorporateName ?? "NÃO INFORMADO");
+
+        if (order.Company.Environment != 1)
+        {
+            name = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+        }
 
         string street = !string.IsNullOrWhiteSpace(order.DestinationStreet)
             ? order.DestinationStreet.Trim()

@@ -117,7 +117,7 @@ public class ShipOutboundOrderHandler : IRequestHandler<ShipOutboundOrderCommand
 
             // Assina utilizando diretamente a configuração do Zeus
             nfe.Assina(cfgServico);
-            //nfe.Valida();
+            nfe.Valida(cfgServico);
         }
         catch (Exception ex)
         {

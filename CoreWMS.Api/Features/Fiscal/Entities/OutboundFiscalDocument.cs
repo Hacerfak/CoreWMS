@@ -46,17 +46,17 @@ public class OutboundFiscalDocument : AuditableEntity
     public void MarkAsAuthorized(string accessKey, string protocol, string rawXml, string message)
     {
         Status = FiscalDocumentStatus.Authorized;
-        AccessKey = accessKey;
-        Protocol = protocol;
+        AccessKey = accessKey?.Trim();
+        Protocol = protocol?.Trim();
         RawXml = rawXml;
-        ReturnMessage = message;
+        ReturnMessage = message?.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void MarkAsRejected(string message)
     {
         Status = FiscalDocumentStatus.Rejected;
-        ReturnMessage = message;
+        ReturnMessage = message?.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 }

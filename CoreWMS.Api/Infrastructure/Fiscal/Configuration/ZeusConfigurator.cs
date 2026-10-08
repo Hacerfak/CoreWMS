@@ -19,10 +19,13 @@ public interface IZeusConfigurator
 public class ZeusConfigurator : IZeusConfigurator
 {
     private readonly IWebHostEnvironment _env;
+    private readonly ILogger<ZeusConfigurator> _logger;
 
-    public ZeusConfigurator(IWebHostEnvironment env)
+    public ZeusConfigurator(IWebHostEnvironment env, ILogger<ZeusConfigurator> logger)
     {
         _env = env;
+        _logger = logger;
+
 #pragma warning disable SYSLIB0014
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 #pragma warning restore SYSLIB0014
@@ -46,12 +49,7 @@ public class ZeusConfigurator : IZeusConfigurator
 
     public ConfiguracaoServico GetNfeConfiguracao(Estado estado, TipoAmbiente ambiente, byte[] certBytes, string certPassword)
     {
-        string schemasPath = Path.Combine(_env.ContentRootPath, "Schemas");
-        if (!Directory.Exists(schemasPath))
-        {
-            schemasPath = Path.Combine(AppContext.BaseDirectory, "Schemas");
-        }
-
+        string? schemasPath = ResolveSchemasDirectory();
         using var cert = LoadCertificate(certBytes, certPassword);
 
         return new ConfiguracaoServico
@@ -59,8 +57,8 @@ public class ZeusConfigurator : IZeusConfigurator
             ValidarCertificadoDoServidor = false,
             DiretorioSalvarXml = "",
             SalvarXmlServicos = false,
-            ValidarSchemas = false,
-            DiretorioSchemas = schemasPath,
+            ValidarSchemas = !string.IsNullOrEmpty(schemasPath),
+            DiretorioSchemas = schemasPath ?? "",
             ProtocoloDeSeguranca = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13,
             RemoverAcentos = true,
             DefineVersaoServicosAutomaticamente = true,
@@ -89,5 +87,36 @@ public class ZeusConfigurator : IZeusConfigurator
         var certPassword = CryptoService.Decrypt(company.CertificatePassword);
 
         return GetNfeConfiguracao(estadoEnum, ambiente, company.CertificateBytes, certPassword);
+    }
+
+    private string? ResolveSchemasDirectory()
+    {
+        var candidatePaths = new[]
+        {
+            Path.Combine(_env.ContentRootPath, "Schemas"),
+            Path.Combine(AppContext.BaseDirectory, "Schemas"),
+            Path.Combine(Directory.GetCurrentDirectory(), "Schemas")
+        };
+
+        foreach (var path in candidatePaths)
+        {
+            _logger.LogInformation("[ZEUS SCHEMAS] Avaliando diretório de Schemas: {Path}", path);
+
+            if (Directory.Exists(path))
+            {
+                var xsdFiles = Directory.GetFiles(path, "*.xsd", SearchOption.AllDirectories);
+                _logger.LogInformation("[ZEUS SCHEMAS] Pasta encontrada em {Path}. Arquivos .xsd localizados: {Count}", path, xsdFiles.Length);
+
+                if (xsdFiles.Length > 0)
+                {
+                    return path;
+                }
+
+                _logger.LogWarning("[ZEUS SCHEMAS] A pasta {Path} existe, mas NÃO contém arquivos .xsd!", path);
+            }
+        }
+
+        _logger.LogError("[ZEUS SCHEMAS] NENHUM diretório válido com arquivos .xsd foi encontrado nos caminhos avaliados!");
+        return null;
     }
 }

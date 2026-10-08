@@ -644,7 +644,7 @@ public class ApplicationDbContext : DbContext
                 .HasMaxLength(30);
 
             b.Property(x => x.ReturnMessage)
-                .HasMaxLength(1000);
+                .HasColumnType("text");
 
             // Mapeamento para armazenar o XML completo sem limite de tamanho
             b.Property(x => x.RawXml)

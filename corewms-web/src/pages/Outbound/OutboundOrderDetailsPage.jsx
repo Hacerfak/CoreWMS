@@ -79,6 +79,29 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
+    const handleDownloadXml = async (doc) => {
+        try {
+            toast.success('Preparando download do XML...');
+            const response = await customInstance({
+                url: `/api/fiscal/nfe/${doc.id}/xml`,
+                method: 'GET',
+                responseType: 'blob' // <-- Essencial para o Axios tratar como arquivo
+            });
+
+            const blob = new Blob([response], { type: 'application/xml' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${doc.accessKey || doc.id}-procNFe.xml`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            toast.error('Erro ao baixar o arquivo XML.');
+        }
+    };
+
     const renderStatusBadge = (status) => {
         switch (status) {
             case 'Pending':
@@ -348,22 +371,36 @@ export default function OutboundOrderDetailsPage() {
                                                     </TableCell>
                                                     <TableCell className="text-right">
                                                         {doc.status === 'Authorized' && (
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleDownloadPdf(doc)}
-                                                                disabled={downloadingDocId === doc.id}
-                                                                className="h-8 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-medium"
-                                                                title="Baixar DANFE em PDF"
-                                                            >
-                                                                {downloadingDocId === doc.id ? (
-                                                                    <Loader2 size={13} className="animate-spin" />
-                                                                ) : (
-                                                                    <>
-                                                                        <Download size={13} className="mr-1 text-orange-600" /> DANFE
-                                                                    </>
-                                                                )}
-                                                            </Button>
+                                                            <div className="flex justify-end gap-2">
+                                                                {/* DOWNLOAD DO XML (Gerado a partir do RAW salvado no banco) */}
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleDownloadXml(doc)}
+                                                                    className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium"
+                                                                    title="Baixar XML Autorizado"
+                                                                >
+                                                                    <FileCode size={13} className="mr-1 text-blue-600" /> XML
+                                                                </Button>
+
+                                                                {/* DOWNLOAD DA DANFE (PDF via FastReport) */}
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleDownloadPdf(doc)}
+                                                                    disabled={downloadingDocId === doc.id}
+                                                                    className="h-8 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-medium"
+                                                                    title="Baixar DANFE em PDF"
+                                                                >
+                                                                    {downloadingDocId === doc.id ? (
+                                                                        <Loader2 size={13} className="animate-spin" />
+                                                                    ) : (
+                                                                        <>
+                                                                            <Download size={13} className="mr-1 text-orange-600" /> DANFE
+                                                                        </>
+                                                                    )}
+                                                                </Button>
+                                                            </div>
                                                         )}
                                                     </TableCell>
                                                 </TableRow>

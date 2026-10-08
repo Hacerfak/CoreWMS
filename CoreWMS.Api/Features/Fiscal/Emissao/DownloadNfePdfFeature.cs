@@ -26,6 +26,8 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
 
     public async Task<IResult> Handle(DownloadNfePdfQuery request, CancellationToken ct)
     {
+        FastReport.Utils.Config.WebMode = true;
+
         _logger.LogInformation("[DANFE] A iniciar geração de PDF para o Documento Fiscal ID: {DocumentId}", request.DocumentId);
 
         var doc = await _db.OutboundFiscalDocuments
@@ -49,12 +51,44 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
             string nomeArquivo = $"{doc.AccessKey}-danfe.pdf";
             string caminhoFinalPdf = Path.Combine(diretorioBase, nomeArquivo);
 
-            // CORREÇÃO: Encapsula a renderização pesada (que usa CPU e IO síncrono) numa Background Task
-            // para não estrangular as Workers Threads do Kestrel.
             await Task.Run(() =>
             {
                 using var report = new Report();
                 report.Load(frxPath);
+
+                var allDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // 1. Inclui TODAS as DLLs da aplicação (/app/*.dll - Zeus, NFe.Classes, NFe.Utils, etc)
+                string appDir = AppContext.BaseDirectory;
+                if (Directory.Exists(appDir))
+                {
+                    foreach (var dll in Directory.GetFiles(appDir, "*.dll"))
+                    {
+                        allDlls.Add(dll);
+                    }
+                }
+
+                // 2. Inclui TODAS as DLLs do Runtime .NET 10 (/usr/share/dotnet/shared/Microsoft.NETCore.App/.../*.dll)
+                string runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+                if (Directory.Exists(runtimeDir))
+                {
+                    foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll"))
+                    {
+                        allDlls.Add(dll);
+                    }
+                }
+
+                // 3. Inclui assemblies dinâmicos/carregados no AppDomain por garantia
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (!asm.IsDynamic && !string.IsNullOrWhiteSpace(asm.Location) && File.Exists(asm.Location))
+                    {
+                        allDlls.Add(asm.Location);
+                    }
+                }
+
+                report.ReferencedAssemblies = allDlls.ToArray();
+
                 report.RegisterData(new[] { nfeProc }, "NFe", 20);
                 report.GetDataSource("NFe").Enabled = true;
 
@@ -90,7 +124,7 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
         report.SetParameterValue("ContingenciaValor", string.Empty);
         report.SetParameterValue("ContingenciaID", string.Empty);
         report.SetParameterValue("DuasLinhas", false);
-        report.SetParameterValue("Desenvolvedor", "CoreWMS");
+        report.SetParameterValue("Desenvolvedor", "CoreWMS - Eder Gross Cichelero");
         report.SetParameterValue("QuebrarLinhasObservacao", true);
         report.SetParameterValue("ImprimirISSQN", false);
         report.SetParameterValue("ImprimirDescPorc", true);
@@ -106,9 +140,9 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
     }
 }
 
-public static class DownloadNfePdfEndpoint
+public static class DownloadNfePdfEndpoints
 {
-    public static void MapDownloadNfePdfEndpoint(this IEndpointRouteBuilder app)
+    public static void MapDownloadNfePdfEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/fiscal/nfe/{documentId:guid}/pdf", async (Guid documentId, IMediator mediator) =>
             await mediator.Send(new DownloadNfePdfQuery(documentId)))

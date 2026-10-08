@@ -8,14 +8,14 @@
 
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
-    <PackageReference Include="Dapper" Version="2.1.86" />
+    <PackageReference Include="Dapper" Version="2.1.89" />
     <PackageReference Include="FastGuid" Version="1.4.3" />
     <PackageReference Include="FastReport.OpenSource" Version="2026.2.8" />
     <PackageReference Include="FastReport.OpenSource.Export.PdfSimple" Version="2026.2.8" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageReference Include="Google.Apis.Gmail.v1" Version="1.75.0.4225" />
     <PackageReference Include="Hercules.NET.NFe.NFCe" Version="2026.9.13.2130" />
-    <PackageReference Include="Mapster" Version="10.0.12" />
+    <PackageReference Include="Mapster" Version="10.0.13" />
     <PackageReference Include="MediatR" Version="14.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
@@ -31,9 +31,10 @@
     <PackageReference Include="MimeKit" Version="4.18.1" />
     <PackageReference Include="MongoDB.Driver" Version="3.12.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageReference Include="SkiaSharp" Version="4.152.1" />
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.152.1" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+    <!-- <PackageReference Include="Zeus.Net.NFe.NFCe" Version="2026.9.24.1416" /> -->
   </ItemGroup>
 
   <ItemGroup>
