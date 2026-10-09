@@ -33,6 +33,7 @@ export * from './createTemplateRequest';
 export * from './createUserCommand';
 export * from './createWarehouseCommand';
 export * from './createZoneCommand';
+export * from './emitOutboundNfeCommand';
 export * from './fiscalOperationType';
 export * from './fracionadoBoxPackingDto';
 export * from './generateBillingCycleCommand';

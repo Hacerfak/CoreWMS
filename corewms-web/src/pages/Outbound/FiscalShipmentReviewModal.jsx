@@ -7,18 +7,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, FileCode, CheckCircle2, ShieldAlert, Sparkles, Truck } from 'lucide-react';
+import { Loader2, FileCode, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId, onSuccess }) {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [stepMessage, setStepMessage] = useState('');
     const [previewData, setPreviewData] = useState(null);
 
     // Formulário de Ajustes Fiscais
     const [naturezaOp, setNaturezaOp] = useState('');
     const [indFinal, setIndFinal] = useState('0');
     const [indPres, setIndPres] = useState('9');
+    const [tpImp, setTpImp] = useState('1'); // 1 = Retrato, 2 = Paisagem
     const [additionalNotes, setAdditionalNotes] = useState('');
 
     useEffect(() => {
@@ -33,6 +35,7 @@ export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId,
                     setNaturezaOp(res.defaultNaturezaOperacao || 'RETORNO DE ARMAZEM GERAL');
                     setIndFinal(res.defaultIndFinal?.toString() || '0');
                     setIndPres(res.defaultIndPres?.toString() || '9');
+                    setTpImp(res.defaultTpImp?.toString() || '1');
                     setAdditionalNotes(res.additionalNotes || '');
                 })
                 .catch(() => toast.error('Erro ao carregar pré-visualização fiscal.'))
@@ -44,27 +47,42 @@ export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId,
         e.preventDefault();
         try {
             setIsSubmitting(true);
-            const payload = {
+
+            // PASSO 1: Emitir e Autorizar NF-e na SEFAZ
+            setStepMessage('Transmitindo e Autorizando NF-e na SEFAZ...');
+            const emitPayload = {
                 orderId,
+                operationType: previewData?.operationType ?? 0,
                 customNaturezaOperacao: naturezaOp,
                 customIndFinal: Number(indFinal),
                 customIndPres: Number(indPres),
+                customTpImp: Number(tpImp),
                 customAdditionalNotes: additionalNotes
             };
 
-            const res = await customInstance({
-                url: `/api/outbound/orders/${orderId}/ship`,
+            const emitRes = await customInstance({
+                url: `/api/fiscal/nfe/emit/${orderId}`,
                 method: 'POST',
-                data: payload
+                data: emitPayload
             });
 
-            toast.success(res?.message || 'NF-e Autorizada e Pedido Expedido com Sucesso!');
+            toast.success(emitRes?.message || 'NF-e Autorizada com sucesso!');
+
+            // PASSO 2: Baixar Estoque e Atualizar Status no WMS
+            setStepMessage('Dando baixa no estoque e finalizando expedição...');
+            await customInstance({
+                url: `/api/outbound/orders/${orderId}/ship`,
+                method: 'POST'
+            });
+
+            toast.success('Pedido expedido e estoque atualizado com sucesso!');
             onOpenChange(false);
             if (onSuccess) onSuccess();
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao expedir e emitir NF-e.');
+            toast.error(error.response?.data?.message || 'Falha durante o processo de emissão/expedição.');
         } finally {
             setIsSubmitting(false);
+            setStepMessage('');
         }
     };
 
@@ -117,7 +135,7 @@ export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId,
                             </Label>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="space-y-1.5 md:col-span-2">
+                                <div className="space-y-1.5 md:col-span-1">
                                     <Label className="text-xs">Natureza da Operação (natOp) *</Label>
                                     <Input
                                         value={naturezaOp}
@@ -136,6 +154,17 @@ export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId,
                                         </SelectContent>
                                     </Select>
                                 </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Orientação da DANFE (tpImp) *</Label>
+                                    <Select value={tpImp} onValueChange={setTpImp}>
+                                        <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="1">1 - Retrato</SelectItem>
+                                            <SelectItem value="2">2 - Paisagem</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
 
                             <div className="space-y-1.5">
@@ -149,7 +178,7 @@ export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId,
                             </div>
                         </div>
 
-                        {/* TABELA DE ITENS COM CFOP E VALORES */}
+                        {/* TABELA DE ITENS */}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
                                 Espelho dos Itens e CFOPs
@@ -204,8 +233,17 @@ export default function FiscalShipmentReviewModal({ open, onOpenChange, orderId,
                                 Cancelar
                             </Button>
                             <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5">
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                                Assinar, Emitir & Expedir na SEFAZ
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        <span className="text-xs">{stepMessage || 'Processando...'}</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                                        Assinar, Emitir & Expedir na SEFAZ
+                                    </>
+                                )}
                             </Button>
                         </DialogFooter>
                     </form>

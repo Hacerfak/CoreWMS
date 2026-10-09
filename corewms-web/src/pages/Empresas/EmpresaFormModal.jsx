@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Building2, Save, FileKey2, UploadCloud, AlertCircle, Sparkles, MapPin, FileSignature, ShieldCheck, FileText, Truck } from 'lucide-react';
+import { Loader2, Building2, Save, FileKey2, UploadCloud, AlertCircle, Sparkles, MapPin, FileSignature, ShieldCheck, FileText, Truck, Image as ImageIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const empresaSchema = z.object({
@@ -59,6 +59,8 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
         resolver: zodResolver(certSchema)
     });
 
+    const logoBase64 = watchDados('logoBase64');
+
     useEffect(() => {
         if (open && empresaToEdit) {
             resetDados({
@@ -89,6 +91,23 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
             setActiveTab('dados');
         }
     }, [open, empresaToEdit, resetDados, resetCert]);
+
+    // Converte o arquivo selecionado para Base64
+    const handleLogoUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 2 * 1024 * 1024) {
+            toast.error('O arquivo da logomarca deve ter no máximo 2MB.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setDadosValue('logoBase64', reader.result, { shouldValidate: true });
+        };
+        reader.readAsDataURL(file);
+    };
 
     const { mutate: updateCompany, isPending: isUpdatingDados } = usePutApiCompaniesId({
         mutation: {
@@ -196,6 +215,51 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     </div>
                                 </div>
 
+                                {/* LOGOMARCA PARA DANFE */}
+                                <div className="space-y-3">
+                                    <h3 className="text-sm font-semibold text-slate-900 border-b pb-1 flex items-center gap-2">
+                                        <ImageIcon size={16} className="text-slate-400" /> Logomarca da Empresa (Impressão DANFE)
+                                    </h3>
+                                    <div className="flex items-center gap-4 p-4 border border-slate-200 rounded-xl bg-slate-50/50">
+                                        {logoBase64 ? (
+                                            <div className="relative group shrink-0">
+                                                <img
+                                                    src={logoBase64}
+                                                    alt="Preview Logo"
+                                                    className="h-16 w-28 object-contain border border-slate-200 rounded-lg bg-white p-1 shadow-xs"
+                                                />
+                                                <Button
+                                                    type="button"
+                                                    variant="destructive"
+                                                    size="icon"
+                                                    className="h-6 w-6 absolute -top-2 -right-2 rounded-full shadow-md"
+                                                    onClick={() => setDadosValue('logoBase64', null, { shouldValidate: true })}
+                                                >
+                                                    <X size={12} />
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="h-16 w-28 border-2 border-dashed border-slate-300 rounded-lg bg-white flex flex-col items-center justify-center text-slate-400 text-[10px] shrink-0 font-medium gap-1">
+                                                <UploadCloud size={20} className="text-slate-300" />
+                                                <span>Sem Logomarca</span>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-1.5 flex-1">
+                                            <Label className="text-xs font-semibold text-slate-700">Selecionar arquivo de imagem</Label>
+                                            <Input
+                                                type="file"
+                                                accept="image/png, image/jpeg, image/jpg"
+                                                onChange={handleLogoUpload}
+                                                className="cursor-pointer h-9 text-xs file:pt-0.5 bg-white"
+                                            />
+                                            <p className="text-[11px] text-slate-500">
+                                                Formatos suportados: PNG, JPG ou JPEG (máximo 2MB). Essa imagem será impressa no cabeçalho das DANFes.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Identificação & Fiscal */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-semibold text-slate-900 border-b pb-1 flex items-center gap-2">
@@ -251,7 +315,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     </div>
                                 </div>
 
-                                {/* PARÂMETROS NF-E E TRANSPORTE (NOVOS) */}
+                                {/* PARÂMETROS NF-E E TRANSPORTE */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-semibold text-slate-900 border-b pb-1 flex items-center gap-2">
                                         <FileText size={16} className="text-slate-400" /> Numeração Fiscal & Transporte (ANTT)

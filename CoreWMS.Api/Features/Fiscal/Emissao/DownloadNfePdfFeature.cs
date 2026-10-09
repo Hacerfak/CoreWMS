@@ -1,11 +1,12 @@
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Fiscal.Emissao.QuestPdf; // Namespace do novo PDF
 using DFe.Utils;
-using FastReport;
-using FastReport.Export.PdfSimple;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using NFe.Classes;
+using QuestPDF.Fluent;
+using QuestPDF.Infrastructure;
 
 namespace CoreWMS.Api.Features.Fiscal.Emissao;
 
@@ -15,24 +16,21 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
 {
     private readonly ApplicationDbContext _db;
     private readonly ILogger<DownloadNfePdfHandler> _logger;
-    private readonly IWebHostEnvironment _env;
 
-    public DownloadNfePdfHandler(ApplicationDbContext db, ILogger<DownloadNfePdfHandler> logger, IWebHostEnvironment env)
+    public DownloadNfePdfHandler(ApplicationDbContext db, ILogger<DownloadNfePdfHandler> logger)
     {
         _db = db;
         _logger = logger;
-        _env = env;
     }
 
     public async Task<IResult> Handle(DownloadNfePdfQuery request, CancellationToken ct)
     {
-        FastReport.Utils.Config.WebMode = true;
-
-        _logger.LogInformation("[DANFE] A iniciar geração de PDF para o Documento Fiscal ID: {DocumentId}", request.DocumentId);
+        _logger.LogInformation("[DANFE] Iniciando geração nativa QuestPDF ID: {DocumentId}", request.DocumentId);
 
         var doc = await _db.OutboundFiscalDocuments
+            .AsNoTracking()
             .Include(d => d.OutboundOrder)
-            .ThenInclude(o => o.Company)
+                .ThenInclude(o => o.Company)
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
@@ -40,69 +38,24 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
 
         try
         {
+            QuestPDF.Settings.License = LicenseType.Community;
+
             var nfeProc = FuncoesXml.XmlStringParaClasse<nfeProc>(doc.RawXml);
 
-            string frxPath = Path.Combine(_env.ContentRootPath, "Assets", "Fiscal", "NFeRetrato.frx");
-            if (!File.Exists(frxPath)) return Results.Problem($"O template {frxPath} não foi encontrado.");
+            // Obtém e converte a string Base64 da empresa para byte[]
+            string? logoBase64 = doc.OutboundOrder?.Company?.LogoBase64; // Substitua pelo nome exato da propriedade
+            byte[]? logoBytes = ConvertBase64ToBytes(logoBase64);
 
-            string diretorioBase = Path.Combine(_env.ContentRootPath, "uploads", "NFePdf");
-            if (!Directory.Exists(diretorioBase)) Directory.CreateDirectory(diretorioBase);
-
-            string nomeArquivo = $"{doc.AccessKey}-danfe.pdf";
-            string caminhoFinalPdf = Path.Combine(diretorioBase, nomeArquivo);
-
-            await Task.Run(() =>
+            byte[] pdfBytes = await Task.Run(() =>
             {
-                using var report = new Report();
-                report.Load(frxPath);
+                IDocument document = nfeProc.NFe.infNFe.ide.tpImp == NFe.Classes.Informacoes.Identificacao.Tipos.TipoImpressao.tiPaisagem
+                    ? new DanfePaisagemDocument(nfeProc, logoBytes)
+                    : new DanfeRetratoDocument(nfeProc, logoBytes);
 
-                var allDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                // 1. Inclui TODAS as DLLs da aplicação (/app/*.dll - Zeus, NFe.Classes, NFe.Utils, etc)
-                string appDir = AppContext.BaseDirectory;
-                if (Directory.Exists(appDir))
-                {
-                    foreach (var dll in Directory.GetFiles(appDir, "*.dll"))
-                    {
-                        allDlls.Add(dll);
-                    }
-                }
-
-                // 2. Inclui TODAS as DLLs do Runtime .NET 10 (/usr/share/dotnet/shared/Microsoft.NETCore.App/.../*.dll)
-                string runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-                if (Directory.Exists(runtimeDir))
-                {
-                    foreach (var dll in Directory.GetFiles(runtimeDir, "*.dll"))
-                    {
-                        allDlls.Add(dll);
-                    }
-                }
-
-                // 3. Inclui assemblies dinâmicos/carregados no AppDomain por garantia
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    if (!asm.IsDynamic && !string.IsNullOrWhiteSpace(asm.Location) && File.Exists(asm.Location))
-                    {
-                        allDlls.Add(asm.Location);
-                    }
-                }
-
-                report.ReferencedAssemblies = allDlls.ToArray();
-
-                report.RegisterData(new[] { nfeProc }, "NFe", 20);
-                report.GetDataSource("NFe").Enabled = true;
-
-                ConfigurarParametrosDanfe(report, nfeProc, doc.Status == Entities.FiscalDocumentStatus.Canceled);
-
-                report.Prepare();
-
-                using var pdfExport = new PDFSimpleExport();
-                report.Export(pdfExport, caminhoFinalPdf);
+                return document.GeneratePdf();
             }, ct);
 
-            _logger.LogInformation("[DANFE] PDF gerado com sucesso: {Path}", caminhoFinalPdf);
-
-            byte[] pdfBytes = await File.ReadAllBytesAsync(caminhoFinalPdf, ct);
+            string nomeArquivo = $"{doc.AccessKey}-danfe.pdf";
             return Results.File(pdfBytes, "application/pdf", nomeArquivo);
         }
         catch (Exception ex)
@@ -112,31 +65,25 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
         }
     }
 
-    private void ConfigurarParametrosDanfe(Report report, nfeProc proc, bool cancelado)
+    private byte[]? ConvertBase64ToBytes(string? base64String)
     {
-        string resumoCanhoto = $"Emissão: {proc.NFe.infNFe.ide.dhEmi:dd/MM/yyyy} Dest/Reme: {proc.NFe.infNFe.dest.xNome} Valor Total: {proc.NFe.infNFe.total.ICMSTot.vNF:C}";
-        string mensagem = cancelado ? "NFe Cancelada" : (proc.NFe.infNFe.ide.tpAmb == DFe.Classes.Flags.TipoAmbiente.Homologacao ? "NFe sem Valor Fiscal - HOMOLOGAÇÃO" : string.Empty);
+        if (string.IsNullOrWhiteSpace(base64String))
+            return null;
 
-        report.SetParameterValue("ResumoCanhoto", resumoCanhoto);
-        report.SetParameterValue("Mensagem", mensagem);
-        report.SetParameterValue("ConsultaAutenticidade", string.Empty);
-        report.SetParameterValue("ContingenciaDescricao", string.Empty);
-        report.SetParameterValue("ContingenciaValor", string.Empty);
-        report.SetParameterValue("ContingenciaID", string.Empty);
-        report.SetParameterValue("DuasLinhas", false);
-        report.SetParameterValue("Desenvolvedor", "CoreWMS - Eder Gross Cichelero");
-        report.SetParameterValue("QuebrarLinhasObservacao", true);
-        report.SetParameterValue("ImprimirISSQN", false);
-        report.SetParameterValue("ImprimirDescPorc", true);
-        report.SetParameterValue("ImprimirTotalLiquido", true);
-        report.SetParameterValue("ImprimirUnidQtdeValor", 1);
-        report.SetParameterValue("ExibeCampoFatura", false);
-        report.SetParameterValue("Logo", Array.Empty<byte>());
-        report.SetParameterValue("ExibirTotalTributos", true);
-        report.SetParameterValue("ExibeRetencoes", false);
-        report.SetParameterValue("DecimaisValorUnitario", 4);
-        report.SetParameterValue("DecimaisQuantidadeItem", 4);
-        report.SetParameterValue("DataHoraImpressao", DateTime.Now);
+        try
+        {
+            // Trata o prefixo Data URI ("data:image/png;base64,...") caso exista
+            string cleanBase64 = base64String.Contains(",")
+                ? base64String.Split(',')[1]
+                : base64String;
+
+            return Convert.FromBase64String(cleanBase64.Trim());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[DANFE] Falha ao converter string Base64 da logomarca da empresa.");
+            return null;
+        }
     }
 }
 

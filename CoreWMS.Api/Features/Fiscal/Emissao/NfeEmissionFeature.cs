@@ -1,22 +1,32 @@
 using CoreWMS.Api.Features.Fiscal.Entities;
+using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 using CoreWMS.Api.Infrastructure.Security;
+using DFe.Classes.Flags;
 using DFe.Utils;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using NFe.Classes.Informacoes.Identificacao.Tipos;
+using NFe.Classes.Servicos.Tipos;
 using NFe.Servicos;
 using NFe.Utils.NFe;
-using NFe.Classes.Servicos.Tipos;
-using DFe.Classes.Flags;
 
 namespace CoreWMS.Api.Features.Fiscal.Emissao;
 
-public record EmitOutboundNfeCommand(Guid OrderId, FiscalOperationType OperationType) : IRequest<IResult>;
+public record EmitOutboundNfeCommand(
+    Guid OrderId,
+    FiscalOperationType OperationType,
+    string? CustomNaturezaOperacao = null,
+    int? CustomIndFinal = null,
+    int? CustomIndPres = null,
+    int? CustomTpImp = null,
+    string? CustomAdditionalNotes = null
+) : IRequest<IResult>;
 
 public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IResult>
 {
@@ -24,9 +34,14 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
     private readonly ITenantProvider _tenant;
     private readonly NfeBuilderService _builder;
     private readonly IZeusConfigurator _zeusConfigurator;
-    private readonly IMemoryCache _cache; // Injeção do Cache Nativo
+    private readonly IMemoryCache _cache;
 
-    public EmitOutboundNfeHandler(ApplicationDbContext db, ITenantProvider tenant, NfeBuilderService builder, IZeusConfigurator zeusConfigurator, IMemoryCache cache)
+    public EmitOutboundNfeHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        NfeBuilderService builder,
+        IZeusConfigurator zeusConfigurator,
+        IMemoryCache cache)
     {
         _db = db;
         _tenant = tenant;
@@ -43,99 +58,137 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             .Include(o => o.Company)
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
 
-        if (order == null) return Results.NotFound();
+        if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
         if (order.Status != OutboundOrderStatus.ReadyToShip)
             return Results.BadRequest(new { Message = "O pedido precisa estar pronto na doca para emitir a NF-e." });
 
-        // 1. Cria a configuração Thread-Safe do Zeus
-        var cfgServico = _zeusConfigurator.GetCompanyConfiguration(order.Company, TipoAmbiente.Homologacao);
+        var company = order.Company;
+        if (company.CertificateBytes == null || company.CertificateBytes.Length == 0)
+            return Results.BadRequest(new { Message = "A empresa não possui um Certificado Digital A1 cadastrado para emissão de NF-e." });
+
+        var tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao;
+        var cfgServico = _zeusConfigurator.GetCompanyConfiguration(company, tpAmb);
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
             cfgServico.Certificado.ArrayBytesArquivo,
             cfgServico.Certificado.Senha,
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
-        // =========================================================
-        // 2. CHECK DE STATUS DA SEFAZ (CACHE DE 1 HORA)
-        // =========================================================
+        // 1. CHECK DE STATUS DA SEFAZ (CACHE DE 1 HORA)
         var cacheKey = $"SEFAZ_STATUS_{cfgServico.cUF}_{cfgServico.tpAmb}";
-
         if (!_cache.TryGetValue(cacheKey, out bool isSefazUp))
         {
             using var servicoStatus = new ServicosNFe(cfgServico, certificado);
             try
             {
                 var retStatus = servicoStatus.NfeStatusServico();
-                // 107 = Serviço em Operação
                 isSefazUp = retStatus.Retorno.cStat == 107;
-                _cache.Set(cacheKey, isSefazUp, TimeSpan.FromHours(1)); // Salva no cache
+                _cache.Set(cacheKey, isSefazUp, TimeSpan.FromHours(1));
             }
             catch
             {
-                isSefazUp = false; // Se deu WebException na consulta, tá fora.
+                isSefazUp = false;
             }
         }
 
         if (!isSefazUp)
-        {
             return Results.BadRequest(new { Message = $"A SEFAZ do estado {cfgServico.cUF} encontra-se inoperante ou em contingência." });
-        }
 
-        // =========================================================
-        // 3. CONSTRUÇÃO E ENVIO DA NOTA
-        // =========================================================
-        var nfe = await _builder.BuildOutboundNfeAsync(order.Id, request.OperationType, ct);
-        var fiscalDoc = new OutboundFiscalDocument(order.Id, request.OperationType == FiscalOperationType.OutboundReturnNormal ? FiscalDocumentType.NfeReturn : FiscalDocumentType.NfeShipment);
+        // 2. CONSTRUÇÃO E AJUSTES CUSTOMIZADOS DO XML
+        NFe.Classes.NFe nfe;
+        var fiscalDocType = request.OperationType == FiscalOperationType.OutboundShipment
+            ? FiscalDocumentType.NfeShipment
+            : FiscalDocumentType.NfeReturn;
 
-        _db.Set<OutboundFiscalDocument>().Add(fiscalDoc); // Rastreia na transação
-
-        using var servicoNFe = new ServicosNFe(cfgServico, certificado);
+        var fiscalDoc = new OutboundFiscalDocument(order.Id, fiscalDocType);
+        _db.Set<OutboundFiscalDocument>().Add(fiscalDoc);
 
         try
         {
-            nfe.Assina();
-            nfe.Valida(); // Internamente valida o XML básico
+            nfe = await _builder.BuildOutboundNfeAsync(order.Id, request.OperationType, ct);
 
-            var loteId = new Random().Next(1000, 99999);
-            var retornoEnvio = servicoNFe.NFeAutorizacao(loteId, IndicadorSincronizacao.Sincrono, new List<NFe.Classes.NFe> { nfe }, false);
+            if (!string.IsNullOrWhiteSpace(request.CustomNaturezaOperacao))
+                nfe.infNFe.ide.natOp = request.CustomNaturezaOperacao.Trim();
 
-            if (retornoEnvio.Retorno.protNFe == null || retornoEnvio.Retorno.cStat != 104) // 104 = Lote processado
+            if (request.CustomIndFinal.HasValue)
+                nfe.infNFe.ide.indFinal = (ConsumidorFinal)request.CustomIndFinal.Value;
+
+            if (request.CustomIndPres.HasValue)
+                nfe.infNFe.ide.indPres = (PresencaComprador)request.CustomIndPres.Value;
+
+            if (request.CustomTpImp.HasValue)
+                nfe.infNFe.ide.tpImp = (TipoImpressao)request.CustomTpImp.Value;
+
+            if (!string.IsNullOrWhiteSpace(request.CustomAdditionalNotes))
             {
-                // Rejeitada pela Sefaz
-                fiscalDoc.MarkAsRejected(retornoEnvio.Retorno.xMotivo);
-
-                // Se a rejeição for 108/109 (Serviço Paralisado), invalidamos o cache!
-                if (retornoEnvio.Retorno.cStat == 108 || retornoEnvio.Retorno.cStat == 109)
-                    _cache.Remove(cacheKey);
-
-                await _db.SaveChangesAsync(ct);
-                return Results.BadRequest(new { Message = $"NF-e Rejeitada: {retornoEnvio.Retorno.xMotivo}", Status = retornoEnvio.Retorno.cStat });
+                nfe.infNFe.infAdic = nfe.infNFe.infAdic ?? new NFe.Classes.Informacoes.Observacoes.infAdic();
+                nfe.infNFe.infAdic.infCpl = request.CustomAdditionalNotes.Trim();
             }
 
-            // 4. SUCESSO! Salva o XML e atualiza Status
-            var nfeProc = new NFe.Classes.nfeProc { NFe = nfe, protNFe = retornoEnvio.Retorno.protNFe, versao = retornoEnvio.Retorno.versao };
-            var xmlAutorizado = nfeProc.ObterXmlString();
-
-            fiscalDoc.MarkAsAuthorized(nfeProc.protNFe.infProt.chNFe, nfeProc.protNFe.infProt.nProt, xmlAutorizado, nfeProc.protNFe.infProt.xMotivo);
-            order.UpdateStatus(OutboundOrderStatus.Shipped);
-
-            await _db.SaveChangesAsync(ct);
-
-            // Neste ponto o Front-End recebe o ID do FiscalDoc para chamar a rota de PDF (Impressão)
-            return Results.Ok(new
-            {
-                Message = "NF-e Emitida e Autorizada!",
-                DocumentId = fiscalDoc.Id,
-                ChaveAcesso = nfeProc.protNFe.infProt.chNFe
-            });
+            nfe.Assina(cfgServico);
+            nfe.Valida(cfgServico);
         }
         catch (Exception ex)
         {
-            // Ocorreu erro de Comunicação/Timeout no momento exato do disparo (Internet caiu, Sefaz Timeout)
-            // Invalidamos o cache para o sistema fazer ping no status na próxima!
-            _cache.Remove(cacheKey);
-            return Results.Problem(statusCode: 500, title: "Falha de comunicação com a SEFAZ.", detail: ex.Message);
+            fiscalDoc.MarkAsRejected($"Erro ao construir/validar o XML da NF-e: {ex.Message}");
+            await _db.SaveChangesAsync(ct);
+            return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
         }
+
+        // 3. TRANSMISSÃO SÍNCRONA
+        using var servicoNFe = new ServicosNFe(cfgServico, certificado);
+        var loteId = new Random().Next(1000, 99999);
+        var retornoEnvio = servicoNFe.NFeAutorizacao(loteId, IndicadorSincronizacao.Sincrono, new List<NFe.Classes.NFe> { nfe }, false);
+
+        var prot = retornoEnvio?.Retorno?.protNFe?.infProt;
+
+        if (retornoEnvio?.Retorno?.protNFe == null || (prot?.cStat != 100 && prot?.cStat != 150))
+        {
+            string motivoRejeicao = prot?.xMotivo ?? retornoEnvio?.Retorno?.xMotivo ?? "Erro desconhecido de autorização SEFAZ.";
+            fiscalDoc.MarkAsRejected($"[Rejeição SEFAZ {prot?.cStat ?? retornoEnvio?.Retorno?.cStat}]: {motivoRejeicao}");
+
+            if (retornoEnvio?.Retorno?.cStat == 108 || retornoEnvio?.Retorno?.cStat == 109)
+                _cache.Remove(cacheKey);
+
+            await _db.SaveChangesAsync(ct);
+
+            return Results.BadRequest(new
+            {
+                Code = "SEFAZ_REJECTION",
+                Message = $"NF-e Rejeitada pela SEFAZ: {motivoRejeicao}",
+                FiscalDocumentId = fiscalDoc.Id
+            });
+        }
+
+        // 4. AUTORIZOU -> GRAVA XML E INCREMENTA SEQUÊNCIAL
+        var nfeProc = new NFe.Classes.nfeProc
+        {
+            NFe = nfe,
+            protNFe = retornoEnvio.Retorno.protNFe,
+            versao = retornoEnvio.Retorno.versao
+        };
+
+        var xmlAutorizado = nfeProc.ObterXmlString();
+        var chNfe = prot.chNFe;
+        var nProt = prot.nProt;
+        var nNfEmitida = nfe.infNFe.ide.nNF;
+
+        fiscalDoc.MarkAsAuthorized(chNfe, nProt, xmlAutorizado, prot.xMotivo);
+        order.SetInvoiceDetails(nNfEmitida.ToString(), nfe.infNFe.ide.serie.ToString(), chNfe);
+
+        // Incrementar a numeração da empresa
+        company.UpdateNfeAndTransportDetails(company.NfeSerie, company.NfeNextNumber + 1, company.Rntrc);
+
+        await _db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            Message = $"NF-e Nº {nNfEmitida} Autorizada com Sucesso!",
+            DocumentId = fiscalDoc.Id,
+            AccessKey = chNfe,
+            Protocol = nProt,
+            InvoiceNumber = nNfEmitida.ToString()
+        });
     }
 }
 
@@ -145,9 +198,11 @@ public static class NfeEmissionEndpoints
     {
         var group = app.MapGroup("/api/fiscal/nfe").WithTags("Fiscal").RequireAuthorization();
 
-        // O IMemoryCache já está disponível nativamente no .NET 8/9 em AddMemoryCache() no Program.cs
-        group.MapPost("/emit/{orderId:guid}", async (Guid orderId, [FromQuery] FiscalOperationType type, IMediator mediator) =>
-            await mediator.Send(new EmitOutboundNfeCommand(orderId, type)))
-            .RequirePermission(Identity.Constants.Permissions.Outbound.Manage);
+        group.MapPost("/emit/{orderId:guid}", async (Guid orderId, EmitOutboundNfeCommand cmd, IMediator mediator) =>
+        {
+            var command = cmd with { OrderId = orderId };
+            return await mediator.Send(command);
+        })
+        .RequirePermission(Permissions.Outbound.Manage);
     }
 }

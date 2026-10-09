@@ -24,8 +24,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  EmitOutboundNfeCommand,
   GetApiFiscalRulesParams,
-  PostApiFiscalNfeEmitOrderIdParams,
   SaveFiscalOperationRuleCommand
 } from '../model';
 
@@ -495,14 +495,15 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     }
     export const postApiFiscalNfeEmitOrderId = (
     orderId: string,
-    params: PostApiFiscalNfeEmitOrderIdParams,
+    emitOutboundNfeCommand: EmitOutboundNfeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
       {url: `/api/fiscal/nfe/emit/${orderId}`, method: 'POST',
-        params, signal
+      headers: {'Content-Type': 'application/json', },
+      data: emitOutboundNfeCommand, signal
     },
       options);
     }
@@ -527,9 +528,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeEmitOrderId>>, PostApiFiscalNfeEmitOrderIdMutationVariables> = (props) => {
-          const {orderId,params} = props ?? {};
+          const {orderId,data} = props ?? {};
 
-          return  postApiFiscalNfeEmitOrderId(orderId,params,requestOptions)
+          return  postApiFiscalNfeEmitOrderId(orderId,data,requestOptions)
         }
 
 
@@ -540,9 +541,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiFiscalNfeEmitOrderIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeEmitOrderId>>>
-
+    export type PostApiFiscalNfeEmitOrderIdMutationBody = EmitOutboundNfeCommand
     export type PostApiFiscalNfeEmitOrderIdMutationError = unknown
-    export type PostApiFiscalNfeEmitOrderIdMutationVariables = {orderId: string;params: PostApiFiscalNfeEmitOrderIdParams}
+    export type PostApiFiscalNfeEmitOrderIdMutationVariables = {orderId: string;data: EmitOutboundNfeCommand}
 
     export const usePostApiFiscalNfeEmitOrderId = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeEmitOrderId>>, TError,PostApiFiscalNfeEmitOrderIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
