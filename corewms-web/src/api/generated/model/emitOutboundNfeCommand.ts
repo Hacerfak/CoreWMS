@@ -4,13 +4,10 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
-import type { FiscalOperationType } from './fiscalOperationType';
 
 export interface EmitOutboundNfeCommand {
   orderId?: string;
-  operationType?: FiscalOperationType;
-  /** @nullable */
-  customNaturezaOperacao?: string | null;
+  fiscalRuleId?: string;
   /** @nullable */
   customIndFinal?: number | null;
   /** @nullable */

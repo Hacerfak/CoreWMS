@@ -20,8 +20,7 @@ namespace CoreWMS.Api.Features.Fiscal.Emissao;
 
 public record EmitOutboundNfeCommand(
     Guid OrderId,
-    FiscalOperationType OperationType,
-    string? CustomNaturezaOperacao = null,
+    Guid FiscalRuleId,
     int? CustomIndFinal = null,
     int? CustomIndPres = null,
     int? CustomTpImp = null,
@@ -94,9 +93,20 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
         if (!isSefazUp)
             return Results.BadRequest(new { Message = $"A SEFAZ do estado {cfgServico.cUF} encontra-se inoperante ou em contingência." });
 
-        // 2. CONSTRUÇÃO E AJUSTES CUSTOMIZADOS DO XML
+        // 2. CONSTRUÇÃO DO XML COM BASE NA NATUREZA SELECIONADA
         NFe.Classes.NFe nfe;
-        var fiscalDocType = request.OperationType == FiscalOperationType.OutboundShipment
+        FiscalOperationRule rule;
+
+        try
+        {
+            (nfe, rule) = await _builder.BuildOutboundNfeAsync(order.Id, request.FiscalRuleId, ct);
+        }
+        catch (Exception ex)
+        {
+            return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
+        }
+
+        var fiscalDocType = rule.OperationType == FiscalOperationType.OutboundShipment
             ? FiscalDocumentType.NfeShipment
             : FiscalDocumentType.NfeReturn;
 
@@ -105,11 +115,6 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
 
         try
         {
-            nfe = await _builder.BuildOutboundNfeAsync(order.Id, request.OperationType, ct);
-
-            if (!string.IsNullOrWhiteSpace(request.CustomNaturezaOperacao))
-                nfe.infNFe.ide.natOp = request.CustomNaturezaOperacao.Trim();
-
             if (request.CustomIndFinal.HasValue)
                 nfe.infNFe.ide.indFinal = (ConsumidorFinal)request.CustomIndFinal.Value;
 
@@ -130,9 +135,9 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
         }
         catch (Exception ex)
         {
-            fiscalDoc.MarkAsRejected($"Erro ao construir/validar o XML da NF-e: {ex.Message}");
+            fiscalDoc.MarkAsRejected($"Erro ao validar/assinar o XML da NF-e: {ex.Message}");
             await _db.SaveChangesAsync(ct);
-            return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
+            return Results.BadRequest(new { Message = $"Falha ao validar a NF-e: {ex.Message}" });
         }
 
         // 3. TRANSMISSÃO SÍNCRONA

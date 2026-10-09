@@ -9,9 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import {
-    ArrowLeft, CheckCircle2, Loader2, FileCode, ShieldAlert, UserCheck, Layers, FileText
-} from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, FileCode, ShieldAlert, UserCheck, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OutboundFiscalReviewPage() {
@@ -21,54 +19,97 @@ export default function OutboundFiscalReviewPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewData, setPreviewData] = useState(null);
+    const [fiscalRulesList, setFiscalRulesList] = useState([]);
 
     // Formulário de Ajustes Fiscais
-    const [naturezaOp, setNaturezaOp] = useState('');
+    const [fiscalRuleId, setFiscalRuleId] = useState('');
     const [indFinal, setIndFinal] = useState('0');
     const [indPres, setIndPres] = useState('9');
+    const [tpImp, setTpImp] = useState('1'); // 1 = Retrato, 2 = Paisagem
     const [additionalNotes, setAdditionalNotes] = useState('');
 
     useEffect(() => {
         if (orderId) {
             setIsLoading(true);
-            customInstance({
-                url: `/api/outbound/orders/${orderId}/fiscal-preview`,
-                method: 'GET'
-            })
-                .then(res => {
-                    setPreviewData(res);
-                    setNaturezaOp(res.defaultNaturezaOperacao || 'RETORNO DE ARMAZEM GERAL');
-                    setIndFinal(res.defaultIndFinal?.toString() || '0');
-                    setIndPres(res.defaultIndPres?.toString() || '9');
-                    setAdditionalNotes(res.additionalNotes || '');
+
+            // Carrega simultaneamente a pré-visualização e a lista completa de regras fiscais
+            Promise.all([
+                customInstance({ url: `/api/outbound/orders/${orderId}/fiscal-preview`, method: 'GET' }),
+                customInstance({ url: `/api/fiscal/rules`, method: 'GET' })
+            ])
+                .then(([previewRes, rulesRes]) => {
+                    const preview = previewRes?.data || previewRes;
+                    const rules = rulesRes?.data || rulesRes || [];
+
+                    setPreviewData(preview);
+                    setFiscalRulesList(rules);
+
+                    // Preseleciona a primeira regra ativa se não houver regra padrão
+                    const defaultRule = rules.find(r => r.id === preview.defaultFiscalRuleId) || rules[0];
+                    setFiscalRuleId(defaultRule?.id || '');
+
+                    setIndFinal(preview.defaultIndFinal?.toString() || '0');
+                    setIndPres(preview.defaultIndPres?.toString() || '9');
+                    setTpImp(preview.defaultTpImp?.toString() || '1');
+                    setAdditionalNotes(preview.additionalNotes || '');
                 })
-                .catch((err) => toast.error(err.response?.data?.message || 'Erro ao carregar pré-visualização fiscal.'))
+                .catch((err) => toast.error(err.response?.data?.message || 'Erro ao carregar dados fiscais.'))
                 .finally(() => setIsLoading(false));
         }
     }, [orderId]);
 
     const handleConfirmShipment = async (e) => {
         e.preventDefault();
+
+        if (!fiscalRuleId) {
+            toast.error('Selecione uma Natureza de Operação para prosseguir.');
+            return;
+        }
+
         try {
             setIsSubmitting(true);
-            const payload = {
+
+            // PASSO 1: Emitir e Autorizar a NF-e na SEFAZ enviando o fiscalRuleId
+            const emitPayload = {
                 orderId,
-                customNaturezaOperacao: naturezaOp,
+                fiscalRuleId,
                 customIndFinal: Number(indFinal),
                 customIndPres: Number(indPres),
+                customTpImp: Number(tpImp),
                 customAdditionalNotes: additionalNotes
             };
 
-            const res = await customInstance({
-                url: `/api/outbound/orders/${orderId}/ship`,
+            const emitRes = await customInstance({
+                url: `/api/fiscal/nfe/emit/${orderId}`,
                 method: 'POST',
-                data: payload
+                data: emitPayload
             });
 
-            toast.success(res?.message || 'NF-e Autorizada e Pedido Expedido com Sucesso!');
+            const emitData = emitRes?.data || emitRes;
+
+            if (emitRes?.status && emitRes.status >= 400) {
+                throw new Error(emitData?.message || 'Falha na autorização da NF-e junto à SEFAZ.');
+            }
+
+            toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
+
+            // PASSO 2: Finalizar expedição no WMS
+            const shipRes = await customInstance({
+                url: `/api/outbound/orders/${orderId}/ship`,
+                method: 'POST'
+            });
+
+            const shipData = shipRes?.data || shipRes;
+
+            if (shipRes?.status && shipRes.status >= 400) {
+                throw new Error(shipData?.message || 'Falha ao expedir e dar baixa no estoque.');
+            }
+
+            toast.success(shipData?.message || 'NF-e Autorizada e Pedido Expedido com Sucesso!');
             navigate(`/outbound/detalhes/${orderId}`);
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao expedir e emitir NF-e na SEFAZ.');
+            const errorMsg = error.response?.data?.message || error.message || 'Erro durante a emissão ou expedição do pedido.';
+            toast.error(errorMsg);
         } finally {
             setIsSubmitting(false);
         }
@@ -115,7 +156,6 @@ export default function OutboundFiscalReviewPage() {
 
             {/* PAINEL DE CONTEÚDO */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* COLUNA ESQUERDA: PARÂMETROS FISCAIS & ESPELHO DOS ITENS */}
                 <div className="lg:col-span-2 space-y-6">
                     {/* CARD 1: PARÂMETROS DE EMISSÃO SEFAZ */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
@@ -125,33 +165,36 @@ export default function OutboundFiscalReviewPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-1.5 md:col-span-2">
-                                    <Label className="text-xs font-semibold text-slate-700">Natureza da Operação (natOp) *</Label>
-                                    <Input
-                                        value={naturezaOp}
-                                        onChange={(e) => setNaturezaOp(e.target.value)}
-                                        className="text-xs bg-white font-medium"
-                                    />
-                                </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-700">Natureza da Operação Cadastrada *</Label>
+                                <Select value={fiscalRuleId} onValueChange={setFiscalRuleId}>
+                                    <SelectTrigger className="text-xs bg-white font-bold h-9"><SelectValue placeholder="Selecione a Natureza da Operação" /></SelectTrigger>
+                                    <SelectContent>
+                                        {fiscalRulesList?.map(rule => (
+                                            <SelectItem key={rule.id} value={rule.id}>
+                                                {rule.description} (CFOP {previewData?.isInterstate ? rule.cfopInterstate : rule.cfopStateInternal})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold text-slate-700">Consumidor Final (indFinal) *</Label>
                                     <Select value={indFinal} onValueChange={setIndFinal}>
-                                        <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="0">0 - Normal / Não Consumidor Final</SelectItem>
                                             <SelectItem value="1">1 - Consumidor Final</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
-                            </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold text-slate-700">Presença Comprador (indPres) *</Label>
                                     <Select value={indPres} onValueChange={setIndPres}>
-                                        <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="0">0 - Não se aplica</SelectItem>
                                             <SelectItem value="1">1 - Operação Presencial</SelectItem>
@@ -161,15 +204,26 @@ export default function OutboundFiscalReviewPage() {
                                     </Select>
                                 </div>
 
-                                <div className="space-y-1.5 md:col-span-2">
-                                    <Label className="text-xs font-semibold text-slate-700">Observações Fiscais Adicionais (infCpl)</Label>
-                                    <Input
-                                        value={additionalNotes}
-                                        onChange={(e) => setAdditionalNotes(e.target.value)}
-                                        placeholder="Ex: Ref. Pedido de Compra #1234. Tributação conforme..."
-                                        className="text-xs bg-white font-mono"
-                                    />
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-700">Orientação DANFE (tpImp) *</Label>
+                                    <Select value={tpImp} onValueChange={setTpImp}>
+                                        <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="1">1 - Retrato</SelectItem>
+                                            <SelectItem value="2">2 - Paisagem</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+                            </div>
+
+                            <div className="space-y-1.5 border-t border-slate-100 pt-3">
+                                <Label className="text-xs font-semibold text-slate-700">Observações Fiscais Adicionais (infCpl)</Label>
+                                <Input
+                                    value={additionalNotes}
+                                    onChange={(e) => setAdditionalNotes(e.target.value)}
+                                    placeholder="Ex: Ref. Pedido de Compra #1234. Tributação conforme..."
+                                    className="text-xs bg-white font-mono h-9"
+                                />
                             </div>
                         </CardContent>
                     </Card>
@@ -220,28 +274,9 @@ export default function OutboundFiscalReviewPage() {
                             </div>
                         </CardContent>
                     </Card>
-
-                    {/* NF-ES REFERENCIADAS (NFref) */}
-                    {previewData?.referencedAccessKeys?.length > 0 && (
-                        <Card className="border-amber-200 bg-amber-50/50 shadow-xs">
-                            <CardHeader className="p-3.5 border-b border-amber-200 bg-amber-100/50">
-                                <CardTitle className="text-xs uppercase font-bold text-amber-900 flex items-center gap-2">
-                                    <ShieldAlert size={16} /> Chaves de NF-e de Entrada Referenciadas (NFref)
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-3.5 space-y-1 font-mono text-xs text-amber-900">
-                                {previewData.referencedAccessKeys.map((key, i) => (
-                                    <div key={i} className="flex items-center gap-2">
-                                        <span className="text-amber-600">•</span>
-                                        <span>{key}</span>
-                                    </div>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    )}
                 </div>
 
-                {/* COLUNA DIREITA: RESUMO FISCAL E DESTITATÁRIO */}
+                {/* COLUNA DIREITA */}
                 <div className="space-y-6">
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">

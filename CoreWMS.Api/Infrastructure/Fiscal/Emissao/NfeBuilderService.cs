@@ -29,7 +29,7 @@ public class NfeBuilderService
         _db = db;
     }
 
-    public async Task<NFe.Classes.NFe> BuildOutboundNfeAsync(Guid outboundOrderId, FiscalOperationType operationType, CancellationToken ct)
+    public async Task<(NFe.Classes.NFe Nfe, FiscalOperationRule Rule)> BuildOutboundNfeAsync(Guid outboundOrderId, Guid fiscalRuleId, CancellationToken ct)
     {
         var order = await _db.OutboundOrders
             .AsNoTracking()
@@ -43,6 +43,12 @@ public class NfeBuilderService
         if (order.Company == null)
             throw new InvalidOperationException("A empresa emitente não está vinculada a este pedido.");
 
+        // Busca obrigatoriamente a Regra Fiscal selecionada pelo ID
+        var rule = await _db.FiscalOperationRules
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == fiscalRuleId && r.CompanyId == order.CompanyId && r.IsActive, ct)
+            ?? throw new InvalidOperationException("A Natureza de Operação selecionada não foi encontrada ou está inativa.");
+
         var destState = !string.IsNullOrWhiteSpace(order.DestinationState)
             ? order.DestinationState.Trim().ToUpper()
             : (order.Customer?.State?.Trim().ToUpper() ?? "EX");
@@ -53,7 +59,7 @@ public class NfeBuilderService
 
         var isInterstate = companyState != destState;
 
-        // Busca as chaves de acesso das NF-es de Entrada originais (NFref) para Devoluções/Retornos
+        // Chaves de acesso das NF-es de Entrada para Devoluções/Retornos (NFref)
         var originAccessKeys = await _db.OutboundAllocations
             .AsNoTracking()
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
@@ -70,7 +76,8 @@ public class NfeBuilderService
             infNFe = new infNFe { versao = "4.00" }
         };
 
-        nfe.infNFe.ide = BuildIde(order, originAccessKeys, destState);
+        // Define a natOp diretamente com a descrição da Natureza selecionada
+        nfe.infNFe.ide = BuildIde(order, originAccessKeys, destState, rule.Description);
         nfe.infNFe.emit = BuildEmitente(order.Company);
         nfe.infNFe.dest = BuildDestinatario(order);
         nfe.infNFe.transp = BuildTransporte(order, order.Volumes?.ToList() ?? new List<OutboundVolume>());
@@ -81,7 +88,6 @@ public class NfeBuilderService
             nfe.infNFe.infAdic.infCpl = order.AdditionalNotes.Trim();
         }
 
-        // Garante que a lista de itens da nota está instanciada antes de adicionar
         nfe.infNFe.det = nfe.infNFe.det ?? new List<det>();
 
         int nItem = 1;
@@ -96,10 +102,6 @@ public class NfeBuilderService
         {
             if (item.Product == null)
                 throw new InvalidOperationException($"Produto não encontrado para o item SKU {item.SkuCode}.");
-
-            var rule = await GetBestFiscalRuleAsync(order.CompanyId, order.CustomerId, destState, item.Product.Ncm, operationType, ct);
-            if (rule == null)
-                throw new InvalidOperationException($"Nenhuma Regra Fiscal encontrada para o produto SKU {item.Product.Sku}.");
 
             var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode;
             var valorTotalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
@@ -205,15 +207,13 @@ public class NfeBuilderService
             CNPJ = "64615275000112",
             xContato = "CoreWMS - Eder Gross Cichelero",
             email = "suporte@corewms.com.br",
-            fone = "54992221877",
-            hashCSRT = null,
-            idCSRT = null
+            fone = "54992221877"
         };
 
-        return nfe;
+        return (nfe, rule);
     }
 
-    private ide BuildIde(OutboundOrder order, List<string> originAccessKeys, string destState)
+    private ide BuildIde(OutboundOrder order, List<string> originAccessKeys, string destState, string naturezaOperacao)
     {
         int nNf = order.Company.NfeNextNumber;
         if (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf) && parsedNf > 0)
@@ -237,7 +237,7 @@ public class NfeBuilderService
         {
             cUF = ufEnum,
             cNF = new Random().Next(10000000, 99999999).ToString("D8"),
-            natOp = "RETORNO DE ARMAZEM GERAL",
+            natOp = naturezaOperacao.Trim(),
             mod = ModeloDocumento.NFe,
             serie = serie,
             nNF = nNf,
@@ -256,7 +256,6 @@ public class NfeBuilderService
             verProc = "CoreWMS 1.0"
         };
 
-        // Adiciona NFref apenas em Produção para evitar a Rejeição 267 em Homologação
         if (order.Company.Environment == 1 && originAccessKeys != null && originAccessKeys.Any())
         {
             ide.NFref = ide.NFref ?? new List<NFref>();
@@ -434,7 +433,6 @@ public class NfeBuilderService
             };
         }
 
-        // Garante a inicialização prévia da lista t.vol para evitar NullReferenceException
         if (volumes != null && volumes.Any())
         {
             t.vol = t.vol ?? new List<vol>();
@@ -505,15 +503,5 @@ public class NfeBuilderService
         }
 
         return impostos;
-    }
-
-    private async Task<FiscalOperationRule?> GetBestFiscalRuleAsync(Guid companyId, Guid customerId, string destState, string? ncm, FiscalOperationType type, CancellationToken ct)
-    {
-        return await _db.FiscalOperationRules
-            .Where(r => r.CompanyId == companyId && r.OperationType == type && r.IsActive)
-            .Where(r => r.SpecificCustomerId == null || r.SpecificCustomerId == customerId)
-            .Where(r => r.SpecificDestinationState == null || r.SpecificDestinationState == destState)
-            .OrderByDescending(r => r.Priority)
-            .FirstOrDefaultAsync(ct);
     }
 }
