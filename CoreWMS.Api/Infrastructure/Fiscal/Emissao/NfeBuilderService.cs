@@ -279,13 +279,22 @@ public class NfeBuilderService
 
         var foneLimpo = string.IsNullOrWhiteSpace(company.Phone) ? null : new string(company.Phone.Where(char.IsDigit).ToArray());
 
+        CRT CompanyCRT = company.Crt switch
+        {
+            1 => CRT.SimplesNacional,
+            2 => CRT.SimplesNacionalExcessoSublimite,
+            3 => CRT.RegimeNormal,
+            4 => CRT.SimplesNacionalMei,
+            _ => CRT.SimplesNacional,
+        };
+
         return new emit
         {
             CNPJ = company.Cnpj ?? "",
             xNome = company.CorporateName ?? "",
             xFant = string.IsNullOrWhiteSpace(company.TradeName) ? null : company.TradeName.Trim(),
             IE = company.StateRegistration,
-            CRT = CRT.SimplesNacional,
+            CRT = CompanyCRT,
             enderEmit = new enderEmit
             {
                 xLgr = company.Street ?? "NÃO INFORMADO",
@@ -452,22 +461,23 @@ public class NfeBuilderService
         {
             ICMS = new ICMS
             {
-                TipoICMS = new ICMSSN102
+                TipoICMS = new ICMS40
                 {
                     orig = OrigemMercadoria.OmNacional,
-                    CSOSN = Csosnicms.Csosn400
+                    CST = Csticms.Cst41
                 }
             },
-            PIS = new PIS { TipoPIS = new PISOutr { CST = CSTPIS.pis99, vBC = 0, pPIS = 0, vPIS = 0 } },
-            COFINS = new COFINS { TipoCOFINS = new COFINSOutr { CST = CSTCOFINS.cofins99, vBC = 0, pCOFINS = 0, vCOFINS = 0 } }
+            IPI = new IPI { cEnq = 108, TipoIPI = new IPITrib { CST = CSTIPI.ipi53 } },
+            PIS = new PIS { TipoPIS = new PISOutr { CST = CSTPIS.pis08 } },
+            COFINS = new COFINS { TipoCOFINS = new COFINSOutr { CST = CSTCOFINS.cofins08 } }
         };
 
         if (rule != null && (!string.IsNullOrEmpty(rule.CstIbs) || !string.IsNullOrEmpty(rule.CstCbs)))
         {
-            var cstText = "cst" + (rule.CstIbs ?? "000");
+            var cstText = "cst" + (rule.CstIbs ?? "410");
             if (!Enum.TryParse<CSTIBSCBS>(cstText, true, out var parsedCst))
             {
-                parsedCst = CSTIBSCBS.cst000;
+                parsedCst = CSTIBSCBS.cst410;
             }
 
             var aliqIbs = rule.AliqIbs > 0 ? rule.AliqIbs : 0.10m;
@@ -478,7 +488,7 @@ public class NfeBuilderService
             impostos.IBSCBS = new IBSCBS
             {
                 CST = parsedCst,
-                cClassTrib = "000001",
+                cClassTrib = "410999",
                 gIBSCBS = new gIBSCBS
                 {
                     vBC = valorTotalItem,
