@@ -1,4 +1,5 @@
 using CoreWMS.Api.Core.Models;
+using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -19,7 +20,9 @@ public record OutboundOrderSummaryDto(
     DateTime IssueDate,
     DateTime ExpectedShipDate,
     string Status,
-    int ItemsCount
+    int ItemsCount,
+    bool HasFiscalDocuments,
+    bool HasActiveFiscalDocuments
 );
 
 public record ListOutboundOrdersQuery(Guid? CustomerId, string? Search, string? Status, int Page = 1, int PageSize = 20) : IRequest<IResult>;
@@ -66,14 +69,15 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
 
         var totalCount = await q.CountAsync(ct);
 
-        var items = await q
+        var rawOrders = await q
             .OrderByDescending(o => o.IssueDate)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
-            .Select(o => new OutboundOrderSummaryDto(
+            .Select(o => new
+            {
                 o.Id,
                 o.CustomerId,
-                o.Customer.CorporateName,
+                CustomerName = o.Customer.CorporateName,
                 o.OrderNumber,
                 o.InvoiceNumber,
                 o.DestinationName,
@@ -81,9 +85,49 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
                 o.DestinationState,
                 o.IssueDate,
                 o.ExpectedShipDate,
-                o.Status.ToString(),
-                o.Items.Count
-            )).ToListAsync(ct);
+                Status = o.Status.ToString(),
+                ItemsCount = o.Items.Count
+            }).ToListAsync(ct);
+
+        var orderIds = rawOrders.Select(o => o.Id).ToList();
+
+        // Consulta em lote o histórico fiscal dos pedidos da página
+        var fiscalDocs = await _db.CompanyFiscalDocuments
+            .AsNoTracking()
+            .Where(f => f.OutboundOrderId.HasValue && orderIds.Contains(f.OutboundOrderId.Value))
+            .Select(f => new { f.OutboundOrderId, f.Status })
+            .ToListAsync(ct);
+
+        var fiscalLookup = fiscalDocs
+            .GroupBy(f => f.OutboundOrderId!.Value)
+            .ToDictionary(g => g.Key, g => new
+            {
+                HasDocs = g.Any(),
+                HasActive = g.Any(d => d.Status != FiscalDocumentStatus.Canceled)
+            });
+
+        var items = rawOrders.Select(o =>
+        {
+            var hasDocs = fiscalLookup.TryGetValue(o.Id, out var f) && f.HasDocs;
+            var hasActive = fiscalLookup.TryGetValue(o.Id, out var f2) && f2.HasActive;
+
+            return new OutboundOrderSummaryDto(
+                o.Id,
+                o.CustomerId,
+                o.CustomerName,
+                o.OrderNumber,
+                o.InvoiceNumber,
+                o.DestinationName,
+                o.DestinationCity,
+                o.DestinationState,
+                o.IssueDate,
+                o.ExpectedShipDate,
+                o.Status,
+                o.ItemsCount,
+                hasDocs,
+                hasActive
+            );
+        }).ToList();
 
         var response = new PaginatedResult<OutboundOrderSummaryDto>(items, totalCount, request.Page, request.PageSize);
         return Results.Ok(response);

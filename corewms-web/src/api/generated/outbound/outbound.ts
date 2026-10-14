@@ -1054,6 +1054,65 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiOutboundOrdersOrderIdItemsOrderItemIdMutationOptions(options), queryClient);
     }
+    export const postApiOutboundOrdersOrderIdRevertShipment = (
+    orderId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${orderId}/revert-shipment`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundOrdersOrderIdRevertShipmentMutationKey = () => ['postApiOutboundOrdersOrderIdRevertShipment'] as const;
+
+export const getPostApiOutboundOrdersOrderIdRevertShipmentMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdRevertShipment>>, TError,PostApiOutboundOrdersOrderIdRevertShipmentMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdRevertShipment>>, TError,PostApiOutboundOrdersOrderIdRevertShipmentMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundOrdersOrderIdRevertShipmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdRevertShipment>>, PostApiOutboundOrdersOrderIdRevertShipmentMutationVariables> = (props) => {
+          const {orderId} = props ?? {};
+
+          return  postApiOutboundOrdersOrderIdRevertShipment(orderId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundOrdersOrderIdRevertShipmentMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdRevertShipment>>>
+
+    export type PostApiOutboundOrdersOrderIdRevertShipmentMutationError = unknown
+    export type PostApiOutboundOrdersOrderIdRevertShipmentMutationVariables = {orderId: string}
+
+    export const usePostApiOutboundOrdersOrderIdRevertShipment = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdRevertShipment>>, TError,PostApiOutboundOrdersOrderIdRevertShipmentMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundOrdersOrderIdRevertShipment>>,
+        TError,
+        PostApiOutboundOrdersOrderIdRevertShipmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundOrdersOrderIdRevertShipmentMutationOptions(options), queryClient);
+    }
     export const postApiOutboundOrdersOrderIdShip = (
     orderId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

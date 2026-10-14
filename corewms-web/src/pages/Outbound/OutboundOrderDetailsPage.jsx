@@ -8,7 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
-    ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText, UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil, ShoppingCart, Ban, FileSignature, RefreshCw
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import {
+    ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText, UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil, ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Outbound/CancelNfeModal';
@@ -22,6 +32,13 @@ export default function OutboundOrderDetailsPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [downloadingDocId, setDownloadingDocId] = useState(null);
     const [expandedItemIds, setExpandedItemIds] = useState({});
+
+    // Ações do cabeçalho
+    const [isRevertingShipment, setIsRevertingShipment] = useState(false);
+    const [isCancelingOrder, setIsCancelingOrder] = useState(false);
+    const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+    const [isCancelOrderDialogOpen, setIsCancelOrderDialogOpen] = useState(false);
+    const [isDeleteOrderDialogOpen, setIsDeleteOrderDialogOpen] = useState(false);
 
     // Modais Fiscais
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -112,6 +129,67 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
+    // Estorno da Expedição
+    const handleRevertShipment = async () => {
+        const confirmMsg = `Deseja realmente estornar a expedição da Ordem #${order?.orderNumber}?\n\nEsta ação irá:\n1. Devolver o saldo para as Unidades Logísticas (HUs).\n2. Restaurar o saldo alocado no estoque.\n3. Registrar a movimentação de estorno no Kardex.\n4. Retornar a ordem para 'Pronto para Expedir' (ReadyToShip), permitindo reemitir a nota fiscal ou cancelar o pedido.`;
+
+        if (!confirm(confirmMsg)) return;
+
+        try {
+            setIsRevertingShipment(true);
+            const res = await customInstance({
+                url: `/api/outbound/orders/${orderId}/revert-shipment`,
+                method: 'POST'
+            });
+
+            const data = res?.data || res;
+            toast.success(data?.message || 'Expedição estornada com sucesso!');
+            loadOrderDetails();
+        } catch (error) {
+            toast.error(error.response?.data?.message || error.message || 'Erro ao estornar expedição.');
+        } finally {
+            setIsRevertingShipment(false);
+        }
+    };
+
+    // Cancelamento do Pedido
+    const handleCancelOrder = async () => {
+        try {
+            setIsCancelingOrder(true);
+            const res = await customInstance({
+                url: `/api/outbound/orders/${orderId}/cancel`,
+                method: 'DELETE'
+            });
+            const data = res?.data || res;
+            toast.success(data?.message || 'Pedido de saída cancelado com sucesso.');
+            setIsCancelOrderDialogOpen(false);
+            loadOrderDetails();
+        } catch (error) {
+            toast.error(error.response?.data?.message || error.message || 'Erro ao cancelar pedido.');
+        } finally {
+            setIsCancelingOrder(false);
+        }
+    };
+
+    // Exclusão Permanente da Ordem
+    const handleDeleteOrder = async () => {
+        try {
+            setIsDeletingOrder(true);
+            const res = await customInstance({
+                url: `/api/outbound/orders/${orderId}`,
+                method: 'DELETE'
+            });
+            const data = res?.data || res;
+            toast.success(data?.message || 'Ordem de saída excluída com sucesso.');
+            setIsDeleteOrderDialogOpen(false);
+            navigate('/outbound');
+        } catch (error) {
+            toast.error(error.response?.data?.message || error.message || 'Erro ao excluir ordem.');
+        } finally {
+            setIsDeletingOrder(false);
+        }
+    };
+
     const handleOpenCancelModal = (doc) => {
         setSelectedDocForCancel(doc);
         setIsCancelModalOpen(true);
@@ -145,20 +223,27 @@ export default function OutboundOrderDetailsPage() {
 
     const canEdit = ['Pending', 'Allocating', 'Allocated'].includes(order?.status);
 
-    // Filtra documentos fiscais correspondentes a NF-e (1 a 6)
+    // Documentos fiscais originais de mercadoria (1 a 6)
     const nfeOriginalDocs = order?.fiscalDocuments?.filter(doc => {
         const typeNum = Number(doc.type);
         return (typeNum >= 1 && typeNum <= 6) ||
             ['Normal', 'Complementar', 'Ajuste', 'Devolucao', 'NotaCredito', 'NotaDebito'].includes(doc.type);
     }) || [];
 
-    // Checa se ainda há alguma NF-e autorizada ativa
+    // Checa se há alguma NF-e autorizada ou pendente
     const hasActiveNfe = nfeOriginalDocs.some(
         d => d.status === 'Authorized' || d.status === 'Pending' || d.status === 1 || d.status === 2
     );
 
-    // Libera reemissão se a ordem já foi expedida e todas as notas anteriores foram canceladas
-    const canReemitNfe = order?.status === 'Shipped' && nfeOriginalDocs.length > 0 && !hasActiveNfe;
+    // CORREÇÃO: Permite estornar e emitir NF-e se a ordem estiver 'Shipped' e NÃO houver nenhuma nota ativa
+    // (funciona tanto para ordens sem nenhuma nota vinculada quanto para ordens com todas as notas canceladas)
+    const canManageShippedOrder = order?.status === 'Shipped' && !hasActiveNfe;
+
+    // Permite cancelar a ordem se ela não estiver faturada/expedida nem cancelada, e sem NF-e ativa
+    const canCancelOrder = order?.status !== 'Shipped' && order?.status !== 'Canceled' && !hasActiveNfe;
+
+    // Permite excluir permanentemente SOMENTE se estiver Canceled e NÃO tiver nenhum documento fiscal em seu histórico
+    const canDeleteOrder = order?.status === 'Canceled' && (!order?.fiscalDocuments || order.fiscalDocuments.length === 0);
 
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -181,6 +266,7 @@ export default function OutboundOrderDetailsPage() {
                 </div>
 
                 <div className="flex gap-2">
+                    {/* EDIÇÃO DE DADOS */}
                     {canEdit && (
                         <>
                             <Button variant="outline" onClick={() => navigate(`/outbound/editar/${order.id}`)} className="border-slate-300 text-slate-700 bg-white font-medium h-9">
@@ -192,6 +278,7 @@ export default function OutboundOrderDetailsPage() {
                         </>
                     )}
 
+                    {/* OPERAÇÃO DO WMS */}
                     {(order?.status === 'Allocated' || order?.status === 'Picking') && (
                         <Button onClick={() => navigate(`/outbound/picking/${order.id}`)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9">
                             <Box size={15} className="mr-1.5" /> Ir para Coletor
@@ -208,15 +295,57 @@ export default function OutboundOrderDetailsPage() {
                         </Button>
                     )}
 
-                    {canReemitNfe && (
-                        <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
-                            <RefreshCw size={15} className="mr-1.5" /> Emitir Nova NF-e
+                    {/* AÇÕES PARA ORDENS EXPEDIDAS SEM NF-E ATIVA (COM OU SEM NOTAS VINCULADAS) */}
+                    {canManageShippedOrder && (
+                        <>
+                            <Button
+                                onClick={handleRevertShipment}
+                                disabled={isRevertingShipment}
+                                variant="outline"
+                                className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold h-9"
+                                title="Restaura os saldos às HUs, Kardex e retorna a ordem para Pronto para Expedir"
+                            >
+                                {isRevertingShipment ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                                ) : (
+                                    <RotateCcw className="h-4 w-4 mr-1.5 text-amber-600" />
+                                )}
+                                Estornar Expedição
+                            </Button>
+
+                            <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
+                                <RefreshCw size={15} className="mr-1.5" /> {nfeOriginalDocs.length > 0 ? 'Emitir Nova NF-e' : 'Emitir NF-e'}
+                            </Button>
+                        </>
+                    )}
+
+                    {/* CANCELAMENTO DO PEDIDO (SEMPRE QUE NÃO EXPEDIDO E SEM NOTAS ATIVAS) */}
+                    {canCancelOrder && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsCancelOrderDialogOpen(true)}
+                            className="border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 font-medium h-9"
+                            title="Cancelar o pedido de saída e liberar as reservas de estoque"
+                        >
+                            <Ban size={15} className="mr-1.5 text-rose-600" /> Cancelar Pedido
+                        </Button>
+                    )}
+
+                    {/* EXCLUSÃO DEFINITIVA (SOMENTE SE CANCELADO E SEM HISTÓRICO FISCAL) */}
+                    {canDeleteOrder && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsDeleteOrderDialogOpen(true)}
+                            className="border-rose-300 text-rose-800 bg-rose-100 hover:bg-rose-200 font-bold h-9"
+                            title="Excluir definitivamente o registro da ordem cancelada"
+                        >
+                            <Trash2 size={15} className="mr-1.5 text-rose-700" /> Excluir Ordem
                         </Button>
                     )}
                 </div>
             </div>
 
-            {/* CONTEÚDO */}
+            {/* CONTEÚDO PRINCIPAL */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
                     {/* ITENS E HUS */}
@@ -587,7 +716,47 @@ export default function OutboundOrderDetailsPage() {
                 </div>
             </div>
 
-            {/* MODAL DE CANCELAMENTO */}
+            {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO DO PEDIDO */}
+            <AlertDialog open={isCancelOrderDialogOpen} onOpenChange={setIsCancelOrderDialogOpen}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Cancelar Pedido de Saída?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Deseja cancelar o pedido <strong className="text-slate-800">#{order?.orderNumber}</strong>?
+                            <br /><br />
+                            Todas as reservas de estoque, alocações de coletor e volumes gerados serão cancelados e liberados de volta ao armazém.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isCancelingOrder}>Voltar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleCancelOrder} disabled={isCancelingOrder} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                            {isCancelingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DA ORDEM */}
+            <AlertDialog open={isDeleteOrderDialogOpen} onOpenChange={setIsDeleteOrderDialogOpen}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Tem certeza que deseja excluir definitivamente a ordem cancelada <strong className="text-slate-800">#{order?.orderNumber}</strong>?
+                            <br /><br />
+                            Esta ação removerá permanentemente o registro e seus itens do sistema.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingOrder}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteOrder} disabled={isDeletingOrder} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
+                            {isDeletingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir Definitivamente'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* MODAL DE CANCELAMENTO DE NF-E (SEFAZ) */}
             <CancelNfeModal
                 open={isCancelModalOpen}
                 onOpenChange={setIsCancelModalOpen}
