@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, CheckCircle2, Loader2, FileCode, ShieldAlert, UserCheck, Layers } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, FileCode, ShieldAlert, UserCheck, Layers, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OutboundFiscalReviewPage() {
@@ -20,6 +20,7 @@ export default function OutboundFiscalReviewPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewData, setPreviewData] = useState(null);
     const [fiscalRulesList, setFiscalRulesList] = useState([]);
+    const [isAlreadyShipped, setIsAlreadyShipped] = useState(false);
 
     // Formulário de Ajustes Fiscais
     const [fiscalRuleId, setFiscalRuleId] = useState('');
@@ -32,19 +33,20 @@ export default function OutboundFiscalReviewPage() {
         if (orderId) {
             setIsLoading(true);
 
-            // Carrega simultaneamente a pré-visualização e a lista completa de regras fiscais
             Promise.all([
                 customInstance({ url: `/api/outbound/orders/${orderId}/fiscal-preview`, method: 'GET' }),
-                customInstance({ url: `/api/fiscal/rules`, method: 'GET' })
+                customInstance({ url: `/api/fiscal/rules`, method: 'GET' }),
+                customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
             ])
-                .then(([previewRes, rulesRes]) => {
+                .then(([previewRes, rulesRes, orderRes]) => {
                     const preview = previewRes?.data || previewRes;
                     const rules = rulesRes?.data || rulesRes || [];
+                    const orderData = orderRes?.data || orderRes;
 
                     setPreviewData(preview);
                     setFiscalRulesList(rules);
+                    setIsAlreadyShipped(orderData?.status === 'Shipped');
 
-                    // Preseleciona a primeira regra ativa se não houver regra padrão
                     const defaultRule = rules.find(r => r.id === preview.defaultFiscalRuleId) || rules[0];
                     setFiscalRuleId(defaultRule?.id || '');
 
@@ -93,19 +95,22 @@ export default function OutboundFiscalReviewPage() {
 
             toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
 
-            // PASSO 2: Finalizar expedição no WMS
-            const shipRes = await customInstance({
-                url: `/api/outbound/orders/${orderId}/ship`,
-                method: 'POST'
-            });
+            // PASSO 2: Finalizar expedição no WMS SOMENTE se o pedido ainda não tiver sido expedido
+            if (!isAlreadyShipped) {
+                const shipRes = await customInstance({
+                    url: `/api/outbound/orders/${orderId}/ship`,
+                    method: 'POST'
+                });
 
-            const shipData = shipRes?.data || shipRes;
+                const shipData = shipRes?.data || shipRes;
 
-            if (shipRes?.status && shipRes.status >= 400) {
-                throw new Error(shipData?.message || 'Falha ao expedir e dar baixa no estoque.');
+                if (shipRes?.status && shipRes.status >= 400) {
+                    throw new Error(shipData?.message || 'Falha ao expedir e dar baixa no estoque.');
+                }
+
+                toast.success(shipData?.message || 'Pedido Expedido com Sucesso!');
             }
 
-            toast.success(shipData?.message || 'NF-e Autorizada e Pedido Expedido com Sucesso!');
             navigate(`/outbound/detalhes/${orderId}`);
         } catch (error) {
             const errorMsg = error.response?.data?.message || error.message || 'Erro durante a emissão ou expedição do pedido.';
@@ -134,8 +139,14 @@ export default function OutboundFiscalReviewPage() {
                     </Button>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-xl font-bold text-slate-900">Revisão Fiscal & Emissão NF-e #{previewData?.orderNumber}</h1>
-                            <Badge className="bg-orange-100 text-orange-800 border-orange-200">Pronto p/ Expedir</Badge>
+                            <h1 className="text-xl font-bold text-slate-900">
+                                {isAlreadyShipped ? 'Emissão de Nova NF-e (Reemissão)' : 'Revisão Fiscal & Emissão NF-e'} #{previewData?.orderNumber}
+                            </h1>
+                            {isAlreadyShipped ? (
+                                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Expedido</Badge>
+                            ) : (
+                                <Badge className="bg-orange-100 text-orange-800 border-orange-200">Pronto p/ Expedir</Badge>
+                            )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
                             Depositante: <strong className="text-slate-700">{previewData?.customerName}</strong> | Destinatário: <strong className="text-slate-700">{previewData?.destinationName}</strong>
@@ -148,8 +159,14 @@ export default function OutboundFiscalReviewPage() {
                         Cancelar
                     </Button>
                     <Button onClick={handleConfirmShipment} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5">
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                        Assinar, Emitir & Expedir na SEFAZ
+                        {isSubmitting ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : isAlreadyShipped ? (
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                        ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                        )}
+                        {isAlreadyShipped ? 'Assinar & Emitir Nova NF-e na SEFAZ' : 'Assinar, Emitir & Expedir na SEFAZ'}
                     </Button>
                 </div>
             </div>

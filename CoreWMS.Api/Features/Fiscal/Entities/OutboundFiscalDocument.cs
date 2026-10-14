@@ -59,4 +59,11 @@ public class OutboundFiscalDocument : AuditableEntity
         ReturnMessage = message?.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void MarkAsCanceled(string message)
+    {
+        Status = FiscalDocumentStatus.Canceled;
+        ReturnMessage = message?.Trim();
+        UpdatedAt = DateTime.UtcNow;
+    }
 }
