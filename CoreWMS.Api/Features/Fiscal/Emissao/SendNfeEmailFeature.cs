@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
@@ -35,9 +36,9 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
     {
         _logger.LogInformation("[EMAIL] A preparar envio de NF-e para: {Email}", request.DestinationEmail);
 
-        var doc = await _db.OutboundFiscalDocuments
+        var doc = await _db.CompanyFiscalDocuments
+            .Include(d => d.Company)
             .Include(d => d.OutboundOrder)
-            .ThenInclude(o => o.Company)
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
@@ -47,28 +48,45 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
 
         try
         {
-            // Usa o IWebHostEnvironment para apontar para a pasta persistente de uploads
             string diretorioBase = Path.Combine(_env.ContentRootPath, "uploads", "NFePdf");
-            string caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
 
-            // Para evitar colisões (Concurrency Locks) caso 2 utilizadores enviem a mesma nota ao mesmo tempo,
-            // geramos um XML temporário e depois apagamos.
-            caminhoXmlTemporario = Path.Combine(diretorioBase, $"{doc.AccessKey}_{Guid.NewGuid():N}.xml");
+            // Define o nome do PDF de acordo com o tipo (DANFE, CC-e ou Cancelamento)
+            string pdfFileName = doc.Type switch
+            {
+                FiscalDocumentType.CartaCorrecao => $"{doc.AccessKey}-cce.pdf",
+                FiscalDocumentType.Cancelamento => $"{doc.AccessKey}-cancelamento.pdf",
+                _ => $"{doc.AccessKey}-danfe.pdf"
+            };
+
+            string caminhoPdf = Path.Combine(diretorioBase, pdfFileName);
+
+            // Fallback de compatibilidade se o arquivo tiver sido gravado com sufixo -danfe.pdf
+            if (!File.Exists(caminhoPdf))
+            {
+                caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
+            }
 
             if (!File.Exists(caminhoPdf))
             {
-                return Results.BadRequest(new { Message = "O PDF da DANFE ainda não foi gerado. Por favor, gere o PDF primeiro." });
+                return Results.BadRequest(new { Message = "O PDF do documento fiscal não foi encontrado. Por favor, gere o PDF primeiro." });
             }
 
-            // O EmailBuilder do Zeus exige o caminho físico do ficheiro
+            caminhoXmlTemporario = Path.Combine(diretorioBase, $"{doc.AccessKey}_{Guid.NewGuid():N}.xml");
             await File.WriteAllTextAsync(caminhoXmlTemporario, doc.RawXml, ct);
 
-            // @TODO: No futuro, puxar estes dados do IOptions ou do cadastro da Company
+            string identificadorDocumento = doc.OutboundOrder != null
+                ? $"Pedido #{doc.OutboundOrder.OrderNumber}"
+                : $"Documento Fiscal #{doc.AccessKey ?? doc.Id.ToString()}";
+
+            string nomeRemetente = doc.Company?.TradeName
+                ?? doc.OutboundOrder?.Company?.TradeName
+                ?? "Departamento de Faturamento";
+
             var configEmail = new ConfiguracaoEmail(
                 email: "faturacao@a-sua-empresa.com",
                 senha: "senha-app-ou-smtp",
-                assunto: $"Nota Fiscal Eletrônica - Pedido #{doc.OutboundOrder.Id}",
-                mensagem: $"Olá!\n\nEm anexo, enviamos a sua Nota Fiscal (XML e PDF) referente à sua solicitação.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!",
+                assunto: $"Nota Fiscal Eletrônica - {identificadorDocumento}",
+                mensagem: $"Olá!\n\nEm anexo, enviamos o seu documento fiscal (XML e PDF) referente a: {identificadorDocumento}.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!",
                 servidorSmtp: "smtp.a-sua-empresa.com",
                 porta: 587,
                 ssl: true,
@@ -77,14 +95,12 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
                 assincrono: false
             )
             {
-                Nome = doc.OutboundOrder.Company.TradeName ?? "Departamento de Faturamento"
+                Nome = nomeRemetente
             };
 
             var emailBuilder = new EmailBuilder(configEmail);
             emailBuilder.AdicionarDestinatario(request.DestinationEmail);
             emailBuilder.AdicionarAnexo(caminhoPdf);
-
-            // Força o nome do anexo no e-mail para não incluir o Guid feio do ficheiro temporário
             emailBuilder.AdicionarAnexo(caminhoXmlTemporario);
 
             _logger.LogInformation("[EMAIL] A disparar a mensagem via SMTP...");
@@ -100,7 +116,6 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
         }
         finally
         {
-            // Limpeza: Apaga o XML temporário para não entulhar o servidor
             if (!string.IsNullOrEmpty(caminhoXmlTemporario) && File.Exists(caminhoXmlTemporario))
             {
                 try { File.Delete(caminhoXmlTemporario); } catch { /* Ignora falha na limpeza */ }

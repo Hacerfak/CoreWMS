@@ -17,6 +17,7 @@ using NFe.Classes.Informacoes.Identificacao.Tipos;
 using NFe.Classes.Informacoes.Pagamento;
 using NFe.Classes.Informacoes.Total;
 using NFe.Classes.Informacoes.Transporte;
+using System.Text.RegularExpressions;
 
 namespace CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 
@@ -43,9 +44,10 @@ public class NfeBuilderService
         if (order.Company == null)
             throw new InvalidOperationException("A empresa emitente não está vinculada a este pedido.");
 
-        // Busca obrigatoriamente a Regra Fiscal selecionada pelo ID
+        // Carrega a Natureza de Operação com as exceções ativas
         var rule = await _db.FiscalOperationRules
             .AsNoTracking()
+            .Include(r => r.Exceptions.Where(e => e.IsActive))
             .FirstOrDefaultAsync(r => r.Id == fiscalRuleId && r.CompanyId == order.CompanyId && r.IsActive, ct)
             ?? throw new InvalidOperationException("A Natureza de Operação selecionada não foi encontrada ou está inativa.");
 
@@ -59,7 +61,6 @@ public class NfeBuilderService
 
         var isInterstate = companyState != destState;
 
-        // Chaves de acesso das NF-es de Entrada para Devoluções/Retornos (NFref)
         var originAccessKeys = await _db.OutboundAllocations
             .AsNoTracking()
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
@@ -76,8 +77,7 @@ public class NfeBuilderService
             infNFe = new infNFe { versao = "4.00" }
         };
 
-        // Define a natOp diretamente com a descrição da Natureza selecionada
-        nfe.infNFe.ide = BuildIde(order, originAccessKeys, destState, rule.Description);
+        nfe.infNFe.ide = BuildIde(order, originAccessKeys, destState, rule.Description, rule.Finalidade);
         nfe.infNFe.emit = BuildEmitente(order.Company);
         nfe.infNFe.dest = BuildDestinatario(order);
         nfe.infNFe.transp = BuildTransporte(order, order.Volumes?.ToList() ?? new List<OutboundVolume>());
@@ -98,13 +98,33 @@ public class NfeBuilderService
             throw new InvalidOperationException("Nenhum item empacotado/separado foi encontrado para este pedido de saída.");
         }
 
+        CRT companyCrt = order.Company.Crt switch
+        {
+            1 => CRT.SimplesNacional,
+            2 => CRT.SimplesNacionalExcessoSublimite,
+            3 => CRT.RegimeNormal,
+            4 => CRT.SimplesNacionalMei,
+            _ => CRT.SimplesNacional,
+        };
+
         foreach (var item in packedItems)
         {
             if (item.Product == null)
                 throw new InvalidOperationException($"Produto não encontrado para o item SKU {item.SkuCode}.");
 
-            var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode;
+            // 1. DADOS DO PRODUTO (NCM, CEST, Origem, GTIN, Unidade)
+            var ncm = string.IsNullOrWhiteSpace(item.Product.Ncm) ? "00000000" : Regex.Replace(item.Product.Ncm, @"\D", "");
+            var cest = ObterCestProduto(item.Product);
+            var origem = ObterOrigemProduto(item.Product);
+            var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode.Trim();
+
+            // 2. DADOS DA HU / QUANTIDADE SEPARADA
             var valorTotalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
+
+            // 3. RESOLUÇÃO DE PARÂMETROS: Regra Base x Linha de Exceção (UF, NCM e Origem)
+            var taxParams = ResolverParametrosItem(rule, destState, ncm, origem);
+
+            var cfopStr = isInterstate ? taxParams.CfopInterstate : taxParams.CfopStateInternal;
 
             var det = new det
             {
@@ -114,8 +134,9 @@ public class NfeBuilderService
                     cProd = item.Product.Sku,
                     cEAN = cEan,
                     xProd = item.Product.Description,
-                    NCM = string.IsNullOrWhiteSpace(item.Product.Ncm) ? "00000000" : item.Product.Ncm,
-                    CFOP = isInterstate ? int.Parse(rule.CfopInterstate) : int.Parse(rule.CfopStateInternal),
+                    NCM = ncm,
+                    CEST = cest,
+                    CFOP = int.Parse(cfopStr),
                     uCom = item.Product.BaseUnit ?? "UN",
                     qCom = item.PackedQuantity,
                     vUnCom = item.UnitValue,
@@ -126,21 +147,56 @@ public class NfeBuilderService
                     vUnTrib = item.UnitValue,
                     indTot = IndicadorTotal.ValorDoItemCompoeTotalNF
                 },
-                imposto = BuildImpostos(rule, valorTotalItem)
+                imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)
             };
 
             nfe.infNFe.det.Add(det);
 
-            if (!string.IsNullOrWhiteSpace(rule.AdditionalNotes))
+            if (!string.IsNullOrWhiteSpace(taxParams.AdditionalNotes))
             {
                 nfe.infNFe.infAdic = nfe.infNFe.infAdic ?? new NFe.Classes.Informacoes.Observacoes.infAdic();
                 nfe.infNFe.infAdic.infCpl = string.IsNullOrEmpty(nfe.infNFe.infAdic.infCpl)
-                    ? rule.AdditionalNotes
-                    : nfe.infNFe.infAdic.infCpl + " " + rule.AdditionalNotes;
+                    ? taxParams.AdditionalNotes
+                    : nfe.infNFe.infAdic.infCpl + " " + taxParams.AdditionalNotes;
             }
         }
 
+        // 4. TOTALIZAÇÃO
         var totalVProd = nfe.infNFe.det.Sum(d => d.prod.vProd);
+        decimal totalVBC = 0m;
+        decimal totalVICMS = 0m;
+        decimal totalVBCST = 0m;
+        decimal totalVST = 0m;
+        decimal totalVIPI = 0m;
+
+        foreach (var det in nfe.infNFe.det)
+        {
+            if (det.imposto?.ICMS?.TipoICMS is ICMS00 icms00)
+            {
+                totalVBC += icms00.vBC;
+                totalVICMS += icms00.vICMS;
+            }
+            else if (det.imposto?.ICMS?.TipoICMS is ICMS20 icms20)
+            {
+                totalVBC += icms20.vBC;
+                totalVICMS += icms20.vICMS;
+            }
+            else if (det.imposto?.ICMS?.TipoICMS is ICMS10 icms10)
+            {
+                totalVBC += icms10.vBC;
+                totalVICMS += icms10.vICMS;
+                totalVBCST += icms10.vBCST;
+                totalVST += icms10.vICMSST;
+            }
+
+            if (det.imposto?.IPI?.TipoIPI is IPITrib ipiTrib)
+            {
+                totalVIPI += ipiTrib.vIPI ?? 0m;
+            }
+        }
+
+        var totalVNF = Math.Round(totalVProd + totalVST + totalVIPI, 2);
+
         var temReformaTributaria = nfe.infNFe.det.Any(d => d.imposto?.IBSCBS != null);
         var totalVBCIbsCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.vBC) : 0m;
         var totalVIbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gIBSUF.vIBSUF) : 0m;
@@ -151,23 +207,23 @@ public class NfeBuilderService
             ICMSTot = new ICMSTot
             {
                 vProd = totalVProd,
-                vNF = totalVProd,
-                vBC = 0,
-                vICMS = 0,
+                vNF = totalVNF,
+                vBC = Math.Round(totalVBC, 2),
+                vICMS = Math.Round(totalVICMS, 2),
                 vICMSDeson = 0,
                 vFCPUFDest = 0,
                 vICMSUFDest = 0,
                 vICMSUFRemet = 0,
                 vFCP = 0,
-                vBCST = 0,
-                vST = 0,
+                vBCST = Math.Round(totalVBCST, 2),
+                vST = Math.Round(totalVST, 2),
                 vFCPST = 0,
                 vFCPSTRet = 0,
                 vFrete = 0,
                 vSeg = 0,
                 vDesc = 0,
                 vII = 0,
-                vIPI = 0,
+                vIPI = Math.Round(totalVIPI, 2),
                 vIPIDevol = 0,
                 vOutro = 0,
                 vTotTrib = 0
@@ -213,7 +269,363 @@ public class NfeBuilderService
         return (nfe, rule);
     }
 
-    private ide BuildIde(OutboundOrder order, List<string> originAccessKeys, string destState, string naturezaOperacao)
+    /// <summary>
+    /// Avalia a regra fiscal base contra as exceções cadastradas para a mesma Natureza.
+    /// A busca cruza NCM, UF Destino e Origem da Mercadoria.
+    /// </summary>
+    private ResolvedTaxParams ResolverParametrosItem(FiscalOperationRule baseRule, string destState, string ncm, OrigemMercadoria origem)
+    {
+        var matchedException = baseRule.Exceptions?
+            .Where(e => e.IsActive)
+            .Where(e => string.IsNullOrWhiteSpace(e.SpecificDestinationState) || e.SpecificDestinationState == destState)
+            .Where(e => string.IsNullOrWhiteSpace(e.SpecificNcmStart) || ncm.StartsWith(e.SpecificNcmStart))
+            .Where(e => !e.SpecificOrigin.HasValue || e.SpecificOrigin.Value == (int)origem)
+            .OrderByDescending(e =>
+                (!string.IsNullOrWhiteSpace(e.SpecificNcmStart) ? 4 : 0) +
+                (!string.IsNullOrWhiteSpace(e.SpecificDestinationState) ? 2 : 0) +
+                (e.SpecificOrigin.HasValue ? 1 : 0))
+            .FirstOrDefault();
+
+        return new ResolvedTaxParams
+        {
+            CfopStateInternal = matchedException?.CfopStateInternal ?? baseRule.CfopStateInternal,
+            CfopInterstate = matchedException?.CfopInterstate ?? baseRule.CfopInterstate,
+            CstCsosnIcms = matchedException?.CstCsosnIcms ?? baseRule.CstCsosnIcms,
+            ModBcIcms = matchedException?.ModBcIcms ?? baseRule.ModBcIcms,
+            AliqIcms = matchedException?.AliqIcms ?? baseRule.AliqIcms,
+            ReducaoBcIcms = matchedException?.ReducaoBcIcms ?? baseRule.ReducaoBcIcms,
+            ModBcIcmsSt = matchedException?.ModBcIcmsSt ?? baseRule.ModBcIcmsSt,
+            MvaIcmsSt = matchedException?.MvaIcmsSt ?? baseRule.MvaIcmsSt,
+            ReducaoBcIcmsSt = matchedException?.ReducaoBcIcmsSt ?? baseRule.ReducaoBcIcmsSt,
+            AliqIcmsSt = matchedException?.AliqIcmsSt ?? baseRule.AliqIcmsSt,
+            MotivoDesoneracaoIcms = matchedException?.MotivoDesoneracaoIcms ?? baseRule.MotivoDesoneracaoIcms,
+            AliqCreditoSimples = matchedException?.AliqCreditoSimples ?? baseRule.AliqCreditoSimples,
+            CstIpi = matchedException?.CstIpi ?? baseRule.CstIpi,
+            CodigoEnquadramentoIpi = matchedException?.CodigoEnquadramentoIpi ?? baseRule.CodigoEnquadramentoIpi,
+            AliqIpi = matchedException?.AliqIpi ?? baseRule.AliqIpi,
+            CstPis = matchedException?.CstPis ?? baseRule.CstPis,
+            AliqPis = matchedException?.AliqPis ?? baseRule.AliqPis,
+            CstCofins = matchedException?.CstCofins ?? baseRule.CstCofins,
+            AliqCofins = matchedException?.AliqCofins ?? baseRule.AliqCofins,
+            CstIbs = matchedException?.CstIbs ?? baseRule.CstIbs,
+            AliqIbs = matchedException?.AliqIbs ?? baseRule.AliqIbs,
+            CstCbs = matchedException?.CstCbs ?? baseRule.CstCbs,
+            AliqCbs = matchedException?.AliqCbs ?? baseRule.AliqCbs,
+            ClassificacaoTributaria = matchedException?.ClassificacaoTributaria ?? baseRule.ClassificacaoTributaria,
+            AdditionalNotes = matchedException?.AdditionalNotes ?? baseRule.AdditionalNotes
+        };
+    }
+
+    private imposto BuildImpostos(ResolvedTaxParams p, decimal valorTotalItem, CRT companyCrt, OrigemMercadoria origem)
+    {
+        var impostos = new imposto
+        {
+            ICMS = BuildIcms(p, valorTotalItem, companyCrt, origem),
+            IPI = BuildIpi(p, valorTotalItem),
+            PIS = BuildPis(p, valorTotalItem),
+            COFINS = BuildCofins(p, valorTotalItem)
+        };
+
+        if (!string.IsNullOrEmpty(p.CstIbs) || !string.IsNullOrEmpty(p.CstCbs))
+        {
+            var rawIbs = Regex.Replace(p.CstIbs ?? "410", @"\D", "").PadLeft(3, '0');
+            if (!Enum.TryParse<CSTIBSCBS>("cst" + rawIbs, true, out var parsedCst))
+            {
+                parsedCst = CSTIBSCBS.cst410;
+            }
+
+            var aliqIbs = p.AliqIbs > 0 ? p.AliqIbs : 0.10m;
+            var aliqCbs = p.AliqCbs > 0 ? p.AliqCbs : 0.90m;
+            var vIbsUf = Math.Round(valorTotalItem * (aliqIbs / 100m), 2);
+            var vCbs = Math.Round(valorTotalItem * (aliqCbs / 100m), 2);
+
+            string cClassTrib = !string.IsNullOrWhiteSpace(p.ClassificacaoTributaria)
+                ? p.ClassificacaoTributaria.Trim()
+                : (rawIbs == "000" ? "000001" : "410999");
+
+            impostos.IBSCBS = new IBSCBS
+            {
+                CST = parsedCst,
+                cClassTrib = cClassTrib,
+                gIBSCBS = new gIBSCBS
+                {
+                    vBC = valorTotalItem,
+                    gIBSUF = new gIBSUF { pIBSUF = aliqIbs, vIBSUF = vIbsUf },
+                    gIBSMun = new gIBSMun { pIBSMun = 0, vIBSMun = 0 },
+                    gCBS = new gCBS { pCBS = aliqCbs, vCBS = vCbs },
+                    vIBS = vIbsUf
+                }
+            };
+        }
+
+        return impostos;
+    }
+
+    private ICMS BuildIcms(ResolvedTaxParams p, decimal valorTotalItem, CRT companyCrt, OrigemMercadoria origem)
+    {
+        string rawCst = Regex.Replace(p.CstCsosnIcms ?? "400", @"\D", "").Trim();
+        bool isSimplesNacional = companyCrt == CRT.SimplesNacional || companyCrt == CRT.SimplesNacionalMei;
+        var modBcEnum = (DeterminacaoBaseIcms)p.ModBcIcms;
+
+        if (isSimplesNacional || rawCst.Length == 3)
+        {
+            string csosnCode = rawCst.PadLeft(3, '0');
+
+            if (csosnCode == "101")
+            {
+                var vCred = Math.Round(valorTotalItem * (p.AliqCreditoSimples / 100m), 2);
+                return new ICMS
+                {
+                    TipoICMS = new ICMSSN101
+                    {
+                        orig = origem,
+                        CSOSN = Csosnicms.Csosn101,
+                        pCredSN = p.AliqCreditoSimples,
+                        vCredICMSSN = vCred
+                    }
+                };
+            }
+
+            if (csosnCode == "500")
+            {
+                return new ICMS { TipoICMS = new ICMSSN500 { orig = origem, CSOSN = Csosnicms.Csosn500 } };
+            }
+
+            Csosnicms csosnEnum = csosnCode switch
+            {
+                "103" => Csosnicms.Csosn103,
+                "300" => Csosnicms.Csosn300,
+                "400" => Csosnicms.Csosn400,
+                _ => Csosnicms.Csosn102
+            };
+
+            return new ICMS { TipoICMS = new ICMSSN102 { orig = origem, CSOSN = csosnEnum } };
+        }
+
+        string cst2Dig = rawCst.PadLeft(2, '0');
+
+        if (cst2Dig == "00")
+        {
+            var vIcms = Math.Round(valorTotalItem * (p.AliqIcms / 100m), 2);
+            return new ICMS
+            {
+                TipoICMS = new ICMS00
+                {
+                    orig = origem,
+                    CST = Csticms.Cst00,
+                    modBC = modBcEnum,
+                    vBC = valorTotalItem,
+                    pICMS = p.AliqIcms,
+                    vICMS = vIcms
+                }
+            };
+        }
+
+        if (cst2Dig == "20")
+        {
+            var vBcRed = Math.Round(valorTotalItem * (1 - (p.ReducaoBcIcms / 100m)), 2);
+            var vIcms = Math.Round(vBcRed * (p.AliqIcms / 100m), 2);
+            return new ICMS
+            {
+                TipoICMS = new ICMS20
+                {
+                    orig = origem,
+                    CST = Csticms.Cst20,
+                    modBC = modBcEnum,
+                    pRedBC = p.ReducaoBcIcms,
+                    vBC = vBcRed,
+                    pICMS = p.AliqIcms,
+                    vICMS = vIcms
+                }
+            };
+        }
+
+        if (cst2Dig is "40" or "41" or "50")
+        {
+            Csticms cstEnum = cst2Dig switch
+            {
+                "40" => Csticms.Cst40,
+                "50" => Csticms.Cst50,
+                _ => Csticms.Cst41
+            };
+
+            return new ICMS
+            {
+                TipoICMS = new ICMS40
+                {
+                    orig = origem,
+                    CST = cstEnum,
+                    motDesICMS = p.MotivoDesoneracaoIcms.HasValue && p.MotivoDesoneracaoIcms.Value > 0
+                        ? (MotivoDesoneracaoIcms)p.MotivoDesoneracaoIcms.Value
+                        : null
+                }
+            };
+        }
+
+        if (cst2Dig == "51")
+        {
+            return new ICMS { TipoICMS = new ICMS51 { orig = origem, CST = Csticms.Cst51, modBC = modBcEnum } };
+        }
+
+        if (cst2Dig == "60")
+        {
+            return new ICMS { TipoICMS = new ICMS60 { orig = origem, CST = Csticms.Cst60 } };
+        }
+
+        return new ICMS { TipoICMS = new ICMS90 { orig = origem, CST = Csticms.Cst90, modBC = modBcEnum } };
+    }
+
+    private IPI BuildIpi(ResolvedTaxParams p, decimal valorTotalItem)
+    {
+        string rawIpi = Regex.Replace(p.CstIpi ?? "53", @"\D", "").PadLeft(2, '0');
+        int cEnq = p.CodigoEnquadramentoIpi > 0 ? p.CodigoEnquadramentoIpi : 999;
+
+        if (!Enum.TryParse<CSTIPI>("ipi" + rawIpi, true, out var cstIpiEnum))
+        {
+            cstIpiEnum = CSTIPI.ipi53;
+        }
+
+        // CSTs tributados de IPI: 00, 49, 50, 99
+        if (rawIpi is "00" or "49" or "50" or "99")
+        {
+            var vIpi = Math.Round(valorTotalItem * (p.AliqIpi / 100m), 2);
+            return new IPI
+            {
+                cEnq = cEnq,
+                TipoIPI = new IPITrib
+                {
+                    CST = cstIpiEnum,
+                    vBC = valorTotalItem,
+                    pIPI = p.AliqIpi,
+                    vIPI = vIpi
+                }
+            };
+        }
+
+        // CSTs não tributados de IPI: 01..05, 51..55 (ex: 53)
+        return new IPI
+        {
+            cEnq = cEnq,
+            TipoIPI = new IPINT { CST = cstIpiEnum }
+        };
+    }
+
+    private PIS BuildPis(ResolvedTaxParams p, decimal valorTotalItem)
+    {
+        string cleanPis = Regex.Replace(p.CstPis ?? "08", @"\D", "").PadLeft(2, '0');
+
+        if (!Enum.TryParse<CSTPIS>("pis" + cleanPis, true, out var cstPisEnum))
+        {
+            cstPisEnum = CSTPIS.pis08;
+        }
+
+        if (cleanPis is "01" or "02")
+        {
+            var vPis = Math.Round(valorTotalItem * (p.AliqPis / 100m), 2);
+            return new PIS
+            {
+                TipoPIS = new PISAliq
+                {
+                    CST = cstPisEnum,
+                    vBC = valorTotalItem,
+                    pPIS = p.AliqPis,
+                    vPIS = vPis
+                }
+            };
+        }
+
+        // CSTs sem incidência / isentos de PIS: 04..09 (ex: 08)
+        if (cleanPis is "04" or "05" or "06" or "07" or "08" or "09")
+        {
+            return new PIS { TipoPIS = new PISNT { CST = cstPisEnum } };
+        }
+
+        var vPisOutr = Math.Round(valorTotalItem * (p.AliqPis / 100m), 2);
+        return new PIS
+        {
+            TipoPIS = new PISOutr
+            {
+                CST = cstPisEnum,
+                vBC = valorTotalItem,
+                pPIS = p.AliqPis,
+                vPIS = vPisOutr
+            }
+        };
+    }
+
+    private COFINS BuildCofins(ResolvedTaxParams p, decimal valorTotalItem)
+    {
+        string cleanCofins = Regex.Replace(p.CstCofins ?? "08", @"\D", "").PadLeft(2, '0');
+
+        if (!Enum.TryParse<CSTCOFINS>("cofins" + cleanCofins, true, out var cstCofinsEnum))
+        {
+            cstCofinsEnum = CSTCOFINS.cofins08;
+        }
+
+        if (cleanCofins is "01" or "02")
+        {
+            var vCofins = Math.Round(valorTotalItem * (p.AliqCofins / 100m), 2);
+            return new COFINS
+            {
+                TipoCOFINS = new COFINSAliq
+                {
+                    CST = cstCofinsEnum,
+                    vBC = valorTotalItem,
+                    pCOFINS = p.AliqCofins,
+                    vCOFINS = vCofins
+                }
+            };
+        }
+
+        // CSTs sem incidência / isentos de COFINS: 04..09 (ex: 08)
+        if (cleanCofins is "04" or "05" or "06" or "07" or "08" or "09")
+        {
+            return new COFINS { TipoCOFINS = new COFINSNT { CST = cstCofinsEnum } };
+        }
+
+        // 49 a 99: Outras Operações -> Exige <COFINSOutr> com base e alíquota
+        var vCofinsOutr = Math.Round(valorTotalItem * (p.AliqCofins / 100m), 2);
+        return new COFINS
+        {
+            TipoCOFINS = new COFINSOutr
+            {
+                CST = cstCofinsEnum,
+                vBC = valorTotalItem,
+                pCOFINS = p.AliqCofins,
+                vCOFINS = vCofinsOutr
+            }
+        };
+    }
+
+    private static OrigemMercadoria ObterOrigemProduto(object product)
+    {
+        var prop = product.GetType().GetProperty("Origin") ?? product.GetType().GetProperty("Origem");
+        if (prop != null)
+        {
+            var val = prop.GetValue(product);
+            if (val is int intVal && Enum.IsDefined(typeof(OrigemMercadoria), intVal))
+                return (OrigemMercadoria)intVal;
+            if (val is OrigemMercadoria origEnum)
+                return origEnum;
+            if (val != null && int.TryParse(val.ToString(), out var parsedInt) && Enum.IsDefined(typeof(OrigemMercadoria), parsedInt))
+                return (OrigemMercadoria)parsedInt;
+        }
+        return OrigemMercadoria.OmNacional;
+    }
+
+    private static string? ObterCestProduto(object product)
+    {
+        var prop = product.GetType().GetProperty("Cest") ?? product.GetType().GetProperty("CEST");
+        if (prop != null)
+        {
+            var val = prop.GetValue(product)?.ToString();
+            var digits = Regex.Replace(val ?? "", @"\D", "");
+            if (digits.Length == 7) return digits;
+        }
+        return null;
+    }
+
+    private ide BuildIde(OutboundOrder order, List<string> originAccessKeys, string destState, string naturezaOperacao, FiscalDocumentType finalidade)
     {
         int nNf = order.Company.NfeNextNumber;
         if (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf) && parsedNf > 0)
@@ -233,6 +645,27 @@ public class NfeBuilderService
             ufEnum = DFe.Classes.Entidades.Estado.RS;
         }
 
+        // Conversão segura para o enum FinalidadeNFe do Zeus (1 a 6)
+        FinalidadeNFe finNfeZeus;
+        if (finalidade == FiscalDocumentType.NotaCredito)
+        {
+            finNfeZeus = Enum.TryParse<FinalidadeNFe>("fnCredito", true, out var fc) ? fc : (FinalidadeNFe)5;
+        }
+        else if (finalidade == FiscalDocumentType.NotaDebito)
+        {
+            finNfeZeus = Enum.TryParse<FinalidadeNFe>("fnDebito", true, out var fd) ? fd : (FinalidadeNFe)6;
+        }
+        else
+        {
+            finNfeZeus = finalidade switch
+            {
+                FiscalDocumentType.Complementar => FinalidadeNFe.fnComplementar,
+                FiscalDocumentType.Ajuste => FinalidadeNFe.fnAjuste,
+                FiscalDocumentType.Devolucao => FinalidadeNFe.fnDevolucao,
+                _ => FinalidadeNFe.fnNormal
+            };
+        }
+
         var ide = new ide
         {
             cUF = ufEnum,
@@ -248,7 +681,7 @@ public class NfeBuilderService
             tpImp = TipoImpressao.tiRetrato,
             tpEmis = TipoEmissao.teNormal,
             tpAmb = order.Company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao,
-            finNFe = FinalidadeNFe.fnNormal,
+            finNFe = finNfeZeus, // 1, 2, 3, 4, 5 ou 6
             indFinal = ConsumidorFinal.cfNao,
             indPres = PresencaComprador.pcOutros,
             indIntermed = IndicadorIntermediador.iiSemIntermediador,
@@ -256,6 +689,7 @@ public class NfeBuilderService
             verProc = "CoreWMS 1.0"
         };
 
+        // Adiciona NFref se for Devolução ou se houver chaves de entrada
         if (order.Company.Environment == 1 && originAccessKeys != null && originAccessKeys.Any())
         {
             ide.NFref = ide.NFref ?? new List<NFref>();
@@ -279,7 +713,7 @@ public class NfeBuilderService
 
         var foneLimpo = string.IsNullOrWhiteSpace(company.Phone) ? null : new string(company.Phone.Where(char.IsDigit).ToArray());
 
-        CRT CompanyCRT = company.Crt switch
+        CRT companyCrt = company.Crt switch
         {
             1 => CRT.SimplesNacional,
             2 => CRT.SimplesNacionalExcessoSublimite,
@@ -294,7 +728,7 @@ public class NfeBuilderService
             xNome = company.CorporateName ?? "",
             xFant = string.IsNullOrWhiteSpace(company.TradeName) ? null : company.TradeName.Trim(),
             IE = company.StateRegistration,
-            CRT = CompanyCRT,
+            CRT = companyCrt,
             enderEmit = new enderEmit
             {
                 xLgr = company.Street ?? "NÃO INFORMADO",
@@ -410,10 +844,7 @@ public class NfeBuilderService
             _ => ModalidadeFrete.mfSemFrete
         };
 
-        var t = new transp
-        {
-            modFrete = modFrete
-        };
+        var t = new transp { modFrete = modFrete };
 
         if (!string.IsNullOrWhiteSpace(order.CarrierCnpjCpf) || !string.IsNullOrWhiteSpace(order.CarrierName))
         {
@@ -455,63 +886,32 @@ public class NfeBuilderService
         return t;
     }
 
-    private imposto BuildImpostos(FiscalOperationRule rule, decimal valorTotalItem)
+    private class ResolvedTaxParams
     {
-        var impostos = new imposto
-        {
-            ICMS = new ICMS
-            {
-                TipoICMS = new ICMS40
-                {
-                    orig = OrigemMercadoria.OmNacional,
-                    CST = Csticms.Cst41
-                }
-            },
-            IPI = new IPI { cEnq = 108, TipoIPI = new IPITrib { CST = CSTIPI.ipi53 } },
-            PIS = new PIS { TipoPIS = new PISOutr { CST = CSTPIS.pis08 } },
-            COFINS = new COFINS { TipoCOFINS = new COFINSOutr { CST = CSTCOFINS.cofins08 } }
-        };
-
-        if (rule != null && (!string.IsNullOrEmpty(rule.CstIbs) || !string.IsNullOrEmpty(rule.CstCbs)))
-        {
-            var cstText = "cst" + (rule.CstIbs ?? "410");
-            if (!Enum.TryParse<CSTIBSCBS>(cstText, true, out var parsedCst))
-            {
-                parsedCst = CSTIBSCBS.cst410;
-            }
-
-            var aliqIbs = rule.AliqIbs > 0 ? rule.AliqIbs : 0.10m;
-            var aliqCbs = rule.AliqCbs > 0 ? rule.AliqCbs : 0.90m;
-            var vIbsUf = Math.Round(valorTotalItem * (aliqIbs / 100), 2);
-            var vCbs = Math.Round(valorTotalItem * (aliqCbs / 100), 2);
-
-            impostos.IBSCBS = new IBSCBS
-            {
-                CST = parsedCst,
-                cClassTrib = "410999",
-                gIBSCBS = new gIBSCBS
-                {
-                    vBC = valorTotalItem,
-                    gIBSUF = new gIBSUF
-                    {
-                        pIBSUF = aliqIbs,
-                        vIBSUF = vIbsUf
-                    },
-                    gIBSMun = new gIBSMun
-                    {
-                        pIBSMun = 0,
-                        vIBSMun = 0
-                    },
-                    gCBS = new gCBS
-                    {
-                        pCBS = aliqCbs,
-                        vCBS = vCbs
-                    },
-                    vIBS = vIbsUf
-                }
-            };
-        }
-
-        return impostos;
+        public string CfopStateInternal { get; set; } = string.Empty;
+        public string CfopInterstate { get; set; } = string.Empty;
+        public string CstCsosnIcms { get; set; } = "400";
+        public int ModBcIcms { get; set; } = 3;
+        public decimal AliqIcms { get; set; }
+        public decimal ReducaoBcIcms { get; set; }
+        public int ModBcIcmsSt { get; set; } = 4;
+        public decimal MvaIcmsSt { get; set; }
+        public decimal ReducaoBcIcmsSt { get; set; }
+        public decimal AliqIcmsSt { get; set; }
+        public int? MotivoDesoneracaoIcms { get; set; }
+        public decimal AliqCreditoSimples { get; set; }
+        public string CstIpi { get; set; } = "53";
+        public int CodigoEnquadramentoIpi { get; set; } = 999;
+        public decimal AliqIpi { get; set; }
+        public string CstPis { get; set; } = "08";
+        public decimal AliqPis { get; set; }
+        public string CstCofins { get; set; } = "08";
+        public decimal AliqCofins { get; set; }
+        public string? CstIbs { get; set; }
+        public decimal AliqIbs { get; set; }
+        public string? CstCbs { get; set; }
+        public decimal AliqCbs { get; set; }
+        public string? ClassificacaoTributaria { get; set; }
+        public string? AdditionalNotes { get; set; }
     }
 }

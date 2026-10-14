@@ -1,4 +1,5 @@
 using System.Text;
+using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using Google.Apis.Auth.OAuth2;
@@ -31,9 +32,9 @@ public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleComma
     {
         _logger.LogInformation("[GMAIL API] A iniciar envio de NF-e para: {Email}", request.DestinationEmail);
 
-        var doc = await _db.OutboundFiscalDocuments
+        var doc = await _db.CompanyFiscalDocuments
+            .Include(d => d.Company)
             .Include(d => d.OutboundOrder)
-            .ThenInclude(o => o.Company)
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
@@ -42,31 +43,51 @@ public class SendNfeEmailGoogleHandler : IRequestHandler<SendNfeEmailGoogleComma
         try
         {
             string diretorioBase = Path.Combine(_env.ContentRootPath, "uploads", "NFePdf");
-            string caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
+
+            string pdfFileName = doc.Type switch
+            {
+                FiscalDocumentType.CartaCorrecao => $"{doc.AccessKey}-cce.pdf",
+                FiscalDocumentType.Cancelamento => $"{doc.AccessKey}-cancelamento.pdf",
+                _ => $"{doc.AccessKey}-danfe.pdf"
+            };
+
+            string caminhoPdf = Path.Combine(diretorioBase, pdfFileName);
 
             if (!File.Exists(caminhoPdf))
-                return Results.BadRequest(new { Message = "O PDF da DANFE não foi encontrado. Gere o PDF primeiro." });
+            {
+                caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
+            }
+
+            if (!File.Exists(caminhoPdf))
+                return Results.BadRequest(new { Message = "O PDF do documento fiscal não foi encontrado. Gere o PDF primeiro." });
+
+            var remetenteEmail = "faturacao@a-sua-empresa.com";
+            var remetenteNome = doc.Company?.TradeName
+                ?? doc.OutboundOrder?.Company?.TradeName
+                ?? "Faturação CoreWMS";
+
+            string identificadorDocumento = doc.OutboundOrder != null
+                ? $"Pedido #{doc.OutboundOrder.OrderNumber}"
+                : $"Documento Fiscal #{doc.AccessKey ?? doc.Id.ToString()}";
 
             var mimeMessage = new MimeMessage();
-            var remetenteEmail = "faturacao@a-sua-empresa.com";
-            var remetenteNome = doc.OutboundOrder.Company.TradeName ?? "Faturação CoreWMS";
-
             mimeMessage.From.Add(new MailboxAddress(remetenteNome, remetenteEmail));
             mimeMessage.To.Add(new MailboxAddress("", request.DestinationEmail));
-            mimeMessage.Subject = $"Nota Fiscal Eletrônica - Pedido #{doc.OutboundOrder.Id}";
+            mimeMessage.Subject = $"Nota Fiscal Eletrônica - {identificadorDocumento}";
 
             var builder = new BodyBuilder
             {
-                TextBody = $"Olá!\n\nEm anexo, enviamos a sua Nota Fiscal (XML e PDF) referente ao seu pedido.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!"
+                TextBody = $"Olá!\n\nEm anexo, enviamos a sua Nota Fiscal referente a: {identificadorDocumento}.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!"
             };
 
-            // Anexa o PDF a partir do disco
             builder.Attachments.Add(caminhoPdf);
 
-            // CORREÇÃO: Cria o XML diretamente na memória sem tocar no disco para evitar colisões
+            // Anexa o XML diretamente da memória sem tocar no disco
             var xmlBytes = Encoding.UTF8.GetBytes(doc.RawXml);
             using var xmlStream = new MemoryStream(xmlBytes);
-            builder.Attachments.Add($"{doc.AccessKey}.xml", xmlStream, ContentType.Parse("text/xml"));
+
+            string xmlFileName = doc.Type.IsEvent() ? $"{doc.AccessKey}-procEvento.xml" : $"{doc.AccessKey}-procNFe.xml";
+            builder.Attachments.Add(xmlFileName, xmlStream, ContentType.Parse("text/xml"));
 
             mimeMessage.Body = builder.ToMessageBody();
 

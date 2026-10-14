@@ -4,8 +4,7 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
-import type { FiscalOperationType } from './fiscalOperationType';
 
 export type GetApiOutboundOrdersOrderIdFiscalPreviewParams = {
-operationType?: FiscalOperationType;
+fiscalRuleId?: string;
 };

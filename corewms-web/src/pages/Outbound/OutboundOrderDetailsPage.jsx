@@ -381,17 +381,23 @@ export default function OutboundOrderDetailsPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {order.fiscalDocuments.map(doc => {
-                                                const isNfeOriginal = doc.type === 'NfeReturn' || doc.type === 'NfeShipment' || doc.type === 1 || doc.type === 2;
+                                                // Verifica se é qualquer uma das finalidades de NF-e (1 a 6)
+                                                const isNfeOriginal = (Number(doc.type) >= 1 && Number(doc.type) <= 6)
+                                                    || ['Normal', 'Complementar', 'Ajuste', 'Devolucao', 'NotaCredito', 'NotaDebito'].includes(doc.type);
                                                 const isAuthorized = doc.status === 'Authorized';
 
                                                 return (
                                                     <TableRow key={doc.id} className="hover:bg-slate-50/50 transition-colors">
                                                         <TableCell className="text-xs font-mono">{new Date(doc.createdAt).toLocaleString('pt-BR')}</TableCell>
                                                         <TableCell className="text-xs font-semibold text-slate-800">
-                                                            {doc.type === 'NfeReturn' || doc.type === 1 ? 'NF-e Retorno' :
-                                                                doc.type === 'NfeShipment' || doc.type === 2 ? 'NF-e Remessa' :
-                                                                    doc.type === 'Cancelation' || doc.type === 3 ? 'Cancelamento' :
-                                                                        doc.type === 'Correction' || doc.type === 4 ? 'Carta de Correção (CC-e)' : doc.type}
+                                                            {doc.type === 'Normal' || doc.type === 1 ? 'NF-e Normal' :
+                                                                doc.type === 'Complementar' || doc.type === 2 ? 'NF-e Complementar' :
+                                                                    doc.type === 'Ajuste' || doc.type === 3 ? 'NF-e Ajuste' :
+                                                                        doc.type === 'Devolucao' || doc.type === 4 ? 'NF-e Devolução / Retorno' :
+                                                                            doc.type === 'NotaCredito' || doc.type === 5 ? 'NF-e Nota de Crédito (RT)' :
+                                                                                doc.type === 'NotaDebito' || doc.type === 6 ? 'NF-e Nota de Débito (RT)' :
+                                                                                    doc.type === 'Cancelamento' || doc.type === 7 ? 'Cancelamento' :
+                                                                                        doc.type === 'CartaCorrecao' || doc.type === 8 ? 'Carta de Correção (CC-e)' : doc.type}
                                                         </TableCell>
                                                         <TableCell className="font-mono text-xs font-semibold text-slate-900">
                                                             {doc.accessKey ? `${doc.accessKey.substring(0, 10)}...${doc.accessKey.substring(34)}` : '-'}
@@ -437,17 +443,17 @@ export default function OutboundOrderDetailsPage() {
                                                                         onClick={() => handleDownloadPdf(doc)}
                                                                         disabled={downloadingDocId === doc.id}
                                                                         className={`h-8 text-xs bg-white font-medium px-2 ${isNfeOriginal ? 'text-orange-700 border-orange-200 hover:bg-orange-50' :
-                                                                            doc.type === 'Cancelation' || doc.type === 3 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
+                                                                            doc.type === 'Cancelamento' || doc.type === 5 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
                                                                                 'text-purple-700 border-purple-200 hover:bg-purple-50'
                                                                             }`}
-                                                                        title="Baixar PDF Oficial"
+                                                                        title="Baixar PDF"
                                                                     >
                                                                         {downloadingDocId === doc.id ? (
                                                                             <Loader2 size={13} className="animate-spin" />
                                                                         ) : (
                                                                             <>
                                                                                 <Download size={13} className="mr-1" />
-                                                                                {isNfeOriginal ? 'DANFE' : doc.type === 'Cancelation' || doc.type === 3 ? 'PDF Canc.' : 'PDF CC-e'}
+                                                                                {isNfeOriginal ? 'DANFE' : doc.type === 'Cancelamento' || doc.type === 5 ? 'PDF Canc.' : 'PDF CC-e'}
                                                                             </>
                                                                         )}
                                                                     </Button>

@@ -2,10 +2,21 @@ using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using DFe.Classes.Flags;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using NFe.Classes.Informacoes.Detalhe.Tributacao.Estadual.Tipos; // <-- Resolve o CS0246 da OrigemMercadoria
+using System.Text.RegularExpressions;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
+
+public record FiscalPreviewRuleOptionDto(
+    Guid Id,
+    string Description,
+    int Finalidade,
+    string CfopStateInternal,
+    string CfopInterstate
+);
 
 public record FiscalPreviewItemDto(
     Guid ProductId,
@@ -27,18 +38,21 @@ public record OutboundFiscalPreviewDto(
     string DestinationState,
     bool IsInterstate,
     int SuggestedNfeCount,
+    Guid? DefaultFiscalRuleId,
     string DefaultNaturezaOperacao,
     int DefaultIndFinal,       // 0 = Normal, 1 = Consumidor Final
     int DefaultIndPres,        // 1 = Presencial, 2 = Internet, 9 = Outros
+    int DefaultTpImp,          // 1 = Retrato, 2 = Paisagem
     string? AdditionalNotes,
     decimal TotalProductsValue,
     List<FiscalPreviewItemDto> Items,
-    List<string> ReferencedAccessKeys
+    List<string> ReferencedAccessKeys,
+    List<FiscalPreviewRuleOptionDto> FiscalRules
 );
 
 public record GetOutboundFiscalPreviewQuery(
     Guid OrderId,
-    FiscalOperationType? OperationType = null
+    Guid? FiscalRuleId = null
 ) : IRequest<IResult>;
 
 public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscalPreviewQuery, IResult>
@@ -65,17 +79,29 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
-        var operationType = request.OperationType ?? (order.IsReturnToCustomer
-            ? FiscalOperationType.OutboundReturnNormal
-            : FiscalOperationType.OutboundShipment);
-
         var destState = !string.IsNullOrWhiteSpace(order.DestinationState)
             ? order.DestinationState.Trim().ToUpper()
             : (order.Customer?.State?.Trim().ToUpper() ?? "RS");
 
         bool isInterstate = order.Company.State.Trim().ToUpper() != destState;
 
-        // Chaves de entrada referenciadas (NFref)
+        // 1. Busca todas as regras fiscais ativas para exibição no combo do front
+        var allRules = await _db.FiscalOperationRules
+            .AsNoTracking()
+            .Include(r => r.Exceptions.Where(e => e.IsActive))
+            .Where(r => r.CompanyId == companyId && r.IsActive)
+            .OrderBy(r => r.Description)
+            .ToListAsync(ct);
+
+        // 2. Seleciona a regra solicitada ou a primeira regra ativa da empresa
+        FiscalOperationRule? selectedRule = null;
+        if (request.FiscalRuleId.HasValue)
+        {
+            selectedRule = allRules.FirstOrDefault(r => r.Id == request.FiscalRuleId.Value);
+        }
+        selectedRule ??= allRules.FirstOrDefault();
+
+        // 3. Chaves de entrada referenciadas (NFref)
         var originAccessKeys = await _db.OutboundAllocations
             .AsNoTracking()
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
@@ -87,23 +113,31 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
             .Distinct()
             .ToListAsync(ct);
 
+        // 4. Monta o espelho dos itens resolvendo CFOP e CST (com base na regra e linhas de exceção)
         var previewItems = new List<FiscalPreviewItemDto>();
 
         foreach (var item in order.Items.Where(i => i.PackedQuantity > 0))
         {
-            var rule = await _db.FiscalOperationRules
-                .AsNoTracking()
-                .Where(r => r.CompanyId == companyId && r.OperationType == operationType && r.IsActive)
-                .Where(r => r.SpecificCustomerId == null || r.SpecificCustomerId == order.CustomerId)
-                .Where(r => r.SpecificDestinationState == null || r.SpecificDestinationState == destState)
-                .OrderByDescending(r => r.Priority)
-                .FirstOrDefaultAsync(ct);
+            var ncm = string.IsNullOrWhiteSpace(item.Product?.Ncm) ? "00000000" : Regex.Replace(item.Product.Ncm, @"\D", "");
+            var origem = ObterOrigemProduto(item.Product);
 
-            var cfop = rule != null
-                ? (isInterstate ? rule.CfopInterstate : rule.CfopStateInternal)
-                : (isInterstate ? "6906" : "5906");
+            // Matching inteligente da exceção por NCM, UF de destino e Origem
+            var matchedException = selectedRule?.Exceptions?
+                .Where(e => e.IsActive)
+                .Where(e => string.IsNullOrWhiteSpace(e.SpecificDestinationState) || e.SpecificDestinationState == destState)
+                .Where(e => string.IsNullOrWhiteSpace(e.SpecificNcmStart) || ncm.StartsWith(e.SpecificNcmStart))
+                .Where(e => !e.SpecificOrigin.HasValue || e.SpecificOrigin.Value == (int)origem)
+                .OrderByDescending(e =>
+                    (!string.IsNullOrWhiteSpace(e.SpecificNcmStart) ? 4 : 0) +
+                    (!string.IsNullOrWhiteSpace(e.SpecificDestinationState) ? 2 : 0) +
+                    (e.SpecificOrigin.HasValue ? 1 : 0))
+                .FirstOrDefault();
 
-            var cst = rule?.CstCsosnIcms ?? "400";
+            var cfopInterno = matchedException?.CfopStateInternal ?? selectedRule?.CfopStateInternal ?? "5906";
+            var cfopInter = matchedException?.CfopInterstate ?? selectedRule?.CfopInterstate ?? "6906";
+            var cfop = isInterstate ? cfopInter : cfopInterno;
+            var cst = matchedException?.CstCsosnIcms ?? selectedRule?.CstCsosnIcms ?? "400";
+
             var totalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
 
             previewItems.Add(new FiscalPreviewItemDto(
@@ -119,24 +153,54 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
             ));
         }
 
+        var fiscalRuleOptions = allRules.Select(r => new FiscalPreviewRuleOptionDto(
+            r.Id,
+            r.Description,
+            (int)r.Finalidade,
+            r.CfopStateInternal,
+            r.CfopInterstate
+        )).ToList();
+
+        var customerName = order.Customer?.CorporateName ?? "NÃO INFORMADO";
+
         var dto = new OutboundFiscalPreviewDto(
             order.Id,
             order.OrderNumber,
-            order.Customer.CorporateName,
-            order.DestinationName ?? order.Customer.CorporateName,
+            customerName,
+            order.DestinationName ?? customerName,
             destState,
             isInterstate,
             SuggestedNfeCount: 1,
-            DefaultNaturezaOperacao: operationType == FiscalOperationType.OutboundShipment ? "REMESSA POR CONTA E ORDEM" : "RETORNO DE ARMAZEM GERAL",
-            DefaultIndFinal: order.DestinationIeIndicator == 9 ? 1 : 0, // Se não contribuinte, consumidor final
-            DefaultIndPres: 9, // Presença do comprador (9=Outros)
+            DefaultFiscalRuleId: selectedRule?.Id,
+            DefaultNaturezaOperacao: selectedRule?.Description ?? "RETORNO DE ARMAZEM GERAL",
+            DefaultIndFinal: order.DestinationIeIndicator == 9 ? 1 : 0,
+            DefaultIndPres: 9,
+            DefaultTpImp: 1,
             AdditionalNotes: order.AdditionalNotes,
             TotalProductsValue: previewItems.Sum(i => i.TotalValue),
             previewItems,
-            originAccessKeys
+            originAccessKeys,
+            fiscalRuleOptions
         );
 
         return Results.Ok(dto);
+    }
+
+    private static OrigemMercadoria ObterOrigemProduto(object? product)
+    {
+        if (product == null) return OrigemMercadoria.OmNacional;
+        var prop = product.GetType().GetProperty("Origin") ?? product.GetType().GetProperty("Origem");
+        if (prop != null)
+        {
+            var val = prop.GetValue(product);
+            if (val is int intVal && Enum.IsDefined(typeof(OrigemMercadoria), intVal))
+                return (OrigemMercadoria)intVal;
+            if (val is OrigemMercadoria origEnum)
+                return origEnum;
+            if (val != null && int.TryParse(val.ToString(), out var parsedInt) && Enum.IsDefined(typeof(OrigemMercadoria), parsedInt))
+                return (OrigemMercadoria)parsedInt;
+        }
+        return OrigemMercadoria.OmNacional;
     }
 }
 
@@ -145,8 +209,8 @@ public static class GetOutboundFiscalPreviewEndpoints
     public static void MapGetOutboundFiscalPreviewEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/outbound/orders/{orderId:guid}/fiscal-preview",
-            async (Guid orderId, FiscalOperationType? operationType, IMediator mediator) =>
-                await mediator.Send(new GetOutboundFiscalPreviewQuery(orderId, operationType)))
+            async (Guid orderId, Guid? fiscalRuleId, IMediator mediator) =>
+                await mediator.Send(new GetOutboundFiscalPreviewQuery(orderId, fiscalRuleId)))
            .WithTags("Outbound")
            .RequireAuthorization()
            .RequirePermission(Permissions.Outbound.View);

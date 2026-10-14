@@ -28,10 +28,11 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
     {
         _logger.LogInformation("[PDF FISCAL] Iniciando geração nativa QuestPDF ID: {DocumentId}", request.DocumentId);
 
-        var doc = await _db.OutboundFiscalDocuments
+        var doc = await _db.CompanyFiscalDocuments
             .AsNoTracking()
+            .Include(d => d.Company)
             .Include(d => d.OutboundOrder)
-                .ThenInclude(o => o.Company)
+                .ThenInclude(o => o!.Company)
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
@@ -41,17 +42,16 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
         {
             QuestPDF.Settings.License = LicenseType.Community;
 
-            string? logoBase64 = doc.OutboundOrder?.Company?.LogoBase64;
+            string? logoBase64 = doc.Company?.LogoBase64 ?? doc.OutboundOrder?.Company?.LogoBase64;
             byte[]? logoBytes = ConvertBase64ToBytes(logoBase64);
 
             // 1. SE FOR EVENTO FISCAL (Cancelamento ou Carta de Correção)
-            if (doc.Type == FiscalDocumentType.Cancelation || doc.Type == FiscalDocumentType.Correction)
+            if (doc.Type.IsEvent())
             {
-                // Busca a NF-e original autorizada da ordem para obter os dados do cabeçalho e destinatário
-                var mainNfeDoc = await _db.OutboundFiscalDocuments
+                var mainNfeDoc = await _db.CompanyFiscalDocuments
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(d => d.OutboundOrderId == doc.OutboundOrderId
-                                           && (d.Type == FiscalDocumentType.NfeReturn || d.Type == FiscalDocumentType.NfeShipment)
+                    .FirstOrDefaultAsync(d => d.AccessKey == doc.AccessKey
+                                           && (int)d.Type >= 1 && (int)d.Type <= 6
                                            && !string.IsNullOrWhiteSpace(d.RawXml), ct);
 
                 if (mainNfeDoc == null || string.IsNullOrWhiteSpace(mainNfeDoc.RawXml))
@@ -63,7 +63,7 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
                     return document.GeneratePdf();
                 }, ct);
 
-                string nomeArquivoEvento = doc.Type == FiscalDocumentType.Correction
+                string nomeArquivoEvento = doc.Type == FiscalDocumentType.CartaCorrecao
                     ? $"{doc.AccessKey}-cce.pdf"
                     : $"{doc.AccessKey}-cancelamento.pdf";
 

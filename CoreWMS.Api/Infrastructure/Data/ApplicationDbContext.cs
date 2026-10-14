@@ -75,7 +75,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<OutboundOrderItem> OutboundOrderItems => Set<OutboundOrderItem>();
     public DbSet<OutboundAllocation> OutboundAllocations => Set<OutboundAllocation>();
     public DbSet<FiscalOperationRule> FiscalOperationRules => Set<FiscalOperationRule>();
-    public DbSet<OutboundFiscalDocument> OutboundFiscalDocuments => Set<OutboundFiscalDocument>();
+    public DbSet<FiscalOperationRuleException> FiscalOperationRuleExceptions => Set<FiscalOperationRuleException>();
+    public DbSet<CompanyFiscalDocument> CompanyFiscalDocuments => Set<CompanyFiscalDocument>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -604,59 +605,129 @@ public class ApplicationDbContext : DbContext
         });
 
         // ==========================================
-        // MÓDULO FISCAL E FATURADOR
+        // MÓDULO FISCAL E NATUREZAS DE OPERAÇÃO
         // ==========================================
         builder.Entity<FiscalOperationRule>(b =>
         {
+            b.ToTable("FiscalOperationRules");
             b.HasKey(x => x.Id);
+
             b.Property(x => x.Description).IsRequired().HasMaxLength(150);
+            b.Property(x => x.Finalidade).IsRequired(); // <-- Recomendado
             b.Property(x => x.CfopStateInternal).IsRequired().HasMaxLength(4);
             b.Property(x => x.CfopInterstate).IsRequired().HasMaxLength(4);
+
             b.Property(x => x.CstCsosnIcms).IsRequired().HasMaxLength(3);
-            b.Property(x => x.CstPisCofins).IsRequired().HasMaxLength(2);
+            b.Property(x => x.AliqIcms).HasPrecision(5, 2);
+            b.Property(x => x.ReducaoBcIcms).HasPrecision(5, 2);
+            b.Property(x => x.MvaIcmsSt).HasPrecision(5, 2);
+            b.Property(x => x.ReducaoBcIcmsSt).HasPrecision(5, 2);
+            b.Property(x => x.AliqIcmsSt).HasPrecision(5, 2);
+            b.Property(x => x.AliqCreditoSimples).HasPrecision(5, 2);
+
             b.Property(x => x.CstIpi).IsRequired().HasMaxLength(2);
-            b.Property(x => x.SpecificDestinationState).HasMaxLength(2);
-            b.Property(x => x.SpecificNcmStart).HasMaxLength(10);
+            b.Property(x => x.AliqIpi).HasPrecision(5, 2);
+
+            b.Property(x => x.CstPis).IsRequired().HasMaxLength(2);
+            b.Property(x => x.AliqPis).HasPrecision(5, 2);
+
+            b.Property(x => x.CstCofins).IsRequired().HasMaxLength(2);
+            b.Property(x => x.AliqCofins).HasPrecision(5, 2);
+
+            b.Property(x => x.CstIbs).HasMaxLength(3);
+            b.Property(x => x.AliqIbs).HasPrecision(5, 2);
+            b.Property(x => x.CstCbs).HasMaxLength(3);
+            b.Property(x => x.AliqCbs).HasPrecision(5, 2);
+            b.Property(x => x.ClassificacaoTributaria).HasMaxLength(6);
+
             b.Property(x => x.AdditionalNotes).HasMaxLength(2000);
 
-            b.HasOne(x => x.Company).WithMany().HasForeignKey(x => x.CompanyId).OnDelete(DeleteBehavior.Restrict);
-            b.HasOne(x => x.SpecificCustomer).WithMany().HasForeignKey(x => x.SpecificCustomerId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Company)
+             .WithMany()
+             .HasForeignKey(x => x.CompanyId)
+             .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasMany(x => x.Exceptions)
+             .WithOne(e => e.FiscalOperationRule)
+             .HasForeignKey(e => e.FiscalOperationRuleId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasIndex(x => new { x.CompanyId, x.Description });
+        });
+
+        builder.Entity<FiscalOperationRuleException>(b =>
+        {
+            b.ToTable("FiscalOperationRuleExceptions");
+            b.HasKey(x => x.Id);
+
+            b.Property(x => x.SpecificDestinationState).HasMaxLength(2);
+            b.Property(x => x.SpecificNcmStart).HasMaxLength(10);
+            b.Property(x => x.SpecificOrigin);
+
+            b.Property(x => x.CfopStateInternal).HasMaxLength(4);
+            b.Property(x => x.CfopInterstate).HasMaxLength(4);
+
+            b.Property(x => x.CstCsosnIcms).HasMaxLength(3);
+            b.Property(x => x.AliqIcms).HasPrecision(5, 2);
+            b.Property(x => x.ReducaoBcIcms).HasPrecision(5, 2);
+            b.Property(x => x.MvaIcmsSt).HasPrecision(5, 2);
+            b.Property(x => x.ReducaoBcIcmsSt).HasPrecision(5, 2);
+            b.Property(x => x.AliqIcmsSt).HasPrecision(5, 2);
+            b.Property(x => x.AliqCreditoSimples).HasPrecision(5, 2);
+
+            b.Property(x => x.CstIpi).HasMaxLength(2);
+            b.Property(x => x.AliqIpi).HasPrecision(5, 2);
+
+            b.Property(x => x.CstPis).HasMaxLength(2);
+            b.Property(x => x.AliqPis).HasPrecision(5, 2);
+
+            b.Property(x => x.CstCofins).HasMaxLength(2);
+            b.Property(x => x.AliqCofins).HasPrecision(5, 2);
+
+            b.Property(x => x.CstIbs).HasMaxLength(3);
+            b.Property(x => x.AliqIbs).HasPrecision(5, 2);
+            b.Property(x => x.CstCbs).HasMaxLength(3);
+            b.Property(x => x.AliqCbs).HasPrecision(5, 2);
+            b.Property(x => x.ClassificacaoTributaria).HasMaxLength(6);
+
+            b.Property(x => x.AdditionalNotes).HasMaxLength(2000);
+
+            b.HasIndex(x => x.FiscalOperationRuleId);
+            b.HasIndex(x => new { x.FiscalOperationRuleId, x.SpecificDestinationState, x.SpecificNcmStart, x.SpecificOrigin });
         });
 
         // ==========================================
-        // DOCUMENTOS FISCAIS DE SAÍDA (1:N com OutboundOrder)
+        // DOCUMENTOS FISCAIS DA EMPRESA (CompanyFiscalDocuments)
         // ==========================================
-        builder.Entity<OutboundFiscalDocument>(b =>
+        builder.Entity<CompanyFiscalDocument>(b =>
         {
-            b.ToTable("OutboundFiscalDocuments");
+            b.ToTable("CompanyFiscalDocuments");
             b.HasKey(x => x.Id);
 
-            b.Property(x => x.Type)
-                .IsRequired();
+            b.Property(x => x.Type).IsRequired();
+            b.Property(x => x.Status).IsRequired();
 
-            b.Property(x => x.Status)
-                .IsRequired();
+            b.Property(x => x.AccessKey).HasMaxLength(44);
+            b.Property(x => x.Protocol).HasMaxLength(30);
+            b.Property(x => x.ReturnMessage).HasColumnType("text");
+            b.Property(x => x.RawXml).HasColumnType("text");
 
-            b.Property(x => x.AccessKey)
-                .HasMaxLength(44);
+            // Propriedades computadas
+            b.Ignore(x => x.IsNfe);   // <-- Recomendado
+            b.Ignore(x => x.IsEvent); // <-- Recomendado
 
-            b.Property(x => x.Protocol)
-                .HasMaxLength(30);
-
-            b.Property(x => x.ReturnMessage)
-                .HasColumnType("text");
-
-            // Mapeamento para armazenar o XML completo sem limite de tamanho
-            b.Property(x => x.RawXml)
-                .HasColumnType("text");
-
-            // Relacionamento 1:N com OutboundOrder
-            b.HasOne(x => x.OutboundOrder)
-                .WithMany() // ou .WithMany(x => x.FiscalDocuments) se tiver a coleção mapeada no OutboundOrder
-                .HasForeignKey(x => x.OutboundOrderId)
+            b.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Índices estratégicos para performance
+            b.HasOne(x => x.OutboundOrder)
+                .WithMany()
+                .HasForeignKey(x => x.OutboundOrderId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => x.CompanyId);
             b.HasIndex(x => x.OutboundOrderId);
             b.HasIndex(x => x.AccessKey);
             b.HasIndex(x => x.Status);

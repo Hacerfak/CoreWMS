@@ -42,7 +42,7 @@ public class ShipOutboundOrderHandler : IRequestHandler<ShipOutboundOrderCommand
             return Results.BadRequest(new { Message = "O pedido já foi expedido anteriormente." });
 
         // Valida se o documento fiscal foi emitido e autorizado
-        var authorizedDoc = await _db.OutboundFiscalDocuments
+        var authorizedDoc = await _db.CompanyFiscalDocuments
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.OutboundOrderId == order.Id && d.Status == FiscalDocumentStatus.Authorized, ct);
 

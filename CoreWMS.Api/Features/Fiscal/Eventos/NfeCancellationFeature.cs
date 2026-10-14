@@ -60,10 +60,10 @@ public class CancelOutboundNfeHandler : IRequestHandler<CancelOutboundNfeCommand
             return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
         // 2. Localiza a NF-e autorizada do pedido
-        var authorizedDoc = await _db.OutboundFiscalDocuments
-            .FirstOrDefaultAsync(d => d.OutboundOrderId == order.Id
-                                   && (d.Type == FiscalDocumentType.NfeReturn || d.Type == FiscalDocumentType.NfeShipment)
-                                   && d.Status == FiscalDocumentStatus.Authorized, ct);
+        var authorizedDoc = await _db.CompanyFiscalDocuments
+    .FirstOrDefaultAsync(d => d.OutboundOrderId == order.Id
+                           && (int)d.Type >= 1 && (int)d.Type <= 6
+                           && d.Status == FiscalDocumentStatus.Authorized, ct);
 
         if (authorizedDoc == null)
             return Results.BadRequest(new { Message = "Não há NF-e autorizada ativa para este pedido." });
@@ -87,8 +87,8 @@ public class CancelOutboundNfeHandler : IRequestHandler<CancelOutboundNfeCommand
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
         // 4. Criação do documento fiscal de cancelamento (Pending)
-        var cancelDoc = new OutboundFiscalDocument(order.Id, FiscalDocumentType.Cancelation);
-        _db.Set<OutboundFiscalDocument>().Add(cancelDoc);
+        var cancelDoc = new CompanyFiscalDocument(companyId, FiscalDocumentType.Cancelamento, order.Id);
+        _db.CompanyFiscalDocuments.Add(cancelDoc);
 
         // 5. Transmissão do Evento de Cancelamento (Código 110111)
         using var servicoNFe = new ServicosNFe(cfgServico, certificado);

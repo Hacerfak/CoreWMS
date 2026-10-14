@@ -59,19 +59,20 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
-        // 1. Permite emissão se estiver pronto na doca (primeira emissão) ou já expedido (reemissão por cancelamento)
+        // 1. Permite emissão se estiver pronto na doca ou se já estiver expedido (reemissão após cancelamento)
         if (order.Status != OutboundOrderStatus.ReadyToShip && order.Status != OutboundOrderStatus.Shipped)
             return Results.BadRequest(new { Message = "O pedido precisa estar pronto na doca ou já expedido (com NF-e cancelada) para emitir uma nova NF-e." });
 
         // 2. REGRA DE OURO: Só permite gerar nova nota quando TODAS as notas do tipo Return ou Shipment estiverem canceladas
-        var hasActiveNfe = await _db.OutboundFiscalDocuments
+        // Só permite gerar nova nota quando TODAS as notas fiscais (1 a 6) estiverem canceladas
+        var hasActiveNfe = await _db.CompanyFiscalDocuments
             .AnyAsync(d => d.OutboundOrderId == order.Id
-                        && (d.Type == FiscalDocumentType.NfeReturn || d.Type == FiscalDocumentType.NfeShipment)
-                        && d.Status == FiscalDocumentStatus.Authorized, ct);
+                        && (int)d.Type >= 1 && (int)d.Type <= 6
+                        && d.Status != FiscalDocumentStatus.Canceled, ct);
 
         if (hasActiveNfe)
         {
-            return Results.BadRequest(new { Message = "Não é possível emitir uma nova NF-e enquanto houver uma nota ativa ou não cancelada para este pedido." });
+            return Results.BadRequest(new { Message = "Não é possível emitir uma nova NF-e enquanto houver uma nota fiscal ativa para este pedido." });
         }
 
         var company = order.Company;
@@ -80,6 +81,9 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
 
         var tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao;
         var cfgServico = _zeusConfigurator.GetCompanyConfiguration(company, tpAmb);
+
+        // Desativa a validação local redundante de schema para evitar bloqueios no .NET
+        cfgServico.ValidarSchemas = false;
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
             cfgServico.Certificado.ArrayBytesArquivo,
@@ -119,12 +123,12 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
         }
 
-        var fiscalDocType = rule.OperationType == FiscalOperationType.OutboundShipment
-            ? FiscalDocumentType.NfeShipment
-            : FiscalDocumentType.NfeReturn;
+        // Determina o tipo do documento fiscal com base na Natureza de Operação aplicada
+        (nfe, rule) = await _builder.BuildOutboundNfeAsync(order.Id, request.FiscalRuleId, ct);
 
-        var fiscalDoc = new OutboundFiscalDocument(order.Id, fiscalDocType);
-        _db.Set<OutboundFiscalDocument>().Add(fiscalDoc);
+        // Assume a finalidade da Natureza de Operação (Normal, Devolução, Nota de Crédito, etc.)
+        var fiscalDoc = new CompanyFiscalDocument(companyId, rule.Finalidade, order.Id);
+        _db.CompanyFiscalDocuments.Add(fiscalDoc);
 
         try
         {

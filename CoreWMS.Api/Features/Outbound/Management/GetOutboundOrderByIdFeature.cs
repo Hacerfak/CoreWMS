@@ -1,3 +1,4 @@
+using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -171,7 +172,8 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             v.UsedStretchFilm
         )).ToList();
 
-        var fiscalDocDtos = await _db.OutboundFiscalDocuments
+        // Consulta através de CompanyFiscalDocuments
+        var fiscalDocDtos = await _db.CompanyFiscalDocuments
             .AsNoTracking()
             .Where(f => f.OutboundOrderId == order.Id)
             .OrderByDescending(f => f.CreatedAt)
@@ -185,10 +187,12 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 f.CreatedAt
             )).ToListAsync(ct);
 
+        var customerName = order.Customer?.CorporateName ?? "NÃO INFORMADO";
+
         var dto = new OutboundOrderFullDetailDto(
             order.Id,
             order.CustomerId,
-            order.Customer.CorporateName,
+            customerName,
             order.OrderNumber,
             order.InvoiceNumber,
             order.InvoiceSerie,

@@ -61,10 +61,13 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
             return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
         // 2. Localiza a NF-e autorizada original
-        var authorizedDoc = await _db.OutboundFiscalDocuments
+        var authorizedDoc = await _db.CompanyFiscalDocuments
             .FirstOrDefaultAsync(d => d.OutboundOrderId == order.Id
-                                   && (d.Type == FiscalDocumentType.NfeReturn || d.Type == FiscalDocumentType.NfeShipment)
-                                   && d.Status == FiscalDocumentStatus.Authorized, ct);
+                           && (d.Type == FiscalDocumentType.Normal
+                            || d.Type == FiscalDocumentType.Complementar
+                            || d.Type == FiscalDocumentType.Ajuste
+                            || d.Type == FiscalDocumentType.Devolucao)
+                           && d.Status == FiscalDocumentStatus.Authorized, ct);
 
         if (authorizedDoc == null)
             return Results.BadRequest(new { Message = "Não há NF-e autorizada ativa para este pedido." });
@@ -73,10 +76,10 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
             return Results.BadRequest(new { Message = "Chave de acesso da NF-e não localizada." });
 
         // 3. Determina a sequência do evento (1 a 20)
-        var currentSeq = await _db.OutboundFiscalDocuments
+        var currentSeq = await _db.CompanyFiscalDocuments
             .CountAsync(d => d.OutboundOrderId == order.Id
-                          && d.Type == FiscalDocumentType.Correction
-                          && d.Status == FiscalDocumentStatus.Authorized, ct) + 1;
+                  && d.Type == FiscalDocumentType.CartaCorrecao
+                  && d.Status == FiscalDocumentStatus.Authorized, ct) + 1;
 
         if (currentSeq > 20)
             return Results.BadRequest(new { Message = "Atingido o limite máximo de 20 Cartas de Correção para esta NF-e (Regra SEFAZ)." });
@@ -99,8 +102,8 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
         // 4. Cria registro inicial do documento da CC-e
-        var correctionDoc = new OutboundFiscalDocument(order.Id, FiscalDocumentType.Correction);
-        _db.Set<OutboundFiscalDocument>().Add(correctionDoc);
+        var correctionDoc = new CompanyFiscalDocument(companyId, FiscalDocumentType.CartaCorrecao, order.Id);
+        _db.CompanyFiscalDocuments.Add(correctionDoc);
 
         // 5. Transmissão do Evento de Carta de Correção (tpEvento 110110)
         using var servicoNFe = new ServicosNFe(cfgServico, certificado);

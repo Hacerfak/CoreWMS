@@ -1,4 +1,5 @@
 using System.Text;
+using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
@@ -19,17 +20,18 @@ public class DownloadNfeXmlHandler : IRequestHandler<DownloadNfeXmlQuery, IResul
 
     public async Task<IResult> Handle(DownloadNfeXmlQuery request, CancellationToken ct)
     {
-        var doc = await _db.OutboundFiscalDocuments
+        var doc = await _db.CompanyFiscalDocuments
             .AsNoTracking()
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
-        if (doc == null) return Results.NotFound(new { Message = "Documento não encontrado." });
+        if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
         if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "O XML não está disponível." });
 
         byte[] xmlBytes = Encoding.UTF8.GetBytes(doc.RawXml);
-        string fileName = $"{doc.AccessKey}-procNFe.xml";
 
-        // Retorna como tipo mime "application/xml" forçando download (attachment)
+        string suffix = doc.Type.IsEvent() ? "-procEvento.xml" : "-procNFe.xml";
+        string fileName = $"{doc.AccessKey ?? doc.Id.ToString()}{suffix}";
+
         return Results.File(xmlBytes, "application/xml", fileName);
     }
 }

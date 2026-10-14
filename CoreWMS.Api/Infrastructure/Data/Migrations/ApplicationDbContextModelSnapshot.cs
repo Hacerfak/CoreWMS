@@ -18,7 +18,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -472,97 +472,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.ToTable("CycleCountTasks");
                 });
 
-            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AdditionalNotes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<decimal>("AliqCbs")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("AliqIbs")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("CfopInterstate")
-                        .IsRequired()
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
-                    b.Property<string>("CfopStateInternal")
-                        .IsRequired()
-                        .HasMaxLength(4)
-                        .HasColumnType("character varying(4)");
-
-                    b.Property<Guid>("CompanyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CstCbs")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CstCsosnIcms")
-                        .IsRequired()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
-
-                    b.Property<string>("CstIbs")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CstIpi")
-                        .IsRequired()
-                        .HasMaxLength(2)
-                        .HasColumnType("character varying(2)");
-
-                    b.Property<string>("CstPisCofins")
-                        .IsRequired()
-                        .HasMaxLength(2)
-                        .HasColumnType("character varying(2)");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("OperationType")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Priority")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("SpecificCustomerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SpecificDestinationState")
-                        .HasMaxLength(2)
-                        .HasColumnType("character varying(2)");
-
-                    b.Property<string>("SpecificNcmStart")
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("SpecificCustomerId");
-
-                    b.ToTable("FiscalOperationRules");
-                });
-
-            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.OutboundFiscalDocument", b =>
+            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.CompanyFiscalDocument", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -572,10 +482,13 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasMaxLength(44)
                         .HasColumnType("character varying(44)");
 
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("OutboundOrderId")
+                    b.Property<Guid?>("OutboundOrderId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Protocol")
@@ -601,11 +514,282 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.HasIndex("AccessKey");
 
+                    b.HasIndex("CompanyId");
+
                     b.HasIndex("OutboundOrderId");
 
                     b.HasIndex("Status");
 
-                    b.ToTable("OutboundFiscalDocuments", (string)null);
+                    b.ToTable("CompanyFiscalDocuments", (string)null);
+                });
+
+            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdditionalNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal>("AliqCbs")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqCofins")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqCreditoSimples")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqIbs")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqIcms")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqIcmsSt")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqIpi")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("AliqPis")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("CfopInterstate")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("CfopStateInternal")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("ClassificacaoTributaria")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<int>("CodigoEnquadramentoIpi")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CstCbs")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CstCofins")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("CstCsosnIcms")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CstIbs")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CstIpi")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("CstPis")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("Finalidade")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ModBcIcms")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ModBcIcmsSt")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MotivoDesoneracaoIcms")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("MvaIcmsSt")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("ReducaoBcIcms")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("ReducaoBcIcmsSt")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "Description");
+
+                    b.ToTable("FiscalOperationRules", (string)null);
+                });
+
+            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRuleException", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdditionalNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal?>("AliqCbs")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqCofins")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqCreditoSimples")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqIbs")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqIcms")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqIcmsSt")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqIpi")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("AliqPis")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("CfopInterstate")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("CfopStateInternal")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)");
+
+                    b.Property<string>("ClassificacaoTributaria")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<int?>("CodigoEnquadramentoIpi")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CstCbs")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CstCofins")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("CstCsosnIcms")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CstIbs")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("CstIpi")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("CstPis")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<Guid>("FiscalOperationRuleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("ModBcIcms")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ModBcIcmsSt")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MotivoDesoneracaoIcms")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("MvaIcmsSt")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("ReducaoBcIcms")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal?>("ReducaoBcIcmsSt")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("SpecificDestinationState")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.Property<string>("SpecificNcmStart")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<int?>("SpecificOrigin")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FiscalOperationRuleId");
+
+                    b.HasIndex("FiscalOperationRuleId", "SpecificDestinationState", "SpecificNcmStart", "SpecificOrigin");
+
+                    b.ToTable("FiscalOperationRuleExceptions", (string)null);
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Identity.Entities.Company", b =>
@@ -2167,6 +2351,24 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.CompanyFiscalDocument", b =>
+                {
+                    b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", "OutboundOrder")
+                        .WithMany()
+                        .HasForeignKey("OutboundOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("OutboundOrder");
+                });
+
             modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRule", b =>
                 {
                     b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
@@ -2175,25 +2377,18 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("CoreWMS.Api.Features.Customers.Entities.Customer", "SpecificCustomer")
-                        .WithMany()
-                        .HasForeignKey("SpecificCustomerId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
                     b.Navigation("Company");
-
-                    b.Navigation("SpecificCustomer");
                 });
 
-            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.OutboundFiscalDocument", b =>
+            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRuleException", b =>
                 {
-                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", "OutboundOrder")
-                        .WithMany()
-                        .HasForeignKey("OutboundOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                    b.HasOne("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRule", "FiscalOperationRule")
+                        .WithMany("Exceptions")
+                        .HasForeignKey("FiscalOperationRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("OutboundOrder");
+                    b.Navigation("FiscalOperationRule");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Identity.Entities.RolePermission", b =>
@@ -2596,6 +2791,11 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
             modelBuilder.Entity("CoreWMS.Api.Features.CycleCount.Entities.CycleCountPlan", b =>
                 {
                     b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("CoreWMS.Api.Features.Fiscal.Entities.FiscalOperationRule", b =>
+                {
+                    b.Navigation("Exceptions");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Identity.Entities.Role", b =>

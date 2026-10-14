@@ -5,6 +5,7 @@
  * OpenAPI spec version: v1
  */
 
+export * from './addOrUpdateExceptionCommand';
 export * from './addOutboundOrderItemsBatchCommand';
 export * from './addStrictLpnRecordCommand';
 export * from './addVolumetricRecordCommand';
@@ -36,6 +37,7 @@ export * from './createWarehouseCommand';
 export * from './createZoneCommand';
 export * from './emitCorrectionLetterCommand';
 export * from './emitOutboundNfeCommand';
+export * from './fiscalDocumentType';
 export * from './fiscalOperationType';
 export * from './fracionadoBoxPackingDto';
 export * from './generateBillingCycleCommand';

@@ -4,24 +4,40 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
-import type { FiscalOperationType } from './fiscalOperationType';
+import type { FiscalDocumentType } from './fiscalDocumentType';
 
 export interface SaveFiscalOperationRuleCommand {
   /** @nullable */
   id?: string | null;
   /** @nullable */
   description?: string | null;
-  operationType?: FiscalOperationType;
+  finalidade?: FiscalDocumentType;
   /** @nullable */
   cfopStateInternal?: string | null;
   /** @nullable */
   cfopInterstate?: string | null;
   /** @nullable */
   cstCsosnIcms?: string | null;
+  modBcIcms?: number;
+  aliqIcms?: number;
+  reducaoBcIcms?: number;
+  modBcIcmsSt?: number;
+  mvaIcmsSt?: number;
+  reducaoBcIcmsSt?: number;
+  aliqIcmsSt?: number;
   /** @nullable */
-  cstPisCofins?: string | null;
+  motivoDesoneracaoIcms?: number | null;
+  aliqCreditoSimples?: number;
   /** @nullable */
   cstIpi?: string | null;
+  codigoEnquadramentoIpi?: number;
+  aliqIpi?: number;
+  /** @nullable */
+  cstPis?: string | null;
+  aliqPis?: number;
+  /** @nullable */
+  cstCofins?: string | null;
+  aliqCofins?: number;
   /** @nullable */
   cstIbs?: string | null;
   aliqIbs?: number;
@@ -29,12 +45,7 @@ export interface SaveFiscalOperationRuleCommand {
   cstCbs?: string | null;
   aliqCbs?: number;
   /** @nullable */
+  classificacaoTributaria?: string | null;
+  /** @nullable */
   additionalNotes?: string | null;
-  /** @nullable */
-  specificCustomerId?: string | null;
-  /** @nullable */
-  specificDestinationState?: string | null;
-  /** @nullable */
-  specificNcmStart?: string | null;
-  priority?: number;
 }
