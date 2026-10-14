@@ -37,10 +37,11 @@ export default function OutboundOrderDetailsPage() {
                 url: `/api/outbound/orders/${orderId}`,
                 method: 'GET'
             });
-            setOrder(res);
-            if (res?.items) {
+            const data = res?.data || res;
+            setOrder(data);
+            if (data?.items) {
                 const initialExpanded = {};
-                res.items.forEach(i => {
+                data.items.forEach(i => {
                     if (i.allocations && i.allocations.length > 0) {
                         initialExpanded[i.id] = true;
                     }
@@ -75,7 +76,7 @@ export default function OutboundOrderDetailsPage() {
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `DANFE-${doc.accessKey || doc.id}.pdf`);
+            link.setAttribute('download', `${doc.accessKey || doc.id}.pdf`);
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -101,7 +102,7 @@ export default function OutboundOrderDetailsPage() {
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${doc.accessKey || doc.id}-proc.xml`);
+            link.setAttribute('download', `${doc.accessKey || doc.id}.xml`);
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -144,17 +145,19 @@ export default function OutboundOrderDetailsPage() {
 
     const canEdit = ['Pending', 'Allocating', 'Allocated'].includes(order?.status);
 
-    // Documentos fiscais originais de mercadoria (Retorno ou Remessa)
-    const nfeOriginalDocs = order?.fiscalDocuments?.filter(
-        d => d.type === 'NfeReturn' || d.type === 'NfeShipment' || d.type === 1 || d.type === 2
-    ) || [];
+    // Filtra documentos fiscais correspondentes a NF-e (1 a 6)
+    const nfeOriginalDocs = order?.fiscalDocuments?.filter(doc => {
+        const typeNum = Number(doc.type);
+        return (typeNum >= 1 && typeNum <= 6) ||
+            ['Normal', 'Complementar', 'Ajuste', 'Devolucao', 'NotaCredito', 'NotaDebito'].includes(doc.type);
+    }) || [];
 
-    // Existe alguma nota ainda autorizada ou pendente?
+    // Checa se ainda há alguma NF-e autorizada ativa
     const hasActiveNfe = nfeOriginalDocs.some(
         d => d.status === 'Authorized' || d.status === 'Pending' || d.status === 1 || d.status === 2
     );
 
-    // Permite reemitir se o pedido estiver Shipped e TODAS as notas originais estiverem canceladas
+    // Libera reemissão se a ordem já foi expedida e todas as notas anteriores foram canceladas
     const canReemitNfe = order?.status === 'Shipped' && nfeOriginalDocs.length > 0 && !hasActiveNfe;
 
     return (
@@ -205,7 +208,6 @@ export default function OutboundOrderDetailsPage() {
                         </Button>
                     )}
 
-                    {/* BOTÃO LIBERADO APÓS CANCELAMENTO DE TODAS AS NF-ES DA ORDEM EXPEDIDA */}
                     {canReemitNfe && (
                         <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
                             <RefreshCw size={15} className="mr-1.5" /> Emitir Nova NF-e
@@ -355,7 +357,7 @@ export default function OutboundOrderDetailsPage() {
                         </CardContent>
                     </Card>
 
-                    {/* HISTÓRICO FISCAL & EVENTOS */}
+                    {/* HISTÓRICO FISCAL */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
@@ -372,7 +374,7 @@ export default function OutboundOrderDetailsPage() {
                                         <TableHeader className="bg-slate-50">
                                             <TableRow>
                                                 <TableHead>Data</TableHead>
-                                                <TableHead>Tipo Documento</TableHead>
+                                                <TableHead>Finalidade / Tipo</TableHead>
                                                 <TableHead>Chave de Acesso</TableHead>
                                                 <TableHead>Protocolo SEFAZ</TableHead>
                                                 <TableHead>Status</TableHead>
@@ -381,21 +383,21 @@ export default function OutboundOrderDetailsPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {order.fiscalDocuments.map(doc => {
-                                                // Verifica se é qualquer uma das finalidades de NF-e (1 a 6)
-                                                const isNfeOriginal = (Number(doc.type) >= 1 && Number(doc.type) <= 6)
-                                                    || ['Normal', 'Complementar', 'Ajuste', 'Devolucao', 'NotaCredito', 'NotaDebito'].includes(doc.type);
-                                                const isAuthorized = doc.status === 'Authorized';
+                                                const typeNum = Number(doc.type);
+                                                const isNfeOriginal = (typeNum >= 1 && typeNum <= 6) ||
+                                                    ['Normal', 'Complementar', 'Ajuste', 'Devolucao', 'NotaCredito', 'NotaDebito'].includes(doc.type);
+                                                const isAuthorized = doc.status === 'Authorized' || doc.status === 2;
 
                                                 return (
                                                     <TableRow key={doc.id} className="hover:bg-slate-50/50 transition-colors">
                                                         <TableCell className="text-xs font-mono">{new Date(doc.createdAt).toLocaleString('pt-BR')}</TableCell>
                                                         <TableCell className="text-xs font-semibold text-slate-800">
-                                                            {doc.type === 'Normal' || doc.type === 1 ? 'NF-e Normal' :
-                                                                doc.type === 'Complementar' || doc.type === 2 ? 'NF-e Complementar' :
-                                                                    doc.type === 'Ajuste' || doc.type === 3 ? 'NF-e Ajuste' :
-                                                                        doc.type === 'Devolucao' || doc.type === 4 ? 'NF-e Devolução / Retorno' :
-                                                                            doc.type === 'NotaCredito' || doc.type === 5 ? 'NF-e Nota de Crédito (RT)' :
-                                                                                doc.type === 'NotaDebito' || doc.type === 6 ? 'NF-e Nota de Débito (RT)' :
+                                                            {doc.type === 'Normal' || doc.type === 1 ? '1 - NF-e Normal' :
+                                                                doc.type === 'Complementar' || doc.type === 2 ? '2 - NF-e Complementar' :
+                                                                    doc.type === 'Ajuste' || doc.type === 3 ? '3 - NF-e Ajuste' :
+                                                                        doc.type === 'Devolucao' || doc.type === 4 ? '4 - Devolução / Retorno' :
+                                                                            doc.type === 'NotaCredito' || doc.type === 5 ? '5 - Nota Crédito (RT)' :
+                                                                                doc.type === 'NotaDebito' || doc.type === 6 ? '6 - Nota Débito (RT)' :
                                                                                     doc.type === 'Cancelamento' || doc.type === 7 ? 'Cancelamento' :
                                                                                         doc.type === 'CartaCorrecao' || doc.type === 8 ? 'Carta de Correção (CC-e)' : doc.type}
                                                         </TableCell>
@@ -406,17 +408,17 @@ export default function OutboundOrderDetailsPage() {
                                                         <TableCell>
                                                             <div className="space-y-0.5">
                                                                 <Badge className={
-                                                                    doc.status === 'Authorized' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                                                                        doc.status === 'Rejected' ? 'bg-rose-100 text-rose-800 border-rose-200' :
-                                                                            doc.status === 'Canceled' ? 'bg-slate-100 text-slate-700 border-slate-200' :
+                                                                    doc.status === 'Authorized' || doc.status === 2 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                                                                        doc.status === 'Rejected' || doc.status === 3 ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                                                                            doc.status === 'Canceled' || doc.status === 4 ? 'bg-slate-100 text-slate-700 border-slate-200' :
                                                                                 'bg-amber-100 text-amber-800 border-amber-200'
                                                                 }>
-                                                                    {doc.status === 'Authorized' ? 'Autorizada' :
-                                                                        doc.status === 'Rejected' ? 'Rejeitada' :
-                                                                            doc.status === 'Canceled' ? 'Cancelada' : doc.status}
+                                                                    {doc.status === 'Authorized' || doc.status === 2 ? 'Autorizada' :
+                                                                        doc.status === 'Rejected' || doc.status === 3 ? 'Rejeitada' :
+                                                                            doc.status === 'Canceled' || doc.status === 4 ? 'Cancelada' : doc.status}
                                                                 </Badge>
                                                                 {doc.returnMessage && (
-                                                                    <span className="block text-[10px] text-slate-500 font-mono max-w-[220px] truncate" title={doc.returnMessage}>
+                                                                    <span className="block text-[10px] text-slate-500 font-mono max-w-[200px] truncate" title={doc.returnMessage}>
                                                                         {doc.returnMessage}
                                                                     </span>
                                                                 )}
@@ -443,22 +445,22 @@ export default function OutboundOrderDetailsPage() {
                                                                         onClick={() => handleDownloadPdf(doc)}
                                                                         disabled={downloadingDocId === doc.id}
                                                                         className={`h-8 text-xs bg-white font-medium px-2 ${isNfeOriginal ? 'text-orange-700 border-orange-200 hover:bg-orange-50' :
-                                                                            doc.type === 'Cancelamento' || doc.type === 5 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
+                                                                            doc.type === 'Cancelamento' || doc.type === 7 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
                                                                                 'text-purple-700 border-purple-200 hover:bg-purple-50'
                                                                             }`}
-                                                                        title="Baixar PDF"
+                                                                        title="Baixar PDF Oficial"
                                                                     >
                                                                         {downloadingDocId === doc.id ? (
                                                                             <Loader2 size={13} className="animate-spin" />
                                                                         ) : (
                                                                             <>
                                                                                 <Download size={13} className="mr-1" />
-                                                                                {isNfeOriginal ? 'DANFE' : doc.type === 'Cancelamento' || doc.type === 5 ? 'PDF Canc.' : 'PDF CC-e'}
+                                                                                {isNfeOriginal ? 'DANFE' : doc.type === 'Cancelamento' || doc.type === 7 ? 'Canc.' : 'CC-e'}
                                                                             </>
                                                                         )}
                                                                     </Button>
 
-                                                                    {/* AÇÕES DE EMISSÃO DE EVENTOS NA NF-E PRINCIPAL */}
+                                                                    {/* AÇÕES DE EMISSÃO DE EVENTOS */}
                                                                     {isNfeOriginal && (
                                                                         <>
                                                                             <Button

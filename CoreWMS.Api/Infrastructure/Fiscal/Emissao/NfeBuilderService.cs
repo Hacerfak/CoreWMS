@@ -1,4 +1,5 @@
 using CoreWMS.Api.Features.Fiscal.Entities;
+using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,34 @@ using NFe.Classes.Informacoes.Transporte;
 using System.Text.RegularExpressions;
 
 namespace CoreWMS.Api.Infrastructure.Fiscal.Emissao;
+
+public record StandaloneNfeItemInput(
+    Guid ProductId,
+    decimal Quantity,
+    decimal UnitValue
+);
+
+public record StandaloneNfeInput(
+    Guid CompanyId,
+    Guid FiscalRuleId,
+    string DestinationName,
+    string DestinationCnpjCpf,
+    string? DestinationStateRegistration,
+    int DestinationIeIndicator,
+    string DestinationStreet,
+    string DestinationNumber,
+    string? DestinationComplement,
+    string DestinationNeighborhood,
+    int DestinationCityCode,
+    string DestinationCity,
+    string DestinationState,
+    string DestinationZipCode,
+    int? IndFinal,
+    int? IndPres,
+    int? TpImp,
+    string? AdditionalNotes,
+    List<StandaloneNfeItemInput> Items
+);
 
 public class NfeBuilderService
 {
@@ -44,7 +73,6 @@ public class NfeBuilderService
         if (order.Company == null)
             throw new InvalidOperationException("A empresa emitente não está vinculada a este pedido.");
 
-        // Carrega a Natureza de Operação com as exceções ativas
         var rule = await _db.FiscalOperationRules
             .AsNoTracking()
             .Include(r => r.Exceptions.Where(e => e.IsActive))
@@ -77,53 +105,37 @@ public class NfeBuilderService
             infNFe = new infNFe { versao = "4.00" }
         };
 
-        nfe.infNFe.ide = BuildIde(order, originAccessKeys, destState, rule.Description, rule.Finalidade);
+        nfe.infNFe.ide = BuildIdeOutbound(order, originAccessKeys, destState, rule.Description, rule.Finalidade);
         nfe.infNFe.emit = BuildEmitente(order.Company);
         nfe.infNFe.dest = BuildDestinatario(order);
         nfe.infNFe.transp = BuildTransporte(order, order.Volumes?.ToList() ?? new List<OutboundVolume>());
 
         if (!string.IsNullOrWhiteSpace(order.AdditionalNotes))
         {
-            nfe.infNFe.infAdic = nfe.infNFe.infAdic ?? new NFe.Classes.Informacoes.Observacoes.infAdic();
-            nfe.infNFe.infAdic.infCpl = order.AdditionalNotes.Trim();
+            nfe.infNFe.infAdic = new NFe.Classes.Informacoes.Observacoes.infAdic { infCpl = order.AdditionalNotes.Trim() };
         }
 
-        nfe.infNFe.det = nfe.infNFe.det ?? new List<det>();
-
+        nfe.infNFe.det = new List<det>();
         int nItem = 1;
         var packedItems = order.Items.Where(i => i.PackedQuantity > 0).ToList();
 
         if (!packedItems.Any())
-        {
             throw new InvalidOperationException("Nenhum item empacotado/separado foi encontrado para este pedido de saída.");
-        }
 
-        CRT companyCrt = order.Company.Crt switch
-        {
-            1 => CRT.SimplesNacional,
-            2 => CRT.SimplesNacionalExcessoSublimite,
-            3 => CRT.RegimeNormal,
-            4 => CRT.SimplesNacionalMei,
-            _ => CRT.SimplesNacional,
-        };
+        CRT companyCrt = ObterCrtEmpresa(order.Company.Crt);
 
         foreach (var item in packedItems)
         {
             if (item.Product == null)
                 throw new InvalidOperationException($"Produto não encontrado para o item SKU {item.SkuCode}.");
 
-            // 1. DADOS DO PRODUTO (NCM, CEST, Origem, GTIN, Unidade)
             var ncm = string.IsNullOrWhiteSpace(item.Product.Ncm) ? "00000000" : Regex.Replace(item.Product.Ncm, @"\D", "");
             var cest = ObterCestProduto(item.Product);
             var origem = ObterOrigemProduto(item.Product);
             var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode.Trim();
-
-            // 2. DADOS DA HU / QUANTIDADE SEPARADA
             var valorTotalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
 
-            // 3. RESOLUÇÃO DE PARÂMETROS: Regra Base x Linha de Exceção (UF, NCM e Origem)
             var taxParams = ResolverParametrosItem(rule, destState, ncm, origem);
-
             var cfopStr = isInterstate ? taxParams.CfopInterstate : taxParams.CfopStateInternal;
 
             var det = new det
@@ -154,14 +166,118 @@ public class NfeBuilderService
 
             if (!string.IsNullOrWhiteSpace(taxParams.AdditionalNotes))
             {
-                nfe.infNFe.infAdic = nfe.infNFe.infAdic ?? new NFe.Classes.Informacoes.Observacoes.infAdic();
+                nfe.infNFe.infAdic ??= new NFe.Classes.Informacoes.Observacoes.infAdic();
                 nfe.infNFe.infAdic.infCpl = string.IsNullOrEmpty(nfe.infNFe.infAdic.infCpl)
                     ? taxParams.AdditionalNotes
                     : nfe.infNFe.infAdic.infCpl + " " + taxParams.AdditionalNotes;
             }
         }
 
-        // 4. TOTALIZAÇÃO
+        CalcularTotaisNfe(nfe);
+        ConfigurarPagamentoERespTec(nfe);
+
+        return (nfe, rule);
+    }
+
+    public async Task<(NFe.Classes.NFe Nfe, FiscalOperationRule Rule)> BuildStandaloneNfeAsync(StandaloneNfeInput input, CancellationToken ct)
+    {
+        var company = await _db.Companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == input.CompanyId, ct)
+            ?? throw new InvalidOperationException("Empresa emitente não encontrada.");
+
+        var rule = await _db.FiscalOperationRules
+            .AsNoTracking()
+            .Include(r => r.Exceptions.Where(e => e.IsActive))
+            .FirstOrDefaultAsync(r => r.Id == input.FiscalRuleId && r.CompanyId == input.CompanyId && r.IsActive, ct)
+            ?? throw new InvalidOperationException("A Natureza de Operação selecionada não foi encontrada ou está inativa.");
+
+        var destState = input.DestinationState.Trim().ToUpper();
+        var companyState = !string.IsNullOrWhiteSpace(company.State) ? company.State.Trim().ToUpper() : "RS";
+        var isInterstate = companyState != destState;
+
+        var productIds = input.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _db.Products
+            .AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        var nfe = new NFe.Classes.NFe
+        {
+            infNFe = new infNFe { versao = "4.00" }
+        };
+
+        nfe.infNFe.ide = BuildIdeStandalone(company, input, destState, isInterstate, rule.Description, rule.Finalidade);
+        nfe.infNFe.emit = BuildEmitente(company);
+        nfe.infNFe.dest = BuildDestinatarioStandalone(company, input);
+        nfe.infNFe.transp = new transp { modFrete = ModalidadeFrete.mfSemFrete };
+
+        if (!string.IsNullOrWhiteSpace(input.AdditionalNotes))
+        {
+            nfe.infNFe.infAdic = new NFe.Classes.Informacoes.Observacoes.infAdic { infCpl = input.AdditionalNotes.Trim() };
+        }
+
+        nfe.infNFe.det = new List<det>();
+        int nItem = 1;
+        CRT companyCrt = ObterCrtEmpresa(company.Crt);
+
+        foreach (var item in input.Items)
+        {
+            if (!products.TryGetValue(item.ProductId, out var prod))
+                throw new InvalidOperationException($"Produto ID {item.ProductId} não encontrado para emissão avulsa.");
+
+            var ncm = string.IsNullOrWhiteSpace(prod.Ncm) ? "00000000" : Regex.Replace(prod.Ncm, @"\D", "");
+            var cest = ObterCestProduto(prod);
+            var origem = ObterOrigemProduto(prod);
+            var cEan = string.IsNullOrWhiteSpace(prod.BaseBarcode) ? "SEM GTIN" : prod.BaseBarcode.Trim();
+            var valorTotalItem = Math.Round(item.Quantity * item.UnitValue, 2);
+
+            var taxParams = ResolverParametrosItem(rule, destState, ncm, origem);
+            var cfopStr = isInterstate ? taxParams.CfopInterstate : taxParams.CfopStateInternal;
+
+            var det = new det
+            {
+                nItem = nItem++,
+                prod = new prod
+                {
+                    cProd = prod.Sku,
+                    cEAN = cEan,
+                    xProd = prod.Description,
+                    NCM = ncm,
+                    CEST = cest,
+                    CFOP = int.Parse(cfopStr),
+                    uCom = prod.BaseUnit ?? "UN",
+                    qCom = item.Quantity,
+                    vUnCom = item.UnitValue,
+                    vProd = valorTotalItem,
+                    cEANTrib = cEan,
+                    uTrib = prod.BaseUnit ?? "UN",
+                    qTrib = item.Quantity,
+                    vUnTrib = item.UnitValue,
+                    indTot = IndicadorTotal.ValorDoItemCompoeTotalNF
+                },
+                imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)
+            };
+
+            nfe.infNFe.det.Add(det);
+
+            if (!string.IsNullOrWhiteSpace(taxParams.AdditionalNotes))
+            {
+                nfe.infNFe.infAdic ??= new NFe.Classes.Informacoes.Observacoes.infAdic();
+                nfe.infNFe.infAdic.infCpl = string.IsNullOrEmpty(nfe.infNFe.infAdic.infCpl)
+                    ? taxParams.AdditionalNotes
+                    : nfe.infNFe.infAdic.infCpl + " " + taxParams.AdditionalNotes;
+            }
+        }
+
+        CalcularTotaisNfe(nfe);
+        ConfigurarPagamentoERespTec(nfe);
+
+        return (nfe, rule);
+    }
+
+    private static void CalcularTotaisNfe(NFe.Classes.NFe nfe)
+    {
         var totalVProd = nfe.infNFe.det.Sum(d => d.prod.vProd);
         decimal totalVBC = 0m;
         decimal totalVICMS = 0m;
@@ -249,7 +365,10 @@ public class NfeBuilderService
                 }
             } : null
         };
+    }
 
+    private static void ConfigurarPagamentoERespTec(NFe.Classes.NFe nfe)
+    {
         nfe.infNFe.pag = new List<pag>
         {
             new pag
@@ -265,14 +384,8 @@ public class NfeBuilderService
             email = "suporte@corewms.com.br",
             fone = "54992221877"
         };
-
-        return (nfe, rule);
     }
 
-    /// <summary>
-    /// Avalia a regra fiscal base contra as exceções cadastradas para a mesma Natureza.
-    /// A busca cruza NCM, UF Destino e Origem da Mercadoria.
-    /// </summary>
     private ResolvedTaxParams ResolverParametrosItem(FiscalOperationRule baseRule, string destState, string ncm, OrigemMercadoria origem)
     {
         var matchedException = baseRule.Exceptions?
@@ -485,7 +598,6 @@ public class NfeBuilderService
             cstIpiEnum = CSTIPI.ipi53;
         }
 
-        // CSTs tributados de IPI: 00, 49, 50, 99
         if (rawIpi is "00" or "49" or "50" or "99")
         {
             var vIpi = Math.Round(valorTotalItem * (p.AliqIpi / 100m), 2);
@@ -502,7 +614,6 @@ public class NfeBuilderService
             };
         }
 
-        // CSTs não tributados de IPI: 01..05, 51..55 (ex: 53)
         return new IPI
         {
             cEnq = cEnq,
@@ -534,7 +645,6 @@ public class NfeBuilderService
             };
         }
 
-        // CSTs sem incidência / isentos de PIS: 04..09 (ex: 08)
         if (cleanPis is "04" or "05" or "06" or "07" or "08" or "09")
         {
             return new PIS { TipoPIS = new PISNT { CST = cstPisEnum } };
@@ -577,13 +687,11 @@ public class NfeBuilderService
             };
         }
 
-        // CSTs sem incidência / isentos de COFINS: 04..09 (ex: 08)
         if (cleanCofins is "04" or "05" or "06" or "07" or "08" or "09")
         {
             return new COFINS { TipoCOFINS = new COFINSNT { CST = cstCofinsEnum } };
         }
 
-        // 49 a 99: Outras Operações -> Exige <COFINSOutr> com base e alíquota
         var vCofinsOutr = Math.Round(valorTotalItem * (p.AliqCofins / 100m), 2);
         return new COFINS
         {
@@ -625,46 +733,45 @@ public class NfeBuilderService
         return null;
     }
 
-    private ide BuildIde(OutboundOrder order, List<string> originAccessKeys, string destState, string naturezaOperacao, FiscalDocumentType finalidade)
+    private static CRT ObterCrtEmpresa(int crt) => crt switch
+    {
+        1 => CRT.SimplesNacional,
+        2 => CRT.SimplesNacionalExcessoSublimite,
+        3 => CRT.RegimeNormal,
+        4 => CRT.SimplesNacionalMei,
+        _ => CRT.SimplesNacional,
+    };
+
+    private static FinalidadeNFe ObterFinalidadeZeus(FiscalDocumentType finalidade)
+    {
+        if (finalidade == FiscalDocumentType.NotaCredito)
+            return Enum.TryParse<FinalidadeNFe>("fnCredito", true, out var fc) ? fc : (FinalidadeNFe)5;
+
+        if (finalidade == FiscalDocumentType.NotaDebito)
+            return Enum.TryParse<FinalidadeNFe>("fnDebito", true, out var fd) ? fd : (FinalidadeNFe)6;
+
+        return finalidade switch
+        {
+            FiscalDocumentType.Complementar => FinalidadeNFe.fnComplementar,
+            FiscalDocumentType.Ajuste => FinalidadeNFe.fnAjuste,
+            FiscalDocumentType.Devolucao => FinalidadeNFe.fnDevolucao,
+            _ => FinalidadeNFe.fnNormal
+        };
+    }
+
+    private static ide BuildIdeOutbound(OutboundOrder order, List<string> originAccessKeys, string destState, string naturezaOperacao, FiscalDocumentType finalidade)
     {
         int nNf = order.Company.NfeNextNumber;
         if (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf) && parsedNf > 0)
-        {
             nNf = parsedNf;
-        }
 
         int serie = order.Company.NfeSerie;
         if (!string.IsNullOrWhiteSpace(order.InvoiceSerie) && int.TryParse(order.InvoiceSerie, out var parsedSerie) && parsedSerie > 0)
-        {
             serie = parsedSerie;
-        }
 
         var companyState = !string.IsNullOrWhiteSpace(order.Company.State) ? order.Company.State.Trim().ToUpper() : "RS";
         if (!Enum.TryParse<DFe.Classes.Entidades.Estado>(companyState, out var ufEnum))
-        {
             ufEnum = DFe.Classes.Entidades.Estado.RS;
-        }
-
-        // Conversão segura para o enum FinalidadeNFe do Zeus (1 a 6)
-        FinalidadeNFe finNfeZeus;
-        if (finalidade == FiscalDocumentType.NotaCredito)
-        {
-            finNfeZeus = Enum.TryParse<FinalidadeNFe>("fnCredito", true, out var fc) ? fc : (FinalidadeNFe)5;
-        }
-        else if (finalidade == FiscalDocumentType.NotaDebito)
-        {
-            finNfeZeus = Enum.TryParse<FinalidadeNFe>("fnDebito", true, out var fd) ? fd : (FinalidadeNFe)6;
-        }
-        else
-        {
-            finNfeZeus = finalidade switch
-            {
-                FiscalDocumentType.Complementar => FinalidadeNFe.fnComplementar,
-                FiscalDocumentType.Ajuste => FinalidadeNFe.fnAjuste,
-                FiscalDocumentType.Devolucao => FinalidadeNFe.fnDevolucao,
-                _ => FinalidadeNFe.fnNormal
-            };
-        }
 
         var ide = new ide
         {
@@ -681,7 +788,7 @@ public class NfeBuilderService
             tpImp = TipoImpressao.tiRetrato,
             tpEmis = TipoEmissao.teNormal,
             tpAmb = order.Company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao,
-            finNFe = finNfeZeus, // 1, 2, 3, 4, 5 ou 6
+            finNFe = ObterFinalidadeZeus(finalidade),
             indFinal = ConsumidorFinal.cfNao,
             indPres = PresencaComprador.pcOutros,
             indIntermed = IndicadorIntermediador.iiSemIntermediador,
@@ -689,38 +796,53 @@ public class NfeBuilderService
             verProc = "CoreWMS 1.0"
         };
 
-        // Adiciona NFref se for Devolução ou se houver chaves de entrada
         if (order.Company.Environment == 1 && originAccessKeys != null && originAccessKeys.Any())
         {
-            ide.NFref = ide.NFref ?? new List<NFref>();
-            foreach (var key in originAccessKeys)
-            {
-                if (!string.IsNullOrWhiteSpace(key))
-                    ide.NFref.Add(new NFref { refNFe = key.Trim() });
-            }
+            ide.NFref = new List<NFref>();
+            foreach (var key in originAccessKeys.Where(k => !string.IsNullOrWhiteSpace(k)))
+                ide.NFref.Add(new NFref { refNFe = key.Trim() });
         }
 
         return ide;
     }
 
-    private emit BuildEmitente(Features.Identity.Entities.Company company)
+    private static ide BuildIdeStandalone(Company company, StandaloneNfeInput input, string destState, bool isInterstate, string naturezaOperacao, FiscalDocumentType finalidade)
     {
         var companyState = !string.IsNullOrWhiteSpace(company.State) ? company.State.Trim().ToUpper() : "RS";
         if (!Enum.TryParse<DFe.Classes.Entidades.Estado>(companyState, out var ufEnum))
-        {
             ufEnum = DFe.Classes.Entidades.Estado.RS;
-        }
+
+        return new ide
+        {
+            cUF = ufEnum,
+            cNF = new Random().Next(10000000, 99999999).ToString("D8"),
+            natOp = naturezaOperacao.Trim(),
+            mod = ModeloDocumento.NFe,
+            serie = company.NfeSerie,
+            nNF = company.NfeNextNumber,
+            dhEmi = DateTimeOffset.Now,
+            tpNF = TipoNFe.tnSaida,
+            idDest = isInterstate ? DestinoOperacao.doInterestadual : DestinoOperacao.doInterna,
+            cMunFG = company.CityCode > 0 ? company.CityCode : 4305108,
+            tpImp = (TipoImpressao)(input.TpImp ?? 1),
+            tpEmis = TipoEmissao.teNormal,
+            tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao,
+            finNFe = ObterFinalidadeZeus(finalidade),
+            indFinal = (ConsumidorFinal)(input.IndFinal ?? 0),
+            indPres = (PresencaComprador)(input.IndPres ?? 9),
+            indIntermed = IndicadorIntermediador.iiSemIntermediador,
+            procEmi = ProcessoEmissao.peAplicativoContribuinte,
+            verProc = "CoreWMS Standalone 1.0"
+        };
+    }
+
+    private static emit BuildEmitente(Company company)
+    {
+        var companyState = !string.IsNullOrWhiteSpace(company.State) ? company.State.Trim().ToUpper() : "RS";
+        if (!Enum.TryParse<DFe.Classes.Entidades.Estado>(companyState, out var ufEnum))
+            ufEnum = DFe.Classes.Entidades.Estado.RS;
 
         var foneLimpo = string.IsNullOrWhiteSpace(company.Phone) ? null : new string(company.Phone.Where(char.IsDigit).ToArray());
-
-        CRT companyCrt = company.Crt switch
-        {
-            1 => CRT.SimplesNacional,
-            2 => CRT.SimplesNacionalExcessoSublimite,
-            3 => CRT.RegimeNormal,
-            4 => CRT.SimplesNacionalMei,
-            _ => CRT.SimplesNacional,
-        };
 
         return new emit
         {
@@ -728,13 +850,13 @@ public class NfeBuilderService
             xNome = company.CorporateName ?? "",
             xFant = string.IsNullOrWhiteSpace(company.TradeName) ? null : company.TradeName.Trim(),
             IE = company.StateRegistration,
-            CRT = companyCrt,
+            CRT = ObterCrtEmpresa(company.Crt),
             enderEmit = new enderEmit
             {
                 xLgr = company.Street ?? "NÃO INFORMADO",
                 nro = company.Number ?? "S/N",
                 xCpl = company.Complement,
-                xBairro = company.Neighborhood ?? "NÃO INFORMADO",
+                xBairro = company.Neighborhood ?? "CENTRO",
                 cMun = company.CityCode > 0 ? company.CityCode : 4305108,
                 xMun = company.CityName ?? "NÃO INFORMADO",
                 UF = ufEnum,
@@ -746,56 +868,14 @@ public class NfeBuilderService
         };
     }
 
-    private dest BuildDestinatario(OutboundOrder order)
+    private static dest BuildDestinatario(OutboundOrder order)
     {
         string name = !string.IsNullOrWhiteSpace(order.DestinationName)
             ? order.DestinationName.Trim()
             : (order.Customer?.CorporateName ?? "NÃO INFORMADO");
 
         if (order.Company.Environment != 1)
-        {
             name = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
-        }
-
-        string street = !string.IsNullOrWhiteSpace(order.DestinationStreet)
-            ? order.DestinationStreet.Trim()
-            : (order.Customer?.Street ?? "NÃO INFORMADO");
-
-        string number = !string.IsNullOrWhiteSpace(order.DestinationNumber)
-            ? order.DestinationNumber.Trim()
-            : (order.Customer?.Number ?? "S/N");
-
-        string? complement = !string.IsNullOrWhiteSpace(order.DestinationComplement)
-            ? order.DestinationComplement.Trim()
-            : order.Customer?.Complement;
-
-        string neighborhood = !string.IsNullOrWhiteSpace(order.DestinationNeighborhood)
-            ? order.DestinationNeighborhood.Trim()
-            : (order.Customer?.Neighborhood ?? "NÃO INFORMADO");
-
-        int cityCode = order.DestinationCityCode > 0
-            ? order.DestinationCityCode
-            : (order.Customer?.CityCode ?? 9999999);
-
-        string city = !string.IsNullOrWhiteSpace(order.DestinationCity)
-            ? order.DestinationCity.Trim()
-            : (order.Customer?.CityName ?? "NÃO INFORMADO");
-
-        string state = !string.IsNullOrWhiteSpace(order.DestinationState)
-            ? order.DestinationState.Trim().ToUpper()
-            : (order.Customer?.State?.Trim().ToUpper() ?? "RS");
-
-        string? cnpjCpf = !string.IsNullOrWhiteSpace(order.DestinationCnpjCpf)
-            ? order.DestinationCnpjCpf.Trim()
-            : order.Customer?.Cnpj;
-
-        string? zipCode = !string.IsNullOrWhiteSpace(order.DestinationZipCode)
-            ? order.DestinationZipCode.Trim()
-            : order.Customer?.ZipCode;
-
-        string? ie = !string.IsNullOrWhiteSpace(order.DestinationStateRegistration)
-            ? order.DestinationStateRegistration.Trim()
-            : order.Customer?.StateRegistration;
 
         indIEDest indIe = order.DestinationIeIndicator switch
         {
@@ -807,23 +887,24 @@ public class NfeBuilderService
         var d = new dest(VersaoServico.Versao400)
         {
             xNome = name,
-            IE = ie,
+            IE = !string.IsNullOrWhiteSpace(order.DestinationStateRegistration) ? order.DestinationStateRegistration.Trim() : order.Customer?.StateRegistration,
             indIEDest = indIe,
             enderDest = new enderDest
             {
-                xLgr = street,
-                nro = number,
-                xCpl = complement,
-                xBairro = neighborhood,
-                cMun = cityCode,
-                xMun = city,
-                UF = state,
-                CEP = zipCode,
+                xLgr = !string.IsNullOrWhiteSpace(order.DestinationStreet) ? order.DestinationStreet.Trim() : (order.Customer?.Street ?? "NÃO INFORMADO"),
+                nro = !string.IsNullOrWhiteSpace(order.DestinationNumber) ? order.DestinationNumber.Trim() : (order.Customer?.Number ?? "S/N"),
+                xCpl = !string.IsNullOrWhiteSpace(order.DestinationComplement) ? order.DestinationComplement.Trim() : order.Customer?.Complement,
+                xBairro = !string.IsNullOrWhiteSpace(order.DestinationNeighborhood) ? order.DestinationNeighborhood.Trim() : (order.Customer?.Neighborhood ?? "CENTRO"),
+                cMun = order.DestinationCityCode > 0 ? order.DestinationCityCode : (order.Customer?.CityCode ?? 9999999),
+                xMun = !string.IsNullOrWhiteSpace(order.DestinationCity) ? order.DestinationCity.Trim() : (order.Customer?.CityName ?? "NÃO INFORMADO"),
+                UF = !string.IsNullOrWhiteSpace(order.DestinationState) ? order.DestinationState.Trim().ToUpper() : (order.Customer?.State?.Trim().ToUpper() ?? "RS"),
+                CEP = !string.IsNullOrWhiteSpace(order.DestinationZipCode) ? order.DestinationZipCode.Trim() : order.Customer?.ZipCode,
                 cPais = 1058,
                 xPais = "BRASIL"
             }
         };
 
+        var cnpjCpf = !string.IsNullOrWhiteSpace(order.DestinationCnpjCpf) ? order.DestinationCnpjCpf : order.Customer?.Cnpj;
         if (!string.IsNullOrWhiteSpace(cnpjCpf))
         {
             var cleanDoc = new string(cnpjCpf.Where(char.IsDigit).ToArray());
@@ -834,7 +915,40 @@ public class NfeBuilderService
         return d;
     }
 
-    private transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
+    private static dest BuildDestinatarioStandalone(Company company, StandaloneNfeInput input)
+    {
+        string name = input.DestinationName.Trim();
+        if (company.Environment != 1)
+            name = "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL";
+
+        var d = new dest(VersaoServico.Versao400)
+        {
+            xNome = name,
+            IE = input.DestinationStateRegistration?.Trim(),
+            indIEDest = (indIEDest)input.DestinationIeIndicator,
+            enderDest = new enderDest
+            {
+                xLgr = input.DestinationStreet.Trim(),
+                nro = input.DestinationNumber.Trim(),
+                xCpl = input.DestinationComplement?.Trim(),
+                xBairro = input.DestinationNeighborhood.Trim(),
+                cMun = input.DestinationCityCode,
+                xMun = input.DestinationCity.Trim(),
+                UF = input.DestinationState.Trim().ToUpper(),
+                CEP = input.DestinationZipCode.Trim(),
+                cPais = 1058,
+                xPais = "BRASIL"
+            }
+        };
+
+        var cleanDoc = Regex.Replace(input.DestinationCnpjCpf ?? "", @"\D", "");
+        if (cleanDoc.Length == 14) d.CNPJ = cleanDoc;
+        else if (cleanDoc.Length == 11) d.CPF = cleanDoc;
+
+        return d;
+    }
+
+    private static transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
     {
         ModalidadeFrete modFrete = order.FreightModality switch
         {
@@ -867,20 +981,20 @@ public class NfeBuilderService
             t.veicTransp = new veicTransp
             {
                 placa = order.VehiclePlate.Trim().ToUpper(),
-                UF = !string.IsNullOrWhiteSpace(order.VehiclePlateState)
-                    ? order.VehiclePlateState.Trim().ToUpper()
-                    : "RS"
+                UF = !string.IsNullOrWhiteSpace(order.VehiclePlateState) ? order.VehiclePlateState.Trim().ToUpper() : "RS"
             };
         }
 
         if (volumes != null && volumes.Any())
         {
-            t.vol = t.vol ?? new List<vol>();
-            t.vol.Add(new vol
+            t.vol = new List<vol>
             {
-                qVol = volumes.Count,
-                pesoB = Math.Round(volumes.Sum(v => v.GrossWeight), 3)
-            });
+                new vol
+                {
+                    qVol = volumes.Count,
+                    pesoB = Math.Round(volumes.Sum(v => v.GrossWeight), 3)
+                }
+            };
         }
 
         return t;

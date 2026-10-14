@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
     ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine,
-    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode
+    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode, FileText
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -64,6 +64,7 @@ export default function MainLayout() {
             scope: 'Gestão',
             items: [
                 { icon: Boxes, label: 'Estoque e Relatórios', path: '/estoque', permission: 'inventory:view' },
+                { icon: FileText, label: 'Documentos Fiscais', path: '/fiscal/documentos', permission: 'outbound:manage' },
                 { icon: ClipboardCheck, label: 'Gestão de Inventário', path: '/inventario/gestao', permission: 'inventory:manageQuality' },
                 { icon: ShieldAlert, label: 'Controle de Qualidade', path: '/qualidade', permission: 'inventory:manageQuality' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },

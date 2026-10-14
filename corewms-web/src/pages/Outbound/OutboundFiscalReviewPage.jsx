@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, CheckCircle2, Loader2, FileCode, ShieldAlert, UserCheck, Layers, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, FileCode, UserCheck, Layers, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OutboundFiscalReviewPage() {
@@ -17,48 +17,67 @@ export default function OutboundFiscalReviewPage() {
     const navigate = useNavigate();
 
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewData, setPreviewData] = useState(null);
-    const [fiscalRulesList, setFiscalRulesList] = useState([]);
     const [isAlreadyShipped, setIsAlreadyShipped] = useState(false);
 
-    // Formulário de Ajustes Fiscais
+    // Formulário de Parâmetros
     const [fiscalRuleId, setFiscalRuleId] = useState('');
     const [indFinal, setIndFinal] = useState('0');
     const [indPres, setIndPres] = useState('9');
-    const [tpImp, setTpImp] = useState('1'); // 1 = Retrato, 2 = Paisagem
+    const [tpImp, setTpImp] = useState('1');
     const [additionalNotes, setAdditionalNotes] = useState('');
 
-    useEffect(() => {
-        if (orderId) {
+    const loadInitialData = async () => {
+        try {
             setIsLoading(true);
-
-            Promise.all([
+            const [previewRes, orderRes] = await Promise.all([
                 customInstance({ url: `/api/outbound/orders/${orderId}/fiscal-preview`, method: 'GET' }),
-                customInstance({ url: `/api/fiscal/rules`, method: 'GET' }),
                 customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
-            ])
-                .then(([previewRes, rulesRes, orderRes]) => {
-                    const preview = previewRes?.data || previewRes;
-                    const rules = rulesRes?.data || rulesRes || [];
-                    const orderData = orderRes?.data || orderRes;
+            ]);
 
-                    setPreviewData(preview);
-                    setFiscalRulesList(rules);
-                    setIsAlreadyShipped(orderData?.status === 'Shipped');
+            const preview = previewRes?.data || previewRes;
+            const orderData = orderRes?.data || orderRes;
 
-                    const defaultRule = rules.find(r => r.id === preview.defaultFiscalRuleId) || rules[0];
-                    setFiscalRuleId(defaultRule?.id || '');
+            setPreviewData(preview);
+            setIsAlreadyShipped(orderData?.status === 'Shipped');
 
-                    setIndFinal(preview.defaultIndFinal?.toString() || '0');
-                    setIndPres(preview.defaultIndPres?.toString() || '9');
-                    setTpImp(preview.defaultTpImp?.toString() || '1');
-                    setAdditionalNotes(preview.additionalNotes || '');
-                })
-                .catch((err) => toast.error(err.response?.data?.message || 'Erro ao carregar dados fiscais.'))
-                .finally(() => setIsLoading(false));
+            const defaultRuleId = preview.defaultFiscalRuleId || preview.fiscalRules?.[0]?.id || '';
+            setFiscalRuleId(defaultRuleId);
+            setIndFinal(preview.defaultIndFinal?.toString() || '0');
+            setIndPres(preview.defaultIndPres?.toString() || '9');
+            setTpImp(preview.defaultTpImp?.toString() || '1');
+            setAdditionalNotes(preview.additionalNotes || '');
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Erro ao carregar dados do espelho fiscal.');
+        } finally {
+            setIsLoading(false);
         }
+    };
+
+    useEffect(() => {
+        if (orderId) loadInitialData();
     }, [orderId]);
+
+    // Recalcula o espelho de itens em tempo real ao selecionar outra Natureza
+    const handleFiscalRuleChange = async (newRuleId) => {
+        setFiscalRuleId(newRuleId);
+        try {
+            setIsRefreshingPreview(true);
+            const res = await customInstance({
+                url: `/api/outbound/orders/${orderId}/fiscal-preview?fiscalRuleId=${newRuleId}`,
+                method: 'GET'
+            });
+            const updated = res?.data || res;
+            setPreviewData(updated);
+            toast.info(`Espelho tributário recalculado para: ${updated.defaultNaturezaOperacao}`);
+        } catch {
+            toast.error('Erro ao recalcular tributação dos itens para a natureza selecionada.');
+        } finally {
+            setIsRefreshingPreview(false);
+        }
+    };
 
     const handleConfirmShipment = async (e) => {
         e.preventDefault();
@@ -71,7 +90,7 @@ export default function OutboundFiscalReviewPage() {
         try {
             setIsSubmitting(true);
 
-            // PASSO 1: Emitir e Autorizar a NF-e na SEFAZ enviando o fiscalRuleId
+            // PASSO 1: Emitir e Autorizar a NF-e na SEFAZ enviando a Natureza Universal
             const emitPayload = {
                 orderId,
                 fiscalRuleId,
@@ -95,7 +114,7 @@ export default function OutboundFiscalReviewPage() {
 
             toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
 
-            // PASSO 2: Finalizar expedição no WMS SOMENTE se o pedido ainda não tiver sido expedido
+            // PASSO 2: Finaliza a expedição física no WMS apenas se o pedido ainda não tiver sido expedido
             if (!isAlreadyShipped) {
                 const shipRes = await customInstance({
                     url: `/api/outbound/orders/${orderId}/ship`,
@@ -124,7 +143,7 @@ export default function OutboundFiscalReviewPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
-                <p className="text-xs text-slate-500 font-medium">Calculando impostos e gerando espelho da NF-e...</p>
+                <p className="text-xs text-slate-500 font-medium">Resolvendo matriz tributária e gerando espelho da NF-e...</p>
             </div>
         );
     }
@@ -140,7 +159,7 @@ export default function OutboundFiscalReviewPage() {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-xl font-bold text-slate-900">
-                                {isAlreadyShipped ? 'Emissão de Nova NF-e (Reemissão)' : 'Revisão Fiscal & Emissão NF-e'} #{previewData?.orderNumber}
+                                {isAlreadyShipped ? 'Reemissão de NF-e (Pedido Expedido)' : 'Revisão Fiscal & Emissão NF-e'} #{previewData?.orderNumber}
                             </h1>
                             {isAlreadyShipped ? (
                                 <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Expedido</Badge>
@@ -149,7 +168,7 @@ export default function OutboundFiscalReviewPage() {
                             )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            Depositante: <strong className="text-slate-700">{previewData?.customerName}</strong> | Destinatário: <strong className="text-slate-700">{previewData?.destinationName}</strong>
+                            Depositante: <strong className="text-slate-700">{previewData?.customerName}</strong> | Destino: <strong className="text-slate-700">{previewData?.destinationName}</strong>
                         </p>
                     </div>
                 </div>
@@ -166,28 +185,38 @@ export default function OutboundFiscalReviewPage() {
                         ) : (
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                         )}
-                        {isAlreadyShipped ? 'Assinar & Emitir Nova NF-e na SEFAZ' : 'Assinar, Emitir & Expedir na SEFAZ'}
+                        {isAlreadyShipped ? 'Transmitir Nova NF-e à SEFAZ' : 'Autorizar & Expedir'}
                     </Button>
                 </div>
             </div>
 
-            {/* PAINEL DE CONTEÚDO */}
+            {/* CONTEÚDO */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    {/* CARD 1: PARÂMETROS DE EMISSÃO SEFAZ */}
+                    {/* SELEÇÃO DA NATUREZA DE OPERAÇÃO UNIVERSAL */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
-                        <CardHeader className="p-4 border-b bg-slate-50/60">
+                        <CardHeader className="p-4 border-b bg-slate-50/60 flex flex-row items-center justify-between">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
                                 <FileCode size={16} className="text-orange-600" /> Parâmetros de Emissão SEFAZ (ide / infAdic)
                             </CardTitle>
+                            {isRefreshingPreview && (
+                                <span className="text-[11px] text-orange-600 flex items-center gap-1 font-medium">
+                                    <Loader2 size={12} className="animate-spin" /> Atualizando espelho...
+                                </span>
+                            )}
                         </CardHeader>
                         <CardContent className="p-4 space-y-4">
                             <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-slate-700">Natureza da Operação Cadastrada *</Label>
-                                <Select value={fiscalRuleId} onValueChange={setFiscalRuleId}>
-                                    <SelectTrigger className="text-xs bg-white font-bold h-9"><SelectValue placeholder="Selecione a Natureza da Operação" /></SelectTrigger>
+                                <div className="flex justify-between items-center">
+                                    <Label className="text-xs font-semibold text-slate-800">Natureza de Operação Selecionada *</Label>
+                                    <span className="text-[10px] text-slate-400">Determina a matriz de impostos e exceções dos itens</span>
+                                </div>
+                                <Select value={fiscalRuleId} onValueChange={handleFiscalRuleChange}>
+                                    <SelectTrigger className="text-xs bg-white font-bold h-9">
+                                        <SelectValue placeholder="Selecione a Natureza da Operação" />
+                                    </SelectTrigger>
                                     <SelectContent>
-                                        {fiscalRulesList?.map(rule => (
+                                        {previewData?.fiscalRules?.map(rule => (
                                             <SelectItem key={rule.id} value={rule.id}>
                                                 {rule.description} (CFOP {previewData?.isInterstate ? rule.cfopInterstate : rule.cfopStateInternal})
                                             </SelectItem>
@@ -234,22 +263,22 @@ export default function OutboundFiscalReviewPage() {
                             </div>
 
                             <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                                <Label className="text-xs font-semibold text-slate-700">Observações Fiscais Adicionais (infCpl)</Label>
+                                <Label className="text-xs font-semibold text-slate-700">Observações Adicionais da NF-e (infCpl)</Label>
                                 <Input
                                     value={additionalNotes}
                                     onChange={(e) => setAdditionalNotes(e.target.value)}
-                                    placeholder="Ex: Ref. Pedido de Compra #1234. Tributação conforme..."
+                                    placeholder="Ex: Ref. Pedido de Compra #1234. Operação amparada por..."
                                     className="text-xs bg-white font-mono h-9"
                                 />
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* CARD 2: ESPELHO DOS ITENS E CFOPs */}
+                    {/* ESPELHO DOS ITENS E TRIBUTOS */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
-                                <span className="flex items-center gap-2"><Layers size={16} className="text-orange-600" /> Espelho dos Itens, CFOP e Tributação</span>
+                                <span className="flex items-center gap-2"><Layers size={16} className="text-orange-600" /> Itens, CFOP Resolvido e Tributação</span>
                                 <Badge variant="secondary" className="font-mono">{previewData?.items?.length || 0} Item(ns)</Badge>
                             </CardTitle>
                         </CardHeader>
@@ -261,9 +290,9 @@ export default function OutboundFiscalReviewPage() {
                                             <TableHead>SKU / Descrição</TableHead>
                                             <TableHead className="text-center">CFOP</TableHead>
                                             <TableHead className="text-center">CST / CSOSN</TableHead>
-                                            <TableHead className="text-right">Qtd Expedida</TableHead>
-                                            <TableHead className="text-right">Valor Unit. (R$)</TableHead>
-                                            <TableHead className="text-right">Total Item (R$)</TableHead>
+                                            <TableHead className="text-right">Qtd</TableHead>
+                                            <TableHead className="text-right">Unitário</TableHead>
+                                            <TableHead className="text-right">Total Item</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -276,7 +305,7 @@ export default function OutboundFiscalReviewPage() {
                                                 <TableCell className="text-center font-mono font-bold text-xs text-purple-700">
                                                     <Badge variant="outline" className="text-purple-700 border-purple-200 bg-purple-50">{item.cfop}</Badge>
                                                 </TableCell>
-                                                <TableCell className="text-center font-mono text-xs">{item.cstCsosn}</TableCell>
+                                                <TableCell className="text-center font-mono text-xs font-semibold">{item.cstCsosn}</TableCell>
                                                 <TableCell className="text-right font-mono text-xs font-semibold">{item.quantity} {item.unit}</TableCell>
                                                 <TableCell className="text-right font-mono text-xs text-slate-600">
                                                     {item.unitValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -293,7 +322,7 @@ export default function OutboundFiscalReviewPage() {
                     </Card>
                 </div>
 
-                {/* COLUNA DIREITA */}
+                {/* RESUMO LATERAL */}
                 <div className="space-y-6">
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
@@ -313,7 +342,7 @@ export default function OutboundFiscalReviewPage() {
                                     <span className="font-mono font-bold text-slate-800">{previewData?.destinationState}</span>
                                 </div>
                                 <div>
-                                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Tipo Operação</span>
+                                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Operação</span>
                                     <Badge className={previewData?.isInterstate ? 'bg-purple-100 text-purple-800 text-[10px]' : 'bg-blue-100 text-blue-800 text-[10px]'}>
                                         {previewData?.isInterstate ? 'Interestadual' : 'Interna'}
                                     </Badge>
@@ -321,8 +350,8 @@ export default function OutboundFiscalReviewPage() {
                             </div>
 
                             <div className="pt-2 border-t border-slate-100">
-                                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Volume de Emissão</span>
-                                <span className="font-bold text-slate-900 block">{previewData?.suggestedNfeCount} NF-e gerada</span>
+                                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Natureza Ativa</span>
+                                <span className="font-bold text-slate-900 block">{previewData?.defaultNaturezaOperacao}</span>
                             </div>
 
                             <div className="pt-3 border-t border-slate-100 space-y-1">
