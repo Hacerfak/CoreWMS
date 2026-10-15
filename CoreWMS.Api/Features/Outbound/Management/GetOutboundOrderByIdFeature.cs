@@ -30,6 +30,7 @@ public record OutboundOrderItemDetailDto(
     decimal PickedQuantity,
     decimal PackedQuantity,
     decimal UnitValue,
+    decimal InboundUnitValue, // <-- Exposto no DTO
     string Status,
     List<OutboundAllocatedHuDetailDto> Allocations
 );
@@ -158,6 +159,7 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 item.PickedQuantity,
                 item.PackedQuantity,
                 item.UnitValue,
+                item.InboundUnitValue, // <-- Mapeado
                 item.Status.ToString(),
                 itemAllocations
             );
@@ -172,7 +174,6 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             v.UsedStretchFilm
         )).ToList();
 
-        // Consulta através de CompanyFiscalDocuments
         var fiscalDocDtos = await _db.CompanyFiscalDocuments
             .AsNoTracking()
             .Where(f => f.OutboundOrderId == order.Id)

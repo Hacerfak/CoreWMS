@@ -1,14 +1,14 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { customInstance } from '@/api/orval-mutator';
 import {
     useGetApiInboundId,
     usePostApiInboundReceiveCheckout,
     usePostApiInboundReceiveOrderItemIdRelease
 } from '@/api/generated/inbound/inbound';
-import { useGetApiProducts } from '@/api/generated/products/products';
+import { useGetApiProductsId } from '@/api/generated/products/products';
 import { useGetApiBillingServices } from '@/api/generated/billing/billing';
-import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
 
 import { Button } from '@/components/ui/button';
@@ -30,14 +30,13 @@ export default function ConferenciaItemPage() {
 
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-    // 1. Dados da Ordem
+    // 1. Dados da Ordem de Recebimento
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
     const item = order?.items?.find(i => i.id === itemId);
 
-    // UNIDADE DE MEDIDA DINÂMICA CONSUMIDA DIRETO DA DTO DO ITEM
     const baseUnit = item?.unit || 'UN';
 
-    // 2. Busca Cadastro do Cliente para validar parâmetro "Exige Conferência Cega"
+    // 2. Consulta do Depositante para verificar exigência de "Conferência Cega"
     const { data: customersResponse } = useGetApiCustomers(
         { PageSize: 500 },
         { query: { enabled: Boolean(order?.customerId) } }
@@ -46,44 +45,29 @@ export default function ConferenciaItemPage() {
     const customerDetail = customersList.find(c => c.id === order?.customerId);
     const isBlindInbound = Boolean(customerDetail?.requiresBlindInbound);
 
-    // 3. Detalhes do Produto no WMS (para embalagens e regras de rastreabilidade)
-    const { data: productsRes } = useGetApiProducts(
-        { Search: item?.sku || item?.rawSkuCode, PageSize: 5 },
-        { query: { enabled: !!(item?.sku || item?.rawSkuCode) } }
-    );
-    const productDetail = productsRes?.items?.find(p => p.id === item?.productId || p.sku === item?.sku);
+    // 3. Regras WMS do Produto (Consulta direta por ID sem pesquisas textuais globais)
+    const { data: productDetail } = useGetApiProductsId(item?.productId, {
+        query: { enabled: Boolean(item?.productId) }
+    });
 
-    // 4. APIs de Apoio
+    // 4. QUERY OTIMIZADA: Lista especificamente as embalagens deste produto
+    const { data: availablePackagings = [], isLoading: isLoadingPackagings } = useQuery({
+        queryKey: ['product-packagings', item?.productId],
+        queryFn: async () => {
+            const res = await customInstance({
+                url: `/api/products/${item.productId}/packagings`,
+                method: 'GET'
+            });
+            return res || [];
+        },
+        enabled: Boolean(item?.productId)
+    });
+
+    // 5. Serviços de Cobrança de Recebimento
     const { data: billingServicesResponse } = useGetApiBillingServices();
     const billingServices = Array.isArray(billingServicesResponse) ? billingServicesResponse : (billingServicesResponse?.items || []);
 
-    const { data: packTypesResponse } = useGetApiPackagingTypes();
-    const globalPackTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
-
-    // Embalagens atreladas ao cadastro do produto
-    const availablePackagings = useMemo(() => {
-        if (productDetail?.packagings && productDetail.packagings.length > 0) {
-            return productDetail.packagings.map(p => {
-                const globalType = globalPackTypes.find(g => g.id === p.packagingTypeId);
-                return {
-                    packagingTypeId: p.packagingTypeId,
-                    code: globalType?.code || 'EMB',
-                    description: globalType?.description || 'Embalagem',
-                    conversionFactor: p.conversionFactor,
-                    barcode: p.barcode
-                };
-            });
-        }
-        return globalPackTypes.map(g => ({
-            packagingTypeId: g.id,
-            code: g.code,
-            description: g.description,
-            conversionFactor: 1,
-            barcode: null
-        }));
-    }, [productDetail, globalPackTypes]);
-
-    // REGRAS ESTRITAS DE RASTREABILIDADE - DEPENDEM EXCLUSIVAMENTE DO CADASTRO DO PRODUTO WMS
+    // Regras de Rastreabilidade extraídas do produto
     const tracksBatch = Boolean(productDetail?.tracksBatch);
     const strictBatch = Boolean(productDetail?.strictBatch);
 
@@ -96,7 +80,7 @@ export default function ConferenciaItemPage() {
     const tracksSerial = Boolean(productDetail?.tracksSerial);
     const strictSerial = Boolean(productDetail?.strictSerial);
 
-    // 5. Estados do Formulário
+    // Estados do Formulário
     const [selectedBillingServiceId, setSelectedBillingServiceId] = useState('');
 
     const [volumeConfig, setVolumeConfig] = useState({
@@ -112,11 +96,11 @@ export default function ConferenciaItemPage() {
         images: []
     });
 
-    // Carrinho
+    // Carrinho de Lotes
     const [stagedVolumes, setStagedVolumes] = useState([]);
     const [generatedHusResult, setGeneratedHusResult] = useState(null);
 
-    // Pré-preenchimento Automático RESPEITANDO rigorosamente as travas do cadastro do produto
+    // Pré-preenchimento automático com base no XML e regras do produto
     useEffect(() => {
         if (item) {
             setVolumeConfig(prev => ({
@@ -137,23 +121,24 @@ export default function ConferenciaItemPage() {
         }));
     };
 
-    // Mutação de Liberação/Pausa do Item
+    // Pausar e libertar o item para outro operador
     const { mutate: releaseItem, isPending: isReleasing } = usePostApiInboundReceiveOrderItemIdRelease({
         mutation: {
             onSuccess: () => {
-                toast.success('Recebimento pausado e liberado com sucesso.');
+                toast.success('Recebimento pausado e libertado com sucesso.');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
                 navigate(`/inbound/operacao/${orderId}`);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao pausar/liberar item.')
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao pausar/libertar item.')
         }
     });
 
+    // Checkout final dos lotes conferidos
     const { mutate: checkoutLotes, isPending: isSubmitting } = usePostApiInboundReceiveCheckout({
         mutation: {
             onSuccess: (res) => {
-                toast.success('Checkout realizado e HUs geradas na Doca!');
+                toast.success('Checkout realizado e HUs geradas na Doca com sucesso!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
 
@@ -199,13 +184,12 @@ export default function ConferenciaItemPage() {
             return toast.warning('Selecione a Qualidade do Lote Recebido.');
         }
         if (volumeConfig.volumeCount <= 0 || volumeConfig.quantityPerVolume <= 0) {
-            return toast.warning('Informe quantidades válidas.');
+            return toast.warning('Indique quantidades válidas.');
         }
         if (!item?.dockLocationId) {
             return toast.warning('Nenhuma Doca vinculada a este item da ordem.');
         }
 
-        // VALIDAÇÕES DAS REGRAS DO PRODUTO (EXIGÊNCIAS OBRIGATÓRIAS)
         if (tracksBatch && strictBatch && !volumeConfig.batch?.trim()) {
             return toast.warning('O lote é obrigatório para este produto.');
         }
@@ -223,7 +207,7 @@ export default function ConferenciaItemPage() {
 
         const newStagedItem = {
             ...volumeConfig,
-            targetLocationId: item.dockLocationId, // OBRIGATORIAMENTE A DOCA DA ORDEM
+            targetLocationId: item.dockLocationId,
             batch: tracksBatch ? volumeConfig.batch?.trim() : '',
             expirationDate: tracksExpiration ? volumeConfig.expirationDate : '',
             manufactureDate: tracksManufacture ? volumeConfig.manufactureDate : '',
@@ -381,14 +365,14 @@ export default function ConferenciaItemPage() {
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-slate-900">Recebimento Concluído na Doca!</h2>
-                        <p className="text-sm text-slate-500 mt-1">HUs geradas e salvas na Doca de Recebimento.</p>
+                        <p className="text-sm text-slate-500 mt-1">HUs geradas e guardadas na Doca de Recebimento.</p>
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left max-h-48 overflow-y-auto font-mono text-xs space-y-1">
                         {generatedHusResult.map((hu, idx) => (
                             <div key={idx} className="flex justify-between items-center py-1 border-b border-slate-100 last:border-none">
                                 <span className="font-bold text-slate-800">{typeof hu === 'string' ? hu : hu.lpn}</span>
-                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registrado na Doca</Badge>
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registado na Doca</Badge>
                             </div>
                         ))}
                     </div>
@@ -403,10 +387,9 @@ export default function ConferenciaItemPage() {
                     </div>
                 </div>
             ) : (
-                /* CONTEÚDO PRINCIPAL DEDICADO */
+                /* FORMULÁRIO DE CONFERÊNCIA */
                 <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
 
-                    {/* COLUNA ESQUERDA (7 COLS) */}
                     <div className="col-span-7 bg-white border border-slate-200/80 rounded-xl shadow-xs p-6 overflow-y-auto flex flex-col space-y-6">
 
                         {/* 1. SERVIÇO DE FATURAMENTO */}
@@ -427,19 +410,20 @@ export default function ConferenciaItemPage() {
                             </Select>
                         </div>
 
-                        {/* 2. DADOS DO VOLUME / QUANTIDADES */}
+                        {/* 2. DADOS DO VOLUME & QUANTIDADES */}
                         <div className="space-y-4 border-b border-slate-100 pb-4">
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                                 <Box className="text-blue-600" size={16} /> 2. Dados do Volume & Quantidades <span className="text-rose-500 font-bold">*</span>
                             </Label>
 
+                            {/* SELETOR OTIMIZADO DE EMBALAGENS ESPECÍFICAS DO PRODUTO */}
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold text-slate-700 flex items-center">
                                     Embalagem do Volume <span className="text-rose-500 font-bold ml-0.5">*</span>
                                 </Label>
                                 <Select value={volumeConfig.packagingTypeId} onValueChange={handlePackagingChange}>
                                     <SelectTrigger className={`bg-slate-50 h-10 ${!volumeConfig.packagingTypeId ? 'border-amber-300' : 'border-slate-200'}`}>
-                                        <SelectValue placeholder="Escolha a embalagem..." />
+                                        <SelectValue placeholder={isLoadingPackagings ? "A carregar embalagens..." : "Escolha a embalagem..."} />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {availablePackagings.map(pt => (
@@ -451,7 +435,7 @@ export default function ConferenciaItemPage() {
                                 </Select>
                             </div>
 
-                            {/* PAINEL EM DESTAQUE PARA QUANTIDADES */}
+                            {/* PAINEL DE QUANTIDADES */}
                             <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
@@ -491,7 +475,7 @@ export default function ConferenciaItemPage() {
                                 </div>
                             </div>
 
-                            {/* RASTREABILIDADE EXIBIDA E EXIGIDA CONFORME REGRAS DO PRODUTO */}
+                            {/* RASTREABILIDADE */}
                             {(tracksBatch || tracksExpiration || tracksManufacture || tracksSerial) && (
                                 <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                                     {tracksBatch && (
@@ -580,14 +564,13 @@ export default function ConferenciaItemPage() {
                                 </Select>
                             </div>
 
-                            {/* OCORRÊNCIAS / EVIDÊNCIAS DE QUALIDADE */}
                             {(volumeConfig.qualityStatus === '2' || volumeConfig.qualityStatus === '3' || volumeConfig.qualityStatus === '4') && (
                                 <div className="p-4 rounded-xl border bg-amber-50/50 border-amber-200 space-y-3 animate-in fade-in duration-300">
                                     <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
                                         {volumeConfig.qualityStatus === '2' && <ShieldAlert size={16} />}
                                         {volumeConfig.qualityStatus === '3' && <AlertTriangle size={16} />}
                                         {volumeConfig.qualityStatus === '4' && <FileWarning size={16} />}
-                                        {volumeConfig.qualityStatus === '2' ? 'Registro de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registro de Avaria Físico' : 'Registro de Divergência / Falta'}
+                                        {volumeConfig.qualityStatus === '2' ? 'Registo de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registo de Avaria Física' : 'Registo de Divergência / Falta'}
                                     </div>
 
                                     <div className="space-y-1">
@@ -597,13 +580,13 @@ export default function ConferenciaItemPage() {
                                         <Input
                                             value={volumeConfig.notes}
                                             onChange={(e) => setVolumeConfig(p => ({ ...p, notes: e.target.value }))}
-                                            placeholder="Descreva observações, inspecções ou motivos..."
+                                            placeholder="Descreva observações ou motivos..."
                                             className="bg-white text-xs h-9"
                                         />
                                     </div>
 
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs">Anexar Imagens / Comprovantes</Label>
+                                        <Label className="text-xs">Anexar Imagens / Comprovativos</Label>
                                         <div className="flex items-center gap-3">
                                             <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-amber-300 bg-white text-xs text-amber-800 cursor-pointer hover:bg-amber-100/50">
                                                 <Upload size={14} /> Selecionar Fotos
@@ -707,7 +690,7 @@ export default function ConferenciaItemPage() {
                                 disabled={stagedVolumes.length === 0 || isSubmitting}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-sm"
                             >
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Registrar Checkout na Doca</>}
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Registar Checkout na Doca</>}
                             </Button>
                         </div>
                     </div>

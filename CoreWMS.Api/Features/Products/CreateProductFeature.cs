@@ -23,7 +23,9 @@ public record CreateProductPackagingCommand(
 );
 
 public record CreateProductCommand(
-    Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin,
+    Guid CustomerId, string Sku, string Description, string BaseUnit, string? BaseBarcode,
+    decimal NetWeight, decimal GrossWeight,
+    string? Ncm, string? Cest, int Origin,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<CreateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
@@ -35,6 +37,8 @@ public class CreateProductCommandValidator : AbstractValidator<CreateProductComm
         RuleFor(x => x.Sku).NotEmpty().MaximumLength(50);
         RuleFor(x => x.Description).NotEmpty().MaximumLength(200);
         RuleFor(x => x.BaseUnit).NotEmpty().MaximumLength(10);
+        RuleFor(x => x.NetWeight).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.GrossWeight).GreaterThanOrEqualTo(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
@@ -80,7 +84,7 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
             }
         }
 
-        var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit);
+        var product = new Product(companyId, request.CustomerId, request.Sku, request.Description, request.BaseUnit, request.NetWeight, request.GrossWeight);
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
         product.UpdateRules(
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,

@@ -55,7 +55,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
         var existingCustomers = await _db.Customers.Where(c => c.CompanyId == companyId).ToListAsync(ct);
         var existingProducts = await _db.Products.AsNoTracking()
             .Where(p => p.CompanyId == companyId)
-            .Select(p => new { p.Id, p.CustomerId, p.Sku, p.BaseBarcode })
+            .Select(p => new { p.Id, p.CustomerId, p.Sku, p.BaseBarcode, p.NetWeight, p.GrossWeight })
             .ToListAsync(ct);
 
         const int BATCH_SIZE = 5;
@@ -154,7 +154,11 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     );
                     _db.InboundOrders.Add(order);
 
-                    // 5. Itens da Nota
+                    var totalQtdGeralNota = parsedNfe.Items.Sum(i => i.Quantity);
+                    var nfeTotalPesoL = parsedNfe.TotalNetWeight ?? 0m;
+                    var nfeTotalPesoB = parsedNfe.TotalGrossWeight ?? 0m;
+
+                    // 5. Itens da Nota com Fallback Direto do Parser
                     foreach (var item in parsedNfe.Items)
                     {
                         var matchedProduct = existingProducts.FirstOrDefault(p =>
@@ -167,6 +171,24 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                             item.Ncm, item.Cest, item.Unit,
                             item.Quantity, item.UnitValue, item.Batch, item.ManufactureDate, item.ExpirationDate
                         );
+
+                        // 1º Tenta calcular via peso total da nota (se informado na tag <vol>)
+                        decimal calculatedNet = 0m;
+                        decimal calculatedGross = 0m;
+
+                        if (totalQtdGeralNota > 0 && nfeTotalPesoL > 0)
+                            calculatedNet = Math.Round(nfeTotalPesoL / totalQtdGeralNota, 4);
+
+                        if (totalQtdGeralNota > 0 && nfeTotalPesoB > 0)
+                            calculatedGross = Math.Round(nfeTotalPesoB / totalQtdGeralNota, 4);
+
+                        // 2º Fallback para o cadastro do produto
+                        decimal finalUnitNet = calculatedNet > 0 ? calculatedNet : (matchedProduct?.NetWeight ?? 0m);
+                        decimal finalUnitGross = calculatedGross > 0 ? calculatedGross : (matchedProduct?.GrossWeight ?? 0m);
+
+                        if (finalUnitGross <= 0m) finalUnitGross = finalUnitNet;
+
+                        orderItem.SetUnitWeights(finalUnitNet, finalUnitGross);
 
                         if (matchedProduct != null)
                         {

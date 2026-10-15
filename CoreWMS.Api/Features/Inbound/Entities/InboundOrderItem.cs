@@ -21,6 +21,9 @@ public class InboundOrderItem : AuditableEntity
     public string RawNcm { get; private set; } = string.Empty;
     public string? RawCest { get; private set; }
     public string RawUnit { get; private set; } = "UN";
+    // Pesos Unitários da NF-e (Calculados ou com Fallback do Produto)
+    public decimal UnitNetWeight { get; private set; }   // Peso Líquido Unitário (kg)
+    public decimal UnitGrossWeight { get; private set; } // Peso Bruto Unitário (kg)
 
     // Expectativas Fiscais
     public decimal ExpectedQuantity { get; private set; }
@@ -132,5 +135,12 @@ public class InboundOrderItem : AuditableEntity
         LockedAt = null;
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void SetUnitWeights(decimal unitNetWeight, decimal unitGrossWeight)
+    {
+        UnitNetWeight = Math.Max(0, Math.Round(unitNetWeight, 4));
+        UnitGrossWeight = Math.Max(0, Math.Round(unitGrossWeight, 4));
+        UpdatedAt = DateTime.UtcNow;
     }
 }

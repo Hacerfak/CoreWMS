@@ -135,22 +135,21 @@ public class NfeBuilderService
             var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode.Trim();
 
             var taxParams = ResolverParametrosItem(rule, destState, ncm, origem);
-            // CFOP resolvido para a linha (base x exceção)
             var cfopStr = isInterstate ? taxParams.CfopInterstate : taxParams.CfopStateInternal;
 
-            // IDENTIFICAÇÃO DO RETORNO PELO CFOP OFICIAL DE ARMAZÉM GERAL (5906, 6906, 5907, 6907)
+            // IDENTIFICAÇÃO DO RETORNO DE ARMAZÉM PELO CFOP
             bool isRetornoArmazem = cfopStr is "5906" or "6906" or "5907" or "6907"
                                  || rule.CfopStateInternal is "5906" or "5907";
 
             decimal vUnCom;
             if (isRetornoArmazem)
             {
-                // Retorno Físico ou Simbólico: SEMPRE o valor original de entrada da HU (remessa original do depositante)
+                // Retorno Físico ou Simbólico: sempre o valor original de entrada da HU
                 vUnCom = item.InboundUnitValue > 0 ? item.InboundUnitValue : item.UnitValue;
             }
             else
             {
-                // Remessa por Conta e Ordem (5923/6923): SEMPRE o valor de venda faturado na NF-e do cliente
+                // Remessa por Conta e Ordem: valor comercial de venda faturado pelo depositante
                 vUnCom = item.UnitValue > 0 ? item.UnitValue : item.InboundUnitValue;
             }
 
@@ -169,12 +168,12 @@ public class NfeBuilderService
                     CFOP = int.Parse(cfopStr),
                     uCom = item.Product.BaseUnit ?? "UN",
                     qCom = item.PackedQuantity,
-                    vUnCom = vUnCom, // <-- Valor correto da operação
+                    vUnCom = vUnCom,
                     vProd = valorTotalItem,
                     cEANTrib = cEan,
                     uTrib = item.Product.BaseUnit ?? "UN",
                     qTrib = item.PackedQuantity,
-                    vUnTrib = vUnCom, // <-- Valor correto da operação
+                    vUnTrib = vUnCom,
                     indTot = IndicadorTotal.ValorDoItemCompoeTotalNF
                 },
                 imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)
@@ -966,7 +965,7 @@ public class NfeBuilderService
         return d;
     }
 
-    private static transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
+    private transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
     {
         ModalidadeFrete modFrete = order.FreightModality switch
         {
@@ -1003,17 +1002,42 @@ public class NfeBuilderService
             };
         }
 
-        if (volumes != null && volumes.Any())
+        // CÁLCULO INTELIGENTE DOS PESOS (LÍQUIDO E BRUTO)
+        decimal totalPesoLiquido = 0m;
+        decimal totalPesoBruto = 0m;
+
+        foreach (var item in order.Items.Where(i => i.PackedQuantity > 0))
         {
-            t.vol = new List<vol>
-            {
-                new vol
-                {
-                    qVol = volumes.Count,
-                    pesoB = Math.Round(volumes.Sum(v => v.GrossWeight), 3)
-                }
-            };
+            var unitNet = item.Product?.NetWeight ?? 0m;
+            var unitGross = item.Product?.GrossWeight ?? 0m;
+
+            // Se o peso bruto unitário estiver zerado, assume o líquido
+            if (unitGross <= 0m) unitGross = unitNet;
+
+            totalPesoLiquido += item.PackedQuantity * unitNet;
+            totalPesoBruto += item.PackedQuantity * unitGross;
         }
+
+        // Se houver pesagem real registrada nos volumes do Packing, prioriza o peso bruto físico
+        if (volumes != null && volumes.Any() && volumes.Sum(v => v.GrossWeight) > 0)
+        {
+            totalPesoBruto = volumes.Sum(v => v.GrossWeight);
+        }
+
+        int quantidadeVolumes = (volumes != null && volumes.Any())
+            ? volumes.Count
+            : (int)Math.Ceiling(order.Items.Sum(i => i.PackedQuantity));
+
+        t.vol = new List<vol>
+        {
+            new vol
+            {
+                qVol = quantidadeVolumes,
+                esp = volumes != null && volumes.Any() ? volumes.First().PackagingType?.Description ?? "VOLUMES" : "VOLUMES",
+                pesoL = Math.Round(totalPesoLiquido, 3), // Formato 12.3 exigido pela SEFAZ
+                pesoB = Math.Round(totalPesoBruto, 3)    // Formato 12.3 exigido pela SEFAZ
+            }
+        };
 
         return t;
     }

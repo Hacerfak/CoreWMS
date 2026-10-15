@@ -14,6 +14,9 @@ public class Product : AuditableEntity
     public string Sku { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
     public string BaseUnit { get; private set; } = "UN";
+    // Pesos Unitários da Unidade Base (Fallback oficial para WMS e SEFAZ)
+    public decimal NetWeight { get; private set; }   // Peso Líquido Unitário (kg)
+    public decimal GrossWeight { get; private set; } // Peso Bruto Unitário (kg)
     public string? BaseBarcode { get; private set; }
     public string? Ncm { get; private set; }
     public string? Cest { get; private set; }
@@ -38,9 +41,15 @@ public class Product : AuditableEntity
 
     protected Product() { }
 
-    public Product(Guid companyId, Guid customerId, string sku, string description, string baseUnit)
+    public Product(Guid companyId, Guid customerId, string sku, string description, string baseUnit, decimal netWeight = 0m, decimal grossWeight = 0m)
     {
-        CompanyId = companyId; CustomerId = customerId; Sku = sku.ToUpper().Trim(); Description = description; BaseUnit = baseUnit.ToUpper().Trim();
+        CompanyId = companyId;
+        CustomerId = customerId;
+        Sku = sku.ToUpper().Trim();
+        Description = description;
+        BaseUnit = baseUnit.ToUpper().Trim();
+        NetWeight = Math.Round(netWeight, 4);
+        GrossWeight = Math.Round(grossWeight, 4);
     }
 
     public void UpdateFiscal(string? ncm, string? cest, int origin, string? baseBarcode)
@@ -61,5 +70,15 @@ public class Product : AuditableEntity
     public void UpdateBasicInfo(string description, string baseUnit)
     {
         Description = description; BaseUnit = baseUnit.ToUpper().Trim(); UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateWeights(decimal netWeight, decimal grossWeight)
+    {
+        if (netWeight < 0 || grossWeight < 0)
+            throw new ArgumentException("Os pesos do produto não podem ser negativos.");
+
+        NetWeight = Math.Round(netWeight, 4);
+        GrossWeight = Math.Round(grossWeight, 4);
+        UpdatedAt = DateTime.UtcNow;
     }
 }

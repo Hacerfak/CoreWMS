@@ -41,11 +41,9 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
 
-        // Permite adicionar enquanto Pending ou Allocated; bloqueia se Picking, Packing, ReadyToShip, Shipped ou Canceled
         if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
             return Results.BadRequest(new { Message = "Não é possível adicionar itens após o início da separação (Picking)." });
 
-        // Trava física: se qualquer volume deste pedido já tiver sido bipado no coletor, bloqueia
         var hasStartedPicking = await _db.OutboundAllocations
             .AnyAsync(a => a.OutboundOrderId == order.Id && a.IsPicked, ct);
 
@@ -64,7 +62,6 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
         if (hus.Count != request.HandlingUnitIds.Count)
             return Results.BadRequest(new { Message = "Um ou mais volumes selecionados já foram reservados por outro pedido ou estão indisponíveis." });
 
-        // Valida se alguma HU já possui alocação pendente no banco de dados
         var alreadyAllocatedHuIds = await _db.OutboundAllocations
             .Where(a => request.HandlingUnitIds.Contains(a.HandlingUnitId) && !a.IsPicked)
             .Select(a => a.HandlingUnitId)
@@ -73,7 +70,6 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
         if (alreadyAllocatedHuIds.Any())
             return Results.Conflict(new { Message = "Um ou mais volumes selecionados acabaram de ser reservados por outro operador." });
 
-        // Busca ou cria o item da ordem
         var orderItem = order.Items.FirstOrDefault(i => i.ProductId == request.ProductId);
         var product = await _db.Products.AsNoTracking().FirstAsync(p => p.Id == request.ProductId, ct);
 
@@ -89,7 +85,13 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
             orderItem.IncreaseExpectedQuantity(totalQtyToAdd);
         }
 
-        // Registra as alocações físicas vinculando à entidade pai
+        // Busca alocações anteriores para incluir no cálculo do preço médio
+        var existingAllocations = await _db.OutboundAllocations
+            .Where(a => a.OutboundOrderItemId == orderItem.Id)
+            .Include(a => a.HandlingUnit)
+            .Select(a => new { a.Quantity, UnitValue = a.HandlingUnit.UnitValue })
+            .ToListAsync(ct);
+
         foreach (var hu in hus)
         {
             var allocation = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, hu.CurrentQuantity);
@@ -98,12 +100,25 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
             orderItem.AddAllocatedQuantity(hu.CurrentQuantity);
         }
 
-        // Atualiza o Saldo Reservado em InventoryBalance
+        // CÁLCULO DO PREÇO MÉDIO DE ENTRADA (INBOUND_UNIT_VALUE)
+        decimal totalAllocQty = existingAllocations.Sum(a => a.Quantity) + hus.Sum(h => h.CurrentQuantity);
+        if (totalAllocQty > 0)
+        {
+            decimal totalVal = existingAllocations.Sum(a => a.Quantity * a.UnitValue) + hus.Sum(h => h.CurrentQuantity * h.UnitValue);
+            decimal avgUnitVal = Math.Round(totalVal / totalAllocQty, 4);
+
+            orderItem.UpdateInboundUnitValue(avgUnitVal);
+
+            if (order.IsReturnToCustomer && orderItem.UnitValue <= 0)
+            {
+                orderItem.UpdateUnitValue(avgUnitVal);
+            }
+        }
+
         var balance = await _db.InventoryBalances
             .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == request.ProductId && b.CustomerId == order.CustomerId, ct);
         if (balance != null) balance.AllocateForPicking(totalQtyToAdd);
 
-        // Recalcula o status do pedido: se todos os itens estão 100% alocados -> Allocated, caso contrário -> Pending
         if (order.Items.All(i => i.AllocatedQuantity >= i.ExpectedQuantity))
         {
             order.UpdateStatus(OutboundOrderStatus.Allocated);
@@ -148,11 +163,9 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
 
-        // Permite adicionar enquanto Pending ou Allocated; bloqueia se Picking em diante
         if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
             return Results.BadRequest(new { Message = "Não é possível adicionar itens após o início da separação (Picking)." });
 
-        // Trava física de início de coleta
         var hasStartedPicking = await _db.OutboundAllocations
             .AnyAsync(a => a.OutboundOrderId == order.Id && a.IsPicked, ct);
 
@@ -162,7 +175,6 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
         var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == request.ProductId && p.CompanyId == companyId, ct);
         if (product == null) return Results.NotFound(new { Message = "Produto não encontrado." });
 
-        // Busca HUs livres descontando alocações pendentes
         var availableHus = await _db.HandlingUnits
             .Where(h => h.CompanyId == companyId &&
                         h.CustomerId == order.CustomerId &&
@@ -177,7 +189,6 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
             .Where(x => x.Hu.CurrentQuantity > x.AllocatedQty)
             .ToListAsync(ct);
 
-        // Regra do Fracionado: Prioriza HUs parciais (menor saldo livre), depois segue a regra (FIFO/FEFO)
         var sortedHus = availableHus
             .Select(x => new { x.Hu, FreeQty = x.Hu.CurrentQuantity - x.AllocatedQty })
             .OrderBy(x => x.FreeQty)
@@ -185,14 +196,15 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
             .ToList();
 
         decimal remainingToReserve = request.Quantity;
-        var reservedAllocations = new List<OutboundAllocation>();
+        var reservedAllocations = new List<(OutboundAllocation Alloc, decimal UnitVal)>();
 
         foreach (var item in sortedHus)
         {
             if (remainingToReserve <= 0) break;
 
             var qtyToTake = Math.Min(remainingToReserve, item.FreeQty);
-            reservedAllocations.Add(new OutboundAllocation(order.Id, Guid.Empty, item.Hu.Id, qtyToTake));
+            var alloc = new OutboundAllocation(order.Id, Guid.Empty, item.Hu.Id, qtyToTake);
+            reservedAllocations.Add((alloc, item.Hu.UnitValue));
             remainingToReserve -= qtyToTake;
         }
 
@@ -210,18 +222,38 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
             orderItem.IncreaseExpectedQuantity(request.Quantity);
         }
 
-        foreach (var alloc in reservedAllocations)
+        var existingAllocations = await _db.OutboundAllocations
+            .Where(a => a.OutboundOrderItemId == orderItem.Id)
+            .Include(a => a.HandlingUnit)
+            .Select(a => new { a.Quantity, UnitValue = a.HandlingUnit.UnitValue })
+            .ToListAsync(ct);
+
+        foreach (var (alloc, _) in reservedAllocations)
         {
             alloc.BindToOrderItem(orderItem);
             _db.OutboundAllocations.Add(alloc);
             orderItem.AddAllocatedQuantity(alloc.Quantity);
         }
 
+        // CÁLCULO DO PREÇO MÉDIO DE ENTRADA (INBOUND_UNIT_VALUE)
+        decimal totalAllocQty = existingAllocations.Sum(a => a.Quantity) + reservedAllocations.Sum(a => a.Alloc.Quantity);
+        if (totalAllocQty > 0)
+        {
+            decimal totalVal = existingAllocations.Sum(a => a.Quantity * a.UnitValue) + reservedAllocations.Sum(a => a.Alloc.Quantity * a.UnitVal);
+            decimal avgUnitVal = Math.Round(totalVal / totalAllocQty, 4);
+
+            orderItem.UpdateInboundUnitValue(avgUnitVal);
+
+            if (order.IsReturnToCustomer && orderItem.UnitValue <= 0)
+            {
+                orderItem.UpdateUnitValue(avgUnitVal);
+            }
+        }
+
         var balance = await _db.InventoryBalances
             .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == request.ProductId && b.CustomerId == order.CustomerId, ct);
         if (balance != null) balance.AllocateForPicking(request.Quantity);
 
-        // Recalcula o status do pedido
         if (order.Items.All(i => i.AllocatedQuantity >= i.ExpectedQuantity))
         {
             order.UpdateStatus(OutboundOrderStatus.Allocated);
@@ -284,7 +316,6 @@ public class RemoveOutboundOrderItemHandler : IRequestHandler<RemoveOutboundOrde
         _db.OutboundAllocations.RemoveRange(allocations);
         _db.OutboundOrderItems.Remove(orderItem);
 
-        // Recalcula o status do pedido após a remoção
         var remainingItems = order.Items.Where(i => i.Id != orderItem.Id).ToList();
         if (!remainingItems.Any() || remainingItems.Any(i => i.AllocatedQuantity < i.ExpectedQuantity))
         {

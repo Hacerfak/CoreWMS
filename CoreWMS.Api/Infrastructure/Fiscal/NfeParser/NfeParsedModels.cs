@@ -50,17 +50,21 @@ public record NfeParsedRecipient(
 );
 
 public record NfeParsedData(
-    string AccessKey,          // Id da <infNFe>
-    DateTime IssueDate,        // dhEmi
-    string IssuerCnpj,         // Shortcut para emit > CNPJ/CPF
-    string IssuerName,         // Shortcut para emit > xNome
-    NfeParsedIssuer Issuer,    // Dados completos do depositante
+    string AccessKey,             // Id da <infNFe>
+    DateTime IssueDate,           // dhEmi
+    string IssuerCnpj,            // Shortcut para emit > CNPJ/CPF
+    string IssuerName,            // Shortcut para emit > xNome
+    NfeParsedIssuer Issuer,       // Dados completos do emitente
     NfeParsedRecipient Recipient, // Dados completos do destinatário
-    int FreightModality,       // transp > modFrete (0=CIF, 1=FOB, etc)
-    string? CarrierCnpjCpf,    // transp > transporta > CNPJ/CPF
-    string? CarrierName,       // transp > transporta > xNome
-    string? CarrierIe,         // transp > transporta > IE
-    string? VehiclePlate,      // transp > veicTransp > placa
-    string? VehiclePlateState, // transp > veicTransp > UF
-    List<NfeParsedItem> Items
+    int FreightModality,          // transp > modFrete (0=CIF, 1=FOB, etc)
+    string? CarrierCnpjCpf,       // transp > transporta > CNPJ/CPF
+    string? CarrierName,          // transp > transporta > xNome
+    string? CarrierIe,            // transp > transporta > IE
+    string? VehiclePlate,         // transp > veicTransp > placa
+    string? VehiclePlateState,    // transp > veicTransp > UF
+    List<NfeParsedItem> Items,
+    decimal? TotalNetWeight = null,   // transp > vol > pesoL (Soma de todos os volumes)
+    decimal? TotalGrossWeight = null, // transp > vol > pesoB (Soma de todos os volumes)
+    int? TotalVolumes = null,         // transp > vol > qVol (Soma dos volumes)
+    string? VolumeSpecies = null      // transp > vol > esp
 );

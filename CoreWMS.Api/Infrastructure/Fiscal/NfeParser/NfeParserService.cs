@@ -103,6 +103,27 @@ public class NfeParserService : INfeParserService
             vehiclePlateState = veicTransp.Element(Ns + "UF")?.Value;
         }
 
+        // Parse Volumes & Pesos (Soma todas as ocorrências de <vol>)
+        decimal totalNetWeight = 0m;
+        decimal totalGrossWeight = 0m;
+        int totalVolumes = 0;
+        string? volumeSpecies = null;
+
+        if (transp != null)
+        {
+            foreach (var vol in transp.Elements(Ns + "vol"))
+            {
+                totalNetWeight += ParseDecimal(vol.Element(Ns + "pesoL")?.Value);
+                totalGrossWeight += ParseDecimal(vol.Element(Ns + "pesoB")?.Value);
+
+                if (int.TryParse(vol.Element(Ns + "qVol")?.Value, out var qv))
+                    totalVolumes += qv;
+
+                if (string.IsNullOrWhiteSpace(volumeSpecies))
+                    volumeSpecies = vol.Element(Ns + "esp")?.Value;
+            }
+        }
+
         // Parse Itens
         var items = new List<NfeParsedItem>();
         foreach (var det in infNfe.Elements(Ns + "det"))
@@ -161,13 +182,17 @@ public class NfeParserService : INfeParserService
             carrierIe,
             vehiclePlate,
             vehiclePlateState,
-            items
+            items,
+            totalNetWeight > 0 ? totalNetWeight : null,
+            totalGrossWeight > 0 ? totalGrossWeight : null,
+            totalVolumes > 0 ? totalVolumes : null,
+            volumeSpecies
         );
     }
 
     private static decimal ParseDecimal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return 0;
-        return decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : 0;
+        return decimal.TryParse(value.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var result) ? result : 0;
     }
 }

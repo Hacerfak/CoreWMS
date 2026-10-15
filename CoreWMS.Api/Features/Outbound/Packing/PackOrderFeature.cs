@@ -63,6 +63,8 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
         var allocations = await _db.OutboundAllocations
             .Include(a => a.HandlingUnit)
                 .ThenInclude(h => h.PackagingType)
+            .Include(a => a.HandlingUnit)
+                .ThenInclude(h => h.Product) // <-- Inclui Product para fallback
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
             .ToListAsync(ct);
 
@@ -75,7 +77,7 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
         int fracionadoBoxesCount = 0;
         decimal totalFracionadoUnitsPicked = 0m;
 
-        // 1. Volumes Fechados
+        // 1. Volumes Fechados (Paletes Completos)
         var fullHuAllocations = allocations
             .Where(a => a.Quantity == a.HandlingUnit.InitialQuantity)
             .GroupBy(a => a.HandlingUnitId)
@@ -86,10 +88,15 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
             var firstAlloc = huGroup.First();
             var hu = firstAlloc.HandlingUnit;
 
+            // Peso unitário da HU com fallback para o cadastro do produto
+            decimal unitGross = hu.UnitGrossWeight > 0 ? hu.UnitGrossWeight : (hu.Product?.GrossWeight ?? 0m);
+            decimal palletGrossWeight = Math.Round(huGroup.Sum(a => a.Quantity) * unitGross, 3);
+
             var volume = new OutboundVolume(
                 outboundOrderId: order.Id,
                 packagingTypeId: hu.PackagingTypeId,
                 volumeLpn: hu.Lpn,
+                grossWeight: palletGrossWeight, // <-- Peso calculado automaticamente
                 usedStretchFilm: request.UsedStretchFilm
             );
 
@@ -97,12 +104,19 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
             fullPalletVolumesCount++;
         }
 
-        // 2. Fracionados
+        // 2. Fracionados (Caixas de Separação Parcial)
         var fracionadoAllocations = allocations
             .Where(a => a.Quantity < a.HandlingUnit.InitialQuantity)
             .ToList();
 
         totalFracionadoUnitsPicked = fracionadoAllocations.Sum(a => a.Quantity);
+
+        // Calcula o peso bruto total de todos os itens fracionados
+        decimal totalFracionadoGrossWeight = fracionadoAllocations.Sum(a =>
+        {
+            var unitGross = a.HandlingUnit.UnitGrossWeight > 0 ? a.HandlingUnit.UnitGrossWeight : (a.HandlingUnit.Product?.GrossWeight ?? 0m);
+            return a.Quantity * unitGross;
+        });
 
         if (request.FracionadoBoxes != null && request.FracionadoBoxes.Any())
         {
@@ -111,6 +125,9 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
                 var packType = await _db.PackagingTypes.FirstOrDefaultAsync(p => p.Id == boxReq.PackagingTypeId, ct);
                 if (packType == null) continue;
 
+                // Rateia o peso entre as caixas deste agrupamento
+                decimal boxWeight = boxReq.BoxCount > 0 ? Math.Round(totalFracionadoGrossWeight / boxReq.BoxCount, 3) : 0m;
+
                 for (int i = 0; i < boxReq.BoxCount; i++)
                 {
                     var boxLpn = $"CX-EXP-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
@@ -118,7 +135,7 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
                         outboundOrderId: order.Id,
                         packagingTypeId: packType.Id,
                         volumeLpn: boxLpn,
-                        grossWeight: 0m,
+                        grossWeight: boxWeight, // <-- Peso da caixa fracionada calculado
                         usedStretchFilm: false
                     );
                     _db.Set<OutboundVolume>().Add(boxVolume);
@@ -136,7 +153,7 @@ public class PackOrderHandler : IRequestHandler<PackOrderCommand, IResult>
                     outboundOrderId: order.Id,
                     packagingTypeId: defaultPackType.Id,
                     volumeLpn: boxLpn,
-                    grossWeight: 0m,
+                    grossWeight: Math.Round(totalFracionadoGrossWeight, 3), // <-- Peso total dos fracionados
                     usedStretchFilm: false
                 );
                 _db.Set<OutboundVolume>().Add(boxVolume);

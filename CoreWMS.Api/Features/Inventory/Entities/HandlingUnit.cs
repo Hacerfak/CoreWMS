@@ -31,6 +31,8 @@ public class HandlingUnit : AuditableEntity
     public decimal InitialQuantity { get; private set; }
     public decimal CurrentQuantity { get; private set; }
     public decimal UnitValue { get; private set; }
+    public decimal UnitNetWeight { get; private set; }
+    public decimal UnitGrossWeight { get; private set; }
 
     public HuStatus Status { get; private set; }
     public QualityStatus QualityStatus { get; private set; }
@@ -40,10 +42,14 @@ public class HandlingUnit : AuditableEntity
 
     protected HandlingUnit() { }
 
-    public HandlingUnit(string lpn, Guid companyId, Guid customerId, Guid productId, Guid packagingTypeId, Guid? receiptDocumentId, string? batch, DateTime? mfgDate, DateTime? expDate, string? serialNumber, decimal initialQuantity, decimal unitValue)
+    public HandlingUnit(
+        string lpn, Guid companyId, Guid customerId, Guid productId, Guid packagingTypeId, Guid? receiptDocumentId,
+        string? batch, DateTime? mfgDate, DateTime? expDate, string? serialNumber,
+        decimal initialQuantity, decimal unitValue,
+        decimal unitNetWeight = 0m, decimal unitGrossWeight = 0m)
     {
         Lpn = lpn.ToUpper().Trim(); CompanyId = companyId; CustomerId = customerId; ProductId = productId; PackagingTypeId = packagingTypeId; ReceiptDocumentId = receiptDocumentId; Batch = batch?.ToUpper().Trim(); ManufactureDate = mfgDate; ExpirationDate = expDate; SerialNumber = serialNumber?.ToUpper().Trim(); InitialQuantity = initialQuantity; CurrentQuantity = initialQuantity; UnitValue = unitValue;
-        Status = HuStatus.Expected; QualityStatus = QualityStatus.Available;
+        Status = HuStatus.Expected; QualityStatus = QualityStatus.Available; UnitNetWeight = unitNetWeight; UnitGrossWeight = unitGrossWeight;
     }
 
     public void ReceiveAtDock(Guid dockLocationId)

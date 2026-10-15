@@ -410,3 +410,89 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiProductsIdMutationOptions(options), queryClient);
     }
+    export const getApiProductsProductIdPackagings = (
+    productId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/products/${productId}/packagings`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiProductsProductIdPackagingsQueryKey = (productId: string,) => {
+    return [
+    `/api/products/${productId}/packagings`
+    ] as const;
+    }
+
+
+export const getGetApiProductsProductIdPackagingsQueryOptions = <TData = Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError = unknown>(productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiProductsProductIdPackagingsQueryKey(productId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>> = ({ signal }) => getApiProductsProductIdPackagings(productId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: productId !== null && productId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiProductsProductIdPackagingsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>>
+export type GetApiProductsProductIdPackagingsQueryError = unknown
+
+
+export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError = unknown>(
+ productId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>,
+          TError,
+          Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError = unknown>(
+ productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>,
+          TError,
+          Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError = unknown>(
+ productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError = unknown>(
+ productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiProductsProductIdPackagingsQueryOptions(productId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

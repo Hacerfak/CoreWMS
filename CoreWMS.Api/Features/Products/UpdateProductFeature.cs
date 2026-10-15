@@ -24,7 +24,9 @@ public record UpdateProductPackagingCommand(
 );
 
 public record UpdateProductCommand(
-    Guid Id, string Description, string BaseUnit, string? BaseBarcode, string? Ncm, string? Cest, int Origin,
+    Guid Id, string Description, string BaseUnit, string? BaseBarcode,
+    decimal NetWeight, decimal GrossWeight,
+    string? Ncm, string? Cest, int Origin,
     bool TracksBatch, bool StrictBatch, bool TracksManufacture, bool StrictManufacture, bool TracksExpiration, bool StrictExpiration, bool TracksSerial, bool StrictSerial,
     int PickingStrategy, int PickingBaseDate, int? InboundShelfLifeToleranceDays, int? OutboundShelfLifeToleranceDays, List<UpdateProductPackagingCommand> Packagings) : IRequest<IResult>;
 
@@ -35,6 +37,8 @@ public class UpdateProductCommandValidator : AbstractValidator<UpdateProductComm
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.Description).NotEmpty().MaximumLength(200);
         RuleFor(x => x.BaseUnit).NotEmpty().MaximumLength(10);
+        RuleFor(x => x.NetWeight).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.GrossWeight).GreaterThanOrEqualTo(0);
         RuleFor(x => x.PickingStrategy).Must(x => Enum.IsDefined(typeof(PickingStrategy), x)).WithMessage("Estratégia inválida.");
         RuleFor(x => x.PickingBaseDate).Must(x => Enum.IsDefined(typeof(PickingBaseDate), x)).WithMessage("Data Base inválida.");
         RuleFor(x => x).Must(x => x.PickingStrategy != (int)PickingStrategy.Fefo || x.TracksExpiration).WithMessage("A estratégia FEFO exige que o controle de validade esteja ativo.");
@@ -81,6 +85,7 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
         }
 
         product.UpdateBasicInfo(request.Description, request.BaseUnit);
+        product.UpdateWeights(request.NetWeight, request.GrossWeight);
         product.UpdateFiscal(request.Ncm, request.Cest, request.Origin, request.BaseBarcode);
         product.UpdateRules(
             request.TracksBatch, request.StrictBatch, request.TracksManufacture, request.StrictManufacture, request.TracksExpiration, request.StrictExpiration, request.TracksSerial, request.StrictSerial,

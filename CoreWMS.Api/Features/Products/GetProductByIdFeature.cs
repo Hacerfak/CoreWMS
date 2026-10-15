@@ -29,6 +29,8 @@ public record ProductDetailDto(
     string Description,
     string BaseUnit,
     string? BaseBarcode,
+    decimal NetWeight,
+    decimal GrossWeight,
     string? Ncm,
     string? Cest,
     int Origin,
@@ -71,7 +73,6 @@ public class GetProductByIdHandler : IRequestHandler<GetProductByIdQuery, IResul
                 .ThenInclude(pack => pack.PackagingType)
             .Where(p => p.Id == request.Id && p.CompanyId == companyId);
 
-        // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
@@ -87,6 +88,8 @@ public class GetProductByIdHandler : IRequestHandler<GetProductByIdQuery, IResul
                 p.Description,
                 p.BaseUnit,
                 p.BaseBarcode,
+                p.NetWeight,
+                p.GrossWeight,
                 p.Ncm,
                 p.Cest,
                 p.Origin,

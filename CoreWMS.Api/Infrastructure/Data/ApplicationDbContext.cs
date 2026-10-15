@@ -270,6 +270,8 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.Sku).IsRequired().HasMaxLength(50);
             b.Property(x => x.Description).IsRequired().HasMaxLength(200);
             b.Property(x => x.BaseUnit).IsRequired().HasMaxLength(10);
+            b.Property(x => x.NetWeight).HasPrecision(18, 4);
+            b.Property(x => x.GrossWeight).HasPrecision(18, 4);
             b.Property(x => x.BaseBarcode).HasMaxLength(50);
             b.Property(x => x.Ncm).HasMaxLength(10);
             b.Property(x => x.Cest).HasMaxLength(10);
@@ -330,6 +332,8 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.InitialQuantity).HasPrecision(18, 10);
             b.Property(x => x.CurrentQuantity).HasPrecision(18, 10);
             b.Property(x => x.UnitValue).HasPrecision(18, 10);
+            b.Property(x => x.UnitNetWeight).HasPrecision(18, 4);
+            b.Property(x => x.UnitGrossWeight).HasPrecision(18, 4);
             b.Property(x => x.Version).IsConcurrencyToken();
 
             b.HasIndex(x => new { x.CompanyId, x.Lpn }).IsUnique();
@@ -524,6 +528,8 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.ExpectedQuantity).HasPrecision(28, 10);
             b.Property(x => x.ExpectedUnitValue).HasPrecision(28, 10);
             b.Property(x => x.ReceivedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.UnitNetWeight).HasPrecision(18, 4);
+            b.Property(x => x.UnitGrossWeight).HasPrecision(18, 4);
 
             // Trava de Concorrência (Lock Optimista contra multi-recebimento)
             b.Property(x => x.Version).IsConcurrencyToken();

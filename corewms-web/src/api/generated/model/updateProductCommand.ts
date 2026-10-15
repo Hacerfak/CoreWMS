@@ -14,6 +14,8 @@ export interface UpdateProductCommand {
   baseUnit?: string | null;
   /** @nullable */
   baseBarcode?: string | null;
+  netWeight?: number;
+  grossWeight?: number;
   /** @nullable */
   ncm?: string | null;
   /** @nullable */

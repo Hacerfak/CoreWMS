@@ -375,8 +375,9 @@ export default function OutboundItemsPanelPage() {
                                 <TableHeader className="bg-slate-50">
                                     <TableRow>
                                         <TableHead>SKU Produto</TableHead>
-                                        <TableHead>Quantidade Solicitada</TableHead>
-                                        <TableHead>Quantidade Alocada (Reservada)</TableHead>
+                                        <TableHead>Qtd Solicitada</TableHead>
+                                        <TableHead>Qtd Alocada</TableHead>
+                                        <TableHead>Vlr. Entrada</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="w-12 text-right"></TableHead>
                                     </TableRow>
@@ -387,6 +388,9 @@ export default function OutboundItemsPanelPage() {
                                             <TableCell className="font-mono font-bold text-slate-900 text-xs">{item.skuCode}</TableCell>
                                             <TableCell className="font-mono text-xs text-slate-900">{item.expectedQuantity}</TableCell>
                                             <TableCell className="font-mono text-xs font-bold text-emerald-700">{item.allocatedQuantity}</TableCell>
+                                            <TableCell className="font-mono text-xs text-blue-700 font-semibold">
+                                                R$ {(item.inboundUnitValue || item.unitValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                                            </TableCell>
                                             <TableCell><Badge variant="outline" className="text-[10px]">{item.status}</Badge></TableCell>
                                             <TableCell className="text-right">
                                                 <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveOrderItem(item.id)} disabled={isActionLoading} className="text-slate-400 hover:text-rose-600 p-1">

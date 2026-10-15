@@ -19,7 +19,7 @@ public class ProductPackaging : AuditableEntity
     public decimal WidthMm { get; private set; }
     public decimal HeightMm { get; private set; }
     public int MaxStacking { get; private set; } = 1;
-    public decimal CubageM3 => LengthMm * WidthMm * HeightMm / 1000000000m;
+    public decimal CubageM3 => LengthMm * WidthMm * HeightMm / 300m;
 
     protected ProductPackaging() { }
 
@@ -48,6 +48,13 @@ public class ProductPackaging : AuditableEntity
         HeightMm = height;
         Barcode = barcode;
         MaxStacking = maxStacking > 0 ? maxStacking : 1;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void AutoCalculateWeightsFromProduct(decimal unitNetWeight, decimal unitGrossWeight, decimal packagingTare = 0m)
+    {
+        NetWeight = Math.Round(ConversionFactor * unitNetWeight, 3);
+        GrossWeight = Math.Round((ConversionFactor * unitGrossWeight) + packagingTare, 3);
         UpdatedAt = DateTime.UtcNow;
     }
 }

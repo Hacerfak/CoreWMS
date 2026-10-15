@@ -121,7 +121,6 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
             var ncm = string.IsNullOrWhiteSpace(item.Product?.Ncm) ? "00000000" : Regex.Replace(item.Product.Ncm, @"\D", "");
             var origem = ObterOrigemProduto(item.Product);
 
-            // Matching inteligente da exceção por NCM, UF de destino e Origem
             var matchedException = selectedRule?.Exceptions?
                 .Where(e => e.IsActive)
                 .Where(e => string.IsNullOrWhiteSpace(e.SpecificDestinationState) || e.SpecificDestinationState == destState)
@@ -138,7 +137,6 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
             var cfop = isInterstate ? cfopInter : cfopInterno;
             var cst = matchedException?.CstCsosnIcms ?? selectedRule?.CstCsosnIcms ?? "400";
 
-            // Identificação do retorno de armazém geral pelo CFOP
             bool isRetornoArmazem = cfop is "5906" or "6906" or "5907" or "6907"
                                  || (selectedRule != null && selectedRule.CfopStateInternal is "5906" or "5907");
 

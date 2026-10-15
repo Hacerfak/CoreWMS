@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Save, Package, Settings2, FileText, Box, PlusCircle, Trash2 } from 'lucide-react';
+import { Loader2, Save, Package, Settings2, FileText, Box, PlusCircle, Trash2, Calculator, Scale } from 'lucide-react';
 import { toast } from 'sonner';
 
 const packagingSchema = z.object({
@@ -36,6 +36,8 @@ const productSchema = z.object({
     description: z.string().min(3, 'Descrição obrigatória.'),
     baseUnit: z.string().min(1, 'Unidade Base obrigatória.'),
     baseBarcode: z.string().optional().nullable(),
+    netWeight: z.coerce.number().min(0, 'Peso líquido unitário inválido.').default(0),
+    grossWeight: z.coerce.number().min(0, 'Peso bruto unitário inválido.').default(0),
     ncm: z.string().optional().nullable(),
     cest: z.string().optional().nullable(),
     origin: z.coerce.number().default(0),
@@ -60,7 +62,6 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isLoadingCustomerRules, setIsLoadingCustomerRules] = useState(false);
 
-    // Listas Resumidas para Selects
     const [customersSummary, setCustomersSummary] = useState([]);
     const [packagingTypesSummary, setPackagingTypesSummary] = useState([]);
 
@@ -69,7 +70,8 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
     const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(productSchema),
         defaultValues: {
-            customerId: '', sku: '', description: '', baseUnit: 'UN', origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
+            customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '',
+            netWeight: 0, grossWeight: 0, origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
             tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
             tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
             packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
@@ -78,22 +80,25 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
 
     const { fields, append, remove } = useFieldArray({ control, name: 'packagings' });
 
-    // OTIMIZAÇÃO: Busca condicional on-demand ao abrir a Sheet
+    // Observa os pesos unitários base para cálculos automáticos das embalagens
+    const currentBaseNetWeight = watch('netWeight') || 0;
+    const currentBaseGrossWeight = watch('grossWeight') || 0;
+
     useEffect(() => {
         if (!open) return;
 
-        // 1. Tipos de Embalagem são necessários tanto na Criação quanto na Edição
         customInstance({ url: '/api/packaging-types/summary', method: 'GET' })
             .then(res => setPackagingTypesSummary(res || []))
             .catch(() => toast.error('Erro ao carregar tipos de embalagem.'));
 
-        // 2. Se for Edição, busca apenas o produto por ID (sem consultar o sumário de clientes)
         if (productId) {
             setIsLoadingDetails(true);
             customInstance({ url: `/api/products/${productId}`, method: 'GET' })
                 .then((data) => {
                     reset({
                         ...data,
+                        netWeight: data.netWeight || 0,
+                        grossWeight: data.grossWeight || 0,
                         packagings: data.packagings?.map(p => ({
                             ...p,
                             maxStacking: p.maxStacking || 1
@@ -104,13 +109,13 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                 .catch(() => toast.error('Erro ao carregar dados do produto.'))
                 .finally(() => setIsLoadingDetails(false));
         } else {
-            // 3. Se for Criação, aí sim busca o sumário de depositantes para o Select
             customInstance({ url: '/api/customers/summary', method: 'GET' })
                 .then(res => setCustomersSummary(res || []))
                 .catch(() => toast.error('Erro ao carregar lista de depositantes.'));
 
             reset({
-                customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '', origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
+                customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '',
+                netWeight: 0, grossWeight: 0, origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
                 tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
                 tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
                 packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
@@ -121,14 +126,14 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
 
     const { mutate: createProduct, isPending: isCreating } = usePostApiProducts({
         mutation: {
-            onSuccess: () => { toast.success('Produto criado!'); queryClient.invalidateQueries({ queryKey: ['/api/products'] }); onOpenChange(false); },
+            onSuccess: () => { toast.success('Produto criado com sucesso!'); queryClient.invalidateQueries({ queryKey: ['/api/products'] }); onOpenChange(false); },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao criar produto.')
         }
     });
 
     const { mutate: updateProduct, isPending: isUpdating } = usePutApiProductsId({
         mutation: {
-            onSuccess: () => { toast.success('Produto atualizado!'); queryClient.invalidateQueries({ queryKey: ['/api/products'] }); onOpenChange(false); },
+            onSuccess: () => { toast.success('Produto atualizado com sucesso!'); queryClient.invalidateQueries({ queryKey: ['/api/products'] }); onOpenChange(false); },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar produto.')
         }
     });
@@ -142,7 +147,6 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
         isEditing ? updateProduct({ id: productId, data }) : createProduct({ data });
     };
 
-    // ON-DEMAND: Busca regras detalhadas do Cliente APENAS quando ele é alterado na Criação
     const handleCustomerChange = async (customerId) => {
         setValue('customerId', customerId, { shouldValidate: true });
 
@@ -169,6 +173,61 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                 setIsLoadingCustomerRules(false);
             }
         }
+    };
+
+    // Função de recálculo dos pesos de uma embalagem específica com base no fator de conversão
+    const handleRecalculatePackagingWeights = (index) => {
+        const factor = Number(watch(`packagings.${index}.conversionFactor`)) || 1;
+        const netW = Number(currentBaseNetWeight) || 0;
+        const grossW = Number(currentBaseGrossWeight) || 0;
+
+        if (netW === 0 && grossW === 0) {
+            toast.warning('Informe primeiro o peso líquido e/ou bruto unitário na aba Básicos.');
+            return;
+        }
+
+        const calculatedNet = Math.round(factor * netW * 1000) / 1000;
+        const calculatedGross = Math.round(factor * (grossW > 0 ? grossW : netW) * 1000) / 1000;
+
+        setValue(`packagings.${index}.netWeight`, calculatedNet, { shouldValidate: true });
+        setValue(`packagings.${index}.grossWeight`, calculatedGross, { shouldValidate: true });
+        toast.success(`Pesos da Embalagem #${index + 1} recalculados para fator ${factor}!`);
+    };
+
+    // Ao mudar o fator de conversão, se os pesos estiverem zerados, auto-calcula
+    const handleConversionFactorChange = (index, value) => {
+        const factor = Number(value) || 1;
+        setValue(`packagings.${index}.conversionFactor`, factor, { shouldValidate: true });
+
+        const currentPackGross = Number(watch(`packagings.${index}.grossWeight`)) || 0;
+        const currentPackNet = Number(watch(`packagings.${index}.netWeight`)) || 0;
+
+        // Se os pesos da embalagem ainda não foram preenchidos manualmente, auto-sugere
+        if (currentPackGross === 0 && currentPackNet === 0) {
+            const netW = Number(currentBaseNetWeight) || 0;
+            const grossW = Number(currentBaseGrossWeight) || 0;
+            if (netW > 0 || grossW > 0) {
+                setValue(`packagings.${index}.netWeight`, Math.round(factor * netW * 1000) / 1000);
+                setValue(`packagings.${index}.grossWeight`, Math.round(factor * (grossW > 0 ? grossW : netW) * 1000) / 1000);
+            }
+        }
+    };
+
+    const handleAddPackaging = () => {
+        const netW = Number(currentBaseNetWeight) || 0;
+        const grossW = Number(currentBaseGrossWeight) || 0;
+
+        append({
+            packagingTypeId: '',
+            conversionFactor: 1,
+            allowFractionalPicking: false,
+            grossWeight: grossW > 0 ? grossW : netW,
+            netWeight: netW,
+            lengthMm: 0,
+            widthMm: 0,
+            heightMm: 0,
+            maxStacking: 1
+        });
     };
 
     const renderToggle = (title, desc, trackField, strictField) => (
@@ -199,7 +258,7 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
             <SheetContent className="w-full sm:w-[950px] !max-w-[950px] flex flex-col p-0 bg-white shadow-2xl">
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <SheetTitle className="text-xl font-bold text-slate-900">{isEditing ? 'Editar Produto' : 'Novo Produto'}</SheetTitle>
-                    <SheetDescription className="text-slate-500">Configure as regras logísticas e as embalagens.</SheetDescription>
+                    <SheetDescription className="text-slate-500">Configure as regras logísticas, pesos e embalagens do produto.</SheetDescription>
                 </SheetHeader>
 
                 {isLoadingDetails ? (
@@ -212,7 +271,7 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
                             <div className="px-6 border-b border-slate-100 bg-white">
                                 <TabsList className="bg-transparent h-12 gap-3 p-0">
-                                    <TabsTrigger value="dados" className="data-[state=active]:bg-slate-100 gap-2 px-4"><Package size={16} /> Básicos</TabsTrigger>
+                                    <TabsTrigger value="dados" className="data-[state=active]:bg-slate-100 gap-2 px-4"><Package size={16} /> Básicos & Pesos</TabsTrigger>
                                     <TabsTrigger value="fiscal" className="data-[state=active]:bg-slate-100 gap-2 px-4"><FileText size={16} /> Fiscal</TabsTrigger>
                                     <TabsTrigger value="regras" className="data-[state=active]:bg-slate-100 gap-2 px-4"><Settings2 size={16} /> WMS & Capacidade</TabsTrigger>
                                     <TabsTrigger value="embalagens" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 gap-2 px-4"><Box size={16} /> Volumes & Conversão</TabsTrigger>
@@ -267,6 +326,44 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                     <div className="space-y-1.5">
                                         <Label>Código de Barras Base (EAN/GTIN)</Label>
                                         <Input {...register('baseBarcode')} className="font-mono" />
+                                    </div>
+
+                                    {/* BLOCO DE PESOS UNITÁRIOS DO PRODUTO */}
+                                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <Scale size={16} className="text-orange-600" />
+                                            <div>
+                                                <span className="font-bold text-slate-900 text-xs block uppercase tracking-wider">
+                                                    Pesos Unitários do Produto (Por {watch('baseUnit') || 'UN'})
+                                                </span>
+                                                <span className="text-[10px] text-slate-500">
+                                                    Utilizado como fallback caso a NF-e de entrada não informe o peso e para totalizar a NF-e de expedição.
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Peso Líquido Unitário (KG)</Label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.0001"
+                                                    {...register('netWeight')}
+                                                    className="font-mono bg-white text-xs h-9"
+                                                    placeholder="0.0000"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label className="text-xs">Peso Bruto Unitário (KG)</Label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.0001"
+                                                    {...register('grossWeight')}
+                                                    className="font-mono bg-white text-xs h-9"
+                                                    placeholder="0.0000"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 </TabsContent>
 
@@ -343,12 +440,27 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                     {errors.packagings && <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-md">{errors.packagings.root?.message || 'Verifique as informações das embalagens.'}</div>}
                                     {fields.map((item, index) => (
                                         <div key={item.id} className="relative p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">
-                                            <div className="absolute top-4 right-4">
+                                            <div className="absolute top-4 right-4 flex items-center gap-1">
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleRecalculatePackagingWeights(index)}
+                                                    className="text-orange-600 hover:bg-orange-50 h-8 px-2 text-xs"
+                                                    title="Recalcular pesos com base no peso unitário e fator"
+                                                >
+                                                    <Calculator size={13} className="mr-1" /> Recalcular Pesos
+                                                </Button>
+
                                                 {fields.length > 1 && (
-                                                    <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0"><Trash2 size={16} /></Button>
+                                                    <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0">
+                                                        <Trash2 size={16} />
+                                                    </Button>
                                                 )}
                                             </div>
+
                                             <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Box size={16} /> Embalagem #{index + 1}</h4>
+
                                             <div className="grid grid-cols-3 gap-4">
                                                 <div className="space-y-1.5">
                                                     <Label>Tipo de Embalagem *</Label>
@@ -363,7 +475,13 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                                 <div className="space-y-1.5">
                                                     <Label>Fator de Conversão *</Label>
                                                     <div className="flex items-center gap-2">
-                                                        <Input type="number" step="0.0001" {...register(`packagings.${index}.conversionFactor`)} className={errors?.packagings?.[index]?.conversionFactor ? 'border-rose-500' : ''} />
+                                                        <Input
+                                                            type="number"
+                                                            step="0.0001"
+                                                            value={watch(`packagings.${index}.conversionFactor`)}
+                                                            onChange={(e) => handleConversionFactorChange(index, e.target.value)}
+                                                            className={errors?.packagings?.[index]?.conversionFactor ? 'border-rose-500' : ''}
+                                                        />
                                                         <span className="text-xs font-mono text-slate-500">{watch('baseUnit')}</span>
                                                     </div>
                                                 </div>
@@ -375,11 +493,26 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                             </div>
 
                                             <div className="grid grid-cols-6 gap-3">
-                                                <div className="space-y-1.5"><Label className="text-xs">Peso Bruto (KG)</Label><Input type="number" step="0.001" {...register(`packagings.${index}.grossWeight`)} className="h-8 text-xs" /></div>
-                                                <div className="space-y-1.5"><Label className="text-xs">Peso Líq. (KG)</Label><Input type="number" step="0.001" {...register(`packagings.${index}.netWeight`)} className="h-8 text-xs" /></div>
-                                                <div className="space-y-1.5"><Label className="text-xs">Comp. (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.lengthMm`)} className="h-8 text-xs" /></div>
-                                                <div className="space-y-1.5"><Label className="text-xs">Largura (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.widthMm`)} className="h-8 text-xs" /></div>
-                                                <div className="space-y-1.5"><Label className="text-xs">Altura (mm)</Label><Input type="number" step="0.1" {...register(`packagings.${index}.heightMm`)} className="h-8 text-xs" /></div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs">Peso Bruto (KG)</Label>
+                                                    <Input type="number" step="0.001" {...register(`packagings.${index}.grossWeight`)} className="h-8 text-xs font-mono" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs">Peso Líq. (KG)</Label>
+                                                    <Input type="number" step="0.001" {...register(`packagings.${index}.netWeight`)} className="h-8 text-xs font-mono" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs">Comp. (mm)</Label>
+                                                    <Input type="number" step="0.1" {...register(`packagings.${index}.lengthMm`)} className="h-8 text-xs" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs">Largura (mm)</Label>
+                                                    <Input type="number" step="0.1" {...register(`packagings.${index}.widthMm`)} className="h-8 text-xs" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs">Altura (mm)</Label>
+                                                    <Input type="number" step="0.1" {...register(`packagings.${index}.heightMm`)} className="h-8 text-xs" />
+                                                </div>
                                                 <div className="space-y-1.5">
                                                     <Label className="text-xs font-bold text-blue-900">Empilhamento Máx.</Label>
                                                     <Input type="number" min="1" {...register(`packagings.${index}.maxStacking`)} className="h-8 text-xs font-bold text-blue-700 bg-blue-50/50 border-blue-200" />
@@ -398,7 +531,7 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => append({ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 })}
+                                        onClick={handleAddPackaging}
                                         className="w-full border-dashed border-2 text-blue-600 hover:bg-blue-50"
                                     >
                                         <PlusCircle size={16} className="mr-2" /> Adicionar Embalagem Secundária

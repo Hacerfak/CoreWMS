@@ -66,8 +66,11 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         var companyId = _tenant.GetCompanyId();
         var userId = Guid.Parse(_http.HttpContext!.User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier).Value);
 
+        // 1. Carrega o item com a ordem, o produto mestre e as embalagens
         var orderItem = await _db.InboundOrderItems
             .Include(i => i.InboundOrder)
+            .Include(i => i.Product)
+                .ThenInclude(p => p!.Packagings)
             .FirstOrDefaultAsync(i => i.Id == request.OrderItemId && i.InboundOrder.CompanyId == companyId, ct);
 
         if (orderItem == null || !orderItem.ProductId.HasValue)
@@ -79,6 +82,32 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         var rules = await _masterDataCache.GetProductRulesAsync(companyId, orderItem.ProductId.Value, ct);
         if (rules == null)
             return Results.BadRequest(new { Message = "Regras do produto não encontradas no Master Data." });
+
+        // 2. RESOLUÇÃO GARANTIDA DE PESO COM FALLBACK MULTICAMADAS
+        decimal baseUnitNet = orderItem.UnitNetWeight;
+        decimal baseUnitGross = orderItem.UnitGrossWeight;
+
+        // Se no orderItem estava zerado, busca direto do cadastro do Produto
+        if (baseUnitNet <= 0 && orderItem.Product != null)
+        {
+            baseUnitNet = orderItem.Product.NetWeight;
+        }
+
+        if (baseUnitGross <= 0 && orderItem.Product != null)
+        {
+            baseUnitGross = orderItem.Product.GrossWeight > 0 ? orderItem.Product.GrossWeight : orderItem.Product.NetWeight;
+        }
+
+        if (baseUnitGross <= 0 && baseUnitNet > 0)
+        {
+            baseUnitGross = baseUnitNet;
+        }
+
+        // Se o orderItem no banco ainda estava zerado, atualiza-o com os pesos do produto
+        if (orderItem.UnitNetWeight <= 0 && baseUnitNet > 0)
+        {
+            orderItem.SetUnitWeights(baseUnitNet, baseUnitGross);
+        }
 
         decimal totalToReceive = 0;
         var husToInsert = new List<HandlingUnit>();
@@ -95,7 +124,20 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             if (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) && vol.Batch != orderItem.ExpectedBatch && vol.QualityStatus == QualityStatus.Available)
                 throw new InvalidOperationException($"Divergência Fiscal: Lote ({vol.Batch}) difere da nota fiscal ({orderItem.ExpectedBatch}).");
 
-            // OTIMIZAÇÃO: Processa e grava as fotos no disco UMA ÚNICA VEZ por lote de volumes
+            // Verifica se a embalagem selecionada tem peso cadastrado
+            var packaging = orderItem.Product?.Packagings?.FirstOrDefault(p => p.PackagingTypeId == vol.PackagingTypeId);
+            decimal huUnitNet = baseUnitNet;
+            decimal huUnitGross = baseUnitGross;
+
+            if (packaging != null && packaging.GrossWeight > 0 && packaging.ConversionFactor > 0)
+            {
+                huUnitGross = Math.Round(packaging.GrossWeight / packaging.ConversionFactor, 4);
+                if (packaging.NetWeight > 0)
+                {
+                    huUnitNet = Math.Round(packaging.NetWeight / packaging.ConversionFactor, 4);
+                }
+            }
+
             var processedImages = new List<(string FileName, string FilePath, long FileSize)>();
             if (vol.QualityStatus != QualityStatus.Available && vol.QualityImages != null && vol.QualityImages.Any())
             {
@@ -112,16 +154,26 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             for (int i = 0; i < vol.VolumeCount; i++)
             {
                 var lpn = GenerateShortLpn();
+
                 var hu = new HandlingUnit(
-                    lpn, companyId, orderItem.InboundOrder.CustomerId!.Value, orderItem.ProductId.Value, vol.PackagingTypeId,
-                    orderItem.InboundOrderId, vol.Batch, vol.ManufactureDate, vol.ExpirationDate, vol.SerialNumber,
-                    vol.QuantityPerVolume, orderItem.ExpectedUnitValue
+                    lpn,
+                    companyId,
+                    orderItem.InboundOrder.CustomerId!.Value,
+                    orderItem.ProductId.Value,
+                    vol.PackagingTypeId,
+                    orderItem.InboundOrderId,
+                    vol.Batch,
+                    vol.ManufactureDate,
+                    vol.ExpirationDate,
+                    vol.SerialNumber,
+                    vol.QuantityPerVolume,
+                    orderItem.ExpectedUnitValue,
+                    huUnitNet,   // <-- Peso Líquido Garantido
+                    huUnitGross  // <-- Peso Bruto Garantido
                 );
 
-                // Entry física obrigatória na Doca
                 hu.ReceiveAtDock(vol.TargetLocationId);
 
-                // Registro de Qualidade por HU reaproveitando os arquivos salvos no disco
                 if (vol.QualityStatus != QualityStatus.Available)
                 {
                     hu.ChangeQuality(vol.QualityStatus);
@@ -133,7 +185,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
                     var qualityEvent = new QualityEvent(companyId, hu.Id, vol.TargetLocationId, reasonId, qualityNotes);
 
-                    // Vincula os mesmos caminhos de arquivos já gerados sem duplicar no disco
                     foreach (var (fileName, filePath, size) in processedImages)
                     {
                         qualityEvent.AddImage(fileName, filePath, size);
@@ -145,7 +196,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 husToInsert.Add(hu);
                 totalToReceive += vol.QuantityPerVolume;
 
-                // Entra no balde TotalDock
                 balance.ReceiveToDock(vol.QuantityPerVolume);
 
                 await _kardex.WriteAsync(new InventoryTransaction(
@@ -164,7 +214,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             orderItem.InboundOrder.UpdateStatus(InboundOrderStatus.Completed);
         }
 
-        // Faturamento de Serviços de Recebimento
         if (request.BillingServiceId.HasValue)
         {
             var activeCycle = await _db.BillingCycles.FirstOrDefaultAsync(c => c.CustomerId == orderItem.InboundOrder.CustomerId && c.Status == Billing.Entities.BillingStatus.Draft, ct);

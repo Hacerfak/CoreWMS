@@ -45,6 +45,12 @@ public class AllocateOutboundOrderHandler : IRequestHandler<AllocateOutboundOrde
         {
             var qtyNeeded = item.ExpectedQuantity - item.AllocatedQuantity;
 
+            var existingAllocations = await _db.OutboundAllocations
+                .Where(a => a.OutboundOrderItemId == item.Id)
+                .Include(a => a.HandlingUnit)
+                .Select(a => new { a.Quantity, UnitValue = a.HandlingUnit.UnitValue })
+                .ToListAsync(ct);
+
             var huQuery = _db.HandlingUnits
                 .Where(h => h.CompanyId == companyId &&
                             h.ProductId == item.ProductId &&
@@ -67,6 +73,7 @@ public class AllocateOutboundOrderHandler : IRequestHandler<AllocateOutboundOrde
 
             var availableHus = await huQuery.ToListAsync(ct);
             decimal totalAllocatedInThisRun = 0;
+            var newAllocationsInRun = new List<(decimal Qty, decimal UnitVal)>();
 
             foreach (var huData in availableHus)
             {
@@ -80,8 +87,24 @@ public class AllocateOutboundOrderHandler : IRequestHandler<AllocateOutboundOrde
                 _db.OutboundAllocations.Add(allocation);
                 item.AddAllocatedQuantity(qtyToTake);
 
+                newAllocationsInRun.Add((qtyToTake, huData.Hu.UnitValue));
                 qtyNeeded -= qtyToTake;
                 totalAllocatedInThisRun += qtyToTake;
+            }
+
+            // ATUALIZAÇÃO DO INBOUND_UNIT_VALUE COM BASE NAS HUS ALOCADAS
+            decimal totalAllocQty = existingAllocations.Sum(a => a.Quantity) + newAllocationsInRun.Sum(a => a.Qty);
+            if (totalAllocQty > 0)
+            {
+                decimal totalVal = existingAllocations.Sum(a => a.Quantity * a.UnitValue) + newAllocationsInRun.Sum(a => a.Qty * a.UnitVal);
+                decimal avgUnitVal = Math.Round(totalVal / totalAllocQty, 4);
+
+                item.UpdateInboundUnitValue(avgUnitVal);
+
+                if (order.IsReturnToCustomer && item.UnitValue <= 0)
+                {
+                    item.UpdateUnitValue(avgUnitVal);
+                }
             }
 
             if (totalAllocatedInThisRun > 0)

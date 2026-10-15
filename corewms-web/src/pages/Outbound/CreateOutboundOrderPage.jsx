@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Badge } from '@/components/ui/badge';
 import {
-    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, MapPin, Save
+    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, Save, Info, Warehouse
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,20 +23,7 @@ const outboundOrderHeaderSchema = z.object({
     invoiceNumber: z.string().optional().nullable(),
     invoiceSerie: z.string().optional().nullable(),
     accessKey: z.string().optional().nullable(),
-    isReturnToCustomer: z.boolean().default(false),
-
-    destinationCnpjCpf: z.string().optional().nullable(),
-    destinationName: z.string().optional().nullable(),
-    destinationStateRegistration: z.string().optional().nullable(),
-    destinationIeIndicator: z.coerce.number().default(9),
-    destinationStreet: z.string().optional().nullable(),
-    destinationNumber: z.string().optional().nullable(),
-    destinationComplement: z.string().optional().nullable(),
-    destinationNeighborhood: z.string().optional().nullable(),
-    destinationCityCode: z.coerce.number().default(0),
-    destinationCity: z.string().optional().nullable(),
-    destinationState: z.string().optional().nullable(),
-    destinationZipCode: z.string().optional().nullable(),
+    isReturnToCustomer: z.boolean().default(true),
 
     carrierCnpjCpf: z.string().optional().nullable(),
     carrierName: z.string().optional().nullable(),
@@ -54,7 +41,6 @@ export default function CreateOutboundOrderPage() {
 
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [isConsultingDestSefaz, setIsConsultingDestSefaz] = useState(false);
     const [isConsultingCarrierSefaz, setIsConsultingCarrierSefaz] = useState(false);
 
     const [customers, setCustomers] = useState([]);
@@ -68,19 +54,7 @@ export default function CreateOutboundOrderPage() {
             invoiceNumber: '',
             invoiceSerie: '',
             accessKey: '',
-            isReturnToCustomer: false,
-            destinationCnpjCpf: '',
-            destinationName: '',
-            destinationStateRegistration: '',
-            destinationIeIndicator: 9,
-            destinationStreet: '',
-            destinationNumber: '',
-            destinationComplement: '',
-            destinationNeighborhood: '',
-            destinationCityCode: 0,
-            destinationCity: '',
-            destinationState: 'RS',
-            destinationZipCode: '',
+            isReturnToCustomer: true,
             carrierCnpjCpf: '',
             carrierName: '',
             carrierStateRegistration: '',
@@ -91,12 +65,13 @@ export default function CreateOutboundOrderPage() {
         }
     });
 
-    const isReturnToCustomer = watch('isReturnToCustomer');
     const selectedCustomerId = watch('customerId');
-    const destCnpjCpf = watch('destinationCnpjCpf');
-    const destState = watch('destinationState');
     const carrierCnpjCpf = watch('carrierCnpjCpf');
     const carrierState = watch('vehiclePlateState');
+
+    const selectedCustomer = useMemo(() => {
+        return customers.find(c => c.id === selectedCustomerId);
+    }, [customers, selectedCustomerId]);
 
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
@@ -104,7 +79,7 @@ export default function CreateOutboundOrderPage() {
             .catch(() => toast.error('Erro ao carregar depositantes.'));
     }, []);
 
-    // Carrega dados da ordem se for Edição
+    // Carrega dados se for Edição
     useEffect(() => {
         if (isEditMode) {
             setIsLoading(true);
@@ -121,19 +96,7 @@ export default function CreateOutboundOrderPage() {
                         invoiceNumber: order.invoiceNumber || '',
                         invoiceSerie: order.invoiceSerie || '',
                         accessKey: order.accessKey || '',
-                        isReturnToCustomer: !!order.isReturnToCustomer,
-                        destinationCnpjCpf: order.destinationCnpjCpf || '',
-                        destinationName: order.destinationName || '',
-                        destinationStateRegistration: order.destinationStateRegistration || '',
-                        destinationIeIndicator: order.destinationIeIndicator ?? 9,
-                        destinationStreet: order.destinationStreet || '',
-                        destinationNumber: order.destinationNumber || '',
-                        destinationComplement: order.destinationComplement || '',
-                        destinationNeighborhood: order.destinationNeighborhood || '',
-                        destinationCityCode: order.destinationCityCode || 0,
-                        destinationCity: order.destinationCity || '',
-                        destinationState: order.destinationState || 'RS',
-                        destinationZipCode: order.destinationZipCode || '',
+                        isReturnToCustomer: true,
                         carrierCnpjCpf: order.carrierCnpjCpf || '',
                         carrierName: order.carrierName || '',
                         carrierStateRegistration: order.carrierStateRegistration || '',
@@ -147,36 +110,6 @@ export default function CreateOutboundOrderPage() {
                 .finally(() => setIsLoading(false));
         }
     }, [orderId, isEditMode, reset]);
-
-    const handleConsultDestSefaz = async () => {
-        const cleanCnpj = (destCnpjCpf || '').replace(/\D/g, '');
-        if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
-
-        setIsConsultingDestSefaz(true);
-        try {
-            const sefazData = await customInstance({
-                url: `/api/customers/consult-sefaz/${cleanCnpj}?uf=${destState}`,
-                method: 'POST'
-            });
-
-            toast.success('Dados do destinatário sincronizados da SEFAZ!');
-            setValue('destinationName', sefazData.corporateName || '');
-            setValue('destinationStateRegistration', sefazData.stateRegistration || '');
-            setValue('destinationIeIndicator', sefazData.stateRegistration ? 1 : 9);
-            setValue('destinationStreet', sefazData.street || '');
-            setValue('destinationNumber', sefazData.number || '');
-            setValue('destinationComplement', sefazData.complement || '');
-            setValue('destinationNeighborhood', sefazData.neighborhood || '');
-            setValue('destinationCityCode', sefazData.cityCode || 0);
-            setValue('destinationCity', sefazData.cityName || '');
-            setValue('destinationState', sefazData.state || destState);
-            setValue('destinationZipCode', sefazData.zipCode || '');
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Não foi possível consultar os dados na SEFAZ.');
-        } finally {
-            setIsConsultingDestSefaz(false);
-        }
-    };
 
     const handleConsultCarrierSefaz = async () => {
         const cleanCnpj = (carrierCnpjCpf || '').replace(/\D/g, '');
@@ -204,11 +137,8 @@ export default function CreateOutboundOrderPage() {
             setIsSaving(true);
             const cleanPayload = {
                 ...data,
-                destinationCnpjCpf: data.destinationCnpjCpf ? data.destinationCnpjCpf.replace(/\D/g, '') : null,
-                destinationZipCode: data.destinationZipCode ? data.destinationZipCode.replace(/\D/g, '') : null,
+                isReturnToCustomer: true, // Garante estritamente retorno para o depositante
                 carrierCnpjCpf: data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
-                destinationIeIndicator: Number(data.destinationIeIndicator),
-                destinationCityCode: Number(data.destinationCityCode),
                 freightModality: Number(data.freightModality),
                 expectedShipDate: new Date(data.expectedShipDate).toISOString()
             };
@@ -262,7 +192,7 @@ export default function CreateOutboundOrderPage() {
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                             {isEditMode ? 'Editar Ordem de Saída' : 'Nova Ordem de Saída Manual'}
                         </h1>
-                        <p className="text-xs text-slate-500 mt-0.5">Defina as informações cadastrais, fiscais e de transporte da ordem.</p>
+                        <p className="text-xs text-slate-500 mt-0.5">Defina as informações de retorno de estoque ao depositante e dados de transporte.</p>
                     </div>
                 </div>
 
@@ -312,12 +242,12 @@ export default function CreateOutboundOrderPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                         <div className="space-y-1.5">
-                            <Label className="text-xs">Nº do Pedido</Label>
-                            <Input {...register('orderNumber')} placeholder="Opcional (ex: PED-1001)" className="font-mono text-xs bg-white" />
+                            <Label className="text-xs">Nº do Pedido / Solicitação</Label>
+                            <Input {...register('orderNumber')} placeholder="Opcional (ex: RET-1001)" className="font-mono text-xs bg-white" />
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-xs">Nº da NF-e Venda/ERP</Label>
+                            <Label className="text-xs">Nº NF-e Ref. (Opcional)</Label>
                             <Input {...register('invoiceNumber')} placeholder="Ex: 1250" className="font-mono text-xs bg-white" />
                         </div>
 
@@ -327,143 +257,50 @@ export default function CreateOutboundOrderPage() {
                         </div>
 
                         <div className="space-y-1.5">
-                            <Label className="text-xs">Chave de Acesso (44 dígitos)</Label>
+                            <Label className="text-xs">Chave de Acesso Referenciada</Label>
                             <Input
                                 maxLength={44}
                                 {...register('accessKey')}
-                                placeholder="3523..."
+                                placeholder="44 dígitos..."
                                 className="font-mono text-xs bg-white"
                             />
                         </div>
                     </div>
                 </div>
 
-                {/* BLOCO 2: TIPO DE ENVIO & ENDEREÇO SEFAZ DESTINATÁRIO */}
+                {/* BLOCO 2: DESTINATÁRIO (SEMPRE O PRÓPRIO DEPOSITANTE) */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-                        <Building2 className="text-orange-600" size={18} /> 2. Destinatário Final & Dados Fiscais *
-                    </h3>
-
-                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                        <Label className="text-xs font-bold uppercase text-slate-700">Finalidade da Operação *</Label>
-                        <RadioGroup
-                            value={isReturnToCustomer ? 'return' : 'third_party'}
-                            onValueChange={(v) => setValue('isReturnToCustomer', v === 'return')}
-                            className="flex gap-6 pt-1"
-                        >
-                            <div className="flex items-center space-x-2 cursor-pointer">
-                                <RadioGroupItem value="return" id="r-return" />
-                                <Label htmlFor="r-return" className="cursor-pointer font-semibold text-slate-800 text-xs">
-                                    Retorno para o Próprio Depositante (Devolução / Retorno Simbólico - CFOP 5906)
-                                </Label>
-                            </div>
-                            <div className="flex items-center space-x-2 cursor-pointer">
-                                <RadioGroupItem value="third_party" id="r-third" />
-                                <Label htmlFor="r-third" className="cursor-pointer font-semibold text-slate-800 text-xs">
-                                    Entrega a Terceiros (Venda por Conta e Ordem - CFOP 5923)
-                                </Label>
-                            </div>
-                        </RadioGroup>
+                    <div className="flex items-center justify-between border-b pb-3">
+                        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                            <Building2 className="text-orange-600" size={18} /> 2. Destinatário Final & Regra Fiscal (Armazém Geral)
+                        </h3>
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 font-mono text-[11px]">
+                            CFOP 5906 / 6906 - Retorno de Armazém
+                        </Badge>
                     </div>
 
-                    {!isReturnToCustomer && (
-                        <div className="space-y-4 animate-in fade-in duration-200 pt-1">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="space-y-1.5 md:col-span-2">
-                                    <Label className="text-xs">CNPJ / CPF Destinatário *</Label>
-                                    <div className="flex gap-2">
-                                        <Input {...register('destinationCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white" />
-                                        <Button
-                                            type="button" variant="outline"
-                                            onClick={handleConsultDestSefaz}
-                                            disabled={isConsultingDestSefaz}
-                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
-                                        >
-                                            {isConsultingDestSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                                            SEFAZ
-                                        </Button>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-1.5 md:col-span-2">
-                                    <Label className="text-xs">Razão Social / Nome Completo *</Label>
-                                    <Input {...register('destinationName')} className="text-xs bg-white" placeholder="Razão social..." />
-                                </div>
+                    <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-blue-100 text-blue-700 mt-0.5 shrink-0">
+                                <Warehouse size={18} />
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs">Inscrição Estadual (IE)</Label>
-                                    <Input {...register('destinationStateRegistration')} placeholder="Isento se vazio" className="font-mono text-xs bg-white" />
-                                </div>
-
-                                <div className="space-y-1.5 md:col-span-2">
-                                    <Label className="text-xs">Indicador de IE SEFAZ *</Label>
-                                    <Select value={watch('destinationIeIndicator')?.toString()} onValueChange={(val) => setValue('destinationIeIndicator', Number(val))}>
-                                        <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="1">1 - Contribuinte ICMS</SelectItem>
-                                            <SelectItem value="2">2 - Contribuinte Isento</SelectItem>
-                                            <SelectItem value="9">9 - Não Contribuinte</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-slate-100 space-y-3">
-                                <Label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                    <MapPin size={14} className="text-orange-600" /> Endereço de Entrega Destinatário
-                                </Label>
-
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div className="space-y-1.5 md:col-span-2">
-                                        <Label className="text-xs">Logradouro / Rua</Label>
-                                        <Input {...register('destinationStreet')} className="text-xs bg-white" placeholder="Ex: Av. Brasil" />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Número</Label>
-                                        <Input {...register('destinationNumber')} className="text-xs bg-white font-mono" placeholder="Ex: 1000" />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Complemento</Label>
-                                        <Input {...register('destinationComplement')} className="text-xs bg-white" placeholder="Ex: Sala 201" />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                    <div className="space-y-1.5 md:col-span-2">
-                                        <Label className="text-xs">Bairro</Label>
-                                        <Input {...register('destinationNeighborhood')} className="text-xs bg-white" placeholder="Ex: Centro" />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Cidade</Label>
-                                        <Input {...register('destinationCity')} className="text-xs bg-white" placeholder="Cidade..." />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Cód. IBGE Cidade</Label>
-                                        <Input type="number" {...register('destinationCityCode')} className="font-mono text-xs bg-white" placeholder="Ex: 4305108" />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">UF / CEP</Label>
-                                        <div className="flex gap-2">
-                                            <Select value={watch('destinationState')} onValueChange={(val) => setValue('destinationState', val)}>
-                                                <SelectTrigger className="text-xs bg-white w-20"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                            <Input {...register('destinationZipCode')} placeholder="CEP..." className="font-mono text-xs bg-white flex-1" />
-                                        </div>
-                                    </div>
-                                </div>
+                            <div className="space-y-1 text-xs">
+                                <span className="font-bold text-slate-900 block text-sm">
+                                    Destinatário Vinculado: {selectedCustomer ? selectedCustomer.corporateName : 'Depositante Selecionado na Origem'}
+                                </span>
+                                <p className="text-slate-600 leading-relaxed">
+                                    Ordens manuais destinam-se exclusivamente à <strong>devolução física ou retorno de custódia</strong> das mercadorias para o próprio depositante. Os dados cadastrais, endereço e Inscrição Estadual para a emissão da NF-e serão preenchidos automaticamente com base no cadastro oficial do depositante.
+                                </p>
                             </div>
                         </div>
-                    )}
+
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-200/70 text-[11px] text-amber-800 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200/60">
+                            <Info size={14} className="shrink-0 text-amber-600" />
+                            <span>
+                                <strong>Precisa realizar uma Venda por Conta e Ordem (CFOP 5923 para terceiro)?</strong> Utilize o botão <strong>"Importar XML NF-e"</strong> na listagem de expedição para garantir a integridade dos valores e da NF-e de venda do depositante.
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
                 {/* BLOCO 3: TRANSPORTADORA, VEÍCULO & FRETE */}

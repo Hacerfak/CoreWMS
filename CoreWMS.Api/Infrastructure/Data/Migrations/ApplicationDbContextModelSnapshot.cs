@@ -1199,6 +1199,14 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<decimal>("UnitGrossWeight")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("UnitNetWeight")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1276,6 +1284,14 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitGrossWeight")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal>("UnitNetWeight")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<decimal>("UnitValue")
                         .HasPrecision(18, 10)
@@ -1595,6 +1611,10 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasPrecision(28, 10)
                         .HasColumnType("numeric(28,10)");
 
+                    b.Property<decimal>("InboundUnitValue")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
                     b.Property<int>("LineNumber")
                         .HasColumnType("integer");
 
@@ -1852,6 +1872,10 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<decimal>("GrossWeight")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
                     b.Property<int?>("InboundShelfLifeToleranceDays")
                         .HasColumnType("integer");
 
@@ -1861,6 +1885,10 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<string>("Ncm")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<decimal>("NetWeight")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<int>("Origin")
                         .HasColumnType("integer");

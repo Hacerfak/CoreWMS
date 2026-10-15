@@ -37,7 +37,10 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         if (lines.Length <= 1) return Results.BadRequest(new { Message = "Planilha vazia." });
 
-        var customers = await _db.Customers.Where(c => c.CompanyId == companyId).ToDictionaryAsync(c => c.Cnpj, c => c.Id, ct);
+        var customers = await _db.Customers
+            .AsNoTracking()
+            .Where(c => c.CompanyId == companyId)
+            .ToDictionaryAsync(c => c.Cnpj, c => c.Id, ct);
 
         // Carrega as localizações incluindo a relação StorageType para validar o StorageRole (Dock, Storage, Quality)
         var locations = await _db.Locations
@@ -54,7 +57,13 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         var balances = await _db.InventoryBalances.Where(b => b.CompanyId == companyId).ToListAsync(ct);
         var existingHus = await _db.HandlingUnits.Where(h => h.CompanyId == companyId).Select(h => h.Lpn).ToHashSetAsync(ct);
 
-        // PRE-CARREGAMENTO DAS EMBALAGENS DOS PRODUTOS
+        // Pre-carregamento dos produtos mestres para fallback de pesos
+        var products = await _db.Products
+            .AsNoTracking()
+            .Where(p => p.CompanyId == companyId)
+            .ToDictionaryAsync(p => p.Id, ct);
+
+        // Pre-carregamento das embalagens dos produtos
         var allProductPackagings = await _db.ProductPackagings
             .AsNoTracking()
             .OrderBy(p => p.CreatedAt)
@@ -64,7 +73,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             .GroupBy(p => p.ProductId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // MAPA DE MEMÓRIA PARA MANTER A MESMA EMBALAGEM EM HUS DO MESMO (PRODUCT_ID, LOTE)
+        // Mapa de memória para manter a mesma embalagem em HUs do mesmo (ProductId, Lote)
         var existingHuBatches = await _db.HandlingUnits
             .AsNoTracking()
             .Where(h => h.CompanyId == companyId && h.Batch != null && h.Batch != "")
@@ -83,7 +92,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         for (int i = 1; i < lines.Length; i++)
         {
             var cols = lines[i].Split(';');
-            if (cols.Length < 21) continue;
+            if (cols.Length < 18) continue;
 
             var lpn = cols[0].Trim().ToUpper().Replace("\"", "");
             var sku = cols[1].Trim().ToUpper().Replace("\"", "");
@@ -96,6 +105,11 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             var depositanteCnpj = cols[14].Trim().Replace("\"", "");
             var isBlocked = !string.IsNullOrWhiteSpace(cols[16].Replace("\"", ""));
             var qualityStatus = isBlocked ? QualityStatus.Quarantine : QualityStatus.Available;
+
+            // Extração dos pesos e valor da planilha
+            var pesoLiquidoTotal = cols.Length > 18 ? ParseBrDecimal(cols[18]) : 0m;
+            var pesoBrutoTotal = cols.Length > 19 ? ParseBrDecimal(cols[19]) : 0m;
+            var valorUnitarioCsv = cols.Length > 20 ? ParseBrDecimal(cols[20]) : 0m;
 
             if (existingHus.Contains(lpn)) continue;
 
@@ -135,7 +149,7 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             // REGRA DE SELEÇÃO INTELIGENTE DE EMBALAGEM
             Guid selectedPackagingTypeId;
 
-            // 1. Tenta encontrar embalagem que corresponda exatamente à quantidade da HU
+            // 1. Correspondência exata da quantidade com o fator de conversão
             var exactMatchPack = productPacks.FirstOrDefault(p => p.ConversionFactor == quantity);
 
             if (exactMatchPack != null)
@@ -149,28 +163,79 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             }
             else if (cleanLote != null)
             {
-                // 2. Quantidade fracionada com Lote: reutiliza a embalagem já vinculada a este produto e lote
+                // 2. Quantidade fracionada com Lote
                 if (assignedPackagingsByBatch.TryGetValue((productId, cleanLote), out var batchPackTypeId))
                 {
                     selectedPackagingTypeId = batchPackTypeId;
                 }
                 else
                 {
-                    // Se é a primeira HU deste lote e é fracionada, usa a primeira embalagem cadastrada
                     selectedPackagingTypeId = productPacks.First().PackagingTypeId;
                     assignedPackagingsByBatch[(productId, cleanLote)] = selectedPackagingTypeId;
                 }
             }
             else
             {
-                // 3. Sem lote e sem correspondência exata de quantidade -> Usa a primeira embalagem do produto
+                // 3. Sem lote e sem correspondência exata
                 selectedPackagingTypeId = productPacks.First().PackagingTypeId;
             }
 
+            // CÁLCULO E RESOLUÇÃO DOS PESOS UNITÁRIOS COM FALLBACK MULTICAMADAS
+            // 1º Tenta calcular via rateio da linha legada: peso_total / quantidade
+            decimal huUnitNet = (quantity > 0 && pesoLiquidoTotal > 0) ? Math.Round(pesoLiquidoTotal / quantity, 4) : 0m;
+            decimal huUnitGross = (quantity > 0 && pesoBrutoTotal > 0) ? Math.Round(pesoBrutoTotal / quantity, 4) : 0m;
+
+            // 2º Fallback para o InboundOrderItem
+            if (huUnitNet <= 0 && orderItem.UnitNetWeight > 0) huUnitNet = orderItem.UnitNetWeight;
+            if (huUnitGross <= 0 && orderItem.UnitGrossWeight > 0) huUnitGross = orderItem.UnitGrossWeight;
+
+            // 3º Fallback para o cadastro mestre do Produto
+            if (products.TryGetValue(productId, out var prodObj))
+            {
+                if (huUnitNet <= 0 && prodObj.NetWeight > 0) huUnitNet = prodObj.NetWeight;
+                if (huUnitGross <= 0 && prodObj.GrossWeight > 0) huUnitGross = prodObj.GrossWeight;
+            }
+
+            // 4º Fallback para a embalagem selecionada
+            var selectedPack = productPacks.FirstOrDefault(p => p.PackagingTypeId == selectedPackagingTypeId);
+            if (selectedPack != null && selectedPack.ConversionFactor > 0)
+            {
+                if (huUnitGross <= 0 && selectedPack.GrossWeight > 0)
+                    huUnitGross = Math.Round(selectedPack.GrossWeight / selectedPack.ConversionFactor, 4);
+
+                if (huUnitNet <= 0 && selectedPack.NetWeight > 0)
+                    huUnitNet = Math.Round(selectedPack.NetWeight / selectedPack.ConversionFactor, 4);
+            }
+
+            // 5º Consistência: se o bruto continuar zerado mas tiver líquido, assume o líquido
+            if (huUnitGross <= 0 && huUnitNet > 0) huUnitGross = huUnitNet;
+            if (huUnitNet <= 0 && huUnitGross > 0) huUnitNet = huUnitGross;
+
+            // Atualiza o InboundOrderItem se ainda não possuía pesos gravados
+            if (orderItem.UnitNetWeight <= 0 && huUnitNet > 0)
+            {
+                orderItem.SetUnitWeights(huUnitNet, huUnitGross);
+            }
+
+            // Resolução do valor unitário da remessa
+            var finalUnitValue = orderItem.ExpectedUnitValue > 0 ? orderItem.ExpectedUnitValue : valorUnitarioCsv;
+
             var hu = new HandlingUnit(
-                lpn, companyId, customerId, productId, selectedPackagingTypeId,
-                orderItem.InboundOrderId, cleanLote, null, null, null,
-                quantity, orderItem.ExpectedUnitValue);
+                lpn,
+                companyId,
+                customerId,
+                productId,
+                selectedPackagingTypeId,
+                orderItem.InboundOrderId,
+                cleanLote,
+                null,
+                null,
+                null,
+                quantity,
+                finalUnitValue,
+                huUnitNet,   // <-- Peso Líquido Unitário
+                huUnitGross  // <-- Peso Bruto Unitário
+            );
 
             // Registra a HU na Doca
             hu.ReceiveAtDock(locationObj.Id);
@@ -196,10 +261,8 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 _db.InventoryBalances.Add(balance);
             }
 
-            // 1. Recebe na Doca
             balance.ReceiveToDock(quantity);
 
-            // 2. Se for posição interna, aloca saindo da Doca
             if (targetRole != StorageRole.Dock)
             {
                 balance.AllocateFromDock(quantity, targetRole, qualityStatus);
