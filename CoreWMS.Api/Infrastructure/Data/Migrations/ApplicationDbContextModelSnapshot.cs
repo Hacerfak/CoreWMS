@@ -124,6 +124,9 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -1076,6 +1079,12 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<Guid?>("CustomerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("InvoiceNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InvoiceSerie")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("IssueDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -1470,6 +1479,45 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.ToTable("OutboundAllocations");
                 });
 
+            modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundItemPack", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OutboundOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OutboundOrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PackagingTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("QuantityPerVolume")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("VolumeCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutboundOrderId");
+
+                    b.HasIndex("OutboundOrderItemId");
+
+                    b.HasIndex("PackagingTypeId");
+
+                    b.ToTable("OutboundItemPacks");
+                });
+
             modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1670,7 +1718,8 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("GrossWeight")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
 
                     b.Property<Guid>("OutboundOrderId")
                         .HasColumnType("uuid");
@@ -1686,7 +1735,8 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.Property<string>("VolumeLpn")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
@@ -1694,7 +1744,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.HasIndex("PackagingTypeId");
 
-                    b.ToTable("OutboundVolume");
+                    b.ToTable("OutboundVolumes");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Printing.Entities.LabelTemplate", b =>
@@ -2615,6 +2665,33 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Navigation("OutboundOrderItem");
                 });
 
+            modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundItemPack", b =>
+                {
+                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", "OutboundOrder")
+                        .WithMany()
+                        .HasForeignKey("OutboundOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrderItem", "OutboundOrderItem")
+                        .WithMany()
+                        .HasForeignKey("OutboundOrderItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CoreWMS.Api.Features.Products.Entities.PackagingType", "PackagingType")
+                        .WithMany()
+                        .HasForeignKey("PackagingTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OutboundOrder");
+
+                    b.Navigation("OutboundOrderItem");
+
+                    b.Navigation("PackagingType");
+                });
+
             modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", b =>
                 {
                     b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
@@ -2671,7 +2748,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.HasOne("CoreWMS.Api.Features.Products.Entities.PackagingType", "PackagingType")
                         .WithMany()
                         .HasForeignKey("PackagingTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("OutboundOrder");

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -34,20 +35,57 @@ public class ExportBillingCycleStatementHandler : IRequestHandler<ExportBillingC
         if (cycle == null) return Results.NotFound();
 
         var builder = new StringBuilder();
-        builder.AppendLine($"EXTRATO DE FATURAMENTO WMS;Ref: {cycle.ReferenceMonth}");
+
+        // 1. CABEÇALHO DO EXTRATO
+        builder.AppendLine($"EXTRATO DE FATURAMENTO WMS;Competência: {cycle.ReferenceMonth}");
         builder.AppendLine($"Depositante;\"{cycle.Customer.CorporateName}\"");
         builder.AppendLine($"CNPJ;\"{cycle.Customer.Cnpj}\"");
-        builder.AppendLine($"Periodo;{cycle.StartDate:dd/MM/yyyy} a {cycle.EndDate:dd/MM/yyyy}");
-        builder.AppendLine($"Status;{cycle.Status}");
-        builder.AppendLine($"Valor Total R$;{cycle.TotalAmount:N2}");
+        builder.AppendLine($"Período de Apuração;{cycle.StartDate:dd/MM/yyyy} a {cycle.EndDate:dd/MM/yyyy}");
+        builder.AppendLine($"Situação da Fatura;{cycle.Status}");
+        builder.AppendLine($"Valor Total Geral R$;{cycle.TotalAmount:N2}");
         builder.AppendLine();
-        builder.AppendLine("Servico / Item;Quantidade Total;Valor Total R$;Observacoes");
 
-        foreach (var item in cycle.Items)
+        // 2. SEÇÃO 1: RESUMO CONSOLIDADO POR SERVIÇO
+        builder.AppendLine("--- 1. RESUMO GERAL DOS SERVIÇOS ---");
+        builder.AppendLine("Serviço / Lançamento;Tipo;Volume / Quantidade;Valor Total R$;Observações");
+
+        foreach (var item in cycle.Items.OrderBy(i => i.CreatedAt))
         {
-            var desc = item.BillingService?.Name ?? item.Description;
+            var serviceType = item.BillingService?.Type.ToString() ?? "Avulso";
+            var desc = item.Description;
             var notes = item.ManualNotes ?? "";
-            builder.AppendLine($"\"{desc}\";{item.QuantityTotal};{item.ServiceTotal:N2};\"{notes}\"");
+            builder.AppendLine($"\"{desc}\";{serviceType};{item.QuantityTotal};{item.ServiceTotal:N2};\"{notes}\"");
+        }
+
+        builder.AppendLine();
+
+        // 3. SEÇÃO 2: DETALHAMENTO ANALÍTICO DAS OCORRÊNCIAS (JSON DESCOMPACTADO)
+        builder.AppendLine("--- 2. DETALHAMENTO ANALÍTICO DAS OCORRÊNCIAS (AUDITORIA LINHA A LINHA) ---");
+        builder.AppendLine("Serviço;Data / Referência;Tipo Volume;Detalhe / Documento;Quantidade;Valor Cobrado R$");
+
+        foreach (var item in cycle.Items.Where(i => !string.IsNullOrWhiteSpace(i.StatementDataJson)))
+        {
+            try
+            {
+                using var jsonDoc = JsonDocument.Parse(item.StatementDataJson!);
+                if (jsonDoc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var elem in jsonDoc.RootElement.EnumerateArray())
+                    {
+                        string dataRef = elem.TryGetProperty("DATA", out var dProp) ? dProp.ToString() : item.CreatedAt.ToString("dd/MM/yyyy");
+                        string tipoVol = elem.TryGetProperty("TIPO_VOLUME", out var tvProp) ? tvProp.ToString() : "-";
+                        string docRef = elem.TryGetProperty("DESCRICAO", out var descProp) ? descProp.ToString() : (elem.TryGetProperty("OrderNumber", out var onProp) ? $"Ped #{onProp}" : "-");
+                        string qtd = elem.TryGetProperty("VOLUME", out var vProp) ? vProp.ToString() : (elem.TryGetProperty("VolumeCount", out var vcProp) ? vcProp.ToString() : "1");
+                        string val = elem.TryGetProperty("VALOR_TOTAL", out var valProp) ? valProp.ToString() : (elem.TryGetProperty("VALOR_DIARIA", out var vdProp) ? vdProp.ToString() : item.ServiceTotal.ToString("N2"));
+
+                        builder.AppendLine($"\"{item.Description}\";{dataRef};{tipoVol};\"{docRef}\";{qtd};{val}");
+                    }
+                }
+            }
+            catch
+            {
+                builder.AppendLine($"\"{item.Description}\";{item.CreatedAt:dd/MM/yyyy};-;\"Lançamento registrado\";{item.QuantityTotal};{item.ServiceTotal:N2}");
+            }
         }
 
         var preamble = Encoding.UTF8.GetPreamble();

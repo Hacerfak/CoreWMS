@@ -26,7 +26,7 @@ public class ListBillingServicesHandler : IRequestHandler<ListBillingServicesQue
         var services = await _db.BillingServices
             .AsNoTracking()
             .Where(s => s.CompanyId == companyId)
-            .Select(s => new BillingServiceDto(s.Id, s.Name, s.Type.ToString(), s.SqlTemplate))
+            .Select(s => new BillingServiceDto(s.Id, s.Name, s.Type.ToString(), s.SqlTemplate, s.IsActive))
             .ToListAsync(ct);
 
         return Results.Ok(services);

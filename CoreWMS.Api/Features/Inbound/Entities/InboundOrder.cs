@@ -16,6 +16,8 @@ public class InboundOrder : AuditableEntity
     public string IssuerCnpj { get; private set; } = string.Empty;
     public string IssuerName { get; private set; } = string.Empty;
     public string AccessKey { get; private set; } = string.Empty;
+    public string? InvoiceNumber { get; private set; }
+    public string? InvoiceSerie { get; private set; }
     public string RawXml { get; private set; } = string.Empty;
     public DateTime IssueDate { get; private set; }
 
@@ -31,7 +33,16 @@ public class InboundOrder : AuditableEntity
 
     protected InboundOrder() { }
 
-    public InboundOrder(Guid companyId, Guid? customerId, string issuerCnpj, string issuerName, string accessKey, string rawXml, DateTime issueDate)
+    public InboundOrder(
+        Guid companyId,
+        Guid? customerId,
+        string issuerCnpj,
+        string issuerName,
+        string accessKey,
+        string rawXml,
+        DateTime issueDate,
+        string? invoiceNumber = null,
+        string? invoiceSerie = null)
     {
         CompanyId = companyId;
         CustomerId = customerId;
@@ -41,6 +52,32 @@ public class InboundOrder : AuditableEntity
         RawXml = rawXml;
         IssueDate = issueDate.ToUniversalTime();
         Status = InboundOrderStatus.Pending;
+
+        // Se o número da nota não for informado explicitamente, extrai da chave de 44 dígitos
+        if (!string.IsNullOrWhiteSpace(invoiceNumber))
+        {
+            InvoiceNumber = invoiceNumber.Trim();
+        }
+        else if (accessKey.Length == 44 && long.TryParse(accessKey.Substring(25, 9), out var nNfVal))
+        {
+            InvoiceNumber = nNfVal.ToString();
+        }
+
+        if (!string.IsNullOrWhiteSpace(invoiceSerie))
+        {
+            InvoiceSerie = invoiceSerie.Trim();
+        }
+        else if (accessKey.Length == 44 && int.TryParse(accessKey.Substring(22, 3), out var serieVal))
+        {
+            InvoiceSerie = serieVal.ToString();
+        }
+    }
+
+    public void SetInvoiceDetails(string invoiceNumber, string? invoiceSerie)
+    {
+        InvoiceNumber = invoiceNumber?.Trim();
+        InvoiceSerie = invoiceSerie?.Trim();
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void LinkCustomer(Guid customerId)

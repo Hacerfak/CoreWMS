@@ -13,4 +13,5 @@ export interface UpdateBillingServiceCommand {
   type?: BillingServiceType;
   /** @nullable */
   sqlTemplate?: string | null;
+  isActive?: boolean;
 }

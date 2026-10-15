@@ -29,6 +29,7 @@ import type {
   GenerateBillingCycleCommand,
   GetApiBillingCyclesParams,
   GetApiBillingTariffsParams,
+  ProcessDailyBillingCycleCommand,
   UpdateBillingServiceCommand,
   UpsertManualBillingItemCommand
 } from '../model';
@@ -913,7 +914,68 @@ export function useGetApiBillingCycles<TData = Awaited<ReturnType<typeof getApiB
 
 
 
-export const postApiBillingCyclesCycleIdItemsManual = (
+export const postApiBillingCyclesProcessDaily = (
+    processDailyBillingCycleCommand: ProcessDailyBillingCycleCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/cycles/process-daily`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: processDailyBillingCycleCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiBillingCyclesProcessDailyMutationKey = () => ['postApiBillingCyclesProcessDaily'] as const;
+
+export const getPostApiBillingCyclesProcessDailyMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCyclesProcessDaily>>, TError,PostApiBillingCyclesProcessDailyMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCyclesProcessDaily>>, TError,PostApiBillingCyclesProcessDailyMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBillingCyclesProcessDailyMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingCyclesProcessDaily>>, PostApiBillingCyclesProcessDailyMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiBillingCyclesProcessDaily(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiBillingCyclesProcessDailyMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingCyclesProcessDaily>>>
+    export type PostApiBillingCyclesProcessDailyMutationBody = ProcessDailyBillingCycleCommand
+    export type PostApiBillingCyclesProcessDailyMutationError = unknown
+    export type PostApiBillingCyclesProcessDailyMutationVariables = {data: ProcessDailyBillingCycleCommand}
+
+    export const usePostApiBillingCyclesProcessDaily = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCyclesProcessDaily>>, TError,PostApiBillingCyclesProcessDailyMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiBillingCyclesProcessDaily>>,
+        TError,
+        PostApiBillingCyclesProcessDailyMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiBillingCyclesProcessDailyMutationOptions(options), queryClient);
+    }
+    export const postApiBillingCyclesCycleIdItemsManual = (
     cycleId: string,
     upsertManualBillingItemCommand: UpsertManualBillingItemCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

@@ -2,69 +2,71 @@ namespace CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 
 public record NfeParsedItem(
     int LineNumber,
-    string SkuCode,            // cProd
-    string? Barcode,           // cEAN (Tratado se for "SEM GTIN")
-    string Description,        // xProd
-    string Ncm,                // NCM
-    string? Cest,              // CEST
-    string Unit,               // uCom
-    decimal Quantity,          // qCom
-    decimal UnitValue,         // vUnCom
-    string? Batch,             // rastro > nLote
-    DateTime? ManufactureDate, // rastro > dFab
-    DateTime? ExpirationDate   // rastro > dVal
+    string SkuCode,
+    string? Barcode,
+    string Description,
+    string Ncm,
+    string? Cest,
+    string Unit,
+    decimal Quantity,
+    decimal UnitValue,
+    string? Batch,
+    DateTime? ManufactureDate,
+    DateTime? ExpirationDate
 );
 
 public record NfeParsedIssuer(
-    string Cnpj,               // emit > CNPJ ou CPF
-    string CorporateName,      // emit > xNome
-    string? TradeName,         // emit > xFant
-    string? StateRegistration,    // emit > IE
-    string? MunicipalRegistration,// emit > IM
-    int? Crt,                  // emit > CRT
-    string? Cnae,              // emit > CNAE
-    string? Street,            // emit > enderEmit > xLgr
-    string? Number,            // emit > enderEmit > nro
-    string? Complement,        // emit > enderEmit > xCmpl
-    string? Neighborhood,      // emit > enderEmit > xBairro
-    int? CityCode,             // emit > enderEmit > cMun
-    string? CityName,           // emit > enderEmit > xMun
-    string State,              // emit > enderEmit > UF
-    string? ZipCode,           // emit > enderEmit > CEP
-    string? Phone              // emit > enderEmit > fone
+    string Cnpj,
+    string CorporateName,
+    string? TradeName,
+    string? StateRegistration,
+    string? MunicipalRegistration,
+    int? Crt,
+    string? Cnae,
+    string? Street,
+    string? Number,
+    string? Complement,
+    string? Neighborhood,
+    int? CityCode,
+    string? CityName,
+    string State,
+    string? ZipCode,
+    string? Phone
 );
 
 public record NfeParsedRecipient(
-    string CnpjCpf,            // dest > CNPJ ou CPF
-    string Name,               // dest > xNome
-    string? StateRegistration, // dest > IE
-    int IeIndicator,           // dest > indIEDest (1=Contribuinte, 2=Isento, 9=Não Contribuinte)
-    string? Street,            // dest > enderDest > xLgr
-    string? Number,            // dest > enderDest > nro
-    string? Complement,        // dest > enderDest > xCmpl
-    string? Neighborhood,      // dest > enderDest > xBairro
-    int CityCode,              // dest > enderDest > cMun
-    string CityName,           // dest > enderDest > xMun
-    string State,              // dest > enderDest > UF
-    string? ZipCode            // dest > enderDest > CEP
+    string CnpjCpf,
+    string Name,
+    string? StateRegistration,
+    int IeIndicator,
+    string? Street,
+    string? Number,
+    string? Complement,
+    string? Neighborhood,
+    int CityCode,
+    string CityName,
+    string State,
+    string? ZipCode
 );
 
 public record NfeParsedData(
-    string AccessKey,             // Id da <infNFe>
-    DateTime IssueDate,           // dhEmi
-    string IssuerCnpj,            // Shortcut para emit > CNPJ/CPF
-    string IssuerName,            // Shortcut para emit > xNome
-    NfeParsedIssuer Issuer,       // Dados completos do emitente
-    NfeParsedRecipient Recipient, // Dados completos do destinatário
-    int FreightModality,          // transp > modFrete (0=CIF, 1=FOB, etc)
-    string? CarrierCnpjCpf,       // transp > transporta > CNPJ/CPF
-    string? CarrierName,          // transp > transporta > xNome
-    string? CarrierIe,            // transp > transporta > IE
-    string? VehiclePlate,         // transp > veicTransp > placa
-    string? VehiclePlateState,    // transp > veicTransp > UF
+    string AccessKey,
+    DateTime IssueDate,
+    string IssuerCnpj,
+    string IssuerName,
+    NfeParsedIssuer Issuer,
+    NfeParsedRecipient Recipient,
+    int FreightModality,
+    string? CarrierCnpjCpf,
+    string? CarrierName,
+    string? CarrierIe,
+    string? VehiclePlate,
+    string? VehiclePlateState,
     List<NfeParsedItem> Items,
-    decimal? TotalNetWeight = null,   // transp > vol > pesoL (Soma de todos os volumes)
-    decimal? TotalGrossWeight = null, // transp > vol > pesoB (Soma de todos os volumes)
-    int? TotalVolumes = null,         // transp > vol > qVol (Soma dos volumes)
-    string? VolumeSpecies = null      // transp > vol > esp
+    decimal? TotalNetWeight = null,
+    decimal? TotalGrossWeight = null,
+    int? TotalVolumes = null,
+    string? VolumeSpecies = null,
+    string? InvoiceNumber = null,
+    string? InvoiceSerie = null
 );

@@ -8,14 +8,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Billing.Services;
 
-public record UpdateBillingServiceCommand(Guid Id, string Name, BillingServiceType Type, string? SqlTemplate) : IRequest<IResult>;
+public record UpdateBillingServiceCommand(Guid Id, string Name, BillingServiceType Type, string? SqlTemplate, bool IsActive = true) : IRequest<IResult>;
 
 public class UpdateBillingServiceCommandValidator : AbstractValidator<UpdateBillingServiceCommand>
 {
     public UpdateBillingServiceCommandValidator()
     {
-        RuleFor(x => x.Id).NotEmpty();
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(150);
+        RuleFor(x => x.Id).NotEmpty().WithMessage("O identificador do serviço é obrigatório.");
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(150).WithMessage("O nome do serviço é obrigatório.");
     }
 }
 
@@ -37,16 +37,13 @@ public class UpdateBillingServiceHandler : IRequestHandler<UpdateBillingServiceC
         var service = await _db.BillingServices
             .FirstOrDefaultAsync(s => s.Id == request.Id && s.CompanyId == companyId, ct);
 
-        if (service == null) return Results.NotFound(new { Message = "Serviço não encontrado." });
+        if (service == null)
+            return Results.NotFound(new { Message = "Serviço de faturamento não encontrado." });
 
-        if (request.Type == BillingServiceType.Automatic_SQL && string.IsNullOrWhiteSpace(request.SqlTemplate))
+        if (request.Type == BillingServiceType.Automatic_Daily && string.IsNullOrWhiteSpace(request.SqlTemplate))
             return Results.BadRequest(new { Message = "Serviços automáticos exigem um template de query SQL." });
 
-        // Atualização dos campos
-        service = new BillingService(companyId, request.Name, request.Type, request.SqlTemplate);
-
-        // No EF Core, atualizamos o estado
-        _db.Entry(service).State = EntityState.Modified;
+        service.UpdateDetails(request.Name, request.Type, request.SqlTemplate, request.IsActive);
         await _db.SaveChangesAsync(ct);
 
         return Results.NoContent();
@@ -59,8 +56,8 @@ public static class UpdateBillingServiceEndpoints
     {
         app.MapPut("/api/billing/services/{id:guid}", async (Guid id, UpdateBillingServiceCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd with { Id = id }))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.Manage);
+            .WithTags("Billing")
+            .RequireAuthorization()
+            .RequirePermission(Permissions.Billing.Manage);
     }
 }

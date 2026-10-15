@@ -150,7 +150,9 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                         issuer.CorporateName,
                         parsedNfe.AccessKey,
                         xmlString,
-                        parsedNfe.IssueDate
+                        parsedNfe.IssueDate,
+                        parsedNfe.InvoiceNumber,
+                        parsedNfe.InvoiceSerie
                     );
                     _db.InboundOrders.Add(order);
 

@@ -9,6 +9,7 @@ using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Services.Billing;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Infrastructure.Storage;
 using FluentValidation;
@@ -44,6 +45,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     private readonly KardexChannel _kardex;
     private readonly IHttpContextAccessor _http;
     private readonly ILocalImageStorageService _imageStorage;
+    private readonly BillingEngineService _billingEngine;
 
     public ReceiveLoteHandler(
         ApplicationDbContext db,
@@ -51,7 +53,8 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         IMasterDataCacheService masterDataCache,
         KardexChannel kardex,
         IHttpContextAccessor http,
-        ILocalImageStorageService imageStorage)
+        ILocalImageStorageService imageStorage,
+        BillingEngineService billingEngine)
     {
         _db = db;
         _tenant = tenant;
@@ -59,6 +62,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         _kardex = kardex;
         _http = http;
         _imageStorage = imageStorage;
+        _billingEngine = billingEngine;
     }
 
     public async Task<IResult> Handle(ReceiveLoteCommand request, CancellationToken ct)
@@ -66,7 +70,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         var companyId = _tenant.GetCompanyId();
         var userId = Guid.Parse(_http.HttpContext!.User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier).Value);
 
-        // 1. Carrega o item com a ordem, o produto mestre e as embalagens
         var orderItem = await _db.InboundOrderItems
             .Include(i => i.InboundOrder)
             .Include(i => i.Product)
@@ -83,31 +86,21 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         if (rules == null)
             return Results.BadRequest(new { Message = "Regras do produto não encontradas no Master Data." });
 
-        // 2. RESOLUÇÃO GARANTIDA DE PESO COM FALLBACK MULTICAMADAS
+        // Fallback de Pesos Unitários
         decimal baseUnitNet = orderItem.UnitNetWeight;
         decimal baseUnitGross = orderItem.UnitGrossWeight;
 
-        // Se no orderItem estava zerado, busca direto do cadastro do Produto
         if (baseUnitNet <= 0 && orderItem.Product != null)
-        {
             baseUnitNet = orderItem.Product.NetWeight;
-        }
 
         if (baseUnitGross <= 0 && orderItem.Product != null)
-        {
             baseUnitGross = orderItem.Product.GrossWeight > 0 ? orderItem.Product.GrossWeight : orderItem.Product.NetWeight;
-        }
 
         if (baseUnitGross <= 0 && baseUnitNet > 0)
-        {
             baseUnitGross = baseUnitNet;
-        }
 
-        // Se o orderItem no banco ainda estava zerado, atualiza-o com os pesos do produto
         if (orderItem.UnitNetWeight <= 0 && baseUnitNet > 0)
-        {
             orderItem.SetUnitWeights(baseUnitNet, baseUnitGross);
-        }
 
         decimal totalToReceive = 0;
         var husToInsert = new List<HandlingUnit>();
@@ -124,7 +117,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             if (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) && vol.Batch != orderItem.ExpectedBatch && vol.QualityStatus == QualityStatus.Available)
                 throw new InvalidOperationException($"Divergência Fiscal: Lote ({vol.Batch}) difere da nota fiscal ({orderItem.ExpectedBatch}).");
 
-            // Verifica se a embalagem selecionada tem peso cadastrado
             var packaging = orderItem.Product?.Packagings?.FirstOrDefault(p => p.PackagingTypeId == vol.PackagingTypeId);
             decimal huUnitNet = baseUnitNet;
             decimal huUnitGross = baseUnitGross;
@@ -133,9 +125,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             {
                 huUnitGross = Math.Round(packaging.GrossWeight / packaging.ConversionFactor, 4);
                 if (packaging.NetWeight > 0)
-                {
                     huUnitNet = Math.Round(packaging.NetWeight / packaging.ConversionFactor, 4);
-                }
             }
 
             var processedImages = new List<(string FileName, string FilePath, long FileSize)>();
@@ -168,8 +158,8 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                     vol.SerialNumber,
                     vol.QuantityPerVolume,
                     orderItem.ExpectedUnitValue,
-                    huUnitNet,   // <-- Peso Líquido Garantido
-                    huUnitGross  // <-- Peso Bruto Garantido
+                    huUnitNet,
+                    huUnitGross
                 );
 
                 hu.ReceiveAtDock(vol.TargetLocationId);
@@ -195,7 +185,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
                 husToInsert.Add(hu);
                 totalToReceive += vol.QuantityPerVolume;
-
                 balance.ReceiveToDock(vol.QuantityPerVolume);
 
                 await _kardex.WriteAsync(new InventoryTransaction(
@@ -214,19 +203,74 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             orderItem.InboundOrder.UpdateStatus(InboundOrderStatus.Completed);
         }
 
-        if (request.BillingServiceId.HasValue)
+        if (request.BillingServiceId.HasValue && orderItem.InboundOrder.CustomerId.HasValue)
         {
-            var activeCycle = await _db.BillingCycles.FirstOrDefaultAsync(c => c.CustomerId == orderItem.InboundOrder.CustomerId && c.Status == Billing.Entities.BillingStatus.Draft, ct);
-            var tariff = await _db.CustomerTariffs.Include(t => t.BillingService).FirstOrDefaultAsync(t => t.CustomerId == orderItem.InboundOrder.CustomerId && t.BillingServiceId == request.BillingServiceId.Value, ct);
+            var customerId = orderItem.InboundOrder.CustomerId.Value;
+            var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
 
-            if (activeCycle != null && tariff != null)
+            // 1. Garante que existe ciclo aberto (Draft)
+            var activeCycle = await _db.BillingCycles
+                .Include(c => c.Items)
+                .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
+                                          c.CustomerId == customerId &&
+                                          c.ReferenceMonth == currentMonth &&
+                                          c.Status == Billing.Entities.BillingStatus.Draft, ct);
+
+            if (activeCycle == null)
             {
-                var totalVolumes = request.Volumes.Sum(v => v.VolumeCount);
-                var extractData = System.Text.Json.JsonSerializer.Serialize(new { InboundOrderId = orderItem.InboundOrderId, AccessKey = orderItem.InboundOrder.AccessKey, GeneratedHus = husToInsert.Select(h => h.Lpn).ToList() });
-                _db.BillingItems.Add(new Billing.Entities.BillingItem(activeCycle.Id, tariff.BillingServiceId, $"{tariff.BillingService.Name} - NF {orderItem.InboundOrder.AccessKey}", totalVolumes, totalVolumes * tariff.UnitValue, extractData, null));
+                activeCycle = new Billing.Entities.BillingCycle(companyId, customerId, DateTime.UtcNow);
+                _db.BillingCycles.Add(activeCycle);
+                await _db.SaveChangesAsync(ct);
+            }
+
+            var tariff = await _db.CustomerTariffs
+                .Include(t => t.BillingService)
+                .FirstOrDefaultAsync(t => t.CustomerId == customerId &&
+                                          t.BillingServiceId == request.BillingServiceId.Value &&
+                                          t.BillingService.IsActive, ct);
+
+            if (tariff != null && !string.IsNullOrWhiteSpace(tariff.BillingService.SqlTemplate))
+            {
+                // 2. Persiste as HUs geradas antes de rodar o Dapper para que fiquem visíveis no banco
+                await _db.SaveChangesAsync(ct);
+
+                // 3. Executa a query SQL do serviço selecionado filtrando pelas HUs da ordem
+                var calculatedBillingItem = await _billingEngine.ExecuteOperationalEventAsync(
+                    activeCycle,
+                    tariff.BillingService,
+                    tariff,
+                    orderId: orderItem.InboundOrderId,
+                    orderItemId: orderItem.Id,
+                    descriptionPrefix: $"NF {orderItem.InboundOrder.InvoiceNumber ?? orderItem.InboundOrder.AccessKey[..8]}"
+                );
+
+                if (calculatedBillingItem != null)
+                {
+                    var targetDescription = calculatedBillingItem.Description;
+
+                    // 4. Upsert por Nota Fiscal: se já foi recebido um item anterior desta mesma NF, atualiza o total
+                    var existingItem = activeCycle.Items.FirstOrDefault(i =>
+                        i.BillingServiceId == tariff.BillingServiceId &&
+                        i.Description == targetDescription);
+
+                    if (existingItem != null)
+                    {
+                        existingItem.UpdateValues(
+                            calculatedBillingItem.QuantityTotal,
+                            calculatedBillingItem.ServiceTotal,
+                            calculatedBillingItem.StatementDataJson,
+                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Recebimento NF)"
+                        );
+                    }
+                    else
+                    {
+                        _db.BillingItems.Add(calculatedBillingItem);
+                    }
+                }
             }
         }
 
+        // 1. Grava as novas HUs na base para torná-las visíveis à consulta SQL de diárias
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -236,9 +280,27 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
         }
 
+        // 2. DISPARO IMEDIATO DAS DIÁRIAS (Armazenagem e Ad-Valorem) PARA O DIA DO RECEBIMENTO
+        if (orderItem.InboundOrder.CustomerId.HasValue)
+        {
+            try
+            {
+                await _billingEngine.UpsertDailyChargesAsync(
+                    companyId,
+                    orderItem.InboundOrder.CustomerId.Value,
+                    DateTime.UtcNow,
+                    ct
+                );
+            }
+            catch
+            {
+                // Falhas no motor de diárias não impedem a conclusão do recebimento físico
+            }
+        }
+
         return Results.Ok(new
         {
-            Message = "Lote recebido na Doca com sucesso.",
+            Message = "Lote recebido na Doca com sucesso e diárias do dia atualizadas.",
             HusGenerated = husToInsert.Select(h => new { h.Id, h.Lpn }).ToList(),
             OrderItemStatus = orderItem.Status.ToString()
         });

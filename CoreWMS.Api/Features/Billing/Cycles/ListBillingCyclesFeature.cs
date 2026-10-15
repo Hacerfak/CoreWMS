@@ -25,11 +25,8 @@ public class ListBillingCyclesHandler : IRequestHandler<ListBillingCyclesQuery, 
 
         var query = _db.BillingCycles
             .AsNoTracking()
-            .Include(c => c.Customer)
-            .Include(c => c.Items)
             .Where(c => c.CompanyId == companyId);
 
-        // Viseira B2B
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
@@ -45,6 +42,8 @@ public class ListBillingCyclesHandler : IRequestHandler<ListBillingCyclesQuery, 
             .OrderByDescending(c => c.StartDate)
             .Select(c => new BillingCycleDto(
                 c.Id,
+                c.CustomerId,
+                c.Customer.CorporateName,
                 c.ReferenceMonth,
                 c.StartDate,
                 c.EndDate,
@@ -63,8 +62,8 @@ public static class ListBillingCyclesEndpoints
     {
         app.MapGet("/api/billing/cycles", async ([AsParameters] ListBillingCyclesQuery query, IMediator mediator) =>
             await mediator.Send(query))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.View);
+            .WithTags("Billing")
+            .RequireAuthorization()
+            .RequirePermission(Permissions.Billing.View);
     }
 }

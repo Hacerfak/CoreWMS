@@ -15,10 +15,10 @@ public class GenerateBillingCycleCommandValidator : AbstractValidator<GenerateBi
 {
     public GenerateBillingCycleCommandValidator()
     {
-        RuleFor(x => x.CustomerId).NotEmpty();
-        RuleFor(x => x.ReferenceMonth).NotEmpty().Matches(@"^(0[1-9]|1[0-2])\/\d{4}$").WithMessage("O formato deve ser MM/YYYY.");
-        RuleFor(x => x.StartDate).NotEmpty();
-        RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate);
+        RuleFor(x => x.CustomerId).NotEmpty().WithMessage("O depositante é obrigatório.");
+        RuleFor(x => x.ReferenceMonth).NotEmpty().Matches(@"^(0[1-9]|1[0-2])\/\d{4}$").WithMessage("O formato do mês de referência deve ser MM/yyyy (Ex: 10/2026).");
+        RuleFor(x => x.StartDate).NotEmpty().WithMessage("A data inicial é obrigatória.");
+        RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate).WithMessage("A data final deve ser maior ou igual à data inicial.");
     }
 }
 
@@ -41,23 +41,40 @@ public class GenerateBillingCycleHandler : IRequestHandler<GenerateBillingCycleC
 
         var existingCycle = await _db.BillingCycles
             .Include(c => c.Items)
-            .FirstOrDefaultAsync(c => c.CompanyId == companyId && c.CustomerId == request.CustomerId && c.ReferenceMonth == request.ReferenceMonth, ct);
+                .ThenInclude(i => i.BillingService)
+            .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
+                                      c.CustomerId == request.CustomerId &&
+                                      c.ReferenceMonth == request.ReferenceMonth.Trim(), ct);
+
+        BillingCycle cycle;
 
         if (existingCycle != null)
         {
             if (existingCycle.Status == BillingStatus.Closed)
-                return Results.BadRequest(new { Message = "Já existe uma fatura fechada para este período." });
+                return Results.BadRequest(new { Message = "Este ciclo de faturamento já foi fechado e não permite recálculo." });
 
-            _db.BillingCycles.Remove(existingCycle);
-            await _db.SaveChangesAsync(ct);
+            var autoItemsToRemove = existingCycle.Items
+                .Where(i => i.BillingService != null && i.BillingService.Type == BillingServiceType.Automatic_SQL)
+                .ToList();
+
+            if (autoItemsToRemove.Any())
+            {
+                _db.BillingItems.RemoveRange(autoItemsToRemove);
+            }
+
+            cycle = existingCycle;
         }
-
-        var cycle = new BillingCycle(companyId, request.CustomerId, request.ReferenceMonth, request.StartDate, request.EndDate);
-        _db.BillingCycles.Add(cycle);
+        else
+        {
+            cycle = new BillingCycle(companyId, request.CustomerId, request.ReferenceMonth, request.StartDate, request.EndDate);
+            _db.BillingCycles.Add(cycle);
+        }
 
         var activeTariffs = await _db.CustomerTariffs
             .Include(t => t.BillingService)
-            .Where(t => t.CompanyId == companyId && t.CustomerId == request.CustomerId &&
+            .Where(t => t.CompanyId == companyId &&
+                        t.CustomerId == request.CustomerId &&
+                        t.BillingService.IsActive &&
                         t.ValidFrom <= request.EndDate &&
                         (t.ValidTo == null || t.ValidTo >= request.StartDate))
             .ToListAsync(ct);
@@ -71,18 +88,21 @@ public class GenerateBillingCycleHandler : IRequestHandler<GenerateBillingCycleC
             }
             catch (Exception ex)
             {
-                var errorItem = new BillingItem(cycle.Id, tariff.BillingServiceId, $"{tariff.BillingService.Name} (ERRO)", 0, 0, null, $"Falha SQL: {ex.Message}");
+                var errorItem = new BillingItem(
+                    cycle.Id,
+                    tariff.BillingServiceId,
+                    $"{tariff.BillingService.Name} (ERRO)",
+                    0,
+                    0,
+                    null,
+                    $"Falha SQL: {ex.Message}"
+                );
                 _db.BillingItems.Add(errorItem);
             }
         }
 
-        foreach (var tariff in activeTariffs.Where(t => t.BillingService.Type == BillingServiceType.Manual_Entry))
-        {
-            _db.BillingItems.Add(new BillingItem(cycle.Id, tariff.BillingServiceId, tariff.BillingService.Name, 0, 0, null, "Aguardando apontamento manual"));
-        }
-
         await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { cycle.Id });
+        return Results.Ok(new { cycle.Id, Message = "Ciclo de faturamento processado com sucesso. Os apontamentos operacionais foram preservados." });
     }
 }
 
@@ -90,9 +110,10 @@ public static class GenerateBillingCycleEndpoints
 {
     public static void MapGenerateBillingCycleEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/billing/cycles/generate", async (GenerateBillingCycleCommand cmd, IMediator mediator) => await mediator.Send(cmd))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.Manage);
+        app.MapPost("/api/billing/cycles/generate", async (GenerateBillingCycleCommand cmd, IMediator mediator) =>
+            await mediator.Send(cmd))
+            .WithTags("Billing")
+            .RequireAuthorization()
+            .RequirePermission(Permissions.Billing.Manage);
     }
 }

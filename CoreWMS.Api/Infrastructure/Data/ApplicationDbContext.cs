@@ -73,6 +73,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<UserCustomer> UserCustomers => Set<UserCustomer>();
     public DbSet<OutboundOrder> OutboundOrders => Set<OutboundOrder>();
     public DbSet<OutboundOrderItem> OutboundOrderItems => Set<OutboundOrderItem>();
+    public DbSet<OutboundItemPack> OutboundItemPacks => Set<OutboundItemPack>();
+    public DbSet<OutboundVolume> OutboundVolumes => Set<OutboundVolume>();
     public DbSet<OutboundAllocation> OutboundAllocations => Set<OutboundAllocation>();
     public DbSet<FiscalOperationRule> FiscalOperationRules => Set<FiscalOperationRule>();
     public DbSet<FiscalOperationRuleException> FiscalOperationRuleExceptions => Set<FiscalOperationRuleException>();
@@ -599,6 +601,45 @@ public class ApplicationDbContext : DbContext
 
             b.HasOne(x => x.OutboundOrder).WithMany(o => o.Items).HasForeignKey(x => x.OutboundOrderId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<OutboundItemPack>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.QuantityPerVolume).HasPrecision(28, 10);
+            b.Ignore(x => x.TotalQuantity);
+
+            b.HasOne(x => x.OutboundOrder)
+                .WithMany()
+                .HasForeignKey(x => x.OutboundOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.OutboundOrderItem)
+                .WithMany()
+                .HasForeignKey(x => x.OutboundOrderItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.PackagingType)
+                .WithMany()
+                .HasForeignKey(x => x.PackagingTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => x.OutboundOrderId);
+            b.HasIndex(x => x.OutboundOrderItemId);
+        });
+
+        builder.Entity<OutboundVolume>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.VolumeLpn).HasMaxLength(100).IsRequired();
+            b.Property(x => x.GrossWeight).HasPrecision(18, 3);
+
+            b.HasOne(x => x.PackagingType)
+                .WithMany()
+                .HasForeignKey(x => x.PackagingTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasIndex(x => x.OutboundOrderId);
         });
 
         builder.Entity<OutboundAllocation>(b =>

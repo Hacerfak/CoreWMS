@@ -26,13 +26,26 @@ public class NfeParserService : INfeParserService
         var dhEmiStr = ide.Element(Ns + "dhEmi")?.Value;
         var issueDate = DateTime.TryParse(dhEmiStr, out var d) ? d.ToUniversalTime() : DateTime.UtcNow;
 
+        // Extração do número e da série da NF
+        string? invoiceNumber = ide.Element(Ns + "nNF")?.Value;
+        string? invoiceSerie = ide.Element(Ns + "serie")?.Value;
+
+        if (string.IsNullOrWhiteSpace(invoiceNumber) && accessKey.Length == 44 && long.TryParse(accessKey.Substring(25, 9), out var nNfVal))
+        {
+            invoiceNumber = nNfVal.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(invoiceSerie) && accessKey.Length == 44 && int.TryParse(accessKey.Substring(22, 3), out var serieVal))
+        {
+            invoiceSerie = serieVal.ToString();
+        }
+
         var emit = infNfe.Element(Ns + "emit") ?? throw new ArgumentException("Tag <emit> não encontrada.");
         var dest = infNfe.Element(Ns + "dest") ?? throw new ArgumentException("Tag <dest> não encontrada.");
 
         var enderEmit = emit.Element(Ns + "enderEmit");
         var enderDest = dest.Element(Ns + "enderDest");
 
-        // Parse Emitente
         var issuerCnpj = emit.Element(Ns + "CNPJ")?.Value ?? emit.Element(Ns + "CPF")?.Value ?? "";
         var issuerName = emit.Element(Ns + "xNome")?.Value ?? "";
         int? crt = int.TryParse(emit.Element(Ns + "CRT")?.Value, out var cVal) ? cVal : null;
@@ -57,7 +70,6 @@ public class NfeParserService : INfeParserService
             enderEmit?.Element(Ns + "fone")?.Value
         );
 
-        // Parse Destinatário
         var destCnpjCpf = dest.Element(Ns + "CNPJ")?.Value ?? dest.Element(Ns + "CPF")?.Value ?? "";
         var destName = dest.Element(Ns + "xNome")?.Value ?? "";
         var destIe = dest.Element(Ns + "IE")?.Value;
@@ -79,13 +91,12 @@ public class NfeParserService : INfeParserService
             enderDest?.Element(Ns + "CEP")?.Value
         );
 
-        // Parse Transporte & Veículo
         var transp = infNfe.Element(Ns + "transp");
         int freightModality = int.TryParse(transp?.Element(Ns + "modFrete")?.Value, out var modVal) ? modVal : 9;
-
         string? carrierCnpjCpf = null;
         string? carrierName = null;
         string? carrierIe = null;
+
         var transporta = transp?.Element(Ns + "transporta");
         if (transporta != null)
         {
@@ -103,7 +114,6 @@ public class NfeParserService : INfeParserService
             vehiclePlateState = veicTransp.Element(Ns + "UF")?.Value;
         }
 
-        // Parse Volumes & Pesos (Soma todas as ocorrências de <vol>)
         decimal totalNetWeight = 0m;
         decimal totalGrossWeight = 0m;
         int totalVolumes = 0;
@@ -115,16 +125,13 @@ public class NfeParserService : INfeParserService
             {
                 totalNetWeight += ParseDecimal(vol.Element(Ns + "pesoL")?.Value);
                 totalGrossWeight += ParseDecimal(vol.Element(Ns + "pesoB")?.Value);
-
                 if (int.TryParse(vol.Element(Ns + "qVol")?.Value, out var qv))
                     totalVolumes += qv;
-
                 if (string.IsNullOrWhiteSpace(volumeSpecies))
                     volumeSpecies = vol.Element(Ns + "esp")?.Value;
             }
         }
 
-        // Parse Itens
         var items = new List<NfeParsedItem>();
         foreach (var det in infNfe.Elements(Ns + "det"))
         {
@@ -138,7 +145,6 @@ public class NfeParserService : INfeParserService
             string? batch = null;
             DateTime? mfgDate = null;
             DateTime? expDate = null;
-
             var rastro = prod.Element(Ns + "rastro");
             if (rastro != null)
             {
@@ -186,7 +192,9 @@ public class NfeParserService : INfeParserService
             totalNetWeight > 0 ? totalNetWeight : null,
             totalGrossWeight > 0 ? totalGrossWeight : null,
             totalVolumes > 0 ? totalVolumes : null,
-            volumeSpecies
+            volumeSpecies,
+            invoiceNumber,
+            invoiceSerie
         );
     }
 

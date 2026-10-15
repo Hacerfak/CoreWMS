@@ -28,14 +28,17 @@ public class DeleteBillingServiceHandler : IRequestHandler<DeleteBillingServiceC
 
         if (service == null) return Results.NotFound();
 
-        // Checa se está vinculado a alguma tarifa ativa
         var isUsedInTariff = await _db.CustomerTariffs.AnyAsync(t => t.BillingServiceId == request.Id, ct);
         if (isUsedInTariff)
-            return Results.BadRequest(new { Message = "Este serviço não pode ser excluído pois possui tarifas vinculadas a depositantes." });
+        {
+            return Results.BadRequest(new
+            {
+                Message = "Este serviço não pode ser excluído pois possui tarifas vinculadas a clientes depositantes. Desative-o caso não deseje mais utilizá-lo."
+            });
+        }
 
         _db.BillingServices.Remove(service);
         await _db.SaveChangesAsync(ct);
-
         return Results.NoContent();
     }
 }
@@ -46,8 +49,8 @@ public static class DeleteBillingServiceEndpoints
     {
         app.MapDelete("/api/billing/services/{id:guid}", async (Guid id, IMediator mediator) =>
             await mediator.Send(new DeleteBillingServiceCommand(id)))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.Manage);
+            .WithTags("Billing")
+            .RequireAuthorization()
+            .RequirePermission(Permissions.Billing.Manage);
     }
 }
