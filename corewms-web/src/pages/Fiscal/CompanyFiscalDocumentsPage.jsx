@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
-    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2, Layers, AlertTriangle, ShieldCheck, ChevronRight
+    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Outbound/CancelNfeModal';
 import CorrectionLetterModal from '@/pages/Outbound/CorrectionLetterModal';
 
-const ESTADOS_BR = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
-
 export default function CompanyFiscalDocumentsPage() {
+    const navigate = useNavigate();
+
     const [documents, setDocuments] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -30,7 +30,7 @@ export default function CompanyFiscalDocumentsPage() {
     // Downloads
     const [downloadingDocId, setDownloadingDocId] = useState(null);
 
-    // Modais Fiscais (Eventos)
+    // Modais Fiscais (Eventos SEFAZ)
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [selectedDocForCancel, setSelectedDocForCancel] = useState(null);
 
@@ -40,34 +40,6 @@ export default function CompanyFiscalDocumentsPage() {
     // Modal de Detalhes & Eventos
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [selectedDocForDetails, setSelectedDocForDetails] = useState(null);
-
-    // Modal de Emissão de Nota Avulsa
-    const [isStandaloneModalOpen, setIsStandaloneModalOpen] = useState(false);
-    const [fiscalRules, setFiscalRules] = useState([]);
-    const [availableProducts, setAvailableProducts] = useState([]);
-    const [isSubmittingStandalone, setIsSubmittingStandalone] = useState(false);
-
-    // Form Avulso
-    const [saRuleId, setSaRuleId] = useState('');
-    const [saName, setSaName] = useState('');
-    const [saCnpjCpf, setSaCnpjCpf] = useState('');
-    const [saIe, setSaIe] = useState('');
-    const [saIeIndicator, setSaIeIndicator] = useState('9');
-    const [saStreet, setSaStreet] = useState('');
-    const [saNumber, setSaNumber] = useState('');
-    const [saComplement, setSaComplement] = useState('');
-    const [saNeighborhood, setSaNeighborhood] = useState('');
-    const [saCityCode, setSaCityCode] = useState('4305108');
-    const [saCity, setSaCity] = useState('');
-    const [saState, setSaState] = useState('RS');
-    const [saZipCode, setSaZipCode] = useState('');
-    const [saIndFinal, setSaIndFinal] = useState('1');
-    const [saIndPres, setSaIndPres] = useState('9');
-    const [saTpImp, setSaTpImp] = useState('1');
-    const [saNotes, setSaNotes] = useState('');
-    const [saItems, setSaItems] = useState([
-        { productId: '', quantity: '1', unitValue: '0.00' }
-    ]);
 
     const loadDocuments = async () => {
         try {
@@ -164,98 +136,6 @@ export default function CompanyFiscalDocumentsPage() {
         }
     };
 
-    // Abre o modal de emissão avulsa
-    const handleOpenStandaloneModal = async () => {
-        try {
-            const [rulesRes, prodsRes] = await Promise.all([
-                customInstance({ url: '/api/fiscal/rules', method: 'GET' }),
-                customInstance({ url: '/api/products', method: 'GET' })
-            ]);
-            setFiscalRules(rulesRes?.data || rulesRes || []);
-            setAvailableProducts(prodsRes?.data?.items || prodsRes?.data || prodsRes || []);
-
-            setSaRuleId((rulesRes?.[0]?.id) || '');
-            setSaItems([{ productId: '', quantity: '1', unitValue: '10.00' }]);
-            setIsStandaloneModalOpen(true);
-        } catch {
-            toast.error('Erro ao carregar dados auxiliares para emissão avulsa.');
-        }
-    };
-
-    const handleAddStandaloneItem = () => {
-        setSaItems(prev => [...prev, { productId: '', quantity: '1', unitValue: '0.00' }]);
-    };
-
-    const handleRemoveStandaloneItem = (index) => {
-        setSaItems(prev => prev.filter((_, idx) => idx !== index));
-    };
-
-    const handleItemChange = (index, field, value) => {
-        setSaItems(prev => {
-            const copy = [...prev];
-            copy[index] = { ...copy[index], [field]: value };
-            return copy;
-        });
-    };
-
-    const handleSaveStandaloneNfe = async (e) => {
-        e.preventDefault();
-
-        if (!saRuleId) {
-            toast.error('Selecione uma Natureza de Operação.');
-            return;
-        }
-
-        const validItems = saItems.filter(i => i.productId && Number(i.quantity) > 0);
-        if (validItems.length === 0) {
-            toast.error('Adicione ao menos um produto válido com quantidade maior que zero.');
-            return;
-        }
-
-        try {
-            setIsSubmittingStandalone(true);
-            const payload = {
-                fiscalRuleId: saRuleId,
-                destinationName: saName,
-                destinationCnpjCpf: saCnpjCpf,
-                destinationStateRegistration: saIe,
-                destinationIeIndicator: Number(saIeIndicator),
-                destinationStreet: saStreet,
-                destinationNumber: saNumber,
-                destinationComplement: saComplement,
-                destinationNeighborhood: saNeighborhood,
-                destinationCityCode: Number(saCityCode),
-                destinationCity: saCity,
-                destinationState: saState,
-                destinationZipCode: saZipCode,
-                indFinal: Number(saIndFinal),
-                indPres: Number(saIndPres),
-                tpImp: Number(saTpImp),
-                additionalNotes: saNotes,
-                items: validItems.map(i => ({
-                    productId: i.productId,
-                    quantity: Number(i.quantity),
-                    unitValue: Number(i.unitValue)
-                }))
-            };
-
-            const res = await customInstance({
-                url: '/api/fiscal/documents/standalone/emit',
-                method: 'POST',
-                data: payload
-            });
-
-            const data = res?.data || res;
-            toast.success(data?.message || 'NF-e Avulsa Autorizada com Sucesso!');
-            setIsStandaloneModalOpen(false);
-            loadDocuments();
-        } catch (error) {
-            toast.error(error.response?.data?.message || error.message || 'Erro ao emitir NF-e avulsa.');
-        } finally {
-            setIsSubmittingStandalone(false);
-        }
-    };
-
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in duration-300">
             {/* CABEÇALHO */}
@@ -266,7 +146,8 @@ export default function CompanyFiscalDocumentsPage() {
                         Gerencie todas as notas fiscais emitidas, eventos vinculados (CC-e e Cancelamento) e emissões avulsas.
                     </p>
                 </div>
-                <Button onClick={handleOpenStandaloneModal} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
+                {/* NAVEGAÇÃO DIRETA PARA A PÁGINA DEDICADA */}
+                <Button onClick={() => navigate('/fiscal/documentos/novo')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
                     <Plus className="mr-1.5 h-4 w-4" /> Nova NF-e Avulsa
                 </Button>
             </div>
@@ -426,7 +307,6 @@ export default function CompanyFiscalDocumentsPage() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-1">
-                                                    {/* VER DETALHES */}
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
@@ -437,7 +317,6 @@ export default function CompanyFiscalDocumentsPage() {
                                                         <Eye size={14} className="text-slate-600" />
                                                     </Button>
 
-                                                    {/* SE AUTORIZADA -> DOWNLOADS E EVENTOS */}
                                                     {isAuthorized && (
                                                         <>
                                                             <Button
@@ -489,14 +368,13 @@ export default function CompanyFiscalDocumentsPage() {
                                                         </>
                                                     )}
 
-                                                    {/* SE PENDENTE -> PERMITE EXCLUIR PARA GERAR NOVA */}
                                                     {isPending && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
                                                             onClick={() => handleDeletePendingDoc(doc)}
                                                             className="h-8 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 font-medium px-2"
-                                                            title="Excluir nota pendente para liberar nova emissão"
+                                                            title="Excluir nota pendente"
                                                         >
                                                             <Trash2 size={13} className="mr-1 text-rose-600" /> Excluir
                                                         </Button>
@@ -554,7 +432,6 @@ export default function CompanyFiscalDocumentsPage() {
                                 </div>
                             </div>
 
-                            {/* TABELA DE EVENTOS VINCULADOS */}
                             <div className="space-y-2">
                                 <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
                                     Eventos Fiscais Registrados na SEFAZ ({selectedDocForDetails.linkedEvents?.length || 0})
@@ -616,172 +493,7 @@ export default function CompanyFiscalDocumentsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* MODAL EMISSÃO NOTA AVULSA */}
-            <Dialog open={isStandaloneModalOpen} onOpenChange={setIsStandaloneModalOpen}>
-                <DialogContent className="sm:max-w-3xl bg-white max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 font-bold flex items-center gap-2">
-                            <Plus className="text-orange-600" size={20} /> Emissão de Nota Fiscal Avulsa (Sem Pedido)
-                        </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            Preencha os dados do destinatário e adicione produtos para gerar uma NF-e independente.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <form onSubmit={handleSaveStandaloneNfe} className="space-y-4 py-2 text-xs">
-                        {/* NATUREZA DA OPERAÇÃO */}
-                        <div className="space-y-1">
-                            <Label className="font-semibold text-slate-800">Natureza de Operação (Regra Fiscal) *</Label>
-                            <Select value={saRuleId} onValueChange={setSaRuleId}>
-                                <SelectTrigger className="bg-white"><SelectValue placeholder="Selecione a Natureza" /></SelectTrigger>
-                                <SelectContent>
-                                    {fiscalRules.map(r => (
-                                        <SelectItem key={r.id} value={r.id}>
-                                            {r.description} (CFOP {r.cfopStateInternal} / {r.cfopInterstate})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        {/* DADOS DO DESTINATÁRIO */}
-                        <div className="p-3 bg-slate-50 border rounded-xl space-y-3">
-                            <span className="font-bold text-slate-800 uppercase text-[10px] block">Destinatário & Entrega</span>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="space-y-1 md:col-span-2">
-                                    <Label>Razão Social / Nome *</Label>
-                                    <Input value={saName} onChange={e => setSaName(e.target.value)} required placeholder="Nome do Destinatário" />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>CNPJ / CPF *</Label>
-                                    <Input value={saCnpjCpf} onChange={e => setSaCnpjCpf(e.target.value)} required placeholder="Apenas números" className="font-mono" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div className="space-y-1">
-                                    <Label>Indicador IE</Label>
-                                    <Select value={saIeIndicator} onValueChange={setSaIeIndicator}>
-                                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="1">1 - Contribuinte</SelectItem>
-                                            <SelectItem value="2">2 - Isento</SelectItem>
-                                            <SelectItem value="9">9 - Não Contribuinte</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Inscrição Estadual</Label>
-                                    <Input value={saIe} onChange={e => setSaIe(e.target.value)} placeholder="ISENTO" className="font-mono" />
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>UF Destino *</Label>
-                                    <Select value={saState} onValueChange={setSaState}>
-                                        <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Município *</Label>
-                                    <Input value={saCity} onChange={e => setSaCity(e.target.value)} required placeholder="Nome da Cidade" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="space-y-1 md:col-span-2">
-                                    <Label>Logradouro & Número *</Label>
-                                    <div className="flex gap-2">
-                                        <Input value={saStreet} onChange={e => setSaStreet(e.target.value)} required placeholder="Rua / Av" className="flex-1" />
-                                        <Input value={saNumber} onChange={e => setSaNumber(e.target.value)} required placeholder="Nº" className="w-20" />
-                                    </div>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>Bairro *</Label>
-                                    <Input value={saNeighborhood} onChange={e => setSaNeighborhood(e.target.value)} required placeholder="Bairro" />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* PRODUTOS / ITENS DA NOTA */}
-                        <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className="font-bold text-slate-800 uppercase text-[10px] block">Itens da Nota Fiscal</span>
-                                <Button type="button" size="sm" variant="outline" onClick={handleAddStandaloneItem} className="h-7 text-[11px]">
-                                    <Plus size={12} className="mr-1" /> Adicionar Produto
-                                </Button>
-                            </div>
-
-                            <div className="space-y-2">
-                                {saItems.map((item, idx) => (
-                                    <div key={idx} className="flex gap-2 items-end p-2 bg-slate-50 rounded-lg border">
-                                        <div className="flex-1 space-y-1">
-                                            <Label className="text-[10px]">Produto / SKU *</Label>
-                                            <Select value={item.productId} onValueChange={(val) => handleItemChange(idx, 'productId', val)}>
-                                                <SelectTrigger className="bg-white h-8 text-xs"><SelectValue placeholder="Selecione o Produto" /></SelectTrigger>
-                                                <SelectContent>
-                                                    {availableProducts.map(p => (
-                                                        <SelectItem key={p.id} value={p.id}>{p.sku} - {p.description}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="w-24 space-y-1">
-                                            <Label className="text-[10px]">Qtd *</Label>
-                                            <Input
-                                                type="number"
-                                                step="0.001"
-                                                value={item.quantity}
-                                                onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                                                className="h-8 font-mono bg-white"
-                                            />
-                                        </div>
-
-                                        <div className="w-28 space-y-1">
-                                            <Label className="text-[10px]">Unitário (R$) *</Label>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                value={item.unitValue}
-                                                onChange={(e) => handleItemChange(idx, 'unitValue', e.target.value)}
-                                                className="h-8 font-mono bg-white"
-                                            />
-                                        </div>
-
-                                        {saItems.length > 1 && (
-                                            <Button type="button" size="sm" variant="ghost" onClick={() => handleRemoveStandaloneItem(idx)} className="h-8 w-8 p-0 text-rose-600">
-                                                <Trash2 size={13} />
-                                            </Button>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <Label>Observações Fiscais (infCpl)</Label>
-                            <Input value={saNotes} onChange={e => setSaNotes(e.target.value)} placeholder="Informações complementares de interesse do contribuinte..." className="font-mono text-xs" />
-                        </div>
-
-                        <DialogFooter className="pt-2">
-                            <Button type="button" variant="outline" onClick={() => setIsStandaloneModalOpen(false)} disabled={isSubmittingStandalone}>Cancelar</Button>
-                            <Button type="submit" disabled={isSubmittingStandalone} className="bg-orange-600 hover:bg-orange-700 text-white font-bold">
-                                {isSubmittingStandalone ? (
-                                    <>
-                                        <Loader2 className="animate-spin mr-1.5 h-4 w-4" /> Transmitindo à SEFAZ...
-                                    </>
-                                ) : (
-                                    'Assinar & Transmitir NF-e Avulsa'
-                                )}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* MODAIS DE EVENTOS */}
+            {/* MODAL CANCELAMENTO */}
             <CancelNfeModal
                 open={isCancelModalOpen}
                 onOpenChange={setIsCancelModalOpen}
@@ -791,6 +503,7 @@ export default function CompanyFiscalDocumentsPage() {
                 onSuccess={loadDocuments}
             />
 
+            {/* MODAL CARTA DE CORREÇÃO (CC-e) */}
             <CorrectionLetterModal
                 open={isCorrectionModalOpen}
                 onOpenChange={setIsCorrectionModalOpen}

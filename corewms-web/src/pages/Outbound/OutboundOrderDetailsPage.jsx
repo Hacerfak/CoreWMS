@@ -694,6 +694,18 @@ export default function OutboundOrderDetailsPage() {
                                 </div>
                             </div>
 
+                            <div className="pt-1 border-t border-slate-100 flex justify-between items-center">
+                                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Modalidade do Frete</span>
+                                <span className="font-semibold text-slate-800 text-xs">
+                                    {order?.freightModality === 0 && '0 - Remetente (CIF)'}
+                                    {order?.freightModality === 1 && '1 - Destinatário (FOB)'}
+                                    {order?.freightModality === 2 && '2 - Terceiros'}
+                                    {order?.freightModality === 3 && '3 - Próprio Remetente'}
+                                    {order?.freightModality === 4 && '4 - Próprio Destinatário'}
+                                    {(order?.freightModality === 9 || order?.freightModality === undefined || order?.freightModality === null) && '9 - Sem Frete'}
+                                </span>
+                            </div>
+
                             <div className="pt-1 border-t border-slate-100">
                                 <span className="text-slate-400 block text-[10px] uppercase font-semibold">Doca de Embarque</span>
                                 <span className="font-mono font-bold text-slate-900">{order?.dockLocationName || 'Aguardando Packing'}</span>

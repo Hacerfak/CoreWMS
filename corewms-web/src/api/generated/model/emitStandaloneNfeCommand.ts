@@ -37,4 +37,15 @@ export interface EmitStandaloneNfeCommand {
   additionalNotes?: string | null;
   /** @nullable */
   items?: StandaloneNfeItemCommand[] | null;
+  freightModality?: number;
+  /** @nullable */
+  carrierCnpjCpf?: string | null;
+  /** @nullable */
+  carrierName?: string | null;
+  /** @nullable */
+  carrierStateRegistration?: string | null;
+  /** @nullable */
+  vehiclePlate?: string | null;
+  /** @nullable */
+  vehiclePlateState?: string | null;
 }

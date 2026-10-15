@@ -47,7 +47,13 @@ public record StandaloneNfeInput(
     int? IndPres,
     int? TpImp,
     string? AdditionalNotes,
-    List<StandaloneNfeItemInput> Items
+    List<StandaloneNfeItemInput> Items,
+    int FreightModality = 9,
+    string? CarrierCnpjCpf = null,
+    string? CarrierName = null,
+    string? CarrierStateRegistration = null,
+    string? VehiclePlate = null,
+    string? VehiclePlateState = null
 );
 
 public class NfeBuilderService
@@ -227,7 +233,45 @@ public class NfeBuilderService
         nfe.infNFe.ide = BuildIdeStandalone(company, input, destState, isInterstate, rule.Description, rule.Finalidade);
         nfe.infNFe.emit = BuildEmitente(company);
         nfe.infNFe.dest = BuildDestinatarioStandalone(company, input);
-        nfe.infNFe.transp = new transp { modFrete = ModalidadeFrete.mfSemFrete };
+
+        ModalidadeFrete modFrete = input.FreightModality switch
+        {
+            0 => ModalidadeFrete.mfContaEmitenteOumfContaRemetente,
+            1 => ModalidadeFrete.mfContaDestinatario,
+            2 => ModalidadeFrete.mfContaTerceiros,
+            3 => ModalidadeFrete.mfProprioContaRemente,
+            4 => ModalidadeFrete.mfProprioContaDestinatario,
+            _ => ModalidadeFrete.mfSemFrete
+        };
+
+        var t = new transp { modFrete = modFrete };
+
+        if (!string.IsNullOrWhiteSpace(input.CarrierCnpjCpf) || !string.IsNullOrWhiteSpace(input.CarrierName))
+        {
+            t.transporta = new transporta
+            {
+                xNome = input.CarrierName?.Trim(),
+                IE = input.CarrierStateRegistration?.Trim()
+            };
+
+            if (!string.IsNullOrWhiteSpace(input.CarrierCnpjCpf))
+            {
+                var cleanCnpj = new string(input.CarrierCnpjCpf.Where(char.IsDigit).ToArray());
+                if (cleanCnpj.Length == 14) t.transporta.CNPJ = cleanCnpj;
+                else if (cleanCnpj.Length == 11) t.transporta.CPF = cleanCnpj;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(input.VehiclePlate))
+        {
+            t.veicTransp = new veicTransp
+            {
+                placa = input.VehiclePlate.Trim().ToUpper(),
+                UF = !string.IsNullOrWhiteSpace(input.VehiclePlateState) ? input.VehiclePlateState.Trim().ToUpper() : "RS"
+            };
+        }
+
+        nfe.infNFe.transp = t;
 
         if (!string.IsNullOrWhiteSpace(input.AdditionalNotes))
         {
@@ -965,14 +1009,16 @@ public class NfeBuilderService
         return d;
     }
 
-    private transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
+    private static transp BuildTransporte(OutboundOrder order, List<OutboundVolume> volumes)
     {
         ModalidadeFrete modFrete = order.FreightModality switch
         {
             0 => ModalidadeFrete.mfContaEmitenteOumfContaRemetente,
             1 => ModalidadeFrete.mfContaDestinatario,
             2 => ModalidadeFrete.mfContaTerceiros,
-            _ => ModalidadeFrete.mfSemFrete
+            3 => ModalidadeFrete.mfProprioContaRemente,      // 3 = Transporte Próprio por conta do Remetente
+            4 => ModalidadeFrete.mfProprioContaDestinatario, // 4 = Transporte Próprio por conta do Destinatário
+            _ => ModalidadeFrete.mfSemFrete                  // 9 = Sem Ocorrência de Transporte
         };
 
         var t = new transp { modFrete = modFrete };
@@ -1011,14 +1057,12 @@ public class NfeBuilderService
             var unitNet = item.Product?.NetWeight ?? 0m;
             var unitGross = item.Product?.GrossWeight ?? 0m;
 
-            // Se o peso bruto unitário estiver zerado, assume o líquido
             if (unitGross <= 0m) unitGross = unitNet;
 
             totalPesoLiquido += item.PackedQuantity * unitNet;
             totalPesoBruto += item.PackedQuantity * unitGross;
         }
 
-        // Se houver pesagem real registrada nos volumes do Packing, prioriza o peso bruto físico
         if (volumes != null && volumes.Any() && volumes.Sum(v => v.GrossWeight) > 0)
         {
             totalPesoBruto = volumes.Sum(v => v.GrossWeight);
@@ -1034,8 +1078,8 @@ public class NfeBuilderService
             {
                 qVol = quantidadeVolumes,
                 esp = volumes != null && volumes.Any() ? volumes.First().PackagingType?.Description ?? "VOLUMES" : "VOLUMES",
-                pesoL = Math.Round(totalPesoLiquido, 3), // Formato 12.3 exigido pela SEFAZ
-                pesoB = Math.Round(totalPesoBruto, 3)    // Formato 12.3 exigido pela SEFAZ
+                pesoL = Math.Round(totalPesoLiquido, 3),
+                pesoB = Math.Round(totalPesoBruto, 3)
             }
         };
 

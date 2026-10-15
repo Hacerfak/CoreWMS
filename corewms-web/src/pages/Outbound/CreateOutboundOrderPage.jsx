@@ -310,14 +310,16 @@ export default function CreateOutboundOrderPage() {
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 md:col-span-2">
                             <Label className="text-xs">Modalidade do Frete *</Label>
                             <Select value={watch('freightModality')?.toString()} onValueChange={(val) => setValue('freightModality', Number(val))}>
-                                <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="0">0 - Contratação pelo Remetente (CIF)</SelectItem>
-                                    <SelectItem value="1">1 - Contratação pelo Destinatário (FOB)</SelectItem>
-                                    <SelectItem value="2">2 - Contratação por Terceiros</SelectItem>
+                                    <SelectItem value="0">0 - Contratação do Frete por conta do Remetente (CIF)</SelectItem>
+                                    <SelectItem value="1">1 - Contratação do Frete por conta do Destinatário (FOB)</SelectItem>
+                                    <SelectItem value="2">2 - Contratação do Frete por conta de Terceiros</SelectItem>
+                                    <SelectItem value="3">3 - Transporte Próprio por conta do Remetente</SelectItem>
+                                    <SelectItem value="4">4 - Transporte Próprio por conta do Destinatário</SelectItem>
                                     <SelectItem value="9">9 - Sem Ocorrência de Transporte</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -326,7 +328,7 @@ export default function CreateOutboundOrderPage() {
                         <div className="space-y-1.5">
                             <Label className="text-xs">CNPJ Transportadora</Label>
                             <div className="flex gap-2">
-                                <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white" />
+                                <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white h-9" />
                                 <Button
                                     type="button" variant="outline"
                                     onClick={handleConsultCarrierSefaz}
@@ -372,7 +374,7 @@ export default function CreateOutboundOrderPage() {
                         <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs bg-white" />
                     </div>
                 </div>
-            </form>
-        </div>
+            </form >
+        </div >
     );
 }

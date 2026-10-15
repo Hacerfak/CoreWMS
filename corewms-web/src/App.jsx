@@ -39,6 +39,7 @@ import OutboundFiscalReviewPage from '@/pages/Outbound/OutboundFiscalReviewPage'
 import AlocacaoInteligentePage from '@/pages/Inbound/AlocacaoInteligentePage';
 import FiscalOperationRulesPage from '@/pages/Fiscal/FiscalOperationRulesPage';
 import CompanyFiscalDocumentsPage from '@/pages/Fiscal/CompanyFiscalDocumentsPage';
+import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -174,6 +175,7 @@ export default function App() {
                 <Route path="/outbound/revisao-fiscal/:id" element={<OutboundFiscalReviewPage />} />
                 <Route path="/fiscal/regras" element={<FiscalOperationRulesPage />} />
                 <Route path="/fiscal/documentos" element={<CompanyFiscalDocumentsPage />} />
+                <Route path="/fiscal/documentos/novo" element={<CreateStandaloneNfePage />} />
               </Route>
 
             </Route>
