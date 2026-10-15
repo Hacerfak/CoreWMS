@@ -31,6 +31,7 @@ public class SefazStatusServicoService : ISefazStatusServicoService
                 throw new ArgumentException($"UF '{uf}' é inválida.");
 
             var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, ambiente, certBytes, certPassword);
+            cfg.ValidarSchemas = false; // <-- Desabilita validação de schemas
             using var servicoSefaz = new ServicosNFe(cfg, certificado);
 
             var retorno = servicoSefaz.NfeStatusServico();

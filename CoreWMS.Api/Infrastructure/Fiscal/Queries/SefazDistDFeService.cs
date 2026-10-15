@@ -29,6 +29,7 @@ public record SefazManifestacaoResultDto(
 public interface ISefazDistDFeService
 {
     Task<SefazDistribuicaoResultDto> BaixarDocumentoPorChaveAsync(Company company, string chaveAcesso, TipoAmbiente ambiente = TipoAmbiente.Producao, CancellationToken ct = default);
+    Task<SefazDistribuicaoResultDto> ConsultarDFePorUltimoNsuAsync(Company company, string ultNsu = "0", TipoAmbiente ambiente = TipoAmbiente.Producao, CancellationToken ct = default);
     Task<SefazManifestacaoResultDto> EnviarManifestacaoAsync(Company company, string chaveAcesso, int codigoEvento, string justificativa = "", TipoAmbiente ambiente = TipoAmbiente.Producao, CancellationToken ct = default);
 }
 
@@ -55,6 +56,8 @@ public class SefazDistDFeService : ISefazDistDFeService
             try
             {
                 var config = _zeusConfigurator.GetCompanyConfiguration(company, ambiente);
+                config.ValidarSchemas = false; // <-- Desabilita validação de schemas XSD
+
                 using var servicoNfe = new ServicosNFe(config);
                 string ufArg = ((int)config.cUF).ToString();
 
@@ -75,7 +78,7 @@ public class SefazDistDFeService : ISefazDistDFeService
                 {
                     var procDoc = ret.loteDistDFeInt.FirstOrDefault(d => d.schema != null && d.schema.ToLower().Contains("procnfe"));
 
-                    // Se a SEFAZ retornar apenas o resumo (resNFe), envia Ciência da Operação (210210)
+                    // Se a SEFAZ retornar apenas o resumo (resNFe), envia Ciência da Operação (210210) e refaz a busca
                     if (procDoc == null)
                     {
                         cienciaResult = await EnviarManifestacaoAsync(company, chaveValida, 210210, "", ambiente, ct);
@@ -114,6 +117,53 @@ public class SefazDistDFeService : ISefazDistDFeService
         }, ct);
     }
 
+    public async Task<SefazDistribuicaoResultDto> ConsultarDFePorUltimoNsuAsync(Company company, string ultNsu = "0", TipoAmbiente ambiente = TipoAmbiente.Producao, CancellationToken ct = default)
+    {
+        return await Task.Run(() =>
+        {
+            var documentosLidos = new List<DocumentoZipDto>();
+
+            try
+            {
+                var config = _zeusConfigurator.GetCompanyConfiguration(company, ambiente);
+                config.ValidarSchemas = false; // <-- Desabilita validação de schemas XSD
+
+                using var servicoNfe = new ServicosNFe(config);
+                string ufArg = ((int)config.cUF).ToString();
+
+                var retorno = servicoNfe.NfeDistDFeInteresse(
+                    ufAutor: ufArg,
+                    documento: company.Cnpj,
+                    ultNSU: string.IsNullOrWhiteSpace(ultNsu) ? "0" : ultNsu.Trim(),
+                    nSU: "0",
+                    chNFE: null
+                );
+
+                if (retorno?.Retorno == null)
+                    return new SefazDistribuicaoResultDto(false, ultNsu, "SEFAZ não respondeu à consulta de distribuição DFe.", documentosLidos);
+
+                var ret = retorno.Retorno;
+
+                if (ret.cStat == 138 && ret.loteDistDFeInt != null)
+                {
+                    foreach (var docZip in ret.loteDistDFeInt)
+                    {
+                        var xmlDescompactado = Compressao.Unzip(docZip.XmlNfe);
+                        documentosLidos.Add(new DocumentoZipDto(docZip.NSU.ToString(), docZip.schema ?? "", xmlDescompactado));
+                    }
+
+                    return new SefazDistribuicaoResultDto(true, ret.ultNSU.ToString(), $"[{ret.cStat}] {ret.xMotivo}", documentosLidos);
+                }
+
+                return new SefazDistribuicaoResultDto(ret.cStat == 137, ret.ultNSU.ToString(), $"SEFAZ [{ret.cStat}]: {ret.xMotivo}", documentosLidos);
+            }
+            catch (Exception ex)
+            {
+                return new SefazDistribuicaoResultDto(false, ultNsu, $"Falha na consulta DFe SEFAZ: {ex.Message}", documentosLidos);
+            }
+        }, ct);
+    }
+
     public async Task<SefazManifestacaoResultDto> EnviarManifestacaoAsync(
         Company company,
         string chaveAcesso,
@@ -127,6 +177,8 @@ public class SefazDistDFeService : ISefazDistDFeService
             try
             {
                 var config = _zeusConfigurator.GetCompanyConfiguration(company, ambiente);
+                config.ValidarSchemas = false; // <-- Desabilita validação de schemas XSD
+
                 using var servicoNfe = new ServicosNFe(config);
 
                 int idLote = Convert.ToInt32(DateTime.Now.ToString("HHmmss"));
@@ -163,12 +215,14 @@ public class SefazDistDFeService : ISefazDistDFeService
                 if (retEnv.retEvento != null && retEnv.retEvento.Count > 0)
                 {
                     var retEv = retEnv.retEvento[0].infEvento;
-                    if (retEv.cStat == 135 || retEv.cStat == 573) // 135 = Evento vinculado, 573 = Duplicidade
+
+                    // 135 = Evento vinculado com sucesso | 573 = Duplicidade de evento (já manifestado anteriormente)
+                    if (retEv.cStat == 135 || retEv.cStat == 573)
                     {
                         return new SefazManifestacaoResultDto(
                             true,
                             $"[{retEv.cStat}] {retEv.xMotivo}",
-                            Protocolo: retEv.nProt,
+                            Protocolo: retEv.nProt ?? "EVENTO_JA_REGISTRADO",
                             DataEvento: retEv.dhRegEvento.Date
                         );
                     }
@@ -176,7 +230,7 @@ public class SefazDistDFeService : ISefazDistDFeService
                     return new SefazManifestacaoResultDto(false, $"Rejeição SEFAZ [{retEv.cStat}]: {retEv.xMotivo}");
                 }
 
-                return new SefazManifestacaoResultDto(false, "SEFAZ retornou lote vazio para o evento.");
+                return new SefazManifestacaoResultDto(false, "SEFAZ retornou lote vazio para o evento de manifestação.");
             }
             catch (Exception ex)
             {

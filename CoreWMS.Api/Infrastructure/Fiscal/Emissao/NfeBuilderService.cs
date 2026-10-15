@@ -133,10 +133,28 @@ public class NfeBuilderService
             var cest = ObterCestProduto(item.Product);
             var origem = ObterOrigemProduto(item.Product);
             var cEan = string.IsNullOrWhiteSpace(item.Product.BaseBarcode) ? "SEM GTIN" : item.Product.BaseBarcode.Trim();
-            var valorTotalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
 
             var taxParams = ResolverParametrosItem(rule, destState, ncm, origem);
+            // CFOP resolvido para a linha (base x exceção)
             var cfopStr = isInterstate ? taxParams.CfopInterstate : taxParams.CfopStateInternal;
+
+            // IDENTIFICAÇÃO DO RETORNO PELO CFOP OFICIAL DE ARMAZÉM GERAL (5906, 6906, 5907, 6907)
+            bool isRetornoArmazem = cfopStr is "5906" or "6906" or "5907" or "6907"
+                                 || rule.CfopStateInternal is "5906" or "5907";
+
+            decimal vUnCom;
+            if (isRetornoArmazem)
+            {
+                // Retorno Físico ou Simbólico: SEMPRE o valor original de entrada da HU (remessa original do depositante)
+                vUnCom = item.InboundUnitValue > 0 ? item.InboundUnitValue : item.UnitValue;
+            }
+            else
+            {
+                // Remessa por Conta e Ordem (5923/6923): SEMPRE o valor de venda faturado na NF-e do cliente
+                vUnCom = item.UnitValue > 0 ? item.UnitValue : item.InboundUnitValue;
+            }
+
+            var valorTotalItem = Math.Round(item.PackedQuantity * vUnCom, 2);
 
             var det = new det
             {
@@ -151,12 +169,12 @@ public class NfeBuilderService
                     CFOP = int.Parse(cfopStr),
                     uCom = item.Product.BaseUnit ?? "UN",
                     qCom = item.PackedQuantity,
-                    vUnCom = item.UnitValue,
+                    vUnCom = vUnCom, // <-- Valor correto da operação
                     vProd = valorTotalItem,
                     cEANTrib = cEan,
                     uTrib = item.Product.BaseUnit ?? "UN",
                     qTrib = item.PackedQuantity,
-                    vUnTrib = item.UnitValue,
+                    vUnTrib = vUnCom, // <-- Valor correto da operação
                     indTot = IndicadorTotal.ValorDoItemCompoeTotalNF
                 },
                 imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)

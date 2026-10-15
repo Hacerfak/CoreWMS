@@ -64,6 +64,14 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(request.CustomerId))
             return Results.Forbid();
 
+        if (!request.IsReturnToCustomer)
+        {
+            return Results.BadRequest(new
+            {
+                Message = "Operações de Venda por Conta e Ordem (entrega a terceiros) não podem ser criadas manualmente. Importe o XML da NF-e de venda emitida pelo depositante para garantir a integridade dos valores e dados fiscais."
+            });
+        }
+
         if (!string.IsNullOrWhiteSpace(request.OrderNumber) &&
             await _db.OutboundOrders.AnyAsync(o => o.CompanyId == companyId && o.OrderNumber == request.OrderNumber.Trim(), ct))
         {

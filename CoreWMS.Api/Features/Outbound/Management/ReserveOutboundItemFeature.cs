@@ -40,8 +40,17 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
-        if (order.Status != OutboundOrderStatus.Pending)
-            return Results.BadRequest(new { Message = "Apenas pedidos em status Pendente podem receber itens." });
+
+        // Permite adicionar enquanto Pending ou Allocated; bloqueia se Picking, Packing, ReadyToShip, Shipped ou Canceled
+        if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
+            return Results.BadRequest(new { Message = "Não é possível adicionar itens após o início da separação (Picking)." });
+
+        // Trava física: se qualquer volume deste pedido já tiver sido bipado no coletor, bloqueia
+        var hasStartedPicking = await _db.OutboundAllocations
+            .AnyAsync(a => a.OutboundOrderId == order.Id && a.IsPicked, ct);
+
+        if (hasStartedPicking)
+            return Results.BadRequest(new { Message = "A separação física deste pedido já foi iniciada no coletor. Não é mais possível adicionar itens." });
 
         var hus = await _db.HandlingUnits
             .Where(h => h.CompanyId == companyId &&
@@ -80,7 +89,7 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
             orderItem.IncreaseExpectedQuantity(totalQtyToAdd);
         }
 
-        // Registra as alocações físicas vinculando a entidade pai
+        // Registra as alocações físicas vinculando à entidade pai
         foreach (var hu in hus)
         {
             var allocation = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, hu.CurrentQuantity);
@@ -94,9 +103,14 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
             .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == request.ProductId && b.CustomerId == order.CustomerId, ct);
         if (balance != null) balance.AllocateForPicking(totalQtyToAdd);
 
+        // Recalcula o status do pedido: se todos os itens estão 100% alocados -> Allocated, caso contrário -> Pending
         if (order.Items.All(i => i.AllocatedQuantity >= i.ExpectedQuantity))
         {
             order.UpdateStatus(OutboundOrderStatus.Allocated);
+        }
+        else
+        {
+            order.UpdateStatus(OutboundOrderStatus.Pending);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -133,8 +147,17 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
-        if (order.Status != OutboundOrderStatus.Pending)
-            return Results.BadRequest(new { Message = "Apenas pedidos em status Pendente podem receber itens." });
+
+        // Permite adicionar enquanto Pending ou Allocated; bloqueia se Picking em diante
+        if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
+            return Results.BadRequest(new { Message = "Não é possível adicionar itens após o início da separação (Picking)." });
+
+        // Trava física de início de coleta
+        var hasStartedPicking = await _db.OutboundAllocations
+            .AnyAsync(a => a.OutboundOrderId == order.Id && a.IsPicked, ct);
+
+        if (hasStartedPicking)
+            return Results.BadRequest(new { Message = "A separação física deste pedido já foi iniciada no coletor. Não é mais possível adicionar itens." });
 
         var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == request.ProductId && p.CompanyId == companyId, ct);
         if (product == null) return Results.NotFound(new { Message = "Produto não encontrado." });
@@ -157,7 +180,7 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
         // Regra do Fracionado: Prioriza HUs parciais (menor saldo livre), depois segue a regra (FIFO/FEFO)
         var sortedHus = availableHus
             .Select(x => new { x.Hu, FreeQty = x.Hu.CurrentQuantity - x.AllocatedQty })
-            .OrderBy(x => x.FreeQty) // Menor saldo primeiro para extinguir
+            .OrderBy(x => x.FreeQty)
             .ThenBy(x => product.PickingStrategy == PickingStrategy.Fefo ? x.Hu.ExpirationDate : x.Hu.CreatedAt)
             .ToList();
 
@@ -198,9 +221,14 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
             .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == request.ProductId && b.CustomerId == order.CustomerId, ct);
         if (balance != null) balance.AllocateForPicking(request.Quantity);
 
+        // Recalcula o status do pedido
         if (order.Items.All(i => i.AllocatedQuantity >= i.ExpectedQuantity))
         {
             order.UpdateStatus(OutboundOrderStatus.Allocated);
+        }
+        else
+        {
+            order.UpdateStatus(OutboundOrderStatus.Pending);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -230,9 +258,15 @@ public class RemoveOutboundOrderItemHandler : IRequestHandler<RemoveOutboundOrde
 
         var orderItem = await _db.OutboundOrderItems
             .Include(i => i.OutboundOrder)
+                .ThenInclude(o => o.Items)
             .FirstOrDefaultAsync(i => i.Id == request.OrderItemId && i.OutboundOrderId == request.OrderId && i.OutboundOrder.CompanyId == companyId, ct);
 
         if (orderItem == null) return Results.NotFound(new { Message = "Item não encontrado." });
+
+        var order = orderItem.OutboundOrder;
+
+        if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
+            return Results.BadRequest(new { Message = "Não é possível remover itens de um pedido cuja separação já foi iniciada." });
 
         var allocations = await _db.OutboundAllocations
             .Where(a => a.OutboundOrderItemId == orderItem.Id)
@@ -244,11 +278,22 @@ public class RemoveOutboundOrderItemHandler : IRequestHandler<RemoveOutboundOrde
         decimal totalReleased = allocations.Sum(a => a.Quantity);
 
         var balance = await _db.InventoryBalances
-            .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == orderItem.ProductId && b.CustomerId == orderItem.OutboundOrder.CustomerId, ct);
+            .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == orderItem.ProductId && b.CustomerId == order.CustomerId, ct);
         if (balance != null) balance.UnallocateForPicking(totalReleased);
 
         _db.OutboundAllocations.RemoveRange(allocations);
         _db.OutboundOrderItems.Remove(orderItem);
+
+        // Recalcula o status do pedido após a remoção
+        var remainingItems = order.Items.Where(i => i.Id != orderItem.Id).ToList();
+        if (!remainingItems.Any() || remainingItems.Any(i => i.AllocatedQuantity < i.ExpectedQuantity))
+        {
+            order.UpdateStatus(OutboundOrderStatus.Pending);
+        }
+        else
+        {
+            order.UpdateStatus(OutboundOrderStatus.Allocated);
+        }
 
         await _db.SaveChangesAsync(ct);
         return Results.Ok(new { Message = "Item e reservas estornados com sucesso." });

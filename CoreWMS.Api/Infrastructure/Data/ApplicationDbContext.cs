@@ -586,6 +586,7 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.PickedQuantity).HasPrecision(28, 10);
             b.Property(x => x.PackedQuantity).HasPrecision(28, 10);
             b.Property(x => x.UnitValue).HasPrecision(28, 10);
+            b.Property(x => x.InboundUnitValue).HasPrecision(28, 10);
 
             // Trava de Concorrência Otimista (Dois operadores bipando o mesmo item)
             b.Property(x => x.Version).IsConcurrencyToken();

@@ -22,8 +22,8 @@ public class OutboundOrderItem : AuditableEntity
     public decimal PickedQuantity { get; private set; } // O que o operador já tirou da prateleira (Coletor)
     public decimal PackedQuantity { get; private set; } // O que já foi colocado num palete de envio (Shipping HU)
 
-    // Valor base para a emissão da NF-e de Retorno (opcional, pode vir do ERP do cliente)
     public decimal UnitValue { get; private set; }
+    public decimal InboundUnitValue { get; private set; }
 
     public OutboundOrderItemStatus Status { get; private set; }
 
@@ -95,5 +95,19 @@ public class OutboundOrderItem : AuditableEntity
 
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void UpdateInboundUnitValue(decimal inboundUnitValue)
+    {
+        if (inboundUnitValue < 0) throw new ArgumentException("O valor de entrada não pode ser negativo.");
+        InboundUnitValue = Math.Round(inboundUnitValue, 4);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateUnitValue(decimal unitValue)
+    {
+        if (unitValue < 0) throw new ArgumentException("O valor unitário não pode ser negativo.");
+        UnitValue = Math.Round(unitValue, 4);
+        UpdatedAt = DateTime.UtcNow;
     }
 }

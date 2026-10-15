@@ -587,12 +587,12 @@ export default function FiscalOperationRulesPage() {
                                 <Select value={finalidade} onValueChange={setFinalidade}>
                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="1">1 - NF-e Normal</SelectItem>
+                                        <SelectItem value="1">1 - NF-e Normal (Vendas, Remessas e Retornos de Armazém)</SelectItem>
                                         <SelectItem value="2">2 - NF-e Complementar</SelectItem>
                                         <SelectItem value="3">3 - NF-e de Ajuste</SelectItem>
-                                        <SelectItem value="4">4 - Devolução / Retorno</SelectItem>
-                                        <SelectItem value="5">5 - Nota de Crédito (RT)</SelectItem>
-                                        <SelectItem value="6">6 - Nota de Débito (RT)</SelectItem>
+                                        <SelectItem value="4">4 - Devolução Comercial de Mercadoria</SelectItem>
+                                        <SelectItem value="5">5 - Nota de Crédito (Reforma Tributária)</SelectItem>
+                                        <SelectItem value="6">6 - Nota de Débito (Reforma Tributária)</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

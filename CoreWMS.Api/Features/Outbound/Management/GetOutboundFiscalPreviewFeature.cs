@@ -138,7 +138,15 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
             var cfop = isInterstate ? cfopInter : cfopInterno;
             var cst = matchedException?.CstCsosnIcms ?? selectedRule?.CstCsosnIcms ?? "400";
 
-            var totalItem = Math.Round(item.PackedQuantity * item.UnitValue, 2);
+            // Identificação do retorno de armazém geral pelo CFOP
+            bool isRetornoArmazem = cfop is "5906" or "6906" or "5907" or "6907"
+                                 || (selectedRule != null && selectedRule.CfopStateInternal is "5906" or "5907");
+
+            var unitValue = isRetornoArmazem
+                ? (item.InboundUnitValue > 0 ? item.InboundUnitValue : item.UnitValue)
+                : (item.UnitValue > 0 ? item.UnitValue : item.InboundUnitValue);
+
+            var totalItem = Math.Round(item.PackedQuantity * unitValue, 2);
 
             previewItems.Add(new FiscalPreviewItemDto(
                 item.ProductId,
@@ -146,7 +154,7 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
                 item.Product?.Description ?? item.SkuCode,
                 item.Product?.BaseUnit ?? "UN",
                 item.PackedQuantity,
-                item.UnitValue,
+                unitValue,
                 totalItem,
                 cfop,
                 cst

@@ -58,9 +58,6 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
             .Select(p => new { p.Id, p.CustomerId, p.Sku, p.BaseBarcode })
             .ToListAsync(ct);
 
-        // ====================================================================
-        // OTIMIZAÇÃO: PROCESSAMENTO EM LOTES DE ATÉ 5 XMLS POR VEZ
-        // ====================================================================
         const int BATCH_SIZE = 5;
         var xmlBatches = request.XmlFiles.Chunk(BATCH_SIZE);
 
@@ -77,7 +74,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     var parsedNfe = _parser.ParseXml(xmlString);
                     var issuer = parsedNfe.Issuer;
 
-                    // 1. Validação do CNPJ Destinatário (Ajustado para o novo objeto Recipient)
+                    // 1. Validação do CNPJ Destinatário
                     if (parsedNfe.Recipient.CnpjCpf != company.Cnpj)
                     {
                         errors.Add($"NF-e {parsedNfe.AccessKey}: Ignorada. O CNPJ destinatário ({parsedNfe.Recipient.CnpjCpf}) não pertence a esta empresa ({company.Cnpj}).");
@@ -191,11 +188,11 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                 }
             }
 
-            // Persiste no banco o lote atual de 5 ordens antes de ir para a SEFAZ
+            // Persiste as ordens importadas antes de disparar o evento SEFAZ
             await _db.SaveChangesAsync(ct);
 
-            // 6. DISPARO PARALELO DAS CIÊNCIAS (210210) PARA O LOTE DE 5 NOTAS
-            if (company.CertificateBytes != null && batchOrdersToManifest.Any())
+            // 6. DISPARO DO EVENTO DE CIÊNCIA DA OPERAÇÃO (210210) PARA O XML IMPORTADO
+            if (company.CertificateBytes != null && company.CertificateBytes.Length > 0 && batchOrdersToManifest.Any())
             {
                 var manifestTasks = batchOrdersToManifest.Select(async item =>
                 {
@@ -221,7 +218,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
                     }
                     catch
                     {
-                        // Falhas na SEFAZ não travam o lançamento do WMS
+                        // Falhas de rede ou SEFAZ não impedem a persistência da ordem no WMS
                     }
                 });
 
@@ -232,7 +229,7 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
 
         return Results.Ok(new
         {
-            Message = $"Processamento em lote concluído. {processedOrders.Count} ordem(ns) importada(s) com sucesso.",
+            Message = $"Processamento concluído. {processedOrders.Count} ordem(ns) importada(s) e ciência registrada.",
             ProcessedCount = processedOrders.Count,
             IgnoredCount = errors.Count,
             ImportedIds = processedOrders,

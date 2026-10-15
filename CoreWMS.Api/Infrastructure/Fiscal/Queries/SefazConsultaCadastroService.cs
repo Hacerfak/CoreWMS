@@ -41,6 +41,7 @@ public class SefazConsultaCadastroService : ISefazConsultaCadastroService
                 throw new ArgumentException($"UF '{uf}' é inválida.");
 
             var cfg = _zeusConfigurator.GetNfeConfiguracao(estadoEnum, TipoAmbiente.Producao, certBytes, certPassword);
+            cfg.ValidarSchemas = false; // <-- Desabilita validação de schemas
             using var servicoSefaz = new ServicosNFe(cfg, certificado);
 
             var retornoSefaz = servicoSefaz.NfeConsultaCadastro(uf.ToUpper(), ConsultaCadastroTipoDocumento.Cnpj, cnpjConsulta);
