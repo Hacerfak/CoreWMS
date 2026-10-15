@@ -36,6 +36,20 @@ export default function ExtratoFaturamentoPage() {
     const [manualNotes, setManualNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Utilitário para formatar datas UTC sem retroceder o dia devido ao fuso horário
+    const formatDatePtBr = (dateValue) => {
+        if (!dateValue) return '-';
+        if (typeof dateValue === 'string') {
+            const clean = dateValue.split('T')[0];
+            const parts = clean.split('-');
+            if (parts.length === 3) {
+                const [year, month, day] = parts;
+                return `${day}/${month}/${year}`;
+            }
+        }
+        return new Date(dateValue).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    };
+
     const loadCycleDetails = async () => {
         try {
             setIsLoading(true);
