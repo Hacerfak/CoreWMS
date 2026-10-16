@@ -18,86 +18,63 @@ public class BillingEngineService
     }
 
     /// <summary>
-    /// Executa o cálculo consolidado para o ciclo completo (utilizado pelo GenerateBillingCycleFeature).
+    /// Recálculo manual ou de fechamento completo do ciclo.
+    /// Itera dia a dia desde o StartDate até a data de encerramento, garantindo o acumulado diário correto.
     /// </summary>
-    public async Task<BillingItem> ExecuteServiceAsync(
-        BillingCycle cycle,
-        BillingService service,
-        CustomerTariff tariff)
+    public async Task<int> RecalculateFullCycleAsync(BillingCycle cycle, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(service.SqlTemplate))
-            throw new InvalidOperationException("Este serviço não possui query SQL configurada.");
+        var companyId = cycle.CompanyId;
+        var customerId = cycle.CustomerId;
+        var activeTariffs = await _db.CustomerTariffs
+            .Include(t => t.BillingService)
+            .Where(t => t.CompanyId == companyId &&
+                        t.CustomerId == customerId &&
+                        t.BillingService.IsActive &&
+                        t.BillingService.Type == BillingServiceType.Automatic_Daily &&
+                        !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate))
+            .ToListAsync(ct);
 
-        var dataIniUtc = DateTime.SpecifyKind(cycle.StartDate.Date, DateTimeKind.Utc);
-        var dataFimUtc = DateTime.SpecifyKind(cycle.EndDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+        var todayUtc = DateTime.UtcNow.Date;
+        var maxDate = cycle.EndDate < todayUtc ? cycle.EndDate.Date : todayUtc;
+        int processedCount = 0;
 
-        var parameters = new
+        for (var currentDate = cycle.StartDate.Date; currentDate <= maxDate; currentDate = currentDate.AddDays(1))
         {
-            ArmazemId = cycle.CompanyId,
-            DepositanteId = cycle.CustomerId,
-            ServicoValor = tariff.UnitValue,
-            DataReferencia = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc),
-            CobrancaDataIni = dataIniUtc,
-            CobrancaDataFim = dataFimUtc
-        };
+            var dateStr = currentDate.ToString("dd/MM/yyyy");
 
-        var (totalQty, totalAmount, extractJson) = await RunDynamicQueryAsync(service.SqlTemplate, parameters);
+            foreach (var tariff in activeTariffs.Where(t => t.ValidFrom <= currentDate && (t.ValidTo == null || t.ValidTo >= currentDate)))
+            {
+                var calculated = await ExecuteDailyServiceAsync(cycle, tariff.BillingService, tariff, currentDate);
+                if (calculated == null) continue;
 
-        return new BillingItem(
-            cycle.Id,
-            service.Id,
-            service.Name,
-            totalQty,
-            totalAmount,
-            extractJson,
-            null
-        );
+                var existingItem = cycle.Items.FirstOrDefault(i =>
+                    i.BillingServiceId == tariff.BillingServiceId &&
+                    i.ChargeDate.Date == currentDate.Date &&
+                    i.DocumentType == "Diária de Estoque");
+
+                if (existingItem != null)
+                {
+                    existingItem.UpdateValues(
+                        calculated.QuantityTotal,
+                        calculated.ServiceTotal,
+                        calculated.StatementDataJson,
+                        $"Recalculado em {DateTime.UtcNow:dd/MM/yyyy HH:mm}"
+                    );
+                }
+                else
+                {
+                    _db.BillingItems.Add(calculated);
+                }
+                processedCount++;
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return processedCount;
     }
 
     /// <summary>
-    /// Executa um serviço operacional disparado por evento (Recebimento, Expedição Momento 1, Filme Stretch).
-    /// </summary>
-    public async Task<BillingItem?> ExecuteOperationalEventAsync(
-        BillingCycle cycle,
-        BillingService service,
-        CustomerTariff tariff,
-        Guid orderId,
-        Guid? orderItemId = null,
-        string? descriptionPrefix = null)
-    {
-        if (string.IsNullOrWhiteSpace(service.SqlTemplate)) return null;
-
-        var parameters = new
-        {
-            ArmazemId = cycle.CompanyId,
-            DepositanteId = cycle.CustomerId,
-            ServicoValor = tariff.UnitValue,
-            OrdemId = orderId,
-            OrderItemId = orderItemId ?? Guid.Empty,
-            DataReferencia = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc),
-            CobrancaDataIni = cycle.StartDate,
-            CobrancaDataFim = cycle.EndDate
-        };
-
-        var (totalQty, totalAmount, extractJson) = await RunDynamicQueryAsync(service.SqlTemplate, parameters);
-
-        var desc = !string.IsNullOrWhiteSpace(descriptionPrefix)
-            ? $"{service.Name} ({descriptionPrefix})"
-            : service.Name;
-
-        return new BillingItem(
-            cycle.Id,
-            service.Id,
-            desc,
-            totalQty,
-            totalAmount,
-            extractJson,
-            null
-        );
-    }
-
-    /// <summary>
-    /// Executa a apuração de um serviço automático diário para uma data específica.
+    /// Executa apuração da diária de estoque acumulada de todas as HUs presentes até a data especificada.
     /// </summary>
     public async Task<BillingItem?> ExecuteDailyServiceAsync(
         BillingCycle cycle,
@@ -127,17 +104,65 @@ public class BillingEngineService
         return new BillingItem(
             cycle.Id,
             service.Id,
-            $"{service.Name} - {referenceDate:dd/MM/yyyy}",
-            totalQty,
-            totalAmount,
-            extractJson,
-            $"Apuração diária automática ({referenceDate:dd/MM/yyyy})"
+            refDateUtc,
+            documentType: "Diária de Estoque",
+            documentNumber: referenceDate.ToString("dd/MM/yyyy"),
+            documentId: null,
+            description: $"{service.Name} - {referenceDate:dd/MM/yyyy}",
+            quantityTotal: totalQty,
+            serviceTotal: totalAmount,
+            statementDataJson: extractJson,
+            manualNotes: $"Apuração automática cumulativa ({referenceDate:dd/MM/yyyy})"
         );
     }
 
     /// <summary>
-    /// Calcula ou recalcula imediatamente as diárias de armazenagem e ad-valorem para a data especificada.
-    /// Mantém apenas um único registo por data, sobrescrevendo os valores atuais do mesmo dia.
+    /// Executa serviço operacional vinculado a documento de origem (Inbound NF-e ou Outbound Pedido).
+    /// </summary>
+    public async Task<BillingItem?> ExecuteOperationalEventAsync(
+        BillingCycle cycle,
+        BillingService service,
+        CustomerTariff tariff,
+        Guid orderId,
+        string documentType,
+        string documentNumber,
+        Guid? orderItemId = null)
+    {
+        if (string.IsNullOrWhiteSpace(service.SqlTemplate)) return null;
+
+        var parameters = new
+        {
+            ArmazemId = cycle.CompanyId,
+            DepositanteId = cycle.CustomerId,
+            ServicoValor = tariff.UnitValue,
+            OrdemId = orderId,
+            OrderItemId = orderItemId ?? Guid.Empty,
+            DataReferencia = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc),
+            CobrancaDataIni = cycle.StartDate,
+            CobrancaDataFim = cycle.EndDate
+        };
+
+        var (totalQty, totalAmount, extractJson) = await RunDynamicQueryAsync(service.SqlTemplate, parameters);
+
+        if (totalQty <= 0 && totalAmount <= 0) return null;
+
+        return new BillingItem(
+            cycle.Id,
+            service.Id,
+            DateTime.UtcNow,
+            documentType: documentType,
+            documentNumber: documentNumber,
+            documentId: orderId,
+            description: $"{service.Name} ({documentType} #{documentNumber})",
+            quantityTotal: totalQty,
+            serviceTotal: totalAmount,
+            statementDataJson: extractJson,
+            manualNotes: null
+        );
+    }
+
+    /// <summary>
+    /// Chamado pelo Background Worker para atualizar as diárias do dia de forma cumulativa.
     /// </summary>
     public async Task<List<BillingItem>> UpsertDailyChargesAsync(
         Guid companyId,
@@ -168,7 +193,7 @@ public class BillingEngineService
             .Where(t => t.CompanyId == companyId &&
                         t.CustomerId == customerId &&
                         t.BillingService.IsActive &&
-                        t.BillingService.Type == BillingServiceType.Automatic_SQL &&
+                        t.BillingService.Type == BillingServiceType.Automatic_Daily &&
                         !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
                         t.ValidFrom <= dateOnly &&
                         (t.ValidTo == null || t.ValidTo >= dateOnly))
@@ -181,11 +206,10 @@ public class BillingEngineService
             var calculatedItem = await ExecuteDailyServiceAsync(cycle, tariff.BillingService, tariff, dateOnly);
             if (calculatedItem == null) continue;
 
-            var targetDescription = $"{tariff.BillingService.Name} - {dateStr}";
-
             var existingItem = cycle.Items.FirstOrDefault(i =>
                 i.BillingServiceId == tariff.BillingServiceId &&
-                (i.Description == targetDescription || i.Description.EndsWith(dateStr)));
+                i.ChargeDate.Date == dateOnly &&
+                i.DocumentType == "Diária de Estoque");
 
             if (existingItem != null)
             {
@@ -193,7 +217,7 @@ public class BillingEngineService
                     calculatedItem.QuantityTotal,
                     calculatedItem.ServiceTotal,
                     calculatedItem.StatementDataJson,
-                    $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Recebimento / Atualização Diária)"
+                    $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Total Cumulativo do Dia)"
                 );
                 processedItems.Add(existingItem);
             }

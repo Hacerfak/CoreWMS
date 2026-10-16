@@ -46,6 +46,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     private readonly IHttpContextAccessor _http;
     private readonly ILocalImageStorageService _imageStorage;
     private readonly BillingEngineService _billingEngine;
+    private readonly BillingChannel? _billingChannel;
 
     public ReceiveLoteHandler(
         ApplicationDbContext db,
@@ -54,7 +55,8 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         KardexChannel kardex,
         IHttpContextAccessor http,
         ILocalImageStorageService imageStorage,
-        BillingEngineService billingEngine)
+        BillingEngineService billingEngine,
+        BillingChannel? billingChannel = null)
     {
         _db = db;
         _tenant = tenant;
@@ -63,6 +65,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         _http = http;
         _imageStorage = imageStorage;
         _billingEngine = billingEngine;
+        _billingChannel = billingChannel;
     }
 
     public async Task<IResult> Handle(ReceiveLoteCommand request, CancellationToken ct)
@@ -203,12 +206,25 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             orderItem.InboundOrder.UpdateStatus(InboundOrderStatus.Completed);
         }
 
+        // 1. Garante que o Número da Nota e Série estejam salvos na InboundOrder
+        if (string.IsNullOrWhiteSpace(orderItem.InboundOrder.InvoiceNumber) && orderItem.InboundOrder.AccessKey?.Length == 44)
+        {
+            if (long.TryParse(orderItem.InboundOrder.AccessKey.Substring(25, 9), out var nNf))
+            {
+                int.TryParse(orderItem.InboundOrder.AccessKey.Substring(22, 3), out var serie);
+                orderItem.InboundOrder.SetInvoiceDetails(nNf.ToString(), serie.ToString());
+            }
+        }
+
+        var docNumber = orderItem.InboundOrder.InvoiceNumber ??
+            (orderItem.InboundOrder.AccessKey!.Length == 44 ? long.Parse(orderItem.InboundOrder.AccessKey.Substring(25, 9)).ToString() : orderItem.InboundOrder.AccessKey[..8]);
+
+        // 2. Faturamento do Serviço Operacional de Entrada (Handling In via SQL dinâmico)
         if (request.BillingServiceId.HasValue && orderItem.InboundOrder.CustomerId.HasValue)
         {
             var customerId = orderItem.InboundOrder.CustomerId.Value;
             var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
 
-            // 1. Garante que existe ciclo aberto (Draft)
             var activeCycle = await _db.BillingCycles
                 .Include(c => c.Items)
                 .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
@@ -231,27 +247,25 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
             if (tariff != null && !string.IsNullOrWhiteSpace(tariff.BillingService.SqlTemplate))
             {
-                // 2. Persiste as HUs geradas antes de rodar o Dapper para que fiquem visíveis no banco
+                // Salva as HUs antes de rodar a consulta SQL do motor para torná-las visíveis
                 await _db.SaveChangesAsync(ct);
 
-                // 3. Executa a query SQL do serviço selecionado filtrando pelas HUs da ordem
                 var calculatedBillingItem = await _billingEngine.ExecuteOperationalEventAsync(
                     activeCycle,
                     tariff.BillingService,
                     tariff,
                     orderId: orderItem.InboundOrderId,
-                    orderItemId: orderItem.Id,
-                    descriptionPrefix: $"NF {orderItem.InboundOrder.InvoiceNumber ?? orderItem.InboundOrder.AccessKey[..8]}"
+                    documentType: "NF-e Entrada",
+                    documentNumber: docNumber,
+                    orderItemId: orderItem.Id
                 );
 
                 if (calculatedBillingItem != null)
                 {
-                    var targetDescription = calculatedBillingItem.Description;
-
-                    // 4. Upsert por Nota Fiscal: se já foi recebido um item anterior desta mesma NF, atualiza o total
                     var existingItem = activeCycle.Items.FirstOrDefault(i =>
                         i.BillingServiceId == tariff.BillingServiceId &&
-                        i.Description == targetDescription);
+                        i.DocumentId == orderItem.InboundOrderId &&
+                        i.DocumentType == "NF-e Entrada");
 
                     if (existingItem != null)
                     {
@@ -259,7 +273,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                             calculatedBillingItem.QuantityTotal,
                             calculatedBillingItem.ServiceTotal,
                             calculatedBillingItem.StatementDataJson,
-                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Recebimento NF)"
+                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Recebimento NF-e #{docNumber})"
                         );
                     }
                     else
@@ -270,7 +284,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             }
         }
 
-        // 1. Grava as novas HUs na base para torná-las visíveis à consulta SQL de diárias
+        // 3. Persiste o recebimento físico
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -280,27 +294,44 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
         }
 
-        // 2. DISPARO IMEDIATO DAS DIÁRIAS (Armazenagem e Ad-Valorem) PARA O DIA DO RECEBIMENTO
+        // 4. DISPARO EM SEGUNDO PLANO: Atualiza as diárias cumulativas do dia sem travar a requisição do operador
         if (orderItem.InboundOrder.CustomerId.HasValue)
         {
-            try
+            var custId = orderItem.InboundOrder.CustomerId.Value;
+            var inOrderId = orderItem.InboundOrderId;
+
+            if (_billingChannel != null)
             {
-                await _billingEngine.UpsertDailyChargesAsync(
+                await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
                     companyId,
-                    orderItem.InboundOrder.CustomerId.Value,
+                    custId,
                     DateTime.UtcNow,
-                    ct
-                );
+                    TriggerOrderId: inOrderId,
+                    TriggerType: "Inbound_Receipt"
+                ), ct);
             }
-            catch
+            else
             {
-                // Falhas no motor de diárias não impedem a conclusão do recebimento físico
+                // Fallback em background sem bloquear o encerramento do HTTP
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _billingEngine.UpsertDailyChargesAsync(
+                            companyId,
+                            custId,
+                            DateTime.UtcNow,
+                            CancellationToken.None
+                        );
+                    }
+                    catch { }
+                });
             }
         }
 
         return Results.Ok(new
         {
-            Message = "Lote recebido na Doca com sucesso e diárias do dia atualizadas.",
+            Message = "Lote recebido na Doca com sucesso.",
             HusGenerated = husToInsert.Select(h => new { h.Id, h.Lpn }).ToList(),
             OrderItemStatus = orderItem.Status.ToString()
         });

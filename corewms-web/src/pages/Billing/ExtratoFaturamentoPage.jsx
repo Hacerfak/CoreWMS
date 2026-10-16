@@ -291,7 +291,7 @@ export default function ExtratoFaturamentoPage() {
                         <FileText size={16} className="text-emerald-600" /> Extrato Analítico dos Serviços Prestados
                     </CardTitle>
                     <span className="text-[11px] text-slate-500 font-mono">
-                        Clique na seta lateral para visualizar as ocorrências detalhadas de cada item
+                        Lançamentos separados por documento de origem e data de apuração
                     </span>
                 </CardHeader>
 
@@ -299,17 +299,19 @@ export default function ExtratoFaturamentoPage() {
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
-                                <TableHead className="w-10"></TableHead>
+                                <TableHead className="w-8"></TableHead>
+                                <TableHead className="w-28">Data Cobrança</TableHead>
+                                <TableHead className="w-44">Doc. Origem</TableHead>
                                 <TableHead>Serviço / Descrição da Operação</TableHead>
-                                <TableHead className="text-right">Volume / Quantidade</TableHead>
+                                <TableHead className="text-right">Quantidade / Volume</TableHead>
                                 <TableHead className="text-right">Valor Total R$</TableHead>
-                                <TableHead>Observações / Justificativas</TableHead>
+                                <TableHead>Observações</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {cycle?.items?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-28 text-center text-xs text-slate-400 italic">
+                                    <TableCell colSpan={7} className="h-28 text-center text-xs text-slate-400 italic">
                                         Nenhum serviço bilhetado neste ciclo até o momento.
                                     </TableCell>
                                 </TableRow>
@@ -342,6 +344,23 @@ export default function ExtratoFaturamentoPage() {
                                                     </Button>
                                                 )}
                                             </TableCell>
+                                            <TableCell className="font-mono text-xs text-slate-700">
+                                                {formatDatePtBr(item.chargeDate)}
+                                            </TableCell>
+                                            <TableCell>
+                                                {item.documentNumber ? (
+                                                    <div className="space-y-0.5">
+                                                        <Badge variant="outline" className="font-mono text-[10px] bg-slate-50 text-slate-800 border-slate-300">
+                                                            {item.documentNumber}
+                                                        </Badge>
+                                                        {item.documentType && (
+                                                            <span className="block text-[10px] text-slate-400 font-medium">{item.documentType}</span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] text-slate-400 font-mono">Consolidado</span>
+                                                )}
+                                            </TableCell>
                                             <TableCell className="text-xs font-semibold text-slate-900">
                                                 <div className="flex items-center gap-2">
                                                     <FileText size={14} className="text-emerald-600 shrink-0" />
@@ -362,23 +381,25 @@ export default function ExtratoFaturamentoPage() {
                                         {/* TABELA DE OCORRÊNCIAS EXPANDIDA */}
                                         {isExpanded && hasStatement && (
                                             <TableRow key={`${item.id}-detail`} className="bg-slate-50/80">
-                                                <TableCell colSpan={5} className="p-4">
+                                                <TableCell colSpan={7} className="p-4">
                                                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
                                                         <div className="flex items-center justify-between border-b pb-2">
                                                             <span className="font-bold text-xs uppercase text-slate-800 flex items-center gap-1.5">
                                                                 <Sparkles size={14} className="text-emerald-600" />
-                                                                Detalhamento Analítico das Ocorrências ({parsedStatement.length} registros apurados)
+                                                                Ocorrências Apuradas ({parsedStatement.length} registros)
                                                             </span>
-                                                            <Badge variant="outline" className="font-mono text-[10px]">Rastreabilidade Contratual</Badge>
+                                                            <Badge variant="outline" className="font-mono text-[10px]">
+                                                                Doc Ref: {item.documentNumber || 'Diária'}
+                                                            </Badge>
                                                         </div>
 
                                                         <div className="border border-slate-100 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
                                                             <Table>
                                                                 <TableHeader className="bg-slate-50">
                                                                     <TableRow>
-                                                                        <TableHead className="text-xs">Data / Referência</TableHead>
-                                                                        <TableHead className="text-xs">Tipo de Volume</TableHead>
-                                                                        <TableHead className="text-xs">Identificador / Ordem / Detalhes</TableHead>
+                                                                        <TableHead className="text-xs">Data / Ref</TableHead>
+                                                                        <TableHead className="text-xs">Tipo Volume</TableHead>
+                                                                        <TableHead className="text-xs">Detalhes / Identificador</TableHead>
                                                                         <TableHead className="text-right text-xs">Quantidade</TableHead>
                                                                         <TableHead className="text-right text-xs">Valor R$</TableHead>
                                                                     </TableRow>
@@ -388,7 +409,7 @@ export default function ExtratoFaturamentoPage() {
                                                                         <TableRow key={rIdx} className="hover:bg-slate-50/50 text-xs font-mono">
                                                                             <TableCell className="text-slate-600">{rec.DATA || rec.CreatedAt || '-'}</TableCell>
                                                                             <TableCell className="font-bold text-slate-800">{rec.TIPO_VOLUME || rec.PackagingCode || '-'}</TableCell>
-                                                                            <TableCell className="text-slate-700">{rec.DESCRICAO || (rec.OrderNumber ? `Pedido #${rec.OrderNumber}` : (rec.InboundOrderId ? `NF Entrada #${rec.InboundOrderId}` : 'Apuração Operacional'))}</TableCell>
+                                                                            <TableCell className="text-slate-700">{rec.DESCRICAO || rec.OrderNumber || item.documentNumber || '-'}</TableCell>
                                                                             <TableCell className="text-right font-bold text-slate-900">{rec.VOLUME || rec.VolumeCount || rec.QUANTIDADE || 1}</TableCell>
                                                                             <TableCell className="text-right font-bold text-emerald-700">
                                                                                 {(rec.VALOR_TOTAL || rec.VALOR_DIARIA || rec.TotalAmount || item.serviceTotal || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

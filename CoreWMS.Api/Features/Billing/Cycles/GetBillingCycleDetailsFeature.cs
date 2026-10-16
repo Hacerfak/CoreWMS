@@ -7,13 +7,31 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreWMS.Api.Features.Billing.Cycles;
 
 public record BillingItemDto(
-    Guid Id, Guid BillingServiceId, string ServiceName, string Description,
-    decimal QuantityTotal, decimal ServiceTotal, string? StatementDataJson, string? ManualNotes);
+    Guid Id,
+    Guid BillingServiceId,
+    string ServiceName,
+    DateTime ChargeDate,
+    string? DocumentType,
+    string? DocumentNumber,
+    Guid? DocumentId,
+    string Description,
+    decimal QuantityTotal,
+    decimal ServiceTotal,
+    string? StatementDataJson,
+    string? ManualNotes
+);
 
 public record BillingCycleDetailsDto(
-    Guid Id, Guid CustomerId, string CustomerName, string ReferenceMonth,
-    DateTime StartDate, DateTime EndDate, string Status, decimal TotalAmount,
-    List<BillingItemDto> Items);
+    Guid Id,
+    Guid CustomerId,
+    string CustomerName,
+    string ReferenceMonth,
+    DateTime StartDate,
+    DateTime EndDate,
+    string Status,
+    decimal TotalAmount,
+    List<BillingItemDto> Items
+);
 
 public record GetBillingCycleDetailsQuery(Guid Id) : IRequest<IResult>;
 
@@ -31,7 +49,6 @@ public class GetBillingCycleDetailsHandler : IRequestHandler<GetBillingCycleDeta
     public async Task<IResult> Handle(GetBillingCycleDetailsQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-
         var query = _db.BillingCycles.AsNoTracking()
             .Include(c => c.Customer)
             .Include(c => c.Items)
@@ -48,12 +65,27 @@ public class GetBillingCycleDetailsHandler : IRequestHandler<GetBillingCycleDeta
         if (cycle == null) return Results.NotFound(new { Message = "Ciclo de faturamento não encontrado." });
 
         var dto = new BillingCycleDetailsDto(
-            cycle.Id, cycle.CustomerId, cycle.Customer.CorporateName, cycle.ReferenceMonth,
-            cycle.StartDate, cycle.EndDate, cycle.Status.ToString(), cycle.TotalAmount,
-            cycle.Items.Select(i => new BillingItemDto(
-                i.Id, i.BillingServiceId, i.BillingService?.Name ?? i.Description,
-                i.Description, i.QuantityTotal, i.ServiceTotal,
-                i.StatementDataJson, i.ManualNotes
+            cycle.Id,
+            cycle.CustomerId,
+            cycle.Customer.CorporateName,
+            cycle.ReferenceMonth,
+            cycle.StartDate,
+            cycle.EndDate,
+            cycle.Status.ToString(),
+            cycle.TotalAmount,
+            cycle.Items.OrderByDescending(i => i.ChargeDate).ThenBy(i => i.Description).Select(i => new BillingItemDto(
+                i.Id,
+                i.BillingServiceId,
+                i.BillingService?.Name ?? i.Description,
+                i.ChargeDate,
+                i.DocumentType,
+                i.DocumentNumber,
+                i.DocumentId,
+                i.Description,
+                i.QuantityTotal,
+                i.ServiceTotal,
+                i.StatementDataJson,
+                i.ManualNotes
             )).ToList()
         );
 
@@ -67,8 +99,8 @@ public static class GetBillingCycleDetailsEndpoints
     {
         app.MapGet("/api/billing/cycles/{id:guid}", async (Guid id, IMediator mediator) =>
             await mediator.Send(new GetBillingCycleDetailsQuery(id)))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.View);
+            .WithTags("Billing")
+            .RequireAuthorization()
+            .RequirePermission(Permissions.Billing.View);
     }
 }

@@ -8,6 +8,12 @@ public class BillingItem : AuditableEntity
     public Guid BillingServiceId { get; private set; }
     public BillingService BillingService { get; private set; } = null!;
 
+    // Identificação e Data da Cobrança no Ciclo
+    public DateTime ChargeDate { get; private set; }
+    public string? DocumentType { get; private set; }   // Ex: "NF-e Entrada", "Ordem de Saída", "Diária de Estoque", "Manual"
+    public string? DocumentNumber { get; private set; } // Ex: "NF 1401997", "Ped 261016-A1", "16/10/2026"
+    public Guid? DocumentId { get; private set; }       // Identificador da InboundOrder ou OutboundOrder
+
     public string Description { get; private set; } = string.Empty;
 
     // Valores Consolidados Financeiros
@@ -25,6 +31,10 @@ public class BillingItem : AuditableEntity
     public BillingItem(
         Guid billingCycleId,
         Guid billingServiceId,
+        DateTime chargeDate,
+        string? documentType,
+        string? documentNumber,
+        Guid? documentId,
         string description,
         decimal quantityTotal,
         decimal serviceTotal,
@@ -33,11 +43,15 @@ public class BillingItem : AuditableEntity
     {
         BillingCycleId = billingCycleId;
         BillingServiceId = billingServiceId;
-        Description = description;
+        ChargeDate = DateTime.SpecifyKind(chargeDate.Date, DateTimeKind.Utc);
+        DocumentType = documentType?.Trim();
+        DocumentNumber = documentNumber?.Trim();
+        DocumentId = documentId;
+        Description = description.Trim();
         QuantityTotal = quantityTotal;
         ServiceTotal = serviceTotal;
         StatementDataJson = statementDataJson;
-        ManualNotes = manualNotes;
+        ManualNotes = manualNotes?.Trim();
     }
 
     public void UpdateValues(decimal quantityTotal, decimal serviceTotal, string? statementDataJson, string? manualNotes = null)
@@ -47,7 +61,7 @@ public class BillingItem : AuditableEntity
         StatementDataJson = statementDataJson;
         if (!string.IsNullOrWhiteSpace(manualNotes))
         {
-            ManualNotes = manualNotes;
+            ManualNotes = manualNotes.Trim();
         }
         UpdatedAt = DateTime.UtcNow;
     }

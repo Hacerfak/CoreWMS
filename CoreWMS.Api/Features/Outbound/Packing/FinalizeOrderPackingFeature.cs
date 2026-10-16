@@ -46,15 +46,18 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly BillingEngineService _billingEngine;
+    private readonly BillingChannel? _billingChannel;
 
     public FinalizeOrderPackingHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        BillingEngineService billingEngine)
+        BillingEngineService billingEngine,
+        BillingChannel? billingChannel = null)
     {
         _db = db;
         _tenant = tenant;
         _billingEngine = billingEngine;
+        _billingChannel = billingChannel;
     }
 
     public async Task<IResult> Handle(FinalizeOrderPackingCommand request, CancellationToken ct)
@@ -80,7 +83,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             });
         }
 
-        // Validação do Momento 1: todos os itens precisam estar 100% conferidos e apontados
+        // 1. Validação do Momento 1: todos os itens precisam estar 100% conferidos e apontados
         var pendingItems = order.Items.Where(i =>
             i.Status != OutboundOrderItemStatus.Packed && i.PackedQuantity < i.ExpectedQuantity).ToList();
 
@@ -109,13 +112,13 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
         if (packagingTypes.Count != packTypeIds.Count)
             return Results.BadRequest(new { Message = "Um ou mais tipos de embalagens de transporte são inválidos." });
 
-        // Remove volumes de transporte anteriores se houver re-packing
+        // 2. Remove volumes de transporte anteriores se houver re-packing
         if (order.Volumes.Any())
         {
             _db.OutboundVolumes.RemoveRange(order.Volumes);
         }
 
-        // Cálculo de peso bruto automático com fallback para HUs / Produtos
+        // 3. Cálculo de peso bruto automático com fallback para HUs e Produtos
         var allocations = await _db.OutboundAllocations
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
@@ -137,7 +140,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             ? Math.Round(calculatedOrderGrossWeight / totalShippingVolumesCount, 3)
             : 0m;
 
-        // Momento 2: Geração das unidades logísticas finais de transporte
+        // 4. Momento 2: Geração das unidades logísticas finais de transporte
         var createdShippingVolumes = new List<OutboundVolume>();
         int volumeSequence = 1;
 
@@ -167,19 +170,48 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
 
         _db.OutboundVolumes.AddRange(createdShippingVolumes);
 
-        // Transita a ordem para ReadyToShip na Doca
+        // 5. Transita a ordem para ReadyToShip na Doca
         order.StageAtDock(request.DockLocationId);
 
-        // 1. Salva as alterações de saída para que fiquem persistidas no banco antes do motor Dapper rodar
+        // Persiste as alterações físicas antes de rodar os eventos operacionais de faturamento
         await _db.SaveChangesAsync(ct);
 
-        // 2. DISPARO DO FATURAMENTO DINÂMICO VIA SQL (HANDLING OUT E STRETCH)
+        // 6. Faturamento dos Eventos Operacionais (Handling Out e Stretch) vinculados ao Pedido
         var billingItemsGenerated = await GenerateBillingEventsAsync(
             companyId,
             order,
             request.UsedStretchFilm,
             ct
         );
+
+        // 7. DISPARO EM SEGUNDO PLANO: Atualiza as diárias cumulativas do dia via BillingChannel sem travar a requisição
+        if (_billingChannel != null)
+        {
+            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
+                CompanyId: companyId,
+                CustomerId: order.CustomerId,
+                ReferenceDate: DateTime.UtcNow,
+                TriggerOrderId: order.Id,
+                TriggerType: "Outbound_Packing"
+            ), ct);
+        }
+        else
+        {
+            // Fallback assíncrono caso o canal não esteja injetado no container de DI
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _billingEngine.UpsertDailyChargesAsync(
+                        companyId,
+                        order.CustomerId,
+                        DateTime.UtcNow,
+                        CancellationToken.None
+                    );
+                }
+                catch { }
+            });
+        }
 
         return Results.Ok(new
         {
@@ -229,7 +261,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
 
         var generatedItems = new List<BillingItem>();
 
-        // 3. APURAÇÃO HANDLING OUT (MOMENTO 1): Executa a query SQL do serviço ativo
+        // 3. APURAÇÃO HANDLING OUT (MOMENTO 1): Executa a query SQL do serviço ativo com metadados do documento
         var handlingTariff = customerTariffs.FirstOrDefault(t =>
             !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
             (t.BillingService.Name.Contains("Expedição", StringComparison.OrdinalIgnoreCase) ||
@@ -243,15 +275,17 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
                 handlingTariff.BillingService,
                 handlingTariff,
                 orderId: order.Id,
-                descriptionPrefix: $"Pedido #{order.OrderNumber}"
+                documentType: "Ordem de Saída",
+                documentNumber: order.OrderNumber,
+                orderItemId: null
             );
 
             if (calculatedItem != null && (calculatedItem.QuantityTotal > 0 || calculatedItem.ServiceTotal > 0))
             {
-                var targetDescription = calculatedItem.Description;
                 var existingItem = cycle.Items.FirstOrDefault(i =>
                     i.BillingServiceId == handlingTariff.BillingServiceId &&
-                    i.Description == targetDescription);
+                    i.DocumentId == order.Id &&
+                    i.DocumentType == "Ordem de Saída");
 
                 if (existingItem != null)
                 {
@@ -286,15 +320,17 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
                     stretchTariff.BillingService,
                     stretchTariff,
                     orderId: order.Id,
-                    descriptionPrefix: $"Pedido #{order.OrderNumber}"
+                    documentType: "Ordem de Saída",
+                    documentNumber: order.OrderNumber,
+                    orderItemId: null
                 );
 
                 if (calculatedStretchItem != null && (calculatedStretchItem.QuantityTotal > 0 || calculatedStretchItem.ServiceTotal > 0))
                 {
-                    var targetDescription = calculatedStretchItem.Description;
                     var existingStretch = cycle.Items.FirstOrDefault(i =>
                         i.BillingServiceId == stretchTariff.BillingServiceId &&
-                        i.Description == targetDescription);
+                        i.DocumentId == order.Id &&
+                        i.DocumentType == "Ordem de Saída");
 
                     if (existingStretch != null)
                     {

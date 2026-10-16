@@ -14,4 +14,8 @@ export interface UpsertManualBillingItemCommand {
   serviceTotal?: number;
   /** @nullable */
   manualNotes?: string | null;
+  /** @nullable */
+  chargeDate?: string | null;
+  /** @nullable */
+  documentNumber?: string | null;
 }

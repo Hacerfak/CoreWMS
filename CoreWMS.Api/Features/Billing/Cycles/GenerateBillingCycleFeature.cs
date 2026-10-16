@@ -16,7 +16,7 @@ public class GenerateBillingCycleCommandValidator : AbstractValidator<GenerateBi
     public GenerateBillingCycleCommandValidator()
     {
         RuleFor(x => x.CustomerId).NotEmpty().WithMessage("O depositante é obrigatório.");
-        RuleFor(x => x.ReferenceMonth).NotEmpty().Matches(@"^(0[1-9]|1[0-2])\/\d{4}$").WithMessage("O formato do mês de referência deve ser MM/yyyy (Ex: 10/2026).");
+        RuleFor(x => x.ReferenceMonth).NotEmpty().Matches(@"^(0[1-9]|1[0-2])\/\d{4}$").WithMessage("O formato deve ser MM/yyyy.");
         RuleFor(x => x.StartDate).NotEmpty().WithMessage("A data inicial é obrigatória.");
         RuleFor(x => x.EndDate).GreaterThanOrEqualTo(x => x.StartDate).WithMessage("A data final deve ser maior ou igual à data inicial.");
     }
@@ -39,70 +39,31 @@ public class GenerateBillingCycleHandler : IRequestHandler<GenerateBillingCycleC
     {
         var companyId = _tenant.GetCompanyId();
 
-        var existingCycle = await _db.BillingCycles
+        var cycle = await _db.BillingCycles
             .Include(c => c.Items)
-                .ThenInclude(i => i.BillingService)
             .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
                                       c.CustomerId == request.CustomerId &&
                                       c.ReferenceMonth == request.ReferenceMonth.Trim(), ct);
 
-        BillingCycle cycle;
-
-        if (existingCycle != null)
-        {
-            if (existingCycle.Status == BillingStatus.Closed)
-                return Results.BadRequest(new { Message = "Este ciclo de faturamento já foi fechado e não permite recálculo." });
-
-            var autoItemsToRemove = existingCycle.Items
-                .Where(i => i.BillingService != null && i.BillingService.Type == BillingServiceType.Automatic_SQL)
-                .ToList();
-
-            if (autoItemsToRemove.Any())
-            {
-                _db.BillingItems.RemoveRange(autoItemsToRemove);
-            }
-
-            cycle = existingCycle;
-        }
-        else
+        if (cycle == null)
         {
             cycle = new BillingCycle(companyId, request.CustomerId, request.ReferenceMonth, request.StartDate, request.EndDate);
             _db.BillingCycles.Add(cycle);
+            await _db.SaveChangesAsync(ct);
         }
-
-        var activeTariffs = await _db.CustomerTariffs
-            .Include(t => t.BillingService)
-            .Where(t => t.CompanyId == companyId &&
-                        t.CustomerId == request.CustomerId &&
-                        t.BillingService.IsActive &&
-                        t.ValidFrom <= request.EndDate &&
-                        (t.ValidTo == null || t.ValidTo >= request.StartDate))
-            .ToListAsync(ct);
-
-        foreach (var tariff in activeTariffs.Where(t => t.BillingService.Type == BillingServiceType.Automatic_SQL))
+        else if (cycle.Status == BillingStatus.Closed)
         {
-            try
-            {
-                var billingItem = await _engine.ExecuteServiceAsync(cycle, tariff.BillingService, tariff);
-                _db.BillingItems.Add(billingItem);
-            }
-            catch (Exception ex)
-            {
-                var errorItem = new BillingItem(
-                    cycle.Id,
-                    tariff.BillingServiceId,
-                    $"{tariff.BillingService.Name} (ERRO)",
-                    0,
-                    0,
-                    null,
-                    $"Falha SQL: {ex.Message}"
-                );
-                _db.BillingItems.Add(errorItem);
-            }
+            return Results.BadRequest(new { Message = "Este ciclo de faturamento já foi encerrado e não permite recálculo." });
         }
 
-        await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { cycle.Id, Message = "Ciclo de faturamento processado com sucesso. Os apontamentos operacionais foram preservados." });
+        // Executa o recálculo cumulativo de diárias dia a dia
+        var recalculatedEntries = await _engine.RecalculateFullCycleAsync(cycle, ct);
+
+        return Results.Ok(new
+        {
+            cycle.Id,
+            Message = $"Ciclo de faturamento recalculado com sucesso. {recalculatedEntries} diárias atualizadas sem perda de eventos operacionais."
+        });
     }
 }
 

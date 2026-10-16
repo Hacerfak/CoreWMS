@@ -14,13 +14,16 @@ public class ProcessDailyBillingCycleHandler : IRequestHandler<ProcessDailyBilli
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly BillingEngineService _engine;
+    private readonly BillingChannel _channel;
 
-    public ProcessDailyBillingCycleHandler(ApplicationDbContext db, ITenantProvider tenant, BillingEngineService engine)
+    public ProcessDailyBillingCycleHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        BillingChannel channel)
     {
         _db = db;
         _tenant = tenant;
-        _engine = engine;
+        _channel = channel;
     }
 
     public async Task<IResult> Handle(ProcessDailyBillingCycleCommand request, CancellationToken ct)
@@ -29,52 +32,30 @@ public class ProcessDailyBillingCycleHandler : IRequestHandler<ProcessDailyBilli
         var dateToProcess = request.ExecutionDate ?? DateTime.UtcNow.Date;
         var refMonth = dateToProcess.ToString("MM/yyyy");
 
-        // 1. Busca todos os depositantes que possuem ciclo aberto no mês corrente
+        // 1. Obtém todos os ciclos abertos (Draft) para a competência em processamento
         var openCycles = await _db.BillingCycles
-            .Include(c => c.Items)
+            .AsNoTracking()
             .Where(c => c.CompanyId == companyId && c.ReferenceMonth == refMonth && c.Status == BillingStatus.Draft)
+            .Select(c => new { c.Id, c.CustomerId })
             .ToListAsync(ct);
 
-        int itemsGeneratedCount = 0;
-
+        // 2. Enfileira a tarefa de apuração cumulativa para cada depositante no canal em segundo plano
         foreach (var cycle in openCycles)
         {
-            // Busca serviços automáticos diários com tarifa ativa para este cliente
-            var activeTariffs = await _db.CustomerTariffs
-                .AsNoTracking()
-                .Include(t => t.BillingService)
-                .Where(t => t.CompanyId == companyId &&
-                            t.CustomerId == cycle.CustomerId &&
-                            t.BillingService.IsActive &&
-                            t.BillingService.Type == BillingServiceType.Automatic_Daily &&
-                            t.ValidFrom <= dateToProcess &&
-                            (t.ValidTo == null || t.ValidTo >= dateToProcess))
-                .ToListAsync(ct);
-
-            foreach (var tariff in activeTariffs)
-            {
-                // Idempotência: Evita duplicar a mesma diária se o job rodar mais de uma vez no mesmo dia
-                var dailyDescription = $"{tariff.BillingService.Name} - {dateToProcess:dd/MM/yyyy}";
-                bool alreadyProcessed = cycle.Items.Any(i => i.BillingServiceId == tariff.BillingServiceId && i.Description == dailyDescription);
-
-                if (alreadyProcessed) continue;
-
-                var billingItem = await _engine.ExecuteDailyServiceAsync(cycle, tariff.BillingService, tariff, dateToProcess);
-                if (billingItem != null)
-                {
-                    _db.BillingItems.Add(billingItem);
-                    itemsGeneratedCount++;
-                }
-            }
+            await _channel.EnqueueRecalculationAsync(new BillingRecalculationTask(
+                CompanyId: companyId,
+                CustomerId: cycle.CustomerId,
+                ReferenceDate: dateToProcess,
+                TriggerOrderId: null,
+                TriggerType: "Process_Daily_Cron"
+            ), ct);
         }
-
-        await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new
         {
-            Message = $"Rotina de faturamento diário concluída para {dateToProcess:dd/MM/yyyy}.",
-            CyclesProcessed = openCycles.Count,
-            DailyEntriesGenerated = itemsGeneratedCount
+            Message = $"Rotina de faturação diária para {dateToProcess:dd/MM/yyyy} enviada para processamento em segundo plano com sucesso.",
+            QueuedCyclesCount = openCycles.Count,
+            ExecutionDate = dateToProcess.ToString("dd/MM/yyyy")
         });
     }
 }

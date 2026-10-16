@@ -15,6 +15,7 @@ using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
+using CoreWMS.Api.Infrastructure.Services.Billing;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -90,6 +91,9 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
 // 4. Arquitetura de Auditoria Assíncrona via Channel
 builder.Services.AddSingleton<AuditChannel>();
 builder.Services.AddHostedService<MongoAuditWorker>();
+
+builder.Services.AddSingleton<BillingChannel>();
+builder.Services.AddHostedService<BillingBackgroundWorker>();
 
 // Banco de Dados PostgreSQL
 builder.Services.AddDbContext<ApplicationDbContext>(options =>

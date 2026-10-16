@@ -77,6 +77,9 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<Guid>("BillingServiceId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime>("ChargeDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -84,6 +87,15 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DocumentType")
+                        .HasColumnType("text");
 
                     b.Property<string>("ManualNotes")
                         .HasMaxLength(1000)

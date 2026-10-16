@@ -9,8 +9,15 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreWMS.Api.Features.Billing.Cycles;
 
 public record UpsertManualBillingItemCommand(
-    Guid CycleId, Guid BillingServiceId, string Description,
-    decimal QuantityTotal, decimal ServiceTotal, string? ManualNotes) : IRequest<IResult>;
+    Guid CycleId,
+    Guid BillingServiceId,
+    string Description,
+    decimal QuantityTotal,
+    decimal ServiceTotal,
+    string? ManualNotes = null,
+    DateTime? ChargeDate = null,
+    string? DocumentNumber = null
+) : IRequest<IResult>;
 
 public class UpsertManualBillingItemValidator : AbstractValidator<UpsertManualBillingItemCommand>
 {
@@ -50,13 +57,17 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         if (service == null) return Results.BadRequest(new { Message = "Serviço de faturamento inválido." });
 
         var item = new BillingItem(
-            cycle.Id,
-            request.BillingServiceId,
-            request.Description,
-            request.QuantityTotal,
-            request.ServiceTotal,
-            null,
-            request.ManualNotes
+            billingCycleId: cycle.Id,
+            billingServiceId: request.BillingServiceId,
+            chargeDate: request.ChargeDate ?? DateTime.UtcNow,
+            documentType: "Manual",
+            documentNumber: request.DocumentNumber,
+            documentId: null,
+            description: request.Description,
+            quantityTotal: request.QuantityTotal,
+            serviceTotal: request.ServiceTotal,
+            statementDataJson: null,
+            manualNotes: request.ManualNotes
         );
 
         _db.BillingItems.Add(item);
