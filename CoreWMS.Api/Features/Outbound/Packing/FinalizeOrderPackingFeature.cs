@@ -4,15 +4,12 @@ using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Services.Billing;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Packing;
-
-// ====================================================================
-// DTOS & COMANDOS (MOMENTO 2: FECHAMENTO DE CARGA, TRANSPORTE & FATURAMENTO)
-// ====================================================================
 
 public record ShippingVolumeDto(
     Guid PackagingTypeId,
@@ -27,17 +24,13 @@ public record FinalizeOrderPackingCommand(
     List<ShippingVolumeDto> ShippingVolumes
 ) : IRequest<IResult>;
 
-// ====================================================================
-// VALIDAÇÃO
-// ====================================================================
-
 public class FinalizeOrderPackingCommandValidator : AbstractValidator<FinalizeOrderPackingCommand>
 {
     public FinalizeOrderPackingCommandValidator()
     {
         RuleFor(x => x.OrderId).NotEmpty().WithMessage("O identificador do pedido é obrigatório.");
         RuleFor(x => x.DockLocationId).NotEmpty().WithMessage("A doca de embarque destino é obrigatória.");
-        RuleFor(x => x.ShippingVolumes).NotEmpty().WithMessage("Informe ao menos um volume final para transporte/expedição.");
+        RuleFor(x => x.ShippingVolumes).NotEmpty().WithMessage("Informe ao menos um volume final para transporte.");
         RuleForEach(x => x.ShippingVolumes).ChildRules(v =>
         {
             v.RuleFor(x => x.PackagingTypeId).NotEmpty().WithMessage("O tipo de embalagem de transporte é obrigatório.");
@@ -48,26 +41,26 @@ public class FinalizeOrderPackingCommandValidator : AbstractValidator<FinalizeOr
     }
 }
 
-// ====================================================================
-// HANDLER: FECHAMENTO DA CARGA, GERAÇÃO DOS VOLUMES SEFAZ & BILLING
-// ====================================================================
-
 public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
+    private readonly BillingEngineService _billingEngine;
 
-    public FinalizeOrderPackingHandler(ApplicationDbContext db, ITenantProvider tenant)
+    public FinalizeOrderPackingHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        BillingEngineService billingEngine)
     {
         _db = db;
         _tenant = tenant;
+        _billingEngine = billingEngine;
     }
 
     public async Task<IResult> Handle(FinalizeOrderPackingCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Carrega o pedido completo com seus itens, alocações e volumes atuais
         var order = await _db.OutboundOrders
             .Include(o => o.Items)
                 .ThenInclude(i => i.Product)
@@ -87,7 +80,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             });
         }
 
-        // 2. Trava de integridade do Momento 1: Todos os itens precisam estar 100% conferidos e empacotados
+        // Validação do Momento 1: todos os itens precisam estar 100% conferidos e apontados
         var pendingItems = order.Items.Where(i =>
             i.Status != OutboundOrderItemStatus.Packed && i.PackedQuantity < i.ExpectedQuantity).ToList();
 
@@ -96,11 +89,10 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             var skus = string.Join(", ", pendingItems.Select(i => i.SkuCode));
             return Results.BadRequest(new
             {
-                Message = $"Ainda existem itens pendentes de conferência no Momento 1 ({skus}). Realize o apontamento de todos os itens antes de fechar a carga."
+                Message = $"Ainda existem itens com conferência pendente no Momento 1 ({skus}). Conclua o apontamento antes de fechar a carga."
             });
         }
 
-        // Valida se a doca selecionada existe e pertence à topologia da empresa
         var dockLocation = await _db.Locations
             .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == request.DockLocationId, ct);
@@ -108,7 +100,6 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
         if (dockLocation == null)
             return Results.BadRequest(new { Message = "Doca de embarque selecionada não encontrada na topologia." });
 
-        // Valida tipos de embalagens de transporte informados no Momento 2
         var packTypeIds = request.ShippingVolumes.Select(v => v.PackagingTypeId).Distinct().ToList();
         var packagingTypes = await _db.PackagingTypes
             .AsNoTracking()
@@ -116,15 +107,15 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             .ToDictionaryAsync(pt => pt.Id, ct);
 
         if (packagingTypes.Count != packTypeIds.Count)
-            return Results.BadRequest(new { Message = "Um ou mais tipos de embalagens de transporte informados são inválidos." });
+            return Results.BadRequest(new { Message = "Um ou mais tipos de embalagens de transporte são inválidos." });
 
-        // 3. Remove volumes de transporte anteriores se houver reprocessamento
+        // Remove volumes de transporte anteriores se houver re-packing
         if (order.Volumes.Any())
         {
             _db.OutboundVolumes.RemoveRange(order.Volumes);
         }
 
-        // 4. Calcula o peso bruto total com base no cadastro mestre dos produtos e HUs
+        // Cálculo de peso bruto automático com fallback para HUs / Produtos
         var allocations = await _db.OutboundAllocations
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
@@ -146,7 +137,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             ? Math.Round(calculatedOrderGrossWeight / totalShippingVolumesCount, 3)
             : 0m;
 
-        // 5. Gera as unidades logísticas finais de transporte (Momento 2)
+        // Momento 2: Geração das unidades logísticas finais de transporte
         var createdShippingVolumes = new List<OutboundVolume>();
         int volumeSequence = 1;
 
@@ -176,19 +167,19 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
 
         _db.OutboundVolumes.AddRange(createdShippingVolumes);
 
-        // 6. Transita a Ordem de Saída para ReadyToShip na Doca de Embarque
+        // Transita a ordem para ReadyToShip na Doca
         order.StageAtDock(request.DockLocationId);
 
-        // 7. DISPARO DO FATURAMENTO AUTOMÁTICO (MOMENTO 1 + MOMENTO 2)
+        // 1. Salva as alterações de saída para que fiquem persistidas no banco antes do motor Dapper rodar
+        await _db.SaveChangesAsync(ct);
+
+        // 2. DISPARO DO FATURAMENTO DINÂMICO VIA SQL (HANDLING OUT E STRETCH)
         var billingItemsGenerated = await GenerateBillingEventsAsync(
             companyId,
             order,
-            createdShippingVolumes,
             request.UsedStretchFilm,
             ct
         );
-
-        await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new
         {
@@ -199,36 +190,26 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             TotalShippingVolumes = createdShippingVolumes.Count,
             UsedStretchFilm = request.UsedStretchFilm,
             TotalCalculatedGrossWeight = createdShippingVolumes.Sum(v => v.GrossWeight),
-            BillingEventsCount = billingItemsGenerated.Count,
-            Volumes = createdShippingVolumes.Select(v => new
-            {
-                v.VolumeLpn,
-                v.PackagingTypeId,
-                PackagingCode = packagingTypes[v.PackagingTypeId].Code,
-                PackagingDescription = packagingTypes[v.PackagingTypeId].Description,
-                v.GrossWeight
-            }).ToList()
+            BillingEventsCount = billingItemsGenerated.Count
         });
     }
-
-    // ====================================================================
-    // MOTOR DE APURAÇÃO DE FATURAMENTO LOGÍSTICO
-    // ====================================================================
 
     private async Task<List<BillingItem>> GenerateBillingEventsAsync(
         Guid companyId,
         OutboundOrder order,
-        List<OutboundVolume> shippingVolumes,
         bool usedStretch,
         CancellationToken ct)
     {
-        // Busca o ciclo de cobrança aberto (Draft) do cliente
+        var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
+
+        // 1. Localiza ou cria o ciclo de faturamento aberto para a competência corrente
         var cycle = await _db.BillingCycles
+            .Include(c => c.Items)
             .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
                                       c.CustomerId == order.CustomerId &&
+                                      c.ReferenceMonth == currentMonth &&
                                       c.Status == BillingStatus.Draft, ct);
 
-        // Se não houver ciclo aberto para o mês corrente, cria automaticamente
         if (cycle == null)
         {
             cycle = new BillingCycle(companyId, order.CustomerId, DateTime.UtcNow);
@@ -236,133 +217,112 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             await _db.SaveChangesAsync(ct);
         }
 
-        // Carrega todas as tarifas ativas negociadas no contrato do cliente
+        // 2. Localiza as tarifas ativas vinculadas a este cliente
         var customerTariffs = await _db.CustomerTariffs
-            .AsNoTracking()
             .Include(t => t.BillingService)
-            .Where(t => t.CustomerId == order.CustomerId &&
-                        t.BillingService.CompanyId == companyId &&
-                        t.BillingService.IsActive)
+            .Where(t => t.CompanyId == companyId &&
+                        t.CustomerId == order.CustomerId &&
+                        t.BillingService.IsActive &&
+                        t.ValidFrom <= DateTime.UtcNow &&
+                        (t.ValidTo == null || t.ValidTo >= DateTime.UtcNow))
             .ToListAsync(ct);
 
         var generatedItems = new List<BillingItem>();
 
-        // --------------------------------------------------------------------
-        // A) COBRANÇA MOMENTO 1: VOLUMES OPERACIONAIS DE SAÍDA (HANDLING OUT)
-        // --------------------------------------------------------------------
-        var operationalPacks = await _db.OutboundItemPacks
-            .AsNoTracking()
-            .Include(p => p.PackagingType)
-            .Where(p => p.OutboundOrderId == order.Id)
-            .GroupBy(p => new { p.PackagingTypeId, p.PackagingType.Code, p.PackagingType.Description })
-            .Select(g => new
-            {
-                g.Key.PackagingTypeId,
-                Code = g.Key.Code.Trim().ToUpper(),
-                Description = g.Key.Description.Trim(),
-                TotalVolumes = g.Sum(x => x.VolumeCount),
-                TotalPieces = g.Sum(x => x.VolumeCount * x.QuantityPerVolume)
-            })
-            .ToListAsync(ct);
+        // 3. APURAÇÃO HANDLING OUT (MOMENTO 1): Executa a query SQL do serviço ativo
+        var handlingTariff = customerTariffs.FirstOrDefault(t =>
+            !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
+            (t.BillingService.Name.Contains("Expedição", StringComparison.OrdinalIgnoreCase) ||
+             t.BillingService.Name.Contains("Handling Out", StringComparison.OrdinalIgnoreCase) ||
+             t.BillingService.Name.Contains("Saída", StringComparison.OrdinalIgnoreCase)));
 
-        foreach (var packGroup in operationalPacks)
+        if (handlingTariff != null)
         {
-            // Busca a tarifa cadastrada para o tipo de volume operacional (ex: "PLT", "CX", "UN", "SC", "GF")
-            var matchedTariff = customerTariffs.FirstOrDefault(t =>
-                t.BillingService.Name.Contains(packGroup.Code, StringComparison.OrdinalIgnoreCase) &&
-                (t.BillingService.Name.Contains("Expedição", StringComparison.OrdinalIgnoreCase) ||
-                 t.BillingService.Name.Contains("Saída", StringComparison.OrdinalIgnoreCase) ||
-                 t.BillingService.Name.Contains("Handling", StringComparison.OrdinalIgnoreCase)))
-                ?? customerTariffs.FirstOrDefault(t =>
-                    t.BillingService.Name.Contains(packGroup.Code, StringComparison.OrdinalIgnoreCase))
-                ?? customerTariffs.FirstOrDefault(t =>
-                    t.BillingService.Name.Contains("Expedição", StringComparison.OrdinalIgnoreCase) ||
-                    t.BillingService.Name.Contains("Handling Out", StringComparison.OrdinalIgnoreCase));
+            var calculatedItem = await _billingEngine.ExecuteOperationalEventAsync(
+                cycle,
+                handlingTariff.BillingService,
+                handlingTariff,
+                orderId: order.Id,
+                descriptionPrefix: $"Pedido #{order.OrderNumber}"
+            );
 
-            if (matchedTariff != null)
+            if (calculatedItem != null && (calculatedItem.QuantityTotal > 0 || calculatedItem.ServiceTotal > 0))
             {
-                decimal unitRate = matchedTariff.UnitValue;
-                decimal totalAmount = Math.Round(packGroup.TotalVolumes * unitRate, 2);
+                var targetDescription = calculatedItem.Description;
+                var existingItem = cycle.Items.FirstOrDefault(i =>
+                    i.BillingServiceId == handlingTariff.BillingServiceId &&
+                    i.Description == targetDescription);
 
-                var extractData = System.Text.Json.JsonSerializer.Serialize(new
+                if (existingItem != null)
                 {
-                    OutboundOrderId = order.Id,
-                    OrderNumber = order.OrderNumber,
-                    PackagingCode = packGroup.Code,
-                    VolumeCount = packGroup.TotalVolumes,
-                    TotalPieces = packGroup.TotalPieces
-                });
-
-                var billingItem = new BillingItem(
-                    cycle.Id,
-                    matchedTariff.BillingServiceId,
-                    $"Expedição ({packGroup.Code}) - {packGroup.TotalVolumes} vol ({packGroup.TotalPieces:0.####} un) - Pedido #{order.OrderNumber}",
-                    packGroup.TotalVolumes,
-                    totalAmount,
-                    extractData,
-                    null
-                );
-
-                generatedItems.Add(billingItem);
+                    existingItem.UpdateValues(
+                        calculatedItem.QuantityTotal,
+                        calculatedItem.ServiceTotal,
+                        calculatedItem.StatementDataJson,
+                        $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Finalização Packing)"
+                    );
+                    generatedItems.Add(existingItem);
+                }
+                else
+                {
+                    _db.BillingItems.Add(calculatedItem);
+                    generatedItems.Add(calculatedItem);
+                }
             }
         }
 
-        // --------------------------------------------------------------------
-        // B) COBRANÇA MOMENTO 2: INSUMO FILME STRETCH APLICADO NA EXPEDIÇÃO
-        // --------------------------------------------------------------------
+        // 4. APURAÇÃO FILME STRETCH (MOMENTO 2): Executa a query SQL caso tenha sido aplicado
         if (usedStretch)
         {
             var stretchTariff = customerTariffs.FirstOrDefault(t =>
-                t.BillingService.Name.Contains("Stretch", StringComparison.OrdinalIgnoreCase) ||
-                t.BillingService.Name.Contains("Filme", StringComparison.OrdinalIgnoreCase));
+                !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
+                (t.BillingService.Name.Contains("Stretch", StringComparison.OrdinalIgnoreCase) ||
+                 t.BillingService.Name.Contains("Filme", StringComparison.OrdinalIgnoreCase)));
 
             if (stretchTariff != null)
             {
-                // Conta paletes gerados para a expedição (se houver tipo PLT, caso contrário cobra por volume final)
-                var palletCount = shippingVolumes.Count(v =>
-                    v.PackagingType != null &&
-                    v.PackagingType.Code.Contains("PLT", StringComparison.OrdinalIgnoreCase));
+                var calculatedStretchItem = await _billingEngine.ExecuteOperationalEventAsync(
+                    cycle,
+                    stretchTariff.BillingService,
+                    stretchTariff,
+                    orderId: order.Id,
+                    descriptionPrefix: $"Pedido #{order.OrderNumber}"
+                );
 
-                int billableCount = palletCount > 0 ? palletCount : shippingVolumes.Count;
-
-                if (billableCount > 0)
+                if (calculatedStretchItem != null && (calculatedStretchItem.QuantityTotal > 0 || calculatedStretchItem.ServiceTotal > 0))
                 {
-                    decimal stretchTotal = Math.Round(billableCount * stretchTariff.UnitValue, 2);
+                    var targetDescription = calculatedStretchItem.Description;
+                    var existingStretch = cycle.Items.FirstOrDefault(i =>
+                        i.BillingServiceId == stretchTariff.BillingServiceId &&
+                        i.Description == targetDescription);
 
-                    var extractData = System.Text.Json.JsonSerializer.Serialize(new
+                    if (existingStretch != null)
                     {
-                        OutboundOrderId = order.Id,
-                        OrderNumber = order.OrderNumber,
-                        AppliedPallets = billableCount
-                    });
-
-                    var stretchBillingItem = new BillingItem(
-                        cycle.Id,
-                        stretchTariff.BillingServiceId,
-                        $"Aplicação Filme Stretch ({billableCount} vol) - Pedido #{order.OrderNumber}",
-                        billableCount,
-                        stretchTotal,
-                        extractData,
-                        null
-                    );
-
-                    generatedItems.Add(stretchBillingItem);
+                        existingStretch.UpdateValues(
+                            calculatedStretchItem.QuantityTotal,
+                            calculatedStretchItem.ServiceTotal,
+                            calculatedStretchItem.StatementDataJson,
+                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Aplicação Stretch)"
+                        );
+                        generatedItems.Add(existingStretch);
+                    }
+                    else
+                    {
+                        _db.BillingItems.Add(calculatedStretchItem);
+                        generatedItems.Add(calculatedStretchItem);
+                    }
                 }
             }
         }
 
         if (generatedItems.Any())
         {
-            _db.BillingItems.AddRange(generatedItems);
+            await _db.SaveChangesAsync(ct);
         }
 
         return generatedItems;
     }
 }
-
-// ====================================================================
-// MAPEAMENTO DO ENDPOINT
-// ====================================================================
 
 public static class FinalizeOrderPackingEndpoints
 {

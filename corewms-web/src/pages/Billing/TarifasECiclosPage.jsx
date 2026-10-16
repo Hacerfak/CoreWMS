@@ -334,11 +334,29 @@ GROUP BY pt."Code", pt."Description";`;
                 break;
             case 'outbound_handling':
                 sql = `-- Expedição / Handling Out por Embalagem (Outbound - Momento 1)
-SELECT 
+SELECT
     pt."Code" AS "TIPO_VOLUME",
     pt."Description" AS "DESCRICAO",
     SUM(p."VolumeCount") AS "VOLUME",
-    SUM(p."VolumeCount") * @ServicoValor AS "VALOR_TOTAL"
+    ROUND(
+        CASE pt."Code"
+            WHEN 'PLT' THEN 12.00
+            WHEN 'CX'  THEN 1.80
+            WHEN 'UN'  THEN 0.90
+            ELSE 0.90
+        END * COALESCE(NULLIF(@ServicoValor, 0), 1.0),
+        2
+    ) AS "VALOR_UNITARIO",
+    ROUND(
+        SUM(p."VolumeCount") *
+        (CASE pt."Code"
+            WHEN 'PLT' THEN 12.00
+            WHEN 'CX'  THEN 1.80
+            WHEN 'UN'  THEN 0.90
+            ELSE 0.90
+        END * COALESCE(NULLIF(@ServicoValor, 0), 1.0)),
+        2
+    ) AS "VALOR_TOTAL"
 FROM "OutboundItemPacks" p
 JOIN "PackagingTypes" pt ON pt."Id" = p."PackagingTypeId"
 WHERE p."OutboundOrderId" = @OrdemId
@@ -346,12 +364,17 @@ GROUP BY pt."Code", pt."Description";`;
                 break;
             case 'outbound_stretch':
                 sql = `-- Insumo Filme Stretch Aplicado (Outbound - Momento 2)
-SELECT 
+SELECT
+    pt."Code" AS "TIPO_VOLUME",
+    'Aplicação Filme Stretch' AS "DESCRICAO",
     COUNT(v."Id") AS "VOLUME",
-    COUNT(v."Id") * @ServicoValor AS "VALOR_TOTAL"
+    ROUND(COALESCE(NULLIF(@ServicoValor, 0), 15.00), 2) AS "VALOR_UNITARIO",
+    ROUND(COUNT(v."Id") * COALESCE(NULLIF(@ServicoValor, 0), 15.00), 2) AS "VALOR_TOTAL"
 FROM "OutboundVolumes" v
+JOIN "PackagingTypes" pt ON pt."Id" = v."PackagingTypeId"
 WHERE v."OutboundOrderId" = @OrdemId
-  AND v."UsedStretchFilm" = TRUE;`;
+  AND v."UsedStretchFilm" = TRUE
+GROUP BY pt."Code";`;
                 break;
             default:
                 break;
@@ -513,7 +536,7 @@ WHERE v."OutboundOrderId" = @OrdemId
                                             {formatDatePtBr(t.validFrom)}
                                         </TableCell>
                                         <TableCell className="text-right font-mono font-bold text-emerald-700 text-sm">
-                                            R$ {t.unitValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                                            R$ {t.unitValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 10 })}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="sm" onClick={() => handleDeleteTariff(t.id)} className="text-slate-400 hover:text-rose-600 h-8 w-8 p-0">
@@ -689,8 +712,8 @@ WHERE v."OutboundOrderId" = @OrdemId
                                 <Label className="text-xs font-semibold text-slate-700">Valor Unitário R$ *</Label>
                                 <Input
                                     type="number"
-                                    step="0.0001"
-                                    placeholder="0,00"
+                                    step="any"
+                                    placeholder="0,0000000000"
                                     onChange={(e) => setTariffValue('unitValue', parseFloat(e.target.value) || 0, { shouldValidate: true })}
                                     className="bg-white font-mono text-xs h-9"
                                 />
