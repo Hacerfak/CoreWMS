@@ -163,6 +163,7 @@ public class BillingEngineService
 
     /// <summary>
     /// Chamado pelo Background Worker para atualizar as diárias do dia de forma cumulativa.
+    /// Remove a diária caso o estoque tenha sido 100% estornado.
     /// </summary>
     public async Task<List<BillingItem>> UpsertDailyChargesAsync(
         Guid companyId,
@@ -204,13 +205,23 @@ public class BillingEngineService
         foreach (var tariff in activeTariffs)
         {
             var calculatedItem = await ExecuteDailyServiceAsync(cycle, tariff.BillingService, tariff, dateOnly);
-            if (calculatedItem == null) continue;
 
             var existingItem = cycle.Items.FirstOrDefault(i =>
                 i.BillingServiceId == tariff.BillingServiceId &&
                 i.ChargeDate.Date == dateOnly &&
                 i.DocumentType == "Diária de Estoque");
 
+            // SE O ESTOQUE FICOU ZERADO (ex: após estorno total de HUs)
+            if (calculatedItem == null)
+            {
+                if (existingItem != null)
+                {
+                    _db.BillingItems.Remove(existingItem);
+                }
+                continue;
+            }
+
+            // SE EXISTE SALDO: Atualiza ou insere
             if (existingItem != null)
             {
                 existingItem.UpdateValues(

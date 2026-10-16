@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
     ArrowLeft, Receipt, Calendar, Download, Lock, RefreshCw,
     Plus, Loader2, CheckCircle2, ChevronDown, ChevronRight, FileText,
-    TrendingUp, ShieldCheck, Sparkles, AlertCircle, Building2
+    TrendingUp, Sparkles, Trash2, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -27,7 +27,7 @@ export default function ExtratoFaturamentoPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [expandedItemId, setExpandedItemId] = useState(null);
 
-    // Modal de Lançamento Manual
+    // Modal de Lançamento Manual Extra
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [description, setDescription] = useState('');
@@ -36,7 +36,10 @@ export default function ExtratoFaturamentoPage() {
     const [manualNotes, setManualNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Utilitário para formatar datas UTC sem retroceder o dia devido ao fuso horário
+    // Modal de Confirmação de Exclusão de Qualquer Item do Ciclo
+    const [itemToDelete, setItemToDelete] = useState(null);
+    const [isDeletingItem, setIsDeletingItem] = useState(false);
+
     const formatDatePtBr = (dateValue) => {
         if (!dateValue) return '-';
         if (typeof dateValue === 'string') {
@@ -71,7 +74,7 @@ export default function ExtratoFaturamentoPage() {
         if (cycleId) loadCycleDetails();
     }, [cycleId]);
 
-    // Recalcular Ciclo Automático
+    // Recalcular Motor
     const handleRecalculateCycle = async () => {
         if (!cycle) return;
         try {
@@ -106,7 +109,7 @@ export default function ExtratoFaturamentoPage() {
         }
     };
 
-    // Lançamento Manual
+    // Gravar Lançamento Manual Extra
     const handleSaveManualItem = async (e) => {
         e.preventDefault();
         if (!selectedServiceId || !description) return;
@@ -140,8 +143,36 @@ export default function ExtratoFaturamentoPage() {
         }
     };
 
+    // Confirmar Exclusão de Item
+    const handleConfirmDeleteItem = async () => {
+        if (!itemToDelete) return;
+        try {
+            setIsDeletingItem(true);
+            await customInstance({
+                url: `/api/billing/cycles/${cycleId}/items/${itemToDelete.id}`,
+                method: 'DELETE'
+            });
+
+            toast.success('Item removido do extrato com sucesso!');
+            setItemToDelete(null);
+            loadCycleDetails();
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao remover item do ciclo.');
+        } finally {
+            setIsDeletingItem(false);
+        }
+    };
+
     const handleExport = () => {
         downloadBackendCsv(`/api/billing/cycles/${cycleId}/export`, {}, `extrato_faturamento_${cycle?.referenceMonth?.replace('/', '_')}`);
+    };
+
+    const checkIsManualItem = (item) => {
+        if (item.documentType?.toLowerCase() === 'manual') return true;
+        if (!item.statementDataJson && item.documentType !== 'Diária de Estoque' && !item.documentId) {
+            return true;
+        }
+        return false;
     };
 
     // KPIs Analíticos da Fatura
@@ -154,12 +185,19 @@ export default function ExtratoFaturamentoPage() {
 
         cycle.items.forEach(i => {
             const val = Number(i.serviceTotal) || 0;
-            if (i.manualNotes && !i.statementDataJson) {
+            const isManual = checkIsManualItem(i);
+
+            if (isManual) {
                 manualTotal += val;
-            } else if (i.description?.includes('Expedição') || i.description?.includes('Stretch') || i.description?.includes('Recebimento') || i.description?.includes('NF')) {
-                eventsTotal += val;
-            } else {
+            } else if (
+                i.documentType === 'Diária de Estoque' ||
+                i.description?.toLowerCase().includes('armazenagem') ||
+                i.description?.toLowerCase().includes('ad-valorem') ||
+                i.description?.toLowerCase().includes('diária')
+            ) {
                 dailyTotal += val;
+            } else {
+                eventsTotal += val;
             }
         });
 
@@ -249,7 +287,7 @@ export default function ExtratoFaturamentoPage() {
                         <p className="text-2xl font-bold font-mono text-purple-800">
                             {metrics.dailyTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </p>
-                        <span className="text-[10px] text-slate-400">Apuração contínua noturna</span>
+                        <span className="text-[10px] text-slate-400">Apuração contínua de estoque</span>
                     </CardContent>
                 </Card>
 
@@ -268,9 +306,9 @@ export default function ExtratoFaturamentoPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="border-slate-200/80 bg-white shadow-2xs">
+                <Card className="border-amber-200 bg-amber-50/20 shadow-2xs">
                     <CardHeader className="p-4 pb-1">
-                        <CardTitle className="text-xs font-semibold text-slate-500 uppercase flex items-center justify-between">
+                        <CardTitle className="text-xs font-semibold text-amber-800 uppercase flex items-center justify-between">
                             <span>Lançamentos Avulsos</span>
                             <Plus size={16} className="text-amber-600" />
                         </CardTitle>
@@ -279,7 +317,7 @@ export default function ExtratoFaturamentoPage() {
                         <p className="text-2xl font-bold font-mono text-amber-800">
                             {metrics.manualTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </p>
-                        <span className="text-[10px] text-slate-400">Serviços adicionais manuais</span>
+                        <span className="text-[10px] text-amber-600/80">Serviços extras manuais</span>
                     </CardContent>
                 </Card>
             </div>
@@ -306,18 +344,20 @@ export default function ExtratoFaturamentoPage() {
                                 <TableHead className="text-right">Quantidade / Volume</TableHead>
                                 <TableHead className="text-right">Valor Total R$</TableHead>
                                 <TableHead>Observações</TableHead>
+                                <TableHead className="text-right w-16">Ações</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {cycle?.items?.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="h-28 text-center text-xs text-slate-400 italic">
+                                    <TableCell colSpan={8} className="h-28 text-center text-xs text-slate-400 italic">
                                         Nenhum serviço bilhetado neste ciclo até o momento.
                                     </TableCell>
                                 </TableRow>
                             ) : cycle?.items?.map((item) => {
                                 const isExpanded = expandedItemId === item.id;
                                 const hasStatement = Boolean(item.statementDataJson);
+                                const isManual = checkIsManualItem(item);
                                 let parsedStatement = [];
 
                                 if (hasStatement) {
@@ -348,7 +388,14 @@ export default function ExtratoFaturamentoPage() {
                                                 {formatDatePtBr(item.chargeDate)}
                                             </TableCell>
                                             <TableCell>
-                                                {item.documentNumber ? (
+                                                {isManual ? (
+                                                    <div className="space-y-0.5">
+                                                        <Badge variant="outline" className="font-mono text-[10px] bg-amber-50 text-amber-800 border-amber-300">
+                                                            Lançamento Avulso
+                                                        </Badge>
+                                                        <span className="block text-[10px] text-amber-600 font-medium">Manual</span>
+                                                    </div>
+                                                ) : item.documentNumber ? (
                                                     <div className="space-y-0.5">
                                                         <Badge variant="outline" className="font-mono text-[10px] bg-slate-50 text-slate-800 border-slate-300">
                                                             {item.documentNumber}
@@ -376,12 +423,26 @@ export default function ExtratoFaturamentoPage() {
                                             <TableCell className="text-xs text-slate-500 italic">
                                                 {item.manualNotes || '-'}
                                             </TableCell>
+                                            <TableCell className="text-right">
+                                                {/* Permite excluir qualquer item do ciclo se estiver em Draft */}
+                                                {isDraft && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setItemToDelete(item)}
+                                                        className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 h-7 w-7 p-0"
+                                                        title="Excluir este lançamento"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </Button>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
 
                                         {/* TABELA DE OCORRÊNCIAS EXPANDIDA */}
                                         {isExpanded && hasStatement && (
                                             <TableRow key={`${item.id}-detail`} className="bg-slate-50/80">
-                                                <TableCell colSpan={7} className="p-4">
+                                                <TableCell colSpan={8} className="p-4">
                                                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
                                                         <div className="flex items-center justify-between border-b pb-2">
                                                             <span className="font-bold text-xs uppercase text-slate-800 flex items-center gap-1.5">
@@ -509,6 +570,68 @@ export default function ExtratoFaturamentoPage() {
                             </Button>
                         </DialogFooter>
                     </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE QUALQUER LANÇAMENTO (PADRÃO DO SISTEMA) */}
+            <Dialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                <DialogContent className="sm:max-w-md bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-rose-600 text-base">
+                            <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão de Cobrança
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            Tem certeza de que deseja remover este lançamento do extrato? Caso seja um estorno de recebimento ou expedição, o recálculo poderá ser acionado novamente.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {itemToDelete && (
+                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 font-sans">
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Descrição:</span>
+                                <strong className="text-slate-800">{itemToDelete.description || itemToDelete.serviceName}</strong>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Documento / Tipo:</span>
+                                <span className="font-semibold text-slate-700">
+                                    {itemToDelete.documentNumber || itemToDelete.documentType || 'Consolidado'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Quantidade:</span>
+                                <span className="font-mono text-slate-700">{itemToDelete.quantityTotal}</span>
+                            </div>
+                            <div className="flex justify-between border-t border-slate-200/60 pt-1">
+                                <span className="text-slate-500">Valor a Estornar:</span>
+                                <strong className="font-mono text-rose-600">
+                                    {(itemToDelete.serviceTotal || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </strong>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setItemToDelete(null)}
+                            disabled={isDeletingItem}
+                            className="h-9"
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleConfirmDeleteItem}
+                            disabled={isDeletingItem}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9"
+                        >
+                            {isDeletingItem ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+                            Excluir Lançamento
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

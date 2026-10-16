@@ -1,7 +1,9 @@
+using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Services.Billing;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
@@ -24,12 +26,18 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly KardexChannel _kardex;
+    private readonly BillingChannel? _billingChannel;
 
-    public RollbackInboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public RollbackInboundOrderHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        KardexChannel kardex,
+        BillingChannel? billingChannel = null)
     {
         _db = db;
         _tenant = tenant;
         _kardex = kardex;
+        _billingChannel = billingChannel;
     }
 
     public async Task<IResult> Handle(RollbackInboundOrderCommand request, CancellationToken ct)
@@ -49,6 +57,7 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
         if (generatedHus.Any(h => h.Status == Inventory.Enums.HuStatus.Shipped))
             return Results.BadRequest(new { Message = "Estorno bloqueado. Uma ou mais HUs desta ordem já foram expedidas." });
 
+        // 1. Estorno de saldo e movimentações no Kardex
         foreach (var hu in generatedHus)
         {
             var balance = await _db.InventoryBalances
@@ -63,9 +72,10 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
                 companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
                 Inventory.Enums.TransactionType.Inventory_Adjustment_Out,
                 -hu.CurrentQuantity, 0,
-                order.Id, $"ESTORNO NF {order.AccessKey}"), ct);
+                order.Id, $"ESTORNO NF {order.InvoiceNumber}"), ct);
         }
 
+        // 2. Remove as HUs físicas geradas
         _db.HandlingUnits.RemoveRange(generatedHus);
 
         foreach (var item in order.Items)
@@ -76,11 +86,18 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
 
         order.UpdateStatus(InboundOrderStatus.Pending);
 
+        // 3. EXCLUSÃO DOS ITENS DE COBRANÇA DA ORDEM (Apenas em ciclos abertos)
         var billingItems = await _db.BillingItems
-            .Where(b => b.Description.Contains(order.AccessKey))
+            .Where(b => (b.DocumentId == order.Id ||
+                         b.Description.Contains(order.AccessKey) ||
+                         (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && b.DocumentNumber == order.InvoiceNumber))
+                     && _db.BillingCycles.Any(c => c.Id == b.BillingCycleId && c.Status == BillingStatus.Draft))
             .ToListAsync(ct);
 
-        if (billingItems.Any()) _db.BillingItems.RemoveRange(billingItems);
+        if (billingItems.Any())
+        {
+            _db.BillingItems.RemoveRange(billingItems);
+        }
 
         try
         {
@@ -91,7 +108,19 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
             return Results.Conflict(new { Message = "Conflito ao processar o estorno. Tente novamente." });
         }
 
-        return Results.Ok(new { Message = "Estorno realizado com sucesso. A ordem retornou para o status pendente." });
+        // 4. RECÁLCULO EM SEGUNDO PLANO DAS DIÁRIAS (Sem as HUs que acabaram de ser excluídas)
+        if (_billingChannel != null && order.CustomerId.HasValue)
+        {
+            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
+                CompanyId: companyId,
+                CustomerId: order.CustomerId.Value,
+                ReferenceDate: DateTime.UtcNow,
+                TriggerOrderId: order.Id,
+                TriggerType: "Inbound_Rollback"
+            ), ct);
+        }
+
+        return Results.Ok(new { Message = "Estorno realizado com sucesso. A ordem retornou para pendente e o faturamento foi atualizado." });
     }
 }
 
@@ -99,7 +128,8 @@ public static class RollbackInboundOrderEndpoints
 {
     public static void MapRollbackInboundOrderEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/inbound/{orderId:guid}/rollback", async (Guid orderId, IMediator mediator) => await mediator.Send(new RollbackInboundOrderCommand(orderId)))
+        app.MapPost("/api/inbound/{orderId:guid}/rollback", async (Guid orderId, IMediator mediator) =>
+            await mediator.Send(new RollbackInboundOrderCommand(orderId)))
            .WithTags("Inbound")
            .RequireAuthorization()
            .RequirePermission(Permissions.Inbound.Manage);

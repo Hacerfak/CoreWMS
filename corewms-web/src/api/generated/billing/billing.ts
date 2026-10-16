@@ -680,6 +680,66 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiBillingCyclesIdCloseMutationOptions(options), queryClient);
     }
+    export const deleteApiBillingCyclesCycleIdItemsItemId = (
+    cycleId: string,
+    itemId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/cycles/${cycleId}/items/${itemId}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiBillingCyclesCycleIdItemsItemIdMutationKey = () => ['deleteApiBillingCyclesCycleIdItemsItemId'] as const;
+
+export const getDeleteApiBillingCyclesCycleIdItemsItemIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingCyclesCycleIdItemsItemId>>, TError,DeleteApiBillingCyclesCycleIdItemsItemIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingCyclesCycleIdItemsItemId>>, TError,DeleteApiBillingCyclesCycleIdItemsItemIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiBillingCyclesCycleIdItemsItemIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiBillingCyclesCycleIdItemsItemId>>, DeleteApiBillingCyclesCycleIdItemsItemIdMutationVariables> = (props) => {
+          const {cycleId,itemId} = props ?? {};
+
+          return  deleteApiBillingCyclesCycleIdItemsItemId(cycleId,itemId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiBillingCyclesCycleIdItemsItemIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiBillingCyclesCycleIdItemsItemId>>>
+
+    export type DeleteApiBillingCyclesCycleIdItemsItemIdMutationError = unknown
+    export type DeleteApiBillingCyclesCycleIdItemsItemIdMutationVariables = {cycleId: string;itemId: string}
+
+    export const useDeleteApiBillingCyclesCycleIdItemsItemId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiBillingCyclesCycleIdItemsItemId>>, TError,DeleteApiBillingCyclesCycleIdItemsItemIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiBillingCyclesCycleIdItemsItemId>>,
+        TError,
+        DeleteApiBillingCyclesCycleIdItemsItemIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiBillingCyclesCycleIdItemsItemIdMutationOptions(options), queryClient);
+    }
     export const postApiBillingCyclesGenerate = (
     generateBillingCycleCommand: GenerateBillingCycleCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

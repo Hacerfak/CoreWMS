@@ -1,3 +1,4 @@
+using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Entities;
@@ -5,6 +6,7 @@ using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Services.Billing;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -18,15 +20,18 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly KardexChannel _kardex;
+    private readonly BillingChannel? _billingChannel;
 
     public RevertOutboundShipmentHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        KardexChannel kardex)
+        KardexChannel kardex,
+        BillingChannel? billingChannel = null)
     {
         _db = db;
         _tenant = tenant;
         _kardex = kardex;
+        _billingChannel = billingChannel;
     }
 
     public async Task<IResult> Handle(RevertOutboundShipmentCommand request, CancellationToken ct)
@@ -120,8 +125,19 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             ), ct);
         }
 
-        // 4. Retorna a ordem para 'ReadyToShip' (permitindo reemitir NF-e ou cancelar o pedido)
+        // 4. Retorna a ordem para 'ReadyToShip'
         order.UpdateStatus(OutboundOrderStatus.ReadyToShip);
+
+        // 5. EXCLUSÃO DOS ITENS OPERACIONAIS DE SAÍDA (Handling Out e Stretch em ciclos abertos)
+        var billingItems = await _db.BillingItems
+            .Where(b => (b.DocumentId == order.Id || b.Description.Contains(order.OrderNumber))
+                     && _db.BillingCycles.Any(c => c.Id == b.BillingCycleId && c.Status == BillingStatus.Draft))
+            .ToListAsync(ct);
+
+        if (billingItems.Any())
+        {
+            _db.BillingItems.RemoveRange(billingItems);
+        }
 
         try
         {
@@ -132,9 +148,21 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             return Results.Conflict(new { Message = "Conflito de concorrência ao estornar a expedição." });
         }
 
+        // 6. RECÁLCULO EM SEGUNDO PLANO DAS DIÁRIAS (Recompondo o estoque que voltou a constar em armazém)
+        if (_billingChannel != null)
+        {
+            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
+                CompanyId: companyId,
+                CustomerId: order.CustomerId,
+                ReferenceDate: DateTime.UtcNow,
+                TriggerOrderId: order.Id,
+                TriggerType: "Outbound_Shipment_Revert"
+            ), ct);
+        }
+
         return Results.Ok(new
         {
-            Message = $"Expedição do Pedido #{order.OrderNumber} estornada com sucesso! O estoque foi restaurado e o pedido retornou para 'Pronto para Expedir'.",
+            Message = $"Expedição do Pedido #{order.OrderNumber} estornada com sucesso! O estoque foi restaurado e os lançamentos de faturamento foram atualizados.",
             OrderStatus = order.Status.ToString()
         });
     }

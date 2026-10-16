@@ -1,9 +1,11 @@
+using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
+using CoreWMS.Api.Infrastructure.Services.Billing;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
@@ -27,12 +29,21 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly KardexChannel _kardex;
+    private readonly BillingEngineService _billingEngine;
+    private readonly BillingChannel? _billingChannel;
 
-    public RollbackHandlingUnitsHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public RollbackHandlingUnitsHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        KardexChannel kardex,
+        BillingEngineService billingEngine,
+        BillingChannel? billingChannel = null)
     {
         _db = db;
         _tenant = tenant;
         _kardex = kardex;
+        _billingEngine = billingEngine;
+        _billingChannel = billingChannel;
     }
 
     public async Task<IResult> Handle(RollbackHandlingUnitsCommand request, CancellationToken ct)
@@ -118,10 +129,104 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
                 hu.ReceiptDocumentId, $"ESTORNO HU {hu.Lpn}"), ct);
         }
 
+        // 1. Remove fisicamente as HUs do banco
         _db.HandlingUnits.RemoveRange(hus);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Ok(new { Message = $"{hus.Count} HU(s) estornada(s) com sucesso." });
+        // 2. TRATAMENTO DO FATURAMENTO (Handling In)
+        foreach (var order in inboundOrders)
+        {
+            // Checa se ainda existem HUs ativas para esta ordem após a exclusão
+            var hasRemainingHus = await _db.HandlingUnits
+                .AnyAsync(h => h.ReceiptDocumentId == order.Id && h.CompanyId == companyId, ct);
+
+            var billingItems = await _db.BillingItems
+                .Where(b => (b.DocumentId == order.Id ||
+                             (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && b.DocumentNumber == order.InvoiceNumber) ||
+                             (!string.IsNullOrWhiteSpace(order.InvoiceNumber) && b.Description.Contains(order.InvoiceNumber)) ||
+                             b.Description.Contains(order.AccessKey))
+                         && _db.BillingCycles.Any(c => c.Id == b.BillingCycleId && c.Status == BillingStatus.Draft))
+                .ToListAsync(ct);
+
+            if (!hasRemainingHus)
+            {
+                // Estorno Total: remove a cobrança do extrato aberto
+                if (billingItems.Any())
+                {
+                    _db.BillingItems.RemoveRange(billingItems);
+                }
+            }
+            else if (order.CustomerId.HasValue && billingItems.Any())
+            {
+                // Estorno Parcial: recalcula o Handling In considerando apenas as HUs restantes
+                var customerId = order.CustomerId.Value;
+                var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
+
+                var cycle = await _db.BillingCycles
+                    .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
+                                              c.CustomerId == customerId &&
+                                              c.ReferenceMonth == currentMonth &&
+                                              c.Status == BillingStatus.Draft, ct);
+
+                if (cycle != null)
+                {
+                    var tariffs = await _db.CustomerTariffs
+                        .Include(t => t.BillingService)
+                        .Where(t => t.CompanyId == companyId && t.CustomerId == customerId && t.BillingService.IsActive)
+                        .ToListAsync(ct);
+
+                    foreach (var item in billingItems)
+                    {
+                        var tariff = tariffs.FirstOrDefault(t => t.BillingServiceId == item.BillingServiceId);
+                        if (tariff != null)
+                        {
+                            var recalculated = await _billingEngine.ExecuteOperationalEventAsync(
+                                cycle,
+                                tariff.BillingService,
+                                tariff,
+                                orderId: order.Id,
+                                documentType: "NF-e Entrada",
+                                documentNumber: order.InvoiceNumber ?? order.AccessKey[..8]
+                            );
+
+                            if (recalculated != null && recalculated.QuantityTotal > 0)
+                            {
+                                item.UpdateValues(
+                                    recalculated.QuantityTotal,
+                                    recalculated.ServiceTotal,
+                                    recalculated.StatementDataJson,
+                                    $"Atualizado após estorno parcial de HUs em {DateTime.UtcNow:dd/MM/yyyy HH:mm}"
+                                );
+                            }
+                            else
+                            {
+                                _db.BillingItems.Remove(item);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+
+        // 3. RECÁLCULO EM SEGUNDO PLANO DAS DIÁRIAS (Sem as HUs estornadas)
+        if (_billingChannel != null)
+        {
+            var customerIds = hus.Select(h => h.CustomerId).Distinct();
+            foreach (var custId in customerIds)
+            {
+                await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
+                    CompanyId: companyId,
+                    CustomerId: custId,
+                    ReferenceDate: DateTime.UtcNow,
+                    TriggerOrderId: orderIds.FirstOrDefault(),
+                    TriggerType: "Inbound_HU_Rollback"
+                ), ct);
+            }
+        }
+
+        return Results.Ok(new { Message = $"{hus.Count} HU(s) estornada(s) com sucesso e faturamento atualizado." });
     }
 }
 

@@ -59,9 +59,9 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         var item = new BillingItem(
             billingCycleId: cycle.Id,
             billingServiceId: request.BillingServiceId,
-            chargeDate: request.ChargeDate ?? DateTime.UtcNow,
+            chargeDate: DateTime.UtcNow,
             documentType: "Manual",
-            documentNumber: request.DocumentNumber,
+            documentNumber: "Avulso",
             documentId: null,
             description: request.Description,
             quantityTotal: request.QuantityTotal,
