@@ -45,12 +45,12 @@ export default function ConferenciaItemPage() {
     const customerDetail = customersList.find(c => c.id === order?.customerId);
     const isBlindInbound = Boolean(customerDetail?.requiresBlindInbound);
 
-    // 3. Regras WMS do Produto (Consulta direta por ID sem pesquisas textuais globais)
+    // 3. Regras WMS do Produto
     const { data: productDetail } = useGetApiProductsId(item?.productId, {
         query: { enabled: Boolean(item?.productId) }
     });
 
-    // 4. QUERY OTIMIZADA: Lista especificamente as embalagens deste produto
+    // 4. Embalagens específicas deste produto
     const { data: availablePackagings = [], isLoading: isLoadingPackagings } = useQuery({
         queryKey: ['product-packagings', item?.productId],
         queryFn: async () => {
@@ -83,9 +83,10 @@ export default function ConferenciaItemPage() {
     // Estados do Formulário
     const [selectedBillingServiceId, setSelectedBillingServiceId] = useState('');
 
+    // volumeCount inicializado como campo aberto/vazio
     const [volumeConfig, setVolumeConfig] = useState({
         packagingTypeId: '',
-        volumeCount: 1,
+        volumeCount: '',
         quantityPerVolume: 0,
         batch: '',
         manufactureDate: '',
@@ -183,8 +184,13 @@ export default function ConferenciaItemPage() {
         if (!volumeConfig.qualityStatus) {
             return toast.warning('Selecione a Qualidade do Lote Recebido.');
         }
-        if (volumeConfig.volumeCount <= 0 || volumeConfig.quantityPerVolume <= 0) {
-            return toast.warning('Indique quantidades válidas.');
+
+        const parsedVolumeCount = Number(volumeConfig.volumeCount);
+        if (!volumeConfig.volumeCount || isNaN(parsedVolumeCount) || parsedVolumeCount <= 0) {
+            return toast.warning('Indique uma quantidade de volumes válida (número maior que zero).');
+        }
+        if (Number(volumeConfig.quantityPerVolume) <= 0) {
+            return toast.warning('Indique uma quantidade de peças por volume válida.');
         }
         if (!item?.dockLocationId) {
             return toast.warning('Nenhuma Doca vinculada a este item da ordem.');
@@ -207,6 +213,7 @@ export default function ConferenciaItemPage() {
 
         const newStagedItem = {
             ...volumeConfig,
+            volumeCount: parsedVolumeCount,
             targetLocationId: item.dockLocationId,
             batch: tracksBatch ? volumeConfig.batch?.trim() : '',
             expirationDate: tracksExpiration ? volumeConfig.expirationDate : '',
@@ -216,7 +223,7 @@ export default function ConferenciaItemPage() {
             tempId: Date.now() + Math.random(),
             packagingCode: selectedPack?.code || 'EMB',
             locationPath: item.dockLocationPath || 'DOCA',
-            totalQuantity: volumeConfig.volumeCount * volumeConfig.quantityPerVolume
+            totalQuantity: parsedVolumeCount * Number(volumeConfig.quantityPerVolume)
         };
 
         setStagedVolumes(prev => [...prev, newStagedItem]);
@@ -226,7 +233,7 @@ export default function ConferenciaItemPage() {
         setVolumeConfig(prev => ({
             ...prev,
             packagingTypeId: '',
-            volumeCount: 1,
+            volumeCount: '',
             quantityPerVolume: 0,
             qualityStatus: '',
             batch: tracksBatch ? (item?.expectedBatch || '') : '',
@@ -300,7 +307,7 @@ export default function ConferenciaItemPage() {
     }
 
     const totalCartUnits = stagedVolumes.reduce((acc, curr) => acc + curr.totalQuantity, 0);
-    const subtotalCurrentLot = (volumeConfig.volumeCount || 0) * (volumeConfig.quantityPerVolume || 0);
+    const subtotalCurrentLot = (Number(volumeConfig.volumeCount) || 0) * (Number(volumeConfig.quantityPerVolume) || 0);
 
     return (
         <div className="flex flex-col h-full space-y-6">
@@ -416,7 +423,7 @@ export default function ConferenciaItemPage() {
                                 <Box className="text-blue-600" size={16} /> 2. Dados do Volume & Quantidades <span className="text-rose-500 font-bold">*</span>
                             </Label>
 
-                            {/* SELETOR OTIMIZADO DE EMBALAGENS ESPECÍFICAS DO PRODUTO */}
+                            {/* SELETOR DE EMBALAGENS ESPECÍFICAS DO PRODUTO */}
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold text-slate-700 flex items-center">
                                     Embalagem do Volume <span className="text-rose-500 font-bold ml-0.5">*</span>
@@ -443,11 +450,15 @@ export default function ConferenciaItemPage() {
                                             Qtd Volumes (HUs) <span className="text-rose-500 font-bold ml-0.5">*</span>
                                         </Label>
                                         <Input
-                                            type="number"
-                                            min="1"
+                                            type="text"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
+                                            placeholder="Ex: 5"
                                             value={volumeConfig.volumeCount}
-                                            onFocus={(e) => e.target.select()}
-                                            onChange={(e) => setVolumeConfig(p => ({ ...p, volumeCount: Number(e.target.value) }))}
+                                            onChange={(e) => {
+                                                const numericOnly = e.target.value.replace(/\D/g, '');
+                                                setVolumeConfig(p => ({ ...p, volumeCount: numericOnly }));
+                                            }}
                                             className="bg-white border-blue-300 focus:ring-2 focus:ring-blue-600 font-mono text-base font-bold h-11 text-center text-slate-900 shadow-xs"
                                         />
                                     </div>
@@ -626,7 +637,7 @@ export default function ConferenciaItemPage() {
                         </div>
                     </div>
 
-                    {/* CARRINHO DE CONFERÊNCIA (5 COLS) */}
+                    {/* CARRINHO DE CONFERÊNCIA */}
                     <div className="col-span-5 bg-slate-50/50 border border-slate-200/80 rounded-xl p-6 flex flex-col min-h-0">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-3 shrink-0">
                             <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
