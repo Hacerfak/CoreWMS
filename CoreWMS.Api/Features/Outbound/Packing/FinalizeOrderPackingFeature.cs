@@ -21,7 +21,8 @@ public record FinalizeOrderPackingCommand(
     Guid OrderId,
     Guid DockLocationId,
     bool UsedStretchFilm,
-    List<ShippingVolumeDto> ShippingVolumes
+    List<ShippingVolumeDto> ShippingVolumes,
+    Guid? HandlingServiceId = null
 ) : IRequest<IResult>;
 
 public class FinalizeOrderPackingCommandValidator : AbstractValidator<FinalizeOrderPackingCommand>
@@ -181,6 +182,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             companyId,
             order,
             request.UsedStretchFilm,
+            request.HandlingServiceId, // <-- Adicione este argumento aqui
             ct
         );
 
@@ -230,6 +232,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
         Guid companyId,
         OutboundOrder order,
         bool usedStretch,
+        Guid? handlingServiceId, // <-- Adicione o parâmetro aqui
         CancellationToken ct)
     {
         var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
@@ -261,8 +264,15 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
 
         var generatedItems = new List<BillingItem>();
 
-        // 3. APURAÇÃO HANDLING OUT (MOMENTO 1): Executa a query SQL do serviço ativo com metadados do documento
-        var handlingTariff = customerTariffs.FirstOrDefault(t =>
+        // 3. APURAÇÃO HANDLING OUT (MOMENTO 1): Utiliza o serviço indicado ou fallback contratual
+        CustomerTariff? handlingTariff = null;
+
+        if (handlingServiceId.HasValue) // <-- Use handlingServiceId diretamente aqui (sem o "request.")
+        {
+            handlingTariff = customerTariffs.FirstOrDefault(t => t.BillingServiceId == handlingServiceId.Value);
+        }
+
+        handlingTariff ??= customerTariffs.FirstOrDefault(t =>
             !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
             (t.BillingService.Name.Contains("Expedição", StringComparison.OrdinalIgnoreCase) ||
              t.BillingService.Name.Contains("Handling Out", StringComparison.OrdinalIgnoreCase) ||

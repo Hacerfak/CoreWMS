@@ -11,8 +11,11 @@ public record PickingAllocatedHuDto(
     Guid HandlingUnitId,
     string Lpn,
     string? LocationPath,
+    string? PackagingCode,
     string? Batch,
+    DateTime? ManufactureDate,
     DateTime? ExpirationDate,
+    string? SerialNumber,
     decimal Quantity,
     bool IsPicked
 );
@@ -63,12 +66,15 @@ public class ListPickingTasksHandler : IRequestHandler<ListPickingTasksQuery, IR
                 .ThenInclude(i => i.Product)
             .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.OrderId, ct);
 
-        if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
+        if (order == null)
+            return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
         var allocations = await _db.OutboundAllocations
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
                 .ThenInclude(h => h.CurrentLocation)
+            .Include(a => a.HandlingUnit)
+                .ThenInclude(h => h.PackagingType)
             .Where(a => a.OutboundOrderId == order.Id)
             .ToListAsync(ct);
 
@@ -81,8 +87,11 @@ public class ListPickingTasksHandler : IRequestHandler<ListPickingTasksQuery, IR
                     a.HandlingUnitId,
                     a.HandlingUnit.Lpn,
                     a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
+                    a.HandlingUnit.PackagingType != null ? a.HandlingUnit.PackagingType.Code : "PLT",
                     a.HandlingUnit.Batch,
+                    a.HandlingUnit.ManufactureDate,
                     a.HandlingUnit.ExpirationDate,
+                    a.HandlingUnit.SerialNumber,
                     a.Quantity,
                     a.IsPicked
                 )).ToList();
@@ -118,7 +127,8 @@ public static class ListPickingTasksEndpoints
 {
     public static void MapListPickingTasksEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/outbound/picking/{orderId:guid}/tasks", async (Guid orderId, IMediator mediator) => await mediator.Send(new ListPickingTasksQuery(orderId)))
+        app.MapGet("/api/outbound/picking/{orderId:guid}/tasks", async (Guid orderId, IMediator mediator) =>
+            await mediator.Send(new ListPickingTasksQuery(orderId)))
            .WithTags("Outbound")
            .RequireAuthorization()
            .RequirePermission(Permissions.Outbound.Manage);

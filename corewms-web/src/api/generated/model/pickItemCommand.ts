@@ -7,7 +7,8 @@
 
 export interface PickItemCommand {
   orderId?: string;
-  orderItemId?: string;
+  /** @nullable */
+  orderItemId?: string | null;
   /** @nullable */
   scannedLpn?: string | null;
   pickedQuantity?: number;

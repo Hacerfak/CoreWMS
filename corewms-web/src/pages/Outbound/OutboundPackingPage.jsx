@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, CheckCircle2, Loader2, Truck, Package, Box, Layers,
-    Plus, Trash2, AlertCircle, ShieldCheck, Warehouse, Sparkles
+    Plus, Trash2, AlertCircle, ShieldCheck, Warehouse, Sparkles, Receipt, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,7 +23,11 @@ export default function OutboundPackingPage() {
     const [order, setOrder] = useState(null);
     const [globalPackagingTypes, setGlobalPackagingTypes] = useState([]);
     const [docks, setDocks] = useState([]);
+    const [billingServices, setBillingServices] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+
+    // --- SERVIÇO DE TARIFICAÇÃO DE SEPARAÇÃO (HANDLING OUT) ---
+    const [selectedHandlingServiceId, setSelectedHandlingServiceId] = useState('');
 
     // --- ESTADOS DO MOMENTO 1 (ITEM A ITEM) ---
     const [selectedItemId, setSelectedItemId] = useState(null);
@@ -33,25 +37,26 @@ export default function OutboundPackingPage() {
 
     // Linhas de apontamento do item em edição
     const [currentItemPacks, setCurrentItemPacks] = useState([
-        { packagingTypeId: '', volumeCount: 1, quantityPerVolume: 0 }
+        { packagingTypeId: '', volumeCount: '', quantityPerVolume: 0 }
     ]);
 
     // --- ESTADOS DO MOMENTO 2 (FECHAMENTO DE TRANSPORTE) ---
     const [selectedDockId, setSelectedDockId] = useState('');
     const [usedStretch, setUsedStretch] = useState(false);
     const [shippingVolumes, setShippingVolumes] = useState([
-        { packagingTypeId: '', volumeCount: 1, grossWeight: '' }
+        { packagingTypeId: '', volumeCount: '', grossWeight: '' }
     ]);
     const [isFinalizing, setIsFinalizing] = useState(false);
 
-    // 1. Carrega dados da ordem, docas e tipos de embalagem globais
+    // Carregamento inicial da ordem, docas, embalagens e serviços de faturamento
     const loadOrderData = async () => {
         try {
             setIsLoading(true);
-            const [orderRes, packTypesRes, docksRes] = await Promise.all([
+            const [orderRes, packTypesRes, docksRes, servicesRes] = await Promise.all([
                 customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' }),
                 customInstance({ url: '/api/packaging-types', method: 'GET' }),
-                customInstance({ url: '/api/topology/locations/docks', method: 'GET' })
+                customInstance({ url: '/api/topology/locations/docks', method: 'GET' }),
+                customInstance({ url: '/api/billing/services', method: 'GET' })
             ]);
 
             const orderData = orderRes?.data || orderRes;
@@ -67,7 +72,22 @@ export default function OutboundPackingPage() {
                 setSelectedDockId(dockList[0].id);
             }
 
-            // Seleciona o primeiro item pendente para conferência se nenhum estiver selecionado
+            const servicesList = Array.isArray(servicesRes) ? servicesRes : (servicesRes?.items || []);
+            setBillingServices(servicesList);
+
+            // Sugere automaticamente o serviço padrão de Handling Out / Expedição
+            if (servicesList.length > 0 && !selectedHandlingServiceId) {
+                const defaultHandling = servicesList.find(s =>
+                    s.name?.toLowerCase().includes('expedição') ||
+                    s.name?.toLowerCase().includes('handling out') ||
+                    s.name?.toLowerCase().includes('saída')
+                );
+                if (defaultHandling) {
+                    setSelectedHandlingServiceId(defaultHandling.id);
+                }
+            }
+
+            // Seleciona o primeiro SKU pendente
             if (orderData?.items?.length > 0) {
                 const firstPending = orderData.items.find(i => i.status !== 'Packed' && i.packedQuantity < i.expectedQuantity);
                 setSelectedItemId(firstPending ? firstPending.id : orderData.items[0].id);
@@ -83,12 +103,12 @@ export default function OutboundPackingPage() {
         if (orderId) loadOrderData();
     }, [orderId]);
 
-    // Item atualmente selecionado para apontamento no Momento 1
+    // Item selecionado para trabalho no momento
     const selectedItem = useMemo(() => {
         return order?.items?.find(i => i.id === selectedItemId);
     }, [order, selectedItemId]);
 
-    // 2. Carrega as embalagens específicas do produto e apontamentos anteriores do item selecionado
+    // Carrega as embalagens cadastradas no SKU do produto e os apontamentos existentes
     useEffect(() => {
         if (!selectedItem?.productId || !orderId) return;
 
@@ -96,7 +116,6 @@ export default function OutboundPackingPage() {
             try {
                 setIsLoadingItemPacks(true);
 
-                // Busca embalagens cadastradas no SKU do produto
                 const packsRes = await customInstance({
                     url: `/api/products/${selectedItem.productId}/packagings`,
                     method: 'GET'
@@ -104,7 +123,7 @@ export default function OutboundPackingPage() {
                 const availablePacks = Array.isArray(packsRes) ? packsRes : [];
                 setItemPackagings(availablePacks);
 
-                // Busca apontamentos já salvos para este item (se houver)
+                // Consulta se este item já possui apontamentos salvos
                 const currentStatus = await customInstance({
                     url: `/api/outbound/packing/orders/${orderId}/items/${selectedItem.id}`,
                     method: 'GET'
@@ -117,7 +136,6 @@ export default function OutboundPackingPage() {
                         quantityPerVolume: p.quantityPerVolume
                     })));
                 } else if (availablePacks.length > 0) {
-                    // Sugestão padrão: Primeira embalagem do cadastro com seu respectivo fator
                     const defaultPack = availablePacks[0];
                     const factor = defaultPack.conversionFactor || 1;
                     const calculatedVolCount = Math.max(1, Math.floor(selectedItem.pickedQuantity / factor));
@@ -133,7 +151,7 @@ export default function OutboundPackingPage() {
                     setCurrentItemPacks([
                         {
                             packagingTypeId: globalPackagingTypes[0]?.id || '',
-                            volumeCount: 1,
+                            volumeCount: '',
                             quantityPerVolume: selectedItem.pickedQuantity
                         }
                     ]);
@@ -148,14 +166,34 @@ export default function OutboundPackingPage() {
         loadItemDetails();
     }, [selectedItemId, selectedItem?.productId, orderId]);
 
-    // --- FUNÇÕES DO MOMENTO 1 (APONTAMENTO DO ITEM) ---
+    // Subtotal de peças do SKU ativo
+    const currentPointedTotal = useMemo(() => {
+        return currentItemPacks.reduce((acc, curr) => {
+            const count = Number(curr.volumeCount) || 0;
+            const perVol = Number(curr.quantityPerVolume) || 0;
+            return acc + (count * perVol);
+        }, 0);
+    }, [currentItemPacks]);
+
+    const isCurrentItemBalanced = selectedItem && currentPointedTotal === selectedItem.pickedQuantity;
+
+    // Métricas de progresso dos itens
+    const packedItemsCount = useMemo(() => {
+        return order?.items?.filter(i => i.status === 'Packed' || i.packedQuantity >= i.expectedQuantity).length || 0;
+    }, [order]);
+
+    const allItemsPacked = useMemo(() => {
+        if (!order?.items || order.items.length === 0) return false;
+        return order.items.every(i => i.status === 'Packed' || i.packedQuantity >= i.expectedQuantity);
+    }, [order]);
+
     const handleAddPackRow = () => {
         const defaultPack = itemPackagings[0] || globalPackagingTypes[0];
         setCurrentItemPacks(prev => [
             ...prev,
             {
                 packagingTypeId: defaultPack?.packagingTypeId || defaultPack?.id || '',
-                volumeCount: 1,
+                volumeCount: '',
                 quantityPerVolume: defaultPack?.conversionFactor || 1
             }
         ]);
@@ -168,9 +206,13 @@ export default function OutboundPackingPage() {
     const handlePackRowChange = (idx, field, value) => {
         setCurrentItemPacks(prev => {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], [field]: value };
+            if (field === 'volumeCount') {
+                const cleanNum = value.replace(/\D/g, '');
+                updated[idx] = { ...updated[idx], volumeCount: cleanNum };
+            } else {
+                updated[idx] = { ...updated[idx], [field]: value };
+            }
 
-            // Se alterou a embalagem, atualiza a quantidade por volume conforme o fator cadastrado
             if (field === 'packagingTypeId') {
                 const foundPack = itemPackagings.find(p => p.packagingTypeId === value);
                 if (foundPack) {
@@ -181,20 +223,13 @@ export default function OutboundPackingPage() {
         });
     };
 
-    // Subtotal de peças apontadas no Momento 1 para o item
-    const currentPointedTotal = useMemo(() => {
-        return currentItemPacks.reduce((acc, curr) => {
-            const count = Number(curr.volumeCount) || 0;
-            const perVol = Number(curr.quantityPerVolume) || 0;
-            return acc + (count * perVol);
-        }, 0);
-    }, [currentItemPacks]);
-
-    const isCurrentItemBalanced = selectedItem && currentPointedTotal === selectedItem.pickedQuantity;
-
-    // Salva o apontamento do Momento 1 para o item
+    // Confirmação do Momento 1 para o SKU selecionado
     const handleSaveItemPacking = async () => {
         if (!selectedItem) return;
+
+        if (!selectedHandlingServiceId) {
+            return toast.warning('Selecione o Serviço de Separação / Handling Out para tarifação no faturamento.');
+        }
 
         if (currentPointedTotal !== selectedItem.pickedQuantity) {
             return toast.warning(
@@ -207,6 +242,7 @@ export default function OutboundPackingPage() {
             const payload = {
                 orderId,
                 orderItemId: selectedItem.id,
+                billingServiceId: selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null,
                 packs: currentItemPacks.map(p => ({
                     packagingTypeId: p.packagingTypeId,
                     volumeCount: Number(p.volumeCount),
@@ -214,16 +250,24 @@ export default function OutboundPackingPage() {
                 }))
             };
 
-            const res = await customInstance({
+            await customInstance({
                 url: `/api/outbound/packing/orders/${orderId}/items/${selectedItem.id}`,
                 method: 'POST',
                 data: payload
             });
 
-            toast.success(res?.message || `Apontamento de ${selectedItem.skuCode} gravado com sucesso!`);
+            toast.success(`Apontamento de ${selectedItem.skuCode} concluído!`);
 
-            // Recarrega o pedido para atualizar status dos itens
-            await loadOrderData();
+            // Recarrega o pedido para atualizar o status dos itens
+            const updatedOrderRes = await customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' });
+            const updatedOrder = updatedOrderRes?.data || updatedOrderRes;
+            setOrder(updatedOrder);
+
+            // Seleciona automaticamente o próximo SKU pendente
+            const nextPending = updatedOrder?.items?.find(i => i.id !== selectedItem.id && i.status !== 'Packed' && i.packedQuantity < i.expectedQuantity);
+            if (nextPending) {
+                setSelectedItemId(nextPending.id);
+            }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao gravar apontamento do item.');
         } finally {
@@ -232,18 +276,13 @@ export default function OutboundPackingPage() {
     };
 
     // --- FUNÇÕES DO MOMENTO 2 (FECHAMENTO DE TRANSPORTE) ---
-    const allItemsPacked = useMemo(() => {
-        if (!order?.items || order.items.length === 0) return false;
-        return order.items.every(i => i.status === 'Packed' || i.packedQuantity >= i.expectedQuantity);
-    }, [order]);
-
     const handleAddShippingVolumeRow = () => {
         const defaultPack = globalPackagingTypes[0];
         setShippingVolumes(prev => [
             ...prev,
             {
                 packagingTypeId: defaultPack?.id || '',
-                volumeCount: 1,
+                volumeCount: '',
                 grossWeight: ''
             }
         ]);
@@ -256,7 +295,12 @@ export default function OutboundPackingPage() {
     const handleShippingVolumeChange = (idx, field, value) => {
         setShippingVolumes(prev => {
             const updated = [...prev];
-            updated[idx] = { ...updated[idx], [field]: value };
+            if (field === 'volumeCount') {
+                const cleanNum = value.replace(/\D/g, '');
+                updated[idx] = { ...updated[idx], volumeCount: cleanNum };
+            } else {
+                updated[idx] = { ...updated[idx], [field]: value };
+            }
             return updated;
         });
     };
@@ -265,7 +309,7 @@ export default function OutboundPackingPage() {
         e.preventDefault();
 
         if (!allItemsPacked) {
-            return toast.error('Existem itens com conferência pendente no Momento 1. Complete todos antes de fechar a carga.');
+            return toast.error('Existem itens com conferência pendente no Momento 1. Complete todos os SKUs antes de finalizar.');
         }
 
         if (!selectedDockId) {
@@ -283,6 +327,7 @@ export default function OutboundPackingPage() {
                 orderId,
                 dockLocationId: selectedDockId,
                 usedStretchFilm: usedStretch,
+                handlingServiceId: selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null,
                 shippingVolumes: validVolumes.map(v => ({
                     packagingTypeId: v.packagingTypeId,
                     volumeCount: Number(v.volumeCount),
@@ -296,8 +341,8 @@ export default function OutboundPackingPage() {
                 data: payload
             });
 
-            toast.success(res?.message || 'Packing finalizado e pedido liberado para a Doca com faturamento automático registrado!');
-            navigate(`/outbound/detalhes/${orderId}`);
+            toast.success(res?.message || 'Packing finalizado e tarifação gravada no faturamento com sucesso!');
+            navigate(`/outbound`);
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao finalizar packing.');
         } finally {
@@ -316,8 +361,8 @@ export default function OutboundPackingPage() {
 
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* CABEÇALHO */}
-            <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
+            {/* CABEÇALHO COM SERVIÇO DE TARIFICAÇÃO */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="sm" onClick={() => navigate('/outbound')} className="bg-white">
                         <ArrowLeft className="h-4 w-4 mr-1.5" /> Voltar
@@ -325,9 +370,9 @@ export default function OutboundPackingPage() {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                <Package className="text-orange-600" size={22} /> Mesa de Embalagem & Conferência (Packing 2 Momentos)
+                                <Package className="text-orange-600" size={22} /> Packing & Expedição (2 Momentos)
                             </h1>
-                            <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs">
+                            <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs font-mono">
                                 Pedido #{order?.orderNumber}
                             </Badge>
                         </div>
@@ -337,27 +382,48 @@ export default function OutboundPackingPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <Badge className={allItemsPacked ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}>
-                        {allItemsPacked ? '✓ Momento 1 Concluído (100%)' : 'Momento 1 em Andamento'}
-                    </Badge>
+                <div className="flex items-center gap-3">
+                    {/* SELETOR DO SERVIÇO DE SEPARAÇÃO / HANDLING OUT */}
+                    <div className="flex flex-col space-y-1">
+                        <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                            <Receipt className="text-orange-600" size={13} /> Serviço de Separação (Handling Out) *
+                        </Label>
+                        <Select value={selectedHandlingServiceId} onValueChange={setSelectedHandlingServiceId}>
+                            <SelectTrigger className={`bg-slate-50 h-9 text-xs w-[260px] ${!selectedHandlingServiceId ? 'border-amber-300' : 'border-slate-200'}`}>
+                                <SelectValue placeholder="Selecione o serviço contratado..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {billingServices.map(s => (
+                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                ))}
+                                <SelectItem value="none">Isento de Tarifa Adicional</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="pt-4">
+                        <Badge className={`text-xs h-9 px-3 flex items-center gap-1.5 ${allItemsPacked ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
+                            {allItemsPacked ? <Check size={14} /> : <Layers size={14} />}
+                            {allItemsPacked ? 'Momento 1 Pronto (100%)' : `Momento 1: ${packedItemsCount}/${order?.items?.length || 0} OK`}
+                        </Badge>
+                    </div>
                 </div>
             </div>
 
             {/* GRID PRINCIPAL */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-                {/* COLUNA ESQUERDA: MOMENTO 1 (ITENS E APONTAMENTO OPERACIONAL) */}
+                {/* COLUNA ESQUERDA: MOMENTO 1 (ITENS DA ORDEM E TRABALHO DO SKU SELECIONADO) */}
                 <div className="lg:col-span-7 space-y-5">
 
-                    {/* LISTAGEM DE ITENS DA ORDEM */}
+                    {/* LISTA DINÂMICA DE SKUS DA ORDEM */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60 flex flex-row items-center justify-between">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
                                 <Layers size={16} className="text-orange-600" /> 1. Apontamento Operacional Item a Item (Handling Out)
                             </CardTitle>
                             <span className="text-[11px] text-slate-500 font-mono">
-                                {order?.items?.filter(i => i.status === 'Packed' || i.packedQuantity >= i.expectedQuantity).length} de {order?.items?.length || 0} conferido(s)
+                                Clique no SKU para trabalhar o apontamento
                             </span>
                         </CardHeader>
 
@@ -372,12 +438,16 @@ export default function OutboundPackingPage() {
                                             key={item.id}
                                             onClick={() => setSelectedItemId(item.id)}
                                             className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${isSelected
-                                                ? 'border-orange-500 bg-orange-50/50 shadow-xs ring-1 ring-orange-500/30'
-                                                : 'border-slate-200 bg-white hover:bg-slate-50'
+                                                ? 'border-orange-500 bg-orange-50/50 shadow-xs ring-2 ring-orange-500/20'
+                                                : isItemCompleted
+                                                    ? 'border-emerald-200 bg-emerald-50/20 hover:bg-emerald-50/40'
+                                                    : 'border-slate-200 bg-white hover:bg-slate-50'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-2.5 h-2.5 rounded-full ${isItemCompleted ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                                                <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isItemCompleted ? 'bg-emerald-500 text-white' : 'bg-amber-400 text-white'}`}>
+                                                    {isItemCompleted && <Check size={8} />}
+                                                </div>
                                                 <div>
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-mono font-bold text-xs text-slate-900">{item.skuCode}</span>
@@ -389,12 +459,12 @@ export default function OutboundPackingPage() {
 
                                             <div className="flex items-center gap-4 text-xs font-mono">
                                                 <div className="text-right">
-                                                    <span className="text-[10px] text-slate-400 block uppercase">Separado / Apontado</span>
+                                                    <span className="text-[10px] text-slate-400 block uppercase">Separado / Conferido</span>
                                                     <span className="font-bold text-slate-800">{item.pickedQuantity} {item.unit}</span>
-                                                    <span className="text-emerald-700 font-bold ml-1">({item.packedQuantity} CONF.)</span>
+                                                    <span className="text-emerald-700 font-bold ml-1.5">({item.packedQuantity} OK)</span>
                                                 </div>
-                                                <Badge className={isItemCompleted ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}>
-                                                    {isItemCompleted ? '100% OK' : 'Pendente'}
+                                                <Badge className={`text-xs ${isItemCompleted ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
+                                                    {isItemCompleted ? '✓ Concluído' : 'Pendente'}
                                                 </Badge>
                                             </div>
                                         </div>
@@ -404,18 +474,18 @@ export default function OutboundPackingPage() {
                         </CardContent>
                     </Card>
 
-                    {/* FORMULÁRIO DO ITEM SELECIONADO NO MOMENTO 1 */}
+                    {/* MESA DE TRABALHO DO SKU SELECIONADO */}
                     {selectedItem && (
                         <Card className="border-orange-200 bg-orange-50/20 shadow-xs">
                             <CardHeader className="p-4 border-b border-orange-200/80 bg-orange-100/40 flex flex-row items-center justify-between">
                                 <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-orange-900 block">Conferência Operacional</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-orange-900 block">SKU Selecionado para Trabalho</span>
                                     <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
                                         <Box size={16} className="text-orange-700" /> {selectedItem.skuCode} - {selectedItem.description}
                                     </CardTitle>
                                 </div>
                                 <div className="text-right">
-                                    <span className="text-[10px] text-slate-500 block uppercase">Separado no Armazém</span>
+                                    <span className="text-[10px] text-slate-500 block uppercase">Total a Apontar</span>
                                     <span className="font-mono font-bold text-slate-900 text-sm">{selectedItem.pickedQuantity} {selectedItem.unit}</span>
                                 </div>
                             </CardHeader>
@@ -423,16 +493,16 @@ export default function OutboundPackingPage() {
                             <CardContent className="p-4 space-y-4">
                                 <div className="p-3 bg-white border border-orange-200 rounded-xl space-y-1 text-xs text-slate-700">
                                     <p className="font-bold text-orange-950 flex items-center gap-1.5">
-                                        <Sparkles size={14} className="text-orange-600" /> Apontamento Físico de Saída:
+                                        <Sparkles size={14} className="text-orange-600" /> Apontamento Físico de Embalagens do SKU:
                                     </p>
                                     <p>
-                                        Indique como você fisicamente separou este produto (ex: paletes, caixas de embarque ou volumes fracionados). A soma das embalagens precisa totalizar <strong>{selectedItem.pickedQuantity} {selectedItem.unit}</strong>.
+                                        Informe os volumes físicos preparados (ex: Paletes ou Caixas). A soma das peças deve totalizar exatamente <strong>{selectedItem.pickedQuantity} {selectedItem.unit}</strong>.
                                     </p>
                                 </div>
 
                                 {isLoadingItemPacks ? (
                                     <div className="py-8 text-center text-slate-500 text-xs flex justify-center items-center gap-2">
-                                        <Loader2 className="animate-spin h-4 w-4 text-orange-600" /> Carregando embalagens do produto...
+                                        <Loader2 className="animate-spin h-4 w-4 text-orange-600" /> Carregando embalagens do SKU...
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
@@ -442,7 +512,7 @@ export default function OutboundPackingPage() {
                                                     <TableRow>
                                                         <TableHead>Tipo de Embalagem</TableHead>
                                                         <TableHead className="w-28 text-center">Qtd Volumes</TableHead>
-                                                        <TableHead className="w-32 text-center">Peças p/ Vol</TableHead>
+                                                        <TableHead className="w-32 text-center">Peças p/ Volume</TableHead>
                                                         <TableHead className="w-28 text-right">Subtotal</TableHead>
                                                         <TableHead className="w-10 text-right"></TableHead>
                                                     </TableRow>
@@ -481,8 +551,9 @@ export default function OutboundPackingPage() {
 
                                                                 <TableCell>
                                                                     <Input
-                                                                        type="number"
-                                                                        min="1"
+                                                                        type="text"
+                                                                        inputMode="numeric"
+                                                                        placeholder="Qtd"
                                                                         value={packRow.volumeCount}
                                                                         onChange={(e) => handlePackRowChange(idx, 'volumeCount', e.target.value)}
                                                                         className="font-mono text-xs text-center h-9 bg-white"
@@ -554,7 +625,7 @@ export default function OutboundPackingPage() {
                                                 ) : (
                                                     <CheckCircle2 className="h-4 w-4 mr-1.5" />
                                                 )}
-                                                Confirmar Apontamento de {selectedItem.skuCode}
+                                                Confirmar Apontamento do SKU {selectedItem.skuCode}
                                             </Button>
                                         </div>
                                     </div>
@@ -564,9 +635,9 @@ export default function OutboundPackingPage() {
                     )}
                 </div>
 
-                {/* COLUNA DIREITA: MOMENTO 2 (ACONDICIONAMENTO PARA TRANSPORTE & FATURAMENTO) */}
+                {/* COLUNA DIREITA: MOMENTO 2 (LIBERADO APENAS QUANDO 100% DOS SKUS ESTIVEREM PRONTOS) */}
                 <div className="lg:col-span-5 space-y-5">
-                    <Card className={`border shadow-xs transition-all ${allItemsPacked ? 'border-emerald-200 bg-white' : 'border-slate-200 bg-slate-50 opacity-90'}`}>
+                    <Card className={`border shadow-xs transition-all ${allItemsPacked ? 'border-emerald-200 bg-white ring-1 ring-emerald-500/20' : 'border-slate-200 bg-slate-50 opacity-80'}`}>
                         <CardHeader className={`p-4 border-b ${allItemsPacked ? 'bg-emerald-50/60' : 'bg-slate-100'}`}>
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
                                 <span className="flex items-center gap-2">
@@ -574,9 +645,9 @@ export default function OutboundPackingPage() {
                                     2. Fechamento de Carga & Transporte (SEFAZ)
                                 </span>
                                 {allItemsPacked ? (
-                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Pronto p/ Embarque</Badge>
+                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Liberado para Embarque</Badge>
                                 ) : (
-                                    <Badge variant="outline" className="text-slate-500">Bloqueado</Badge>
+                                    <Badge variant="outline" className="text-slate-500 bg-white">Bloqueado</Badge>
                                 )}
                             </CardTitle>
                         </CardHeader>
@@ -588,7 +659,8 @@ export default function OutboundPackingPage() {
                                         <AlertCircle size={16} className="text-amber-600" /> Momento 2 Bloqueado
                                     </div>
                                     <p>
-                                        Conclua o apontamento de todos os itens da ordem na coluna ao lado. Assim que todos estiverem verdes (100% OK), o fechamento de volumes de transporte será liberado automaticamente.
+                                        Conclua o apontamento de todos os SKUs na coluna ao lado ({packedItemsCount}/{order?.items?.length || 0} finalizados).
+                                        Assim que todos estiverem verdes (100% Concluído), o fechamento de transporte e faturamento de saída será liberado.
                                     </p>
                                 </div>
                             ) : (
@@ -670,8 +742,9 @@ export default function OutboundPackingPage() {
                                                         <div className="space-y-1">
                                                             <Label className="text-[10px]">Qtd Volumes *</Label>
                                                             <Input
-                                                                type="number"
-                                                                min="1"
+                                                                type="text"
+                                                                inputMode="numeric"
+                                                                placeholder="Qtd"
                                                                 value={volRow.volumeCount}
                                                                 onChange={(e) => handleShippingVolumeChange(idx, 'volumeCount', e.target.value)}
                                                                 className="font-mono text-xs text-center h-8 bg-white"
@@ -706,7 +779,7 @@ export default function OutboundPackingPage() {
                                         <label htmlFor="stretch" className="text-xs text-slate-700 font-medium cursor-pointer leading-tight">
                                             Aplicação de Filme Stretch nos Paletes
                                             <span className="text-[10px] text-slate-500 block font-normal mt-0.5">
-                                                (Registra automaticamente a tarifação de Insumo no ciclo de faturamento deste mês)
+                                                (Registra a tarifação do Insumo no ciclo de faturamento deste mês via query SQL)
                                             </span>
                                         </label>
                                     </div>

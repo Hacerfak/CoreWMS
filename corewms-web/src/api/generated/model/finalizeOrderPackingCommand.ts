@@ -12,4 +12,6 @@ export interface FinalizeOrderPackingCommand {
   usedStretchFilm?: boolean;
   /** @nullable */
   shippingVolumes?: ShippingVolumeDto[] | null;
+  /** @nullable */
+  handlingServiceId?: string | null;
 }
