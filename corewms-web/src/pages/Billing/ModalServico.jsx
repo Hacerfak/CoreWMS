@@ -93,37 +93,53 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
             case 'storage_daily':
                 sql = `-- Armazenagem Diária (Rotina Noturna - Inclui HUs baixadas no dia)
 SELECT
-    DATE(@DataReferencia) AS "DATA",
+    COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
+    io."IssueDate"::date AS "DATA_ENTRADA",
+    p."SkuCode" AS "SKU",
+    p."Description" AS "DESCRICAO",
+    pt."Code" AS "TIPO_VOLUME",
     COUNT(DISTINCT h."Id") AS "VOLUME",
-    COUNT(DISTINCT h."Id") * @ServicoValor AS "VALOR_TOTAL"
+    ROUND(COUNT(DISTINCT h."Id") * @ServicoValor, 10) AS "VALOR_TOTAL"
 FROM "HandlingUnits" h
+LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
+LEFT JOIN "Products" p ON p."Id" = h."ProductId"
+LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
   AND h."CreatedAt" <= @CobrancaDataFim
   AND (
       h."Status" IN (1, 2)
       OR (h."UpdatedAt" >= @CobrancaDataIni)
-  );`;
+  )
+GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."SkuCode", p."Description", pt."Code"
+ORDER BY "NF_ENTRADA", p."SkuCode";`;
                 break;
             case 'ad_valorem':
                 sql = `-- Seguro / Ad-Valorem Diário (Sobre valor de mercadoria em custódia)
 SELECT
-    DATE(@DataReferencia) AS "DATA",
+    COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
+    io."IssueDate"::date AS "DATA_ENTRADA",
+    p."SkuCode" AS "SKU",
+    p."Description" AS "DESCRICAO",
+    pt."Code" AS "TIPO_VOLUME",
     COUNT(DISTINCT h."Id") AS "VOLUME",
     ROUND(
-        SUM(
-            COALESCE(NULLIF(h."CurrentQuantity", 0), h."InitialQuantity", 0) * h."UnitValue"
-        ) * @ServicoValor,
+        SUM(h."CurrentQuantity" * h."UnitValue") * @ServicoValor,
         10
     ) AS "VALOR_TOTAL"
 FROM "HandlingUnits" h
+LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
+LEFT JOIN "Products" p ON p."Id" = h."ProductId"
+LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
   AND h."CreatedAt" <= @CobrancaDataFim
   AND (
       h."Status" IN (1, 2)
       OR (h."UpdatedAt" >= @CobrancaDataIni)
-  );`;
+  )
+GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."SkuCode", p."Description", pt."Code"
+ORDER BY "NF_ENTRADA", p."SkuCode";`;
                 break;
             case 'inbound_volumes':
                 sql = `-- Recebimento por Tipo de Volume (Inbound)

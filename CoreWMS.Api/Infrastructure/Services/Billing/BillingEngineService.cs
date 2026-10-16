@@ -18,13 +18,13 @@ public class BillingEngineService
     }
 
     /// <summary>
-    /// Recálculo manual ou de fechamento completo do ciclo.
-    /// Itera dia a dia desde o StartDate até a data de encerramento, garantindo o acumulado diário correto.
+    /// Recálculo manual ou de fechamento completo do ciclo dia a dia.
     /// </summary>
     public async Task<int> RecalculateFullCycleAsync(BillingCycle cycle, CancellationToken ct = default)
     {
         var companyId = cycle.CompanyId;
         var customerId = cycle.CustomerId;
+
         var activeTariffs = await _db.CustomerTariffs
             .Include(t => t.BillingService)
             .Where(t => t.CompanyId == companyId &&
@@ -40,33 +40,8 @@ public class BillingEngineService
 
         for (var currentDate = cycle.StartDate.Date; currentDate <= maxDate; currentDate = currentDate.AddDays(1))
         {
-            var dateStr = currentDate.ToString("dd/MM/yyyy");
-
-            foreach (var tariff in activeTariffs.Where(t => t.ValidFrom <= currentDate && (t.ValidTo == null || t.ValidTo >= currentDate)))
-            {
-                var calculated = await ExecuteDailyServiceAsync(cycle, tariff.BillingService, tariff, currentDate);
-                if (calculated == null) continue;
-
-                var existingItem = cycle.Items.FirstOrDefault(i =>
-                    i.BillingServiceId == tariff.BillingServiceId &&
-                    i.ChargeDate.Date == currentDate.Date &&
-                    i.DocumentType == "Diária de Estoque");
-
-                if (existingItem != null)
-                {
-                    existingItem.UpdateValues(
-                        calculated.QuantityTotal,
-                        calculated.ServiceTotal,
-                        calculated.StatementDataJson,
-                        $"Recalculado em {DateTime.UtcNow:dd/MM/yyyy HH:mm}"
-                    );
-                }
-                else
-                {
-                    _db.BillingItems.Add(calculated);
-                }
-                processedCount++;
-            }
+            var calculatedList = await ExecuteDailyServicesPerInboundOrderAsync(cycle, activeTariffs, currentDate);
+            processedCount += calculatedList.Count;
         }
 
         await _db.SaveChangesAsync(ct);
@@ -74,46 +49,167 @@ public class BillingEngineService
     }
 
     /// <summary>
-    /// Executa apuração da diária de estoque acumulada de todas as HUs presentes até a data especificada.
+    /// Apura as diárias de estoque agrupadas por NF-e de entrada (ReceiptDocumentId),
+    /// vinculando o DocumentId e DocumentNumber para rastreabilidade 3PL.
     /// </summary>
-    public async Task<BillingItem?> ExecuteDailyServiceAsync(
+    public async Task<List<BillingItem>> ExecuteDailyServicesPerInboundOrderAsync(
         BillingCycle cycle,
-        BillingService service,
-        CustomerTariff tariff,
+        List<CustomerTariff> tariffs,
         DateTime referenceDate)
     {
-        if (string.IsNullOrWhiteSpace(service.SqlTemplate)) return null;
-
         var refDateUtc = DateTime.SpecifyKind(referenceDate.Date, DateTimeKind.Utc);
         var refDateFimUtc = DateTime.SpecifyKind(referenceDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
 
-        var parameters = new
+        var processedItems = new List<BillingItem>();
+
+        foreach (var tariff in tariffs)
         {
-            ArmazemId = cycle.CompanyId,
-            DepositanteId = cycle.CustomerId,
-            ServicoValor = tariff.UnitValue,
-            DataReferencia = refDateUtc,
-            CobrancaDataIni = refDateUtc,
-            CobrancaDataFim = refDateFimUtc
-        };
+            if (string.IsNullOrWhiteSpace(tariff.BillingService.SqlTemplate)) continue;
 
-        var (totalQty, totalAmount, extractJson) = await RunDynamicQueryAsync(service.SqlTemplate, parameters);
+            var parameters = new
+            {
+                ArmazemId = cycle.CompanyId,
+                DepositanteId = cycle.CustomerId,
+                ServicoValor = tariff.UnitValue,
+                DataReferencia = refDateUtc,
+                CobrancaDataIni = refDateUtc,
+                CobrancaDataFim = refDateFimUtc
+            };
 
-        if (totalQty <= 0 && totalAmount <= 0) return null;
+            var connection = _db.Database.GetDbConnection();
+            var transaction = _db.Database.CurrentTransaction?.GetDbTransaction();
 
-        return new BillingItem(
-            cycle.Id,
-            service.Id,
-            refDateUtc,
-            documentType: "Diária de Estoque",
-            documentNumber: referenceDate.ToString("dd/MM/yyyy"),
-            documentId: null,
-            description: $"{service.Name} - {referenceDate:dd/MM/yyyy}",
-            quantityTotal: totalQty,
-            serviceTotal: totalAmount,
-            statementDataJson: extractJson,
-            manualNotes: $"Apuração automática cumulativa ({referenceDate:dd/MM/yyyy})"
-        );
+            var safeQuery = tariff.BillingService.SqlTemplate
+                .Replace("'{armazem_id}'", "@ArmazemId").Replace("{armazem_id}", "@ArmazemId")
+                .Replace("'{depositante_id}'", "@DepositanteId").Replace("{depositante_id}", "@DepositanteId")
+                .Replace("'{servico_valor}'", "@ServicoValor").Replace("{servico_valor}", "@ServicoValor")
+                .Replace("'{data_referencia}'", "@DataReferencia").Replace("{data_referencia}", "@DataReferencia")
+                .Replace("'{cobranca_data_ini}'", "@CobrancaDataIni").Replace("{cobranca_data_ini}", "@CobrancaDataIni")
+                .Replace("'{cobranca_data_fim}'", "@CobrancaDataFim").Replace("{cobranca_data_fim}", "@CobrancaDataFim");
+
+            var resultRows = await connection.QueryAsync<dynamic>(safeQuery, parameters, transaction);
+
+            // Agrupa os resultados do SQL por Nota Fiscal de Entrada
+            var groupedByOrder = new Dictionary<string, (Guid? OrderId, string DocNum, decimal TotalQty, decimal TotalAmount, List<IDictionary<string, object>> ExtractList)>();
+
+            foreach (var row in resultRows)
+            {
+                var dict = new Dictionary<string, object>((IDictionary<string, object>)row, StringComparer.OrdinalIgnoreCase);
+
+                string docNum = dict.TryGetValue("NF_ENTRADA", out var nfeObj) && nfeObj != null ? nfeObj.ToString()! : "Estoque Consolidado";
+                Guid? orderId = dict.TryGetValue("ORDEM_ID", out var ordObj) && ordObj is Guid g ? g : (dict.TryGetValue("RECEIPTDOCUMENTID", out var rObj) && rObj is Guid rg ? rg : null);
+
+                decimal qty = 0;
+                if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull and not null)
+                    qty = Convert.ToDecimal(qtyObj, System.Globalization.CultureInfo.InvariantCulture);
+
+                decimal amount = 0;
+                if (dict.TryGetValue("VALOR_TOTAL", out var valObj) && valObj is not DBNull and not null)
+                    amount = Convert.ToDecimal(valObj, System.Globalization.CultureInfo.InvariantCulture);
+                else if (dict.TryGetValue("VALOR_DIARIA", out var vObj) && vObj is not DBNull and not null)
+                    amount = Convert.ToDecimal(vObj, System.Globalization.CultureInfo.InvariantCulture);
+
+                if (!groupedByOrder.ContainsKey(docNum))
+                {
+                    groupedByOrder[docNum] = (orderId, docNum, 0, 0, new List<IDictionary<string, object>>());
+                }
+
+                var current = groupedByOrder[docNum];
+                current.TotalQty += qty;
+                current.TotalAmount += amount;
+                current.ExtractList.Add((IDictionary<string, object>)row);
+                if (!current.OrderId.HasValue && orderId.HasValue) current.OrderId = orderId;
+                groupedByOrder[docNum] = current;
+            }
+
+            // Para cada NF-e encontrada no estoque deste dia, atualiza ou insere o BillingItem vinculado
+            foreach (var entry in groupedByOrder.Values)
+            {
+                if (entry.TotalQty <= 0 && entry.TotalAmount <= 0) continue;
+
+                var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
+                var extractJson = JsonSerializer.Serialize(entry.ExtractList, jsonOptions);
+
+                var existingItem = cycle.Items.FirstOrDefault(i =>
+                    i.BillingServiceId == tariff.BillingServiceId &&
+                    i.ChargeDate.Date == refDateUtc.Date &&
+                    i.DocumentNumber == entry.DocNum);
+
+                if (existingItem != null)
+                {
+                    existingItem.UpdateValues(
+                        entry.TotalQty,
+                        entry.TotalAmount,
+                        extractJson,
+                        $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Total Cumulativo do Dia)"
+                    );
+                    processedItems.Add(existingItem);
+                }
+                else
+                {
+                    var newItem = new BillingItem(
+                        billingCycleId: cycle.Id,
+                        billingServiceId: tariff.BillingServiceId,
+                        chargeDate: refDateUtc,
+                        documentType: "NF-e Entrada",
+                        documentNumber: entry.DocNum,
+                        documentId: entry.OrderId,
+                        description: $"{tariff.BillingService.Name} (NF #{entry.DocNum})",
+                        quantityTotal: entry.TotalQty,
+                        serviceTotal: entry.TotalAmount,
+                        statementDataJson: extractJson,
+                        manualNotes: $"Apuração de diária vinculada à NF-e #{entry.DocNum}"
+                    );
+                    _db.BillingItems.Add(newItem);
+                    processedItems.Add(newItem);
+                }
+            }
+        }
+
+        return processedItems;
+    }
+
+    /// <summary>
+    /// Chamado pelo Background Worker ou pós-checkout para atualizar as diárias do dia.
+    /// </summary>
+    public async Task<List<BillingItem>> UpsertDailyChargesAsync(
+        Guid companyId,
+        Guid customerId,
+        DateTime referenceDate,
+        CancellationToken ct = default)
+    {
+        var dateOnly = referenceDate.ToUniversalTime().Date;
+        var refMonth = dateOnly.ToString("MM/yyyy");
+
+        var cycle = await _db.BillingCycles
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
+                                      c.CustomerId == customerId &&
+                                      c.ReferenceMonth == refMonth &&
+                                      c.Status == BillingStatus.Draft, ct);
+
+        if (cycle == null)
+        {
+            cycle = new BillingCycle(companyId, customerId, dateOnly);
+            _db.BillingCycles.Add(cycle);
+            await _db.SaveChangesAsync(ct);
+        }
+
+        var activeTariffs = await _db.CustomerTariffs
+            .Include(t => t.BillingService)
+            .Where(t => t.CompanyId == companyId &&
+                        t.CustomerId == customerId &&
+                        t.BillingService.IsActive &&
+                        t.BillingService.Type == BillingServiceType.Automatic_Daily &&
+                        !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
+                        t.ValidFrom <= dateOnly &&
+                        (t.ValidTo == null || t.ValidTo >= dateOnly))
+            .ToListAsync(ct);
+
+        var processedItems = await ExecuteDailyServicesPerInboundOrderAsync(cycle, activeTariffs, dateOnly);
+
+        await _db.SaveChangesAsync(ct);
+        return processedItems;
     }
 
     /// <summary>
@@ -147,9 +243,9 @@ public class BillingEngineService
         if (totalQty <= 0 && totalAmount <= 0) return null;
 
         return new BillingItem(
-            cycle.Id,
-            service.Id,
-            DateTime.UtcNow,
+            billingCycleId: cycle.Id,
+            billingServiceId: service.Id,
+            chargeDate: DateTime.UtcNow,
             documentType: documentType,
             documentNumber: documentNumber,
             documentId: orderId,
@@ -159,88 +255,6 @@ public class BillingEngineService
             statementDataJson: extractJson,
             manualNotes: null
         );
-    }
-
-    /// <summary>
-    /// Chamado pelo Background Worker para atualizar as diárias do dia de forma cumulativa.
-    /// Remove a diária caso o estoque tenha sido 100% estornado.
-    /// </summary>
-    public async Task<List<BillingItem>> UpsertDailyChargesAsync(
-        Guid companyId,
-        Guid customerId,
-        DateTime referenceDate,
-        CancellationToken ct = default)
-    {
-        var dateOnly = referenceDate.ToUniversalTime().Date;
-        var dateStr = dateOnly.ToString("dd/MM/yyyy");
-        var refMonth = dateOnly.ToString("MM/yyyy");
-
-        var cycle = await _db.BillingCycles
-            .Include(c => c.Items)
-            .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
-                                      c.CustomerId == customerId &&
-                                      c.ReferenceMonth == refMonth &&
-                                      c.Status == BillingStatus.Draft, ct);
-
-        if (cycle == null)
-        {
-            cycle = new BillingCycle(companyId, customerId, dateOnly);
-            _db.BillingCycles.Add(cycle);
-            await _db.SaveChangesAsync(ct);
-        }
-
-        var activeTariffs = await _db.CustomerTariffs
-            .Include(t => t.BillingService)
-            .Where(t => t.CompanyId == companyId &&
-                        t.CustomerId == customerId &&
-                        t.BillingService.IsActive &&
-                        t.BillingService.Type == BillingServiceType.Automatic_Daily &&
-                        !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
-                        t.ValidFrom <= dateOnly &&
-                        (t.ValidTo == null || t.ValidTo >= dateOnly))
-            .ToListAsync(ct);
-
-        var processedItems = new List<BillingItem>();
-
-        foreach (var tariff in activeTariffs)
-        {
-            var calculatedItem = await ExecuteDailyServiceAsync(cycle, tariff.BillingService, tariff, dateOnly);
-
-            var existingItem = cycle.Items.FirstOrDefault(i =>
-                i.BillingServiceId == tariff.BillingServiceId &&
-                i.ChargeDate.Date == dateOnly &&
-                i.DocumentType == "Diária de Estoque");
-
-            // SE O ESTOQUE FICOU ZERADO (ex: após estorno total de HUs)
-            if (calculatedItem == null)
-            {
-                if (existingItem != null)
-                {
-                    _db.BillingItems.Remove(existingItem);
-                }
-                continue;
-            }
-
-            // SE EXISTE SALDO: Atualiza ou insere
-            if (existingItem != null)
-            {
-                existingItem.UpdateValues(
-                    calculatedItem.QuantityTotal,
-                    calculatedItem.ServiceTotal,
-                    calculatedItem.StatementDataJson,
-                    $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Total Cumulativo do Dia)"
-                );
-                processedItems.Add(existingItem);
-            }
-            else
-            {
-                _db.BillingItems.Add(calculatedItem);
-                processedItems.Add(calculatedItem);
-            }
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return processedItems;
     }
 
     private async Task<(decimal TotalQty, decimal TotalAmount, string ExtractJson)> RunDynamicQueryAsync(
@@ -275,15 +289,11 @@ public class BillingEngineService
 
             if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull and not null)
                 totalQty += Convert.ToDecimal(qtyObj, System.Globalization.CultureInfo.InvariantCulture);
-            else if (dict.TryGetValue("QUANTIDADE", out var qtyAltObj) && qtyAltObj is not DBNull and not null)
-                totalQty += Convert.ToDecimal(qtyAltObj, System.Globalization.CultureInfo.InvariantCulture);
 
             if (dict.TryGetValue("VALOR_TOTAL", out var vTotalObj) && vTotalObj is not DBNull and not null)
                 totalAmount += Convert.ToDecimal(vTotalObj, System.Globalization.CultureInfo.InvariantCulture);
             else if (dict.TryGetValue("VALOR_DIARIA", out var valObj) && valObj is not DBNull and not null)
                 totalAmount += Convert.ToDecimal(valObj, System.Globalization.CultureInfo.InvariantCulture);
-            else if (dict.TryGetValue("SERVICE_TOTAL", out var sTotalObj) && sTotalObj is not DBNull and not null)
-                totalAmount += Convert.ToDecimal(sTotalObj, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         var jsonOptions = new JsonSerializerOptions { WriteIndented = false };

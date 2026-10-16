@@ -1,27 +1,34 @@
-using System.Text;
-using System.Text.Json;
+using CoreWMS.Api.Features.Billing.Documents;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
+using QuestPDF.Infrastructure;
 
 namespace CoreWMS.Api.Features.Billing.Queries;
 
-public record ExportBillingCycleStatementQuery(Guid Id) : IRequest<IResult>;
+public record ExportBillingCyclePdfQuery(Guid Id) : IRequest<IResult>;
 
-public class ExportBillingCycleStatementHandler : IRequestHandler<ExportBillingCycleStatementQuery, IResult>
+public class ExportBillingCyclePdfHandler : IRequestHandler<ExportBillingCyclePdfQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
 
-    public ExportBillingCycleStatementHandler(ApplicationDbContext db, ITenantProvider tenant)
+    static ExportBillingCyclePdfHandler()
+    {
+        // Garante a licença do QuestPDF mesmo se não estiver declarada no Program.cs
+        QuestPDF.Settings.License = LicenseType.Community;
+    }
+
+    public ExportBillingCyclePdfHandler(ApplicationDbContext db, ITenantProvider tenant)
     {
         _db = db;
         _tenant = tenant;
     }
 
-    public async Task<IResult> Handle(ExportBillingCycleStatementQuery request, CancellationToken ct)
+    public async Task<IResult> Handle(ExportBillingCyclePdfQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
@@ -32,77 +39,39 @@ public class ExportBillingCycleStatementHandler : IRequestHandler<ExportBillingC
             .Where(c => c.Id == request.Id && c.CompanyId == companyId)
             .FirstOrDefaultAsync(ct);
 
-        if (cycle == null) return Results.NotFound();
+        if (cycle == null) return Results.NotFound(new { Message = "Ciclo não encontrado." });
 
-        var builder = new StringBuilder();
+        var tz = GetBrasiliaTimeZone();
+        var emissaoLocal = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
 
-        // 1. CABEÇALHO DO EXTRATO
-        builder.AppendLine($"EXTRATO DE FATURAMENTO WMS;Competência: {cycle.ReferenceMonth}");
-        builder.AppendLine($"Depositante;\"{cycle.Customer.CorporateName}\"");
-        builder.AppendLine($"CNPJ;\"{cycle.Customer.Cnpj}\"");
-        builder.AppendLine($"Período de Apuração;{cycle.StartDate:dd/MM/yyyy} a {cycle.EndDate:dd/MM/yyyy}");
-        builder.AppendLine($"Situação da Fatura;{cycle.Status}");
-        builder.AppendLine($"Valor Total Geral R$;{cycle.TotalAmount:N2}");
-        builder.AppendLine();
+        var document = new BillingCyclePdfDocument(cycle, emissaoLocal);
+        var pdfBytes = document.GeneratePdf();
 
-        // 2. SEÇÃO 1: RESUMO CONSOLIDADO POR SERVIÇO
-        builder.AppendLine("--- 1. RESUMO GERAL DOS SERVIÇOS ---");
-        builder.AppendLine("Serviço / Lançamento;Tipo;Volume / Quantidade;Valor Total R$;Observações");
+        var safeCnpj = (cycle.Customer?.Cnpj ?? "00000000").Replace(".", "").Replace("/", "").Replace("-", "");
+        var safeMonth = cycle.ReferenceMonth.Replace("/", "_");
+        var fileName = $"extrato_faturamento_{safeCnpj}_{safeMonth}.pdf";
 
-        foreach (var item in cycle.Items.OrderBy(i => i.CreatedAt))
+        return Results.File(pdfBytes, "application/pdf", fileName);
+    }
+
+    private static TimeZoneInfo GetBrasiliaTimeZone()
+    {
+        string[] tzIds = ["America/Sao_Paulo", "E. South America Standard Time", "Central Brazilian Standard Time"];
+        foreach (var id in tzIds)
         {
-            var serviceType = item.BillingService?.Type.ToString() ?? "Avulso";
-            var desc = item.Description;
-            var notes = item.ManualNotes ?? "";
-            builder.AppendLine($"\"{desc}\";{serviceType};{item.QuantityTotal};{item.ServiceTotal:N2};\"{notes}\"");
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch { }
         }
-
-        builder.AppendLine();
-
-        // 3. SEÇÃO 2: DETALHAMENTO ANALÍTICO DAS OCORRÊNCIAS (JSON DESCOMPACTADO)
-        builder.AppendLine("--- 2. DETALHAMENTO ANALÍTICO DAS OCORRÊNCIAS (AUDITORIA LINHA A LINHA) ---");
-        builder.AppendLine("Serviço;Data / Referência;Tipo Volume;Detalhe / Documento;Quantidade;Valor Cobrado R$");
-
-        foreach (var item in cycle.Items.Where(i => !string.IsNullOrWhiteSpace(i.StatementDataJson)))
-        {
-            try
-            {
-                using var jsonDoc = JsonDocument.Parse(item.StatementDataJson!);
-                if (jsonDoc.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var elem in jsonDoc.RootElement.EnumerateArray())
-                    {
-                        string dataRef = elem.TryGetProperty("DATA", out var dProp) ? dProp.ToString() : item.CreatedAt.ToString("dd/MM/yyyy");
-                        string tipoVol = elem.TryGetProperty("TIPO_VOLUME", out var tvProp) ? tvProp.ToString() : "-";
-                        string docRef = elem.TryGetProperty("DESCRICAO", out var descProp) ? descProp.ToString() : (elem.TryGetProperty("OrderNumber", out var onProp) ? $"Ped #{onProp}" : "-");
-                        string qtd = elem.TryGetProperty("VOLUME", out var vProp) ? vProp.ToString() : (elem.TryGetProperty("VolumeCount", out var vcProp) ? vcProp.ToString() : "1");
-                        string val = elem.TryGetProperty("VALOR_TOTAL", out var valProp) ? valProp.ToString() : (elem.TryGetProperty("VALOR_DIARIA", out var vdProp) ? vdProp.ToString() : item.ServiceTotal.ToString("N2"));
-
-                        builder.AppendLine($"\"{item.Description}\";{dataRef};{tipoVol};\"{docRef}\";{qtd};{val}");
-                    }
-                }
-            }
-            catch
-            {
-                builder.AppendLine($"\"{item.Description}\";{item.CreatedAt:dd/MM/yyyy};-;\"Lançamento registrado\";{item.QuantityTotal};{item.ServiceTotal:N2}");
-            }
-        }
-
-        var preamble = Encoding.UTF8.GetPreamble();
-        var contentBytes = Encoding.UTF8.GetBytes(builder.ToString());
-        var fileBytes = preamble.Concat(contentBytes).ToArray();
-
-        var fileName = $"extrato_faturamento_{cycle.Customer.Cnpj}_{cycle.ReferenceMonth.Replace("/", "_")}.csv";
-        return Results.File(fileBytes, "text/csv; charset=utf-8", fileName);
+        return TimeZoneInfo.CreateCustomTimeZone("Brasilia", TimeSpan.FromHours(-3), "Brasilia", "Brasilia");
     }
 }
 
-public static class ExportBillingCycleStatementEndpoints
+public static class ExportBillingCyclePdfEndpoints
 {
-    public static void MapExportBillingCycleStatementEndpoints(this IEndpointRouteBuilder app)
+    public static void MapExportBillingCyclePdfEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/billing/cycles/{id:guid}/export", async (Guid id, IMediator mediator) =>
-            await mediator.Send(new ExportBillingCycleStatementQuery(id)))
+        app.MapGet("/api/billing/cycles/{id:guid}/export-pdf", async (Guid id, IMediator mediator) =>
+            await mediator.Send(new ExportBillingCyclePdfQuery(id)))
            .WithTags("Billing")
            .RequireAuthorization()
            .RequirePermission(Permissions.Billing.View);
