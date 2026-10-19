@@ -9,4 +9,14 @@ export interface StandaloneNfeItemCommand {
   productId?: string;
   quantity?: number;
   unitValue?: number;
+  /** @nullable */
+  batch?: string | null;
+  /** @nullable */
+  manufactureDate?: string | null;
+  /** @nullable */
+  expirationDate?: string | null;
+  /** @nullable */
+  xPed?: string | null;
+  /** @nullable */
+  nItemPed?: number | null;
 }

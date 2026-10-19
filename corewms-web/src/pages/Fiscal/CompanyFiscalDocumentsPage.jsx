@@ -122,17 +122,18 @@ export default function CompanyFiscalDocumentsPage() {
         }
     };
 
+    // Exclusão de nota fiscal pendente ou rejeitada
     const handleDeletePendingDoc = async (doc) => {
-        if (!confirm(`Deseja realmente excluir este documento fiscal pendente #${doc.id}?`)) return;
+        if (!confirm(`Deseja realmente excluir este documento fiscal pendente/rejeitado #${doc.id}?`)) return;
         try {
             await customInstance({
                 url: `/api/fiscal/documents/${doc.id}`,
                 method: 'DELETE'
             });
-            toast.success('Nota fiscal pendente removida com sucesso!');
+            toast.success('Nota fiscal pendente/rejeitada removida com sucesso!');
             loadDocuments();
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao excluir documento pendente.');
+            toast.error(error.response?.data?.message || 'Erro ao excluir documento fiscal.');
         }
     };
 
@@ -146,7 +147,6 @@ export default function CompanyFiscalDocumentsPage() {
                         Gerencie todas as notas fiscais emitidas, eventos vinculados (CC-e e Cancelamento) e emissões avulsas.
                     </p>
                 </div>
-                {/* NAVEGAÇÃO DIRETA PARA A PÁGINA DEDICADA */}
                 <Button onClick={() => navigate('/fiscal/documentos/novo')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
                     <Plus className="mr-1.5 h-4 w-4" /> Nova NF-e Avulsa
                 </Button>
@@ -241,9 +241,10 @@ export default function CompanyFiscalDocumentsPage() {
                                 </TableRow>
                             ) : (
                                 documents.map(doc => {
-                                    const isAuthorized = doc.status === 'Authorized' || doc.status === '2';
-                                    const isPending = doc.status === 'Pending' || doc.status === '1';
-                                    const isCanceled = doc.status === 'Canceled' || doc.status === '4';
+                                    const statusStr = String(doc.status || '').toLowerCase();
+                                    const isAuthorized = statusStr === 'authorized' || statusStr === '2';
+                                    const isPendingOrRejected = statusStr === 'pending' || statusStr === '1' || statusStr === 'rejected' || statusStr === '3';
+                                    const isCanceled = statusStr === 'canceled' || statusStr === '4';
                                     const eventsCount = doc.linkedEvents?.length || 0;
 
                                     return (
@@ -281,12 +282,12 @@ export default function CompanyFiscalDocumentsPage() {
                                                 <div className="space-y-0.5">
                                                     <Badge className={
                                                         isAuthorized ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
-                                                            doc.status === 'Rejected' || doc.status === '3' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                                                            statusStr === 'rejected' || statusStr === '3' ? 'bg-rose-100 text-rose-800 border-rose-200' :
                                                                 isCanceled ? 'bg-slate-100 text-slate-700 border-slate-200' :
                                                                     'bg-amber-100 text-amber-800 border-amber-200'
                                                     }>
                                                         {isAuthorized ? 'Autorizada' :
-                                                            doc.status === 'Rejected' || doc.status === '3' ? 'Rejeitada' :
+                                                            statusStr === 'rejected' || statusStr === '3' ? 'Rejeitada' :
                                                                 isCanceled ? 'Cancelada' : 'Pendente'}
                                                     </Badge>
                                                     {doc.returnMessage && (
@@ -317,6 +318,7 @@ export default function CompanyFiscalDocumentsPage() {
                                                         <Eye size={14} className="text-slate-600" />
                                                     </Button>
 
+                                                    {/* BOTÕES DE NOTA AUTORIZADA */}
                                                     {isAuthorized && (
                                                         <>
                                                             <Button
@@ -368,13 +370,14 @@ export default function CompanyFiscalDocumentsPage() {
                                                         </>
                                                     )}
 
-                                                    {isPending && (
+                                                    {/* BOTÃO EXCLUIR NOTA PENDENTE OU REJEITADA */}
+                                                    {isPendingOrRejected && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
                                                             onClick={() => handleDeletePendingDoc(doc)}
                                                             className="h-8 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 font-medium px-2"
-                                                            title="Excluir nota pendente"
+                                                            title="Excluir nota pendente/rejeitada"
                                                         >
                                                             <Trash2 size={13} className="mr-1 text-rose-600" /> Excluir
                                                         </Button>

@@ -59,6 +59,213 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
+export const postApiFiscalRulesRuleIdExceptions = (
+    ruleId: string,
+    addOrUpdateExceptionCommand: AddOrUpdateExceptionCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules/${ruleId}/exceptions`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: addOrUpdateExceptionCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiFiscalRulesRuleIdExceptionsMutationKey = () => ['postApiFiscalRulesRuleIdExceptions'] as const;
+
+export const getPostApiFiscalRulesRuleIdExceptionsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, TError,PostApiFiscalRulesRuleIdExceptionsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, TError,PostApiFiscalRulesRuleIdExceptionsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiFiscalRulesRuleIdExceptionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, PostApiFiscalRulesRuleIdExceptionsMutationVariables> = (props) => {
+          const {ruleId,data} = props ?? {};
+
+          return  postApiFiscalRulesRuleIdExceptions(ruleId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFiscalRulesRuleIdExceptionsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>>
+    export type PostApiFiscalRulesRuleIdExceptionsMutationBody = AddOrUpdateExceptionCommand
+    export type PostApiFiscalRulesRuleIdExceptionsMutationError = unknown
+    export type PostApiFiscalRulesRuleIdExceptionsMutationVariables = {ruleId: string;data: AddOrUpdateExceptionCommand}
+
+    export const usePostApiFiscalRulesRuleIdExceptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, TError,PostApiFiscalRulesRuleIdExceptionsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>,
+        TError,
+        PostApiFiscalRulesRuleIdExceptionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFiscalRulesRuleIdExceptionsMutationOptions(options), queryClient);
+    }
+    export const deleteApiFiscalRulesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiFiscalRulesIdMutationKey = () => ['deleteApiFiscalRulesId'] as const;
+
+export const getDeleteApiFiscalRulesIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, TError,DeleteApiFiscalRulesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, TError,DeleteApiFiscalRulesIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiFiscalRulesIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, DeleteApiFiscalRulesIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiFiscalRulesId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiFiscalRulesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>>
+
+    export type DeleteApiFiscalRulesIdMutationError = unknown
+    export type DeleteApiFiscalRulesIdMutationVariables = {id: string}
+
+    export const useDeleteApiFiscalRulesId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, TError,DeleteApiFiscalRulesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiFiscalRulesId>>,
+        TError,
+        DeleteApiFiscalRulesIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiFiscalRulesIdMutationOptions(options), queryClient);
+    }
+    export const getApiFiscalRulesId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules/${id}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiFiscalRulesIdQueryKey = (id: string,) => {
+    return [
+    `/api/fiscal/rules/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiFiscalRulesIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalRulesIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalRulesId>>> = ({ signal }) => getApiFiscalRulesId(id, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiFiscalRulesIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalRulesId>>>
+export type GetApiFiscalRulesIdQueryError = unknown
+
+
+export function useGetApiFiscalRulesId<TData = Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalRulesId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalRulesId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalRulesId<TData = Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalRulesId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalRulesId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalRulesId<TData = Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiFiscalRulesId<TData = Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiFiscalRulesIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export const deleteApiFiscalDocumentsId = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -118,7 +325,160 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiFiscalDocumentsIdMutationOptions(options), queryClient);
     }
-    export const postApiFiscalDocumentsStandaloneEmit = (
+    export const deleteApiFiscalRulesRuleIdExceptionsExceptionId = (
+    ruleId: string,
+    exceptionId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules/${ruleId}/exceptions/${exceptionId}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationKey = () => ['deleteApiFiscalRulesRuleIdExceptionsExceptionId'] as const;
+
+export const getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, TError,DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, TError,DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables> = (props) => {
+          const {ruleId,exceptionId} = props ?? {};
+
+          return  deleteApiFiscalRulesRuleIdExceptionsExceptionId(ruleId,exceptionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>>
+
+    export type DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationError = unknown
+    export type DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables = {ruleId: string;exceptionId: string}
+
+    export const useDeleteApiFiscalRulesRuleIdExceptionsExceptionId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, TError,DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>,
+        TError,
+        DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationOptions(options), queryClient);
+    }
+    export const getApiFiscalRulesRuleIdExceptionsExceptionId = (
+    ruleId: string,
+    exceptionId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules/${ruleId}/exceptions/${exceptionId}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiFiscalRulesRuleIdExceptionsExceptionIdQueryKey = (ruleId: string,
+    exceptionId: string,) => {
+    return [
+    `/api/fiscal/rules/${ruleId}/exceptions/${exceptionId}`
+    ] as const;
+    }
+
+
+export const getGetApiFiscalRulesRuleIdExceptionsExceptionIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError = unknown>(ruleId: string,
+    exceptionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalRulesRuleIdExceptionsExceptionIdQueryKey(ruleId,exceptionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>> = ({ signal }) => getApiFiscalRulesRuleIdExceptionsExceptionId(ruleId,exceptionId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: ruleId !== null && ruleId !== undefined && exceptionId !== null && exceptionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiFiscalRulesRuleIdExceptionsExceptionIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>>
+export type GetApiFiscalRulesRuleIdExceptionsExceptionIdQueryError = unknown
+
+
+export function useGetApiFiscalRulesRuleIdExceptionsExceptionId<TData = Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError = unknown>(
+ ruleId: string,
+    exceptionId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalRulesRuleIdExceptionsExceptionId<TData = Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError = unknown>(
+ ruleId: string,
+    exceptionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalRulesRuleIdExceptionsExceptionId<TData = Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError = unknown>(
+ ruleId: string,
+    exceptionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiFiscalRulesRuleIdExceptionsExceptionId<TData = Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError = unknown>(
+ ruleId: string,
+    exceptionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiFiscalRulesRuleIdExceptionsExceptionIdQueryOptions(ruleId,exceptionId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiFiscalDocumentsStandaloneEmit = (
     emitStandaloneNfeCommand: EmitStandaloneNfeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -266,7 +626,213 @@ export function useGetApiFiscalDocuments<TData = Awaited<ReturnType<typeof getAp
 
 
 
-export const getApiFiscalNfeDocumentIdPdf = (
+export const getApiFiscalRules = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiFiscalRulesQueryKey = () => {
+    return [
+    `/api/fiscal/rules`
+    ] as const;
+    }
+
+
+export const getGetApiFiscalRulesQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalRulesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalRules>>> = ({ signal }) => getApiFiscalRules(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiFiscalRulesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalRules>>>
+export type GetApiFiscalRulesQueryError = unknown
+
+
+export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalRules>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalRules>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalRules>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalRules>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiFiscalRulesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiFiscalRules = (
+    saveFiscalOperationRuleCommand: SaveFiscalOperationRuleCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: saveFiscalOperationRuleCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiFiscalRulesMutationKey = () => ['postApiFiscalRules'] as const;
+
+export const getPostApiFiscalRulesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRules>>, TError,PostApiFiscalRulesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRules>>, TError,PostApiFiscalRulesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiFiscalRulesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalRules>>, PostApiFiscalRulesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiFiscalRules(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFiscalRulesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalRules>>>
+    export type PostApiFiscalRulesMutationBody = SaveFiscalOperationRuleCommand
+    export type PostApiFiscalRulesMutationError = unknown
+    export type PostApiFiscalRulesMutationVariables = {data: SaveFiscalOperationRuleCommand}
+
+    export const usePostApiFiscalRules = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRules>>, TError,PostApiFiscalRulesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFiscalRules>>,
+        TError,
+        PostApiFiscalRulesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFiscalRulesMutationOptions(options), queryClient);
+    }
+    export const patchApiFiscalRulesIdToggle = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/rules/${id}/toggle`, method: 'PATCH', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPatchApiFiscalRulesIdToggleMutationKey = () => ['patchApiFiscalRulesIdToggle'] as const;
+
+export const getPatchApiFiscalRulesIdToggleMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, TError,PatchApiFiscalRulesIdToggleMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, TError,PatchApiFiscalRulesIdToggleMutationVariables, TContext> => {
+
+const mutationKey = getPatchApiFiscalRulesIdToggleMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, PatchApiFiscalRulesIdToggleMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  patchApiFiscalRulesIdToggle(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiFiscalRulesIdToggleMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>>
+
+    export type PatchApiFiscalRulesIdToggleMutationError = unknown
+    export type PatchApiFiscalRulesIdToggleMutationVariables = {id: string}
+
+    export const usePatchApiFiscalRulesIdToggle = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, TError,PatchApiFiscalRulesIdToggleMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>,
+        TError,
+        PatchApiFiscalRulesIdToggleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiFiscalRulesIdToggleMutationOptions(options), queryClient);
+    }
+    export const getApiFiscalNfeDocumentIdPdf = (
     documentId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -438,394 +1004,7 @@ export function useGetApiFiscalNfeDocumentIdXml<TData = Awaited<ReturnType<typeo
 
 
 
-export const getApiFiscalRules = (
-
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/rules`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiFiscalRulesQueryKey = () => {
-    return [
-    `/api/fiscal/rules`
-    ] as const;
-    }
-
-
-export const getGetApiFiscalRulesQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalRulesQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalRules>>> = ({ signal }) => getApiFiscalRules(requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiFiscalRulesQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalRules>>>
-export type GetApiFiscalRulesQueryError = unknown
-
-
-export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiFiscalRules>>,
-          TError,
-          Awaited<ReturnType<typeof getApiFiscalRules>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiFiscalRules>>,
-          TError,
-          Awaited<ReturnType<typeof getApiFiscalRules>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiFiscalRulesQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const postApiFiscalRules = (
-    saveFiscalOperationRuleCommand: SaveFiscalOperationRuleCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/rules`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: saveFiscalOperationRuleCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiFiscalRulesMutationKey = () => ['postApiFiscalRules'] as const;
-
-export const getPostApiFiscalRulesMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRules>>, TError,PostApiFiscalRulesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRules>>, TError,PostApiFiscalRulesMutationVariables, TContext> => {
-
-const mutationKey = getPostApiFiscalRulesMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalRules>>, PostApiFiscalRulesMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiFiscalRules(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiFiscalRulesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalRules>>>
-    export type PostApiFiscalRulesMutationBody = SaveFiscalOperationRuleCommand
-    export type PostApiFiscalRulesMutationError = unknown
-    export type PostApiFiscalRulesMutationVariables = {data: SaveFiscalOperationRuleCommand}
-
-    export const usePostApiFiscalRules = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRules>>, TError,PostApiFiscalRulesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiFiscalRules>>,
-        TError,
-        PostApiFiscalRulesMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiFiscalRulesMutationOptions(options), queryClient);
-    }
-    export const postApiFiscalRulesRuleIdExceptions = (
-    ruleId: string,
-    addOrUpdateExceptionCommand: AddOrUpdateExceptionCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/rules/${ruleId}/exceptions`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: addOrUpdateExceptionCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiFiscalRulesRuleIdExceptionsMutationKey = () => ['postApiFiscalRulesRuleIdExceptions'] as const;
-
-export const getPostApiFiscalRulesRuleIdExceptionsMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, TError,PostApiFiscalRulesRuleIdExceptionsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, TError,PostApiFiscalRulesRuleIdExceptionsMutationVariables, TContext> => {
-
-const mutationKey = getPostApiFiscalRulesRuleIdExceptionsMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, PostApiFiscalRulesRuleIdExceptionsMutationVariables> = (props) => {
-          const {ruleId,data} = props ?? {};
-
-          return  postApiFiscalRulesRuleIdExceptions(ruleId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiFiscalRulesRuleIdExceptionsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>>
-    export type PostApiFiscalRulesRuleIdExceptionsMutationBody = AddOrUpdateExceptionCommand
-    export type PostApiFiscalRulesRuleIdExceptionsMutationError = unknown
-    export type PostApiFiscalRulesRuleIdExceptionsMutationVariables = {ruleId: string;data: AddOrUpdateExceptionCommand}
-
-    export const usePostApiFiscalRulesRuleIdExceptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>, TError,PostApiFiscalRulesRuleIdExceptionsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiFiscalRulesRuleIdExceptions>>,
-        TError,
-        PostApiFiscalRulesRuleIdExceptionsMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiFiscalRulesRuleIdExceptionsMutationOptions(options), queryClient);
-    }
-    export const patchApiFiscalRulesIdToggle = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/rules/${id}/toggle`, method: 'PATCH', signal
-    },
-      options);
-    }
-
-
-
-
-export const getPatchApiFiscalRulesIdToggleMutationKey = () => ['patchApiFiscalRulesIdToggle'] as const;
-
-export const getPatchApiFiscalRulesIdToggleMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, TError,PatchApiFiscalRulesIdToggleMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, TError,PatchApiFiscalRulesIdToggleMutationVariables, TContext> => {
-
-const mutationKey = getPatchApiFiscalRulesIdToggleMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, PatchApiFiscalRulesIdToggleMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  patchApiFiscalRulesIdToggle(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PatchApiFiscalRulesIdToggleMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>>
-
-    export type PatchApiFiscalRulesIdToggleMutationError = unknown
-    export type PatchApiFiscalRulesIdToggleMutationVariables = {id: string}
-
-    export const usePatchApiFiscalRulesIdToggle = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>, TError,PatchApiFiscalRulesIdToggleMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof patchApiFiscalRulesIdToggle>>,
-        TError,
-        PatchApiFiscalRulesIdToggleMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPatchApiFiscalRulesIdToggleMutationOptions(options), queryClient);
-    }
-    export const deleteApiFiscalRulesId = (
-    id: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/rules/${id}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiFiscalRulesIdMutationKey = () => ['deleteApiFiscalRulesId'] as const;
-
-export const getDeleteApiFiscalRulesIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, TError,DeleteApiFiscalRulesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, TError,DeleteApiFiscalRulesIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiFiscalRulesIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, DeleteApiFiscalRulesIdMutationVariables> = (props) => {
-          const {id} = props ?? {};
-
-          return  deleteApiFiscalRulesId(id,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiFiscalRulesIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>>
-
-    export type DeleteApiFiscalRulesIdMutationError = unknown
-    export type DeleteApiFiscalRulesIdMutationVariables = {id: string}
-
-    export const useDeleteApiFiscalRulesId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesId>>, TError,DeleteApiFiscalRulesIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiFiscalRulesId>>,
-        TError,
-        DeleteApiFiscalRulesIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiFiscalRulesIdMutationOptions(options), queryClient);
-    }
-    export const deleteApiFiscalRulesRuleIdExceptionsExceptionId = (
-    ruleId: string,
-    exceptionId: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/rules/${ruleId}/exceptions/${exceptionId}`, method: 'DELETE', signal
-    },
-      options);
-    }
-
-
-
-
-export const getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationKey = () => ['deleteApiFiscalRulesRuleIdExceptionsExceptionId'] as const;
-
-export const getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, TError,DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, TError,DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables, TContext> => {
-
-const mutationKey = getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables> = (props) => {
-          const {ruleId,exceptionId} = props ?? {};
-
-          return  deleteApiFiscalRulesRuleIdExceptionsExceptionId(ruleId,exceptionId,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>>
-
-    export type DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationError = unknown
-    export type DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables = {ruleId: string;exceptionId: string}
-
-    export const useDeleteApiFiscalRulesRuleIdExceptionsExceptionId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>, TError,DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof deleteApiFiscalRulesRuleIdExceptionsExceptionId>>,
-        TError,
-        DeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationVariables,
-        TContext
-      > => {
-      return useMutation(getDeleteApiFiscalRulesRuleIdExceptionsExceptionIdMutationOptions(options), queryClient);
-    }
-    export const postApiFiscalNfeCancelOrderId = (
+export const postApiFiscalNfeCancelOrderId = (
     orderId: string,
     cancelOutboundNfeCommand: CancelOutboundNfeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

@@ -39,15 +39,16 @@ public class DeletePendingFiscalDocumentHandler : IRequestHandler<DeletePendingF
         if (doc == null)
             return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
 
-        if (doc.Status != FiscalDocumentStatus.Pending)
+        // Permite excluir tanto notas pendentes quanto rejeitadas (nunca autorizadas)
+        if (doc.Status != FiscalDocumentStatus.Pending && doc.Status != FiscalDocumentStatus.Rejected)
         {
-            return Results.BadRequest(new { Message = "Apenas notas fiscais em situação 'Pendente' podem ser excluídas." });
+            return Results.BadRequest(new { Message = "Apenas notas fiscais em situação 'Pendente' ou 'Rejeitada' podem ser excluídas." });
         }
 
         _db.CompanyFiscalDocuments.Remove(doc);
         await _db.SaveChangesAsync(ct);
 
-        return Results.Ok(new { Message = "Nota fiscal pendente excluída com sucesso! Uma nova nota pode ser gerada." });
+        return Results.Ok(new { Message = "Documento fiscal removido com sucesso! Uma nova nota pode ser gerada." });
     }
 }
 

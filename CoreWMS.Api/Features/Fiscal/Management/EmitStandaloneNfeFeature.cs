@@ -9,6 +9,8 @@ using DFe.Utils;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using NFe.Classes.Informacoes.Pagamento;
+using NFe.Classes.Informacoes.Identificacao.Tipos;
 using NFe.Classes.Servicos.Tipos;
 using NFe.Servicos;
 using NFe.Utils.NFe;
@@ -18,7 +20,29 @@ namespace CoreWMS.Api.Features.Fiscal.Management;
 public record StandaloneNfeItemCommand(
     Guid ProductId,
     decimal Quantity,
-    decimal UnitValue
+    decimal UnitValue,
+    string? Batch = null,
+    DateTime? ManufactureDate = null,
+    DateTime? ExpirationDate = null,
+    string? XPed = null,
+    int? NItemPed = null
+);
+
+public record StandaloneNfeDuplicataCommand(
+    string Numero,
+    DateTime DataVencimento,
+    decimal Valor
+);
+
+public record StandaloneNfePaymentCommand(
+    bool GerarCobranca,
+    int FormaPagamento = 15, // 90 = Sem Pagamento, 15 = Boleto, 14 = Duplicata, 17 = PIX
+    int IndicadorPagamento = 1, // 0 = À Vista, 1 = A Prazo
+    string? NumeroFatura = null,
+    decimal? ValorOriginalFatura = null,
+    decimal? ValorDescontoFatura = null,
+    decimal? ValorLiquidoFatura = null,
+    List<StandaloneNfeDuplicataCommand>? Duplicatas = null
 );
 
 public record EmitStandaloneNfeCommand(
@@ -45,7 +69,9 @@ public record EmitStandaloneNfeCommand(
     string? CarrierName = null,
     string? CarrierStateRegistration = null,
     string? VehiclePlate = null,
-    string? VehiclePlateState = null
+    string? VehiclePlateState = null,
+    StandaloneNfePaymentCommand? Payment = null,
+    List<string>? ReferencedAccessKeys = null
 ) : IRequest<IResult>;
 
 public class EmitStandaloneNfeCommandValidator : AbstractValidator<EmitStandaloneNfeCommand>
@@ -64,6 +90,12 @@ public class EmitStandaloneNfeCommandValidator : AbstractValidator<EmitStandalon
             i.RuleFor(x => x.ProductId).NotEmpty().WithMessage("O identificador do produto é obrigatório.");
             i.RuleFor(x => x.Quantity).GreaterThan(0).WithMessage("A quantidade deve ser maior que zero.");
             i.RuleFor(x => x.UnitValue).GreaterThanOrEqualTo(0).WithMessage("O valor unitário não pode ser negativo.");
+        });
+
+        When(x => x.Payment != null && x.Payment.GerarCobranca, () =>
+        {
+            RuleFor(x => x.Payment!.Duplicatas)
+                .NotEmpty().WithMessage("Quando houver cobrança/fatura gerada, informe ao menos uma duplicata.");
         });
     }
 }
@@ -100,33 +132,73 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
         if (company.CertificateBytes == null || company.CertificateBytes.Length == 0)
             return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado para esta empresa." });
 
-        // 1. Constrói o DTO completo de entrada para o builder
+        // 1. Mapeamento de Pagamento e Duplicatas
+        NfePaymentInput? paymentInput = null;
+        if (request.Payment != null)
+        {
+            var formaPagamento = Enum.IsDefined(typeof(FormaPagamento), request.Payment.FormaPagamento)
+                ? (FormaPagamento)request.Payment.FormaPagamento
+                : FormaPagamento.fpSemPagamento;
+
+            var indPag = Enum.IsDefined(typeof(IndicadorPagamentoDetalhePagamento), request.Payment.IndicadorPagamento)
+                ? (IndicadorPagamentoDetalhePagamento)request.Payment.IndicadorPagamento
+                : IndicadorPagamentoDetalhePagamento.ipDetPgVista;
+
+            var duplicatas = request.Payment.Duplicatas?.Select(d => new NfeDuplicataInput(
+                d.Numero,
+                d.DataVencimento,
+                d.Valor
+            )).ToList();
+
+            paymentInput = new NfePaymentInput(
+                request.Payment.GerarCobranca,
+                formaPagamento,
+                indPag,
+                request.Payment.NumeroFatura,
+                request.Payment.ValorOriginalFatura,
+                request.Payment.ValorDescontoFatura,
+                request.Payment.ValorLiquidoFatura,
+                duplicatas
+            );
+        }
+
+        // 2. Constrói o DTO completo de entrada para o builder
         var builderInput = new StandaloneNfeInput(
-            companyId,
-            request.FiscalRuleId,
-            request.DestinationName,
-            request.DestinationCnpjCpf,
-            request.DestinationStateRegistration,
-            request.DestinationIeIndicator,
-            request.DestinationStreet,
-            request.DestinationNumber,
-            request.DestinationComplement,
-            request.DestinationNeighborhood,
-            request.DestinationCityCode,
-            request.DestinationCity,
-            request.DestinationState,
-            request.DestinationZipCode,
-            request.IndFinal,
-            request.IndPres,
-            request.TpImp,
-            request.AdditionalNotes,
-            request.Items.Select(i => new StandaloneNfeItemInput(i.ProductId, i.Quantity, i.UnitValue)).ToList(),
-            request.FreightModality,
-            request.CarrierCnpjCpf,
-            request.CarrierName,
-            request.CarrierStateRegistration,
-            request.VehiclePlate,
-            request.VehiclePlateState
+            CompanyId: companyId,
+            FiscalRuleId: request.FiscalRuleId,
+            DestinationName: request.DestinationName,
+            DestinationCnpjCpf: request.DestinationCnpjCpf,
+            DestinationStateRegistration: request.DestinationStateRegistration,
+            DestinationIeIndicator: request.DestinationIeIndicator,
+            DestinationStreet: request.DestinationStreet,
+            DestinationNumber: request.DestinationNumber,
+            DestinationComplement: request.DestinationComplement,
+            DestinationNeighborhood: request.DestinationNeighborhood,
+            DestinationCityCode: request.DestinationCityCode,
+            DestinationCity: request.DestinationCity,
+            DestinationState: request.DestinationState,
+            DestinationZipCode: request.DestinationZipCode,
+            IndFinal: request.IndFinal,
+            IndPres: request.IndPres,
+            TpImp: request.TpImp,
+            AdditionalNotes: request.AdditionalNotes,
+            Items: request.Items.Select(i => new StandaloneNfeItemInput(
+                i.ProductId,
+                i.Quantity,
+                i.UnitValue,
+                i.Batch,
+                i.ManufactureDate,
+                i.ExpirationDate,
+                i.XPed,
+                i.NItemPed
+            )).ToList(),
+            FreightModality: request.FreightModality,
+            CarrierCnpjCpf: request.CarrierCnpjCpf,
+            CarrierName: request.CarrierName,
+            CarrierStateRegistration: request.CarrierStateRegistration,
+            VehiclePlate: request.VehiclePlate,
+            VehiclePlateState: request.VehiclePlateState,
+            Payment: paymentInput
         );
 
         NFe.Classes.NFe nfe;
@@ -134,27 +206,48 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
 
         try
         {
-            (nfe, rule) = await _builder.BuildStandaloneNfeAsync(builderInput, ct);
+            var buildRequest = new NfeBuildRequest(
+                FiscalRuleId: request.FiscalRuleId,
+                CompanyId: companyId,
+                ManualInput: builderInput,
+                Payment: paymentInput,
+                CustomIndFinal: request.IndFinal,
+                CustomIndPres: request.IndPres,
+                CustomTpImp: request.TpImp,
+                CustomAdditionalNotes: request.AdditionalNotes
+            );
+
+            (nfe, rule) = await _builder.BuildAsync(buildRequest, ct);
+
+            // Injeta as chaves referenciadas na emissão avulsa (se informadas)
+            if (request.ReferencedAccessKeys != null && request.ReferencedAccessKeys.Any())
+            {
+                nfe.infNFe.ide.NFref ??= new List<NFe.Classes.Informacoes.Identificacao.NFref>();
+                foreach (var key in request.ReferencedAccessKeys.Where(k => !string.IsNullOrWhiteSpace(k)))
+                {
+                    nfe.infNFe.ide.NFref.Add(new NFe.Classes.Informacoes.Identificacao.NFref { refNFe = key.Trim() });
+                }
+            }
         }
         catch (Exception ex)
         {
             return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
         }
 
-        // 2. Registra o documento inicial no banco (sem ordem vinculada)
+        // 3. Registra o documento inicial no banco
         var fiscalDoc = new CompanyFiscalDocument(companyId, rule.Finalidade, outboundOrderId: null);
         _db.CompanyFiscalDocuments.Add(fiscalDoc);
 
         var tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao;
         var cfgServico = _zeusConfigurator.GetCompanyConfiguration(company, tpAmb);
-        cfgServico.ValidarSchemas = false; // Schemas locais desabilitados
+        cfgServico.ValidarSchemas = false;
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
             cfgServico.Certificado.ArrayBytesArquivo,
             cfgServico.Certificado.Senha,
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
-        // 3. Assina e valida
+        // 4. Assina e valida
         try
         {
             nfe.Assina(cfgServico);
@@ -167,7 +260,7 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             return Results.BadRequest(new { Message = $"Falha na validação do XML: {ex.Message}" });
         }
 
-        // 4. Transmissão síncrona
+        // 5. Transmissão síncrona
         using var servicoNFe = new ServicosNFe(cfgServico, certificado);
         var loteId = new Random().Next(1000, 99999);
         var retornoEnvio = servicoNFe.NFeAutorizacao(loteId, IndicadorSincronizacao.Sincrono, new List<NFe.Classes.NFe> { nfe }, false);
@@ -181,7 +274,7 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             return Results.BadRequest(new { Message = $"NF-e Rejeitada pela SEFAZ: {motivo}", DocumentId = fiscalDoc.Id });
         }
 
-        // 5. Sucesso: grava XML e atualiza sequencial
+        // 6. Autorizou -> Persiste XML e atualiza sequencial
         var proc = new NFe.Classes.nfeProc { NFe = nfe, protNFe = retornoEnvio.Retorno.protNFe, versao = retornoEnvio.Retorno.versao };
         fiscalDoc.MarkAsAuthorized(prot.chNFe, prot.nProt, proc.ObterXmlString(), prot.xMotivo);
 

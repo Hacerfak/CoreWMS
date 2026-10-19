@@ -43,6 +43,9 @@ public class OutboundOrder : AuditableEntity
     public string? CarrierCnpjCpf { get; private set; }
     public string? CarrierName { get; private set; }
     public string? CarrierStateRegistration { get; private set; }
+    public string? CarrierAddress { get; private set; } // <xEnder>
+    public string? CarrierCity { get; private set; }    // <xMun>
+    public string? CarrierState { get; private set; }   // <UF>
     public string? VehiclePlate { get; private set; }
     public string? VehiclePlateState { get; private set; }
     public int FreightModality { get; private set; } = 9;              // 0=CIF, 1=FOB, 2=Terceiros, 9=Sem Frete
@@ -89,6 +92,9 @@ public class OutboundOrder : AuditableEntity
         string? carrierCnpjCpf,
         string? carrierName,
         string? carrierIe,
+        string? carrierAddress,
+        string? carrierCity,
+        string? carrierState,
         string? vehiclePlate,
         string? vehiclePlateState,
         int freightModality,
@@ -98,18 +104,14 @@ public class OutboundOrder : AuditableEntity
     {
         CompanyId = companyId;
         CustomerId = customerId;
-
-        // Gera código no formato YYMMDD-HEX (Exemplo: 261007-8A2F4B) quando não informado
         OrderNumber = string.IsNullOrWhiteSpace(orderNumber)
             ? $"{DateTime.UtcNow:yyMMdd}-{FastGuid.NewPostgreSqlGuid().ToString()[..6].ToUpper()}"
             : orderNumber.Trim();
-
         InvoiceNumber = invoiceNumber?.Trim();
         InvoiceSerie = invoiceSerie?.Trim();
         AccessKey = accessKey?.Trim();
         RawXml = rawXml;
         IsReturnToCustomer = isReturnToCustomer;
-
         DestinationCnpjCpf = destCnpjCpf?.Trim();
         DestinationName = destName?.Trim();
         DestinationStateRegistration = destIe?.Trim();
@@ -126,10 +128,13 @@ public class OutboundOrder : AuditableEntity
         CarrierCnpjCpf = carrierCnpjCpf?.Trim();
         CarrierName = carrierName?.Trim();
         CarrierStateRegistration = carrierIe?.Trim();
+        CarrierAddress = carrierAddress?.Trim();
+        CarrierCity = carrierCity?.Trim();
+        CarrierState = carrierState?.Trim()?.ToUpper();
+
         VehiclePlate = vehiclePlate?.Trim().ToUpper();
         VehiclePlateState = vehiclePlateState?.Trim().ToUpper();
         FreightModality = freightModality;
-
         AdditionalNotes = additionalNotes?.Trim();
         IssueDate = issueDate.ToUniversalTime();
         ExpectedShipDate = expectedShipDate.ToUniversalTime();
@@ -169,6 +174,9 @@ public class OutboundOrder : AuditableEntity
         string? carrierCnpjCpf,
         string? carrierName,
         string? carrierIe,
+        string? carrierAddress,
+        string? carrierCity,
+        string? carrierState,
         string? vehiclePlate,
         string? vehiclePlateState,
         int freightModality,
@@ -183,7 +191,6 @@ public class OutboundOrder : AuditableEntity
         InvoiceSerie = invoiceSerie?.Trim();
         AccessKey = accessKey?.Trim();
         IsReturnToCustomer = isReturnToCustomer;
-
         DestinationCnpjCpf = destCnpjCpf?.Trim();
         DestinationName = destName?.Trim();
         DestinationStateRegistration = destIe?.Trim();
@@ -200,6 +207,10 @@ public class OutboundOrder : AuditableEntity
         CarrierCnpjCpf = carrierCnpjCpf?.Trim();
         CarrierName = carrierName?.Trim();
         CarrierStateRegistration = carrierIe?.Trim();
+        CarrierAddress = carrierAddress?.Trim();
+        CarrierCity = carrierCity?.Trim();
+        CarrierState = carrierState?.Trim()?.ToUpper();
+
         VehiclePlate = vehiclePlate?.Trim().ToUpper();
         VehiclePlateState = vehiclePlateState?.Trim().ToUpper();
         FreightModality = freightModality;

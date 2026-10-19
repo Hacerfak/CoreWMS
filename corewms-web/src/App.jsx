@@ -38,6 +38,8 @@ import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
 import OutboundFiscalReviewPage from '@/pages/Outbound/OutboundFiscalReviewPage';
 import AlocacaoInteligentePage from '@/pages/Inbound/AlocacaoInteligentePage';
 import FiscalOperationRulesPage from '@/pages/Fiscal/FiscalOperationRulesPage';
+import CreateOrEditFiscalRulePage from '@/pages/Fiscal/CreateOrEditFiscalRulePage';
+import CreateOrEditRuleExceptionPage from '@/pages/Fiscal/CreateOrEditRuleExceptionPage';
 import CompanyFiscalDocumentsPage from '@/pages/Fiscal/CompanyFiscalDocumentsPage';
 import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
 
@@ -174,6 +176,10 @@ export default function App() {
                 <Route path="/outbound/ordem/:id/itens" element={<OutboundItemsPanelPage />} />
                 <Route path="/outbound/revisao-fiscal/:id" element={<OutboundFiscalReviewPage />} />
                 <Route path="/fiscal/regras" element={<FiscalOperationRulesPage />} />
+                <Route path="/fiscal/regras/nova" element={<CreateOrEditFiscalRulePage />} />
+                <Route path="/fiscal/regras/:id" element={<CreateOrEditFiscalRulePage />} />
+                <Route path="/fiscal/regras/:ruleId/excecoes/nova" element={<CreateOrEditRuleExceptionPage />} />
+                <Route path="/fiscal/regras/:ruleId/excecoes/:exceptionId" element={<CreateOrEditRuleExceptionPage />} />
                 <Route path="/fiscal/documentos" element={<CompanyFiscalDocumentsPage />} />
                 <Route path="/fiscal/documentos/novo" element={<CreateStandaloneNfePage />} />
               </Route>

@@ -8,14 +8,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, Send, Loader2, Sparkles, Plus, Trash2,
-    FileText, UserCheck, Layers, Truck, MessageSquare, CheckCircle2
+    FileText, UserCheck, Layers, Truck, MessageSquare, CreditCard,
+    Calendar, Tag, Link as LinkIcon, DollarSign, Calculator, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ESTADOS_BR = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
+
+const FORMAS_PAGAMENTO = [
+    { value: '15', label: '15 - Boleto Bancário' },
+    { value: '14', label: '14 - Duplicata Mercantil' },
+    { value: '17', label: '17 - Pagamento Instantâneo (PIX)' },
+    { value: '16', label: '16 - Depósito Bancário' },
+    { value: '1', label: '01 - Dinheiro' },
+    { value: '3', label: '03 - Cartão de Crédito' },
+    { value: '4', label: '04 - Cartão de Débito' },
+    { value: '18', label: '18 - Transferência Bancária' },
+    { value: '90', label: '90 - Sem Pagamento' },
+    { value: '99', label: '99 - Outros' }
+];
 
 export default function CreateStandaloneNfePage() {
     const navigate = useNavigate();
@@ -36,6 +51,10 @@ export default function CreateStandaloneNfePage() {
     const [indPres, setIndPres] = useState('9');
     const [tpImp, setTpImp] = useState('1');
 
+    // Chaves de Acesso Referenciadas (NFref)
+    const [refKeyInput, setRefKeyInput] = useState('');
+    const [referencedKeys, setReferencedKeys] = useState([]);
+
     // --- ABA 2: DESTINATÁRIO & ENDEREÇO ---
     const [destCnpjCpf, setDestCnpjCpf] = useState('');
     const [destName, setDestName] = useState('');
@@ -50,13 +69,26 @@ export default function CreateStandaloneNfePage() {
     const [destState, setDestState] = useState('RS');
     const [destZipCode, setDestZipCode] = useState('');
 
-    // --- ABA 3: ITENS & VALORES ---
+    // --- ABA 3: ITENS & VALORES COM RASTREABILIDADE & PEDIDO ---
     const [selectedProductId, setSelectedProductId] = useState('');
     const [itemQty, setItemQty] = useState('1');
     const [itemUnitVal, setItemUnitVal] = useState('');
+    const [itemBatch, setItemBatch] = useState('');
+    const [itemManufactureDate, setItemManufactureDate] = useState('');
+    const [itemExpirationDate, setItemExpirationDate] = useState('');
+    const [itemXPed, setItemXPed] = useState('');
+    const [itemNItemPed, setItemNItemPed] = useState('');
     const [itemsList, setItemsList] = useState([]);
 
-    // --- ABA 4: TRANSPORTE & FRETE ---
+    // --- ABA 4: COBRANÇA, FATURA & DUPLICATAS ---
+    const [hasFinancialBilling, setHasFinancialBilling] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('15');
+    const [paymentIndicator, setPaymentIndicator] = useState('1');
+    const [invoiceNumber, setInvoiceNumber] = useState('');
+    const [invoiceDiscount, setInvoiceDiscount] = useState('0');
+    const [duplicatas, setDuplicatas] = useState([]);
+
+    // --- ABA 5: TRANSPORTE & FRETE ---
     const [freightModality, setFreightModality] = useState('9');
     const [carrierCnpjCpf, setCarrierCnpjCpf] = useState('');
     const [carrierName, setCarrierName] = useState('');
@@ -64,10 +96,9 @@ export default function CreateStandaloneNfePage() {
     const [vehiclePlate, setVehiclePlate] = useState('');
     const [vehiclePlateState, setVehiclePlateState] = useState('RS');
 
-    // --- ABA 5: OBSERVAÇÕES FISCAIS ---
+    // --- ABA 6: OBSERVAÇÕES FISCAIS ---
     const [additionalNotes, setAdditionalNotes] = useState('');
 
-    // Função utilitária para extrair arrays de forma segura
     const extractArray = (res) => {
         if (Array.isArray(res)) return res;
         if (Array.isArray(res?.items)) return res.items;
@@ -103,6 +134,68 @@ export default function CreateStandaloneNfePage() {
 
         loadAuxiliaryData();
     }, []);
+
+    const activeRule = useMemo(() => {
+        return fiscalRules.find(r => r.id === fiscalRuleId);
+    }, [fiscalRules, fiscalRuleId]);
+
+    // Identificação de CFOP 5124 para sugestão automática de faturamento comercial
+    useEffect(() => {
+        if (activeRule) {
+            const is5124OrService =
+                activeRule.cfopStateInternal === '5124' ||
+                activeRule.cfopInterstate === '6124' ||
+                activeRule.description?.toLowerCase().includes('industrialização') ||
+                activeRule.description?.toLowerCase().includes('serviço') ||
+                activeRule.description?.toLowerCase().includes('cobrança');
+
+            if (is5124OrService) {
+                setHasFinancialBilling(true);
+                setPaymentMethod('15'); // Boleto
+                setPaymentIndicator('1'); // A Prazo
+            }
+        }
+    }, [activeRule]);
+
+    // Total dos Produtos
+    const totalProductsValue = useMemo(() => {
+        return itemsList.reduce((acc, curr) => acc + curr.totalValue, 0);
+    }, [itemsList]);
+
+    // Valor Líquido da Fatura
+    const invoiceNetValue = useMemo(() => {
+        const disc = parseFloat(invoiceDiscount) || 0;
+        return Math.max(0, totalProductsValue - disc);
+    }, [totalProductsValue, invoiceDiscount]);
+
+    // Soma das Duplicatas
+    const totalDuplicatasValue = useMemo(() => {
+        return duplicatas.reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
+    }, [duplicatas]);
+
+    const isDuplicatasBalanced = useMemo(() => {
+        if (!hasFinancialBilling) return true;
+        if (duplicatas.length === 0) return false;
+        return Math.abs(totalDuplicatasValue - invoiceNetValue) < 0.01;
+    }, [hasFinancialBilling, duplicatas.length, totalDuplicatasValue, invoiceNetValue]);
+
+    // Adição de Chave Referenciada (NFref)
+    const handleAddReferencedKey = () => {
+        const cleanKey = refKeyInput.replace(/\D/g, '');
+        if (cleanKey.length !== 44) {
+            return toast.warning('A chave de acesso da NF-e referenciada deve conter exatamente 44 dígitos numéricos.');
+        }
+        if (referencedKeys.includes(cleanKey)) {
+            return toast.warning('Esta chave já foi adicionada.');
+        }
+        setReferencedKeys(prev => [...prev, cleanKey]);
+        setRefKeyInput('');
+        toast.info('Chave referenciada adicionada.');
+    };
+
+    const handleRemoveReferencedKey = (keyToRemove) => {
+        setReferencedKeys(prev => prev.filter(k => k !== keyToRemove));
+    };
 
     // Consulta SEFAZ Destinatário
     const handleConsultDestSefaz = async () => {
@@ -157,14 +250,14 @@ export default function CreateStandaloneNfePage() {
         }
     };
 
-    // Inclusão de Item
+    // Inclusão de Item com Lote e Pedido
     const handleAddItem = () => {
         if (!selectedProductId) return toast.warning('Selecione um produto do catálogo.');
         const qtyNum = parseFloat(itemQty);
         const valNum = parseFloat(itemUnitVal);
 
-        if (isNaN(qtyNum) || qtyNum <= 0) return toast.warning('Informe uma quantidade válida.');
-        if (isNaN(valNum) || valNum <= 0) return toast.warning('Informe um valor unitário válido.');
+        if (isNaN(qtyNum) || qtyNum <= 0) return toast.warning('Informe uma quantidade válida maior que zero.');
+        if (isNaN(valNum) || valNum < 0) return toast.warning('Informe um valor unitário válido.');
 
         const prod = products.find(p => p.id === selectedProductId);
         if (!prod) return;
@@ -178,13 +271,23 @@ export default function CreateStandaloneNfePage() {
                 unit: prod.baseUnit || 'UN',
                 quantity: qtyNum,
                 unitValue: valNum,
-                totalValue: Math.round(qtyNum * valNum * 100) / 100
+                totalValue: Math.round(qtyNum * valNum * 100) / 100,
+                batch: itemBatch.trim() || null,
+                manufactureDate: itemManufactureDate || null,
+                expirationDate: itemExpirationDate || null,
+                xPed: itemXPed.trim() || null,
+                nItemPed: itemNItemPed ? parseInt(itemNItemPed, 10) : null
             }
         ]);
 
         setSelectedProductId('');
         setItemQty('1');
         setItemUnitVal('');
+        setItemBatch('');
+        setItemManufactureDate('');
+        setItemExpirationDate('');
+        setItemXPed('');
+        setItemNItemPed('');
         toast.info('Item adicionado à lista.');
     };
 
@@ -192,17 +295,64 @@ export default function CreateStandaloneNfePage() {
         setItemsList(prev => prev.filter((_, i) => i !== idx));
     };
 
-    const totalNfeValue = useMemo(() => {
-        return itemsList.reduce((acc, curr) => acc + curr.totalValue, 0);
-    }, [itemsList]);
+    // Gerador Automático de Parcelas / Duplicatas
+    const handleGenerateInstallments = (count) => {
+        if (invoiceNetValue <= 0) {
+            return toast.warning('O valor total dos produtos deve ser maior que zero para gerar parcelas.');
+        }
 
-    const activeRule = useMemo(() => {
-        return fiscalRules.find(r => r.id === fiscalRuleId);
-    }, [fiscalRules, fiscalRuleId]);
+        const parcelValue = Math.round((invoiceNetValue / count) * 100) / 100;
+        let remainder = Math.round((invoiceNetValue - (parcelValue * count)) * 100) / 100;
+
+        const generated = [];
+        const today = new Date();
+
+        for (let i = 1; i <= count; i++) {
+            const dueDate = new Date();
+            dueDate.setDate(today.getDate() + (i * 30));
+            const val = i === 1 ? parcelValue + remainder : parcelValue;
+
+            generated.push({
+                numero: String(i).padStart(3, '0'),
+                dataVencimento: dueDate.toISOString().split('T')[0],
+                valor: val.toFixed(2)
+            });
+        }
+
+        setDuplicatas(generated);
+        toast.success(`${count} parcela(s) gerada(s) com sucesso!`);
+    };
+
+    const handleAddDuplicataRow = () => {
+        const nextNum = String(duplicatas.length + 1).padStart(3, '0');
+        const defaultDate = new Date();
+        defaultDate.setDate(defaultDate.getDate() + 30);
+
+        setDuplicatas(prev => [
+            ...prev,
+            {
+                numero: nextNum,
+                dataVencimento: defaultDate.toISOString().split('T')[0],
+                valor: '0.00'
+            }
+        ]);
+    };
+
+    const handleRemoveDuplicata = (idx) => {
+        setDuplicatas(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleDuplicataChange = (idx, field, value) => {
+        setDuplicatas(prev => {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], [field]: value };
+            return updated;
+        });
+    };
 
     // Transmissão da NF-e Avulsa à SEFAZ
     const handleSubmitNfe = async (e) => {
-        e.preventDefault();
+        e?.preventDefault();
 
         if (!fiscalRuleId) {
             setActiveTab('operacao');
@@ -221,8 +371,42 @@ export default function CreateStandaloneNfePage() {
             return toast.error('Adicione ao menos um produto para emitir a NF-e.');
         }
 
+        if (hasFinancialBilling) {
+            if (duplicatas.length === 0) {
+                setActiveTab('cobranca');
+                return toast.error('Para operações faturadas (com cobrança), adicione ao menos uma duplicata/parcela.');
+            }
+            if (!isDuplicatasBalanced) {
+                setActiveTab('cobranca');
+                return toast.error(
+                    `A soma das duplicatas (R$ ${totalDuplicatasValue.toFixed(2)}) não confere com o valor líquido da fatura (R$ ${invoiceNetValue.toFixed(2)}).`
+                );
+            }
+        }
+
         try {
             setIsSubmitting(true);
+
+            // Monta o payload de Cobrança / Pagamento
+            const paymentPayload = hasFinancialBilling ? {
+                gerarCobranca: true,
+                formaPagamento: Number(paymentMethod),
+                indicadorPagamento: Number(paymentIndicator),
+                numeroFatura: invoiceNumber.trim() || null,
+                valorOriginalFatura: totalProductsValue,
+                valorDescontoFatura: parseFloat(invoiceDiscount) || 0,
+                valorLiquidoFatura: invoiceNetValue,
+                duplicatas: duplicatas.map(d => ({
+                    numero: d.numero.trim(),
+                    dataVencimento: new Date(d.dataVencimento).toISOString(),
+                    valor: parseFloat(d.valor) || 0
+                }))
+            } : {
+                gerarCobranca: false,
+                formaPagamento: 90, // Sem Pagamento
+                indicadorPagamento: 0
+            };
+
             const payload = {
                 fiscalRuleId,
                 destinationName: destName.trim(),
@@ -250,8 +434,15 @@ export default function CreateStandaloneNfePage() {
                 items: itemsList.map(i => ({
                     productId: i.productId,
                     quantity: i.quantity,
-                    unitValue: i.unitValue
-                }))
+                    unitValue: i.unitValue,
+                    batch: i.batch || null,
+                    manufactureDate: i.manufactureDate ? new Date(i.manufactureDate).toISOString() : null,
+                    expirationDate: i.expirationDate ? new Date(i.expirationDate).toISOString() : null,
+                    xPed: i.xPed || null,
+                    nItemPed: i.nItemPed || null
+                })),
+                payment: paymentPayload,
+                referencedAccessKeys: referencedKeys.length > 0 ? referencedKeys : null
             };
 
             const res = await customInstance({
@@ -261,7 +452,7 @@ export default function CreateStandaloneNfePage() {
             });
 
             const data = res?.data || res;
-            toast.success(data?.message || 'NF-e Avulsa Autorizada com Sucesso na SEFAZ!');
+            toast.success(data?.message || 'NF-e Autorizada com Sucesso na SEFAZ!');
             navigate('/fiscal/documentos');
         } catch (error) {
             toast.error(error.response?.data?.message || error.message || 'Erro ao emitir NF-e avulsa.');
@@ -289,11 +480,11 @@ export default function CreateStandaloneNfePage() {
                     </Button>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h1 className="text-xl font-bold text-slate-900">Nova NF-e Avulsa</h1>
-                            <Badge className="bg-purple-100 text-purple-800 border-purple-200">Emissão Direta</Badge>
+                            <h1 className="text-xl font-bold text-slate-900">Emissão de NF-e Standalone</h1>
+                            <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-xs">CFOP 5124 / Avulsa</Badge>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            Emissão autônoma de Nota Fiscal Eletrônica sem vínculo com ordem de separação/expedição.
+                            Emissão de Nota Fiscal com suporte completo a cobrança, faturas, duplicatas, rastreabilidade e pedidos.
                         </p>
                     </div>
                 </div>
@@ -301,8 +492,8 @@ export default function CreateStandaloneNfePage() {
                 <div className="flex items-center gap-3">
                     <div className="text-right pr-2 hidden sm:block">
                         <span className="text-[10px] text-slate-400 font-bold uppercase block">Total da Nota</span>
-                        <span className="text-sm font-bold font-mono text-emerald-700">
-                            {totalNfeValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        <span className="text-base font-bold font-mono text-emerald-700">
+                            {totalProductsValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </span>
                     </div>
 
@@ -327,33 +518,36 @@ export default function CreateStandaloneNfePage() {
             {/* FORMULÁRIO COM ABAS NATIVAS */}
             <form onSubmit={handleSubmitNfe} className="flex-1 min-h-0">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full space-y-4">
-                    <TabsList className="bg-white border border-slate-200/80 p-1 rounded-xl shadow-xs justify-start h-12 w-full gap-2">
-                        <TabsTrigger value="operacao" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-4 text-xs font-semibold">
-                            <FileText size={15} /> 1. Operação & Emissão
+                    <TabsList className="bg-white border border-slate-200/80 p-1 rounded-xl shadow-xs justify-start h-12 w-full gap-2 overflow-x-auto">
+                        <TabsTrigger value="operacao" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-3 text-xs font-semibold">
+                            <FileText size={15} /> 1. Operação & Referências
                         </TabsTrigger>
-                        <TabsTrigger value="destinatario" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-4 text-xs font-semibold">
+                        <TabsTrigger value="destinatario" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-3 text-xs font-semibold">
                             <UserCheck size={15} /> 2. Destinatário & Entrega
                         </TabsTrigger>
-                        <TabsTrigger value="itens" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-4 text-xs font-semibold">
-                            <Layers size={15} /> 3. Itens & Produtos ({itemsList.length})
+                        <TabsTrigger value="itens" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-3 text-xs font-semibold">
+                            <Layers size={15} /> 3. Itens, Lotes & Pedidos ({itemsList.length})
                         </TabsTrigger>
-                        <TabsTrigger value="transporte" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-4 text-xs font-semibold">
-                            <Truck size={15} /> 4. Transporte & Frete
+                        <TabsTrigger value="cobranca" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-3 text-xs font-semibold">
+                            <CreditCard size={15} /> 4. Cobrança & Fatura {hasFinancialBilling && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
                         </TabsTrigger>
-                        <TabsTrigger value="observacoes" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-4 text-xs font-semibold">
-                            <MessageSquare size={15} /> 5. Observações Fiscais
+                        <TabsTrigger value="transporte" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-3 text-xs font-semibold">
+                            <Truck size={15} /> 5. Transporte & Frete
+                        </TabsTrigger>
+                        <TabsTrigger value="observacoes" className="data-[state=active]:bg-orange-50 data-[state=active]:text-orange-800 gap-2 px-3 text-xs font-semibold">
+                            <MessageSquare size={15} /> 6. Observações & Resumo
                         </TabsTrigger>
                     </TabsList>
 
-                    {/* ABA 1: OPERAÇÃO & EMISSÃO */}
+                    {/* ABA 1: OPERAÇÃO & REFERÊNCIAS */}
                     <TabsContent value="operacao" className="space-y-4 mt-0">
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-4 border-b bg-slate-50/50">
                                 <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
-                                    <FileText size={16} className="text-orange-600" /> Parâmetros da Operação & Natureza Fiscal
+                                    <FileText size={16} className="text-orange-600" /> Parâmetros da Operação & Notas Referenciadas (NFref)
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="p-5 space-y-4">
+                            <CardContent className="p-5 space-y-5">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-bold text-slate-800">Natureza de Operação (Regra Fiscal Aplicada) *</Label>
                                     <Select value={fiscalRuleId} onValueChange={setFiscalRuleId}>
@@ -361,7 +555,7 @@ export default function CreateStandaloneNfePage() {
                                             <SelectValue placeholder="Selecione a Regra Fiscal..." />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {(Array.isArray(fiscalRules) ? fiscalRules : []).map(r => (
+                                            {fiscalRules.map(r => (
                                                 <SelectItem key={r.id} value={r.id}>
                                                     {r.description} (CFOP {r.cfopStateInternal} / {r.cfopInterstate})
                                                 </SelectItem>
@@ -370,7 +564,7 @@ export default function CreateStandaloneNfePage() {
                                     </Select>
                                     {activeRule && (
                                         <p className="text-[11px] text-slate-500 font-mono">
-                                            Tipo: {activeRule.operationType === 1 ? 'Entrada' : 'Saída'} | Finalidade: {activeRule.finalidade} | CST ICMS Base: {activeRule.cstCsosnIcms}
+                                            CFOP: <strong className="text-blue-700">{activeRule.cfopStateInternal}</strong> / <strong className="text-purple-700">{activeRule.cfopInterstate}</strong> | Finalidade: <strong>{activeRule.finalidade}</strong> | CST ICMS Base: <strong>{activeRule.cstCsosnIcms}</strong>
                                         </p>
                                     )}
                                 </div>
@@ -410,6 +604,58 @@ export default function CreateStandaloneNfePage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
+                                </div>
+
+                                {/* CHAVES DE ACESSO REFERENCIADAS (NFREF) */}
+                                <div className="border-t border-slate-100 pt-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                                <LinkIcon size={14} className="text-orange-600" /> Notas Fiscais Referenciadas (NFref)
+                                            </Label>
+                                            <span className="text-[11px] text-slate-500 block">
+                                                Obrigatório para retornos e industrializações (ex: chave da NF-e de remessa para industrialização enviada pelo cliente).
+                                            </span>
+                                        </div>
+                                        <Badge variant="outline" className="font-mono text-xs">{referencedKeys.length} chave(s)</Badge>
+                                    </div>
+
+                                    <div className="flex gap-2">
+                                        <Input
+                                            value={refKeyInput}
+                                            onChange={e => setRefKeyInput(e.target.value)}
+                                            placeholder="Digite ou bipe a chave de 44 dígitos da NF-e referenciada..."
+                                            className="font-mono text-xs bg-white h-9 flex-1"
+                                            maxLength={44}
+                                        />
+                                        <Button
+                                            type="button"
+                                            onClick={handleAddReferencedKey}
+                                            variant="outline"
+                                            className="bg-white text-orange-700 border-orange-200 hover:bg-orange-50 text-xs h-9"
+                                        >
+                                            <Plus size={14} className="mr-1" /> Adicionar Chave
+                                        </Button>
+                                    </div>
+
+                                    {referencedKeys.length > 0 && (
+                                        <div className="space-y-1.5 font-mono text-xs">
+                                            {referencedKeys.map((key, kIdx) => (
+                                                <div key={kIdx} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                                    <span className="font-bold text-slate-800">{key}</span>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => handleRemoveReferencedKey(key)}
+                                                        className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-50"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>
@@ -536,16 +782,15 @@ export default function CreateStandaloneNfePage() {
                         </Card>
                     </TabsContent>
 
-                    {/* ABA 3: ITENS & VALORES */}
+                    {/* ABA 3: ITENS & VALORES COM RASTREABILIDADE & PEDIDO */}
                     <TabsContent value="itens" className="space-y-4 mt-0">
-                        {/* PAINEL DE ADIÇÃO DE PRODUTO */}
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-4 border-b bg-slate-50/50">
                                 <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
-                                    <Plus size={16} className="text-orange-600" /> Adicionar Produto à Nota Fiscal
+                                    <Plus size={16} className="text-orange-600" /> Adicionar Produto com Rastreabilidade & Pedido
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="p-4 space-y-3">
+                            <CardContent className="p-4 space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                                     <div className="md:col-span-3 space-y-1">
                                         <Label className="text-xs font-semibold text-slate-800">Produto do Catálogo *</Label>
@@ -554,7 +799,7 @@ export default function CreateStandaloneNfePage() {
                                                 <SelectValue placeholder="Selecione um produto..." />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {(Array.isArray(products) ? products : []).map(p => (
+                                                {products.map(p => (
                                                     <SelectItem key={p.id} value={p.id}>
                                                         <span className="font-mono font-bold">{p.sku}</span> - {p.description} ({p.baseUnit})
                                                     </SelectItem>
@@ -592,8 +837,74 @@ export default function CreateStandaloneNfePage() {
                                             onClick={handleAddItem}
                                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 text-xs"
                                         >
-                                            <Plus size={14} className="mr-1" /> Inserir
+                                            <Plus size={14} className="mr-1" /> Inserir Item
                                         </Button>
+                                    </div>
+                                </div>
+
+                                {/* CAMPOS DE RASTREABILIDADE & PEDIDO DE COMPRA */}
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                                    <div className="flex items-center justify-between border-b pb-2">
+                                        <span className="text-[11px] font-bold uppercase text-slate-700 flex items-center gap-1.5">
+                                            <Tag size={13} className="text-orange-600" /> Rastreabilidade (Lote / Validade) & Pedido de Compra do Cliente
+                                        </span>
+                                        <span className="text-[10px] text-slate-500 font-mono">
+                                            Lote completo = tag &lt;rastro&gt; | Lote simples = impresso em infAdProd
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px]">Número do Lote</Label>
+                                            <Input
+                                                value={itemBatch}
+                                                onChange={e => setItemBatch(e.target.value)}
+                                                placeholder="Ex: 2610A"
+                                                className="font-mono text-xs bg-white h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px]">Data Fabricação</Label>
+                                            <Input
+                                                type="date"
+                                                value={itemManufactureDate}
+                                                onChange={e => setItemManufactureDate(e.target.value)}
+                                                className="font-mono text-xs bg-white h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px]">Data Validade</Label>
+                                            <Input
+                                                type="date"
+                                                value={itemExpirationDate}
+                                                onChange={e => setItemExpirationDate(e.target.value)}
+                                                className="font-mono text-xs bg-white h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px]">Nº Pedido Cliente (xPed)</Label>
+                                            <Input
+                                                value={itemXPed}
+                                                onChange={e => setItemXPed(e.target.value)}
+                                                placeholder="Max 15 carac."
+                                                maxLength={15}
+                                                className="font-mono text-xs bg-white h-8"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <Label className="text-[11px]">Item do Pedido (nItemPed)</Label>
+                                            <Input
+                                                type="number"
+                                                value={itemNItemPed}
+                                                onChange={e => setItemNItemPed(e.target.value)}
+                                                placeholder="Ex: 1"
+                                                className="font-mono text-xs bg-white h-8"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>
@@ -614,6 +925,7 @@ export default function CreateStandaloneNfePage() {
                                             <TableHead className="w-12 text-center">#</TableHead>
                                             <TableHead>SKU / Código</TableHead>
                                             <TableHead>Descrição do Produto</TableHead>
+                                            <TableHead>Rastreabilidade / Pedido</TableHead>
                                             <TableHead className="text-center">UN</TableHead>
                                             <TableHead className="text-right">Quantidade</TableHead>
                                             <TableHead className="text-right">Valor Unitário</TableHead>
@@ -624,7 +936,7 @@ export default function CreateStandaloneNfePage() {
                                     <TableBody>
                                         {itemsList.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={8} className="h-28 text-center text-slate-400 italic">
+                                                <TableCell colSpan={9} className="h-28 text-center text-slate-400 italic">
                                                     Nenhum produto adicionado ainda. Utilize o formulário acima para inserir itens.
                                                 </TableCell>
                                             </TableRow>
@@ -634,6 +946,24 @@ export default function CreateStandaloneNfePage() {
                                                     <TableCell className="text-center font-mono text-xs text-slate-400">{idx + 1}</TableCell>
                                                     <TableCell className="font-mono font-bold text-xs text-slate-900">{item.sku}</TableCell>
                                                     <TableCell className="text-xs text-slate-700">{item.description}</TableCell>
+                                                    <TableCell className="text-[11px] font-mono space-x-1">
+                                                        {item.batch && (
+                                                            <Badge variant="outline" className="text-[10px] bg-slate-50">
+                                                                Lote: {item.batch}
+                                                            </Badge>
+                                                        )}
+                                                        {item.expirationDate && (
+                                                            <Badge variant="outline" className="text-[10px] text-amber-700 bg-amber-50 border-amber-200">
+                                                                Val: {item.expirationDate}
+                                                            </Badge>
+                                                        )}
+                                                        {item.xPed && (
+                                                            <Badge variant="outline" className="text-[10px] text-blue-700 bg-blue-50 border-blue-200">
+                                                                Ped: {item.xPed} {item.nItemPed && `(#${item.nItemPed})`}
+                                                            </Badge>
+                                                        )}
+                                                        {!item.batch && !item.xPed && <span className="text-slate-400">-</span>}
+                                                    </TableCell>
                                                     <TableCell className="text-center font-mono text-xs">{item.unit}</TableCell>
                                                     <TableCell className="text-right font-mono text-xs font-semibold">{item.quantity}</TableCell>
                                                     <TableCell className="text-right font-mono text-xs text-slate-600">
@@ -664,7 +994,7 @@ export default function CreateStandaloneNfePage() {
                                         <span className="text-xs font-semibold text-slate-600">Totalizadores da Nota:</span>
                                         <div className="flex items-center gap-6 font-mono text-xs">
                                             <span>Qtd Total: <strong>{itemsList.reduce((acc, i) => acc + i.quantity, 0)}</strong></span>
-                                            <span>Total dos Produtos: <strong className="text-emerald-700 text-sm">{totalNfeValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span>
+                                            <span>Total dos Produtos: <strong className="text-emerald-700 text-sm">{totalProductsValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span>
                                         </div>
                                     </div>
                                 )}
@@ -672,7 +1002,247 @@ export default function CreateStandaloneNfePage() {
                         </Card>
                     </TabsContent>
 
-                    {/* ABA 4: TRANSPORTE & FRETE */}
+                    {/* ABA 4: COBRANÇA, FATURA & DUPLICATAS */}
+                    <TabsContent value="cobranca" className="space-y-4 mt-0">
+                        <Card className="border-slate-200/80 bg-white shadow-xs">
+                            <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+                                <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
+                                    <CreditCard size={16} className="text-orange-600" /> Cobrança Comercial, Fatura & Parcelas (Duplicatas)
+                                </CardTitle>
+                                <div className="flex items-center space-x-2">
+                                    <Label htmlFor="billing-switch" className="text-xs font-semibold cursor-pointer">
+                                        Gerar Cobrança Financeira (CFOP 5124 / Venda)
+                                    </Label>
+                                    <Switch
+                                        id="billing-switch"
+                                        checked={hasFinancialBilling}
+                                        onCheckedChange={setHasFinancialBilling}
+                                    />
+                                </div>
+                            </CardHeader>
+
+                            <CardContent className="p-5 space-y-5">
+                                {!hasFinancialBilling ? (
+                                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs text-slate-600">
+                                        <div className="flex items-center gap-2 font-bold text-slate-800">
+                                            <Badge variant="outline" className="font-mono">tPag = 90 (Sem Pagamento)</Badge> Operação Não Financeira
+                                        </div>
+                                        <p>
+                                            Esta nota fiscal será emitida sem grupo de cobrança (&lt;cobr&gt;) e com a forma de pagamento "90 - Sem Pagamento", conforme a exigência da SEFAZ para operações de retorno e remessa (CFOPs 5906, 5907, 5902, 5903, 5921, 5923).
+                                        </p>
+                                        <p className="text-[11px] text-slate-400">
+                                            Para notas de serviço / industrialização (CFOP 5124), ative a chave acima para informar as parcelas e vencimentos.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-5">
+                                        {/* FORMA E PRAZO DE PAGAMENTO */}
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                            <div className="space-y-1.5 md:col-span-2">
+                                                <Label className="text-xs font-semibold text-slate-800">Forma de Pagamento (tPag) *</Label>
+                                                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                                    <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {FORMAS_PAGAMENTO.map(f => (
+                                                            <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold text-slate-800">Indicador de Pagamento (indPag) *</Label>
+                                                <Select value={paymentIndicator} onValueChange={setPaymentIndicator}>
+                                                    <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="0">0 - À Vista</SelectItem>
+                                                        <SelectItem value="1">1 - A Prazo</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold text-slate-800">Nº da Fatura (Opcional)</Label>
+                                                <Input
+                                                    value={invoiceNumber}
+                                                    onChange={e => setInvoiceNumber(e.target.value)}
+                                                    placeholder="Padrão = Nº da NF-e"
+                                                    className="font-mono text-xs bg-white h-9"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* VALORES DA FATURA */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                            <div className="space-y-1">
+                                                <span className="text-[11px] font-semibold text-slate-600 uppercase block">Valor Original</span>
+                                                <span className="text-base font-bold font-mono text-slate-900">
+                                                    {totalProductsValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                </span>
+                                            </div>
+
+                                            <div className="space-y-1">
+                                                <Label className="text-[11px] font-semibold text-slate-700">Desconto Comercial (R$)</Label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={invoiceDiscount}
+                                                    onChange={e => setInvoiceDiscount(e.target.value)}
+                                                    className="font-mono text-xs bg-white h-8"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1 text-right">
+                                                <span className="text-[11px] font-semibold text-slate-600 uppercase block">Valor Líquido da Fatura</span>
+                                                <span className="text-lg font-bold font-mono text-emerald-700">
+                                                    {invoiceNetValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* GERADOR RÁPIDO DE PARCELAS */}
+                                        <div className="space-y-3 pt-2">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                <div>
+                                                    <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                                        <Calculator size={14} className="text-orange-600" /> Parcelas / Duplicatas de Cobrança (&lt;dup&gt;)
+                                                    </Label>
+                                                    <span className="text-[11px] text-slate-500 block">
+                                                        Gere automaticamente ou adicione duplicatas manuais.
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5">
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleGenerateInstallments(1)}
+                                                        className="text-[11px] h-8 bg-white"
+                                                    >
+                                                        1x (30d)
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleGenerateInstallments(2)}
+                                                        className="text-[11px] h-8 bg-white"
+                                                    >
+                                                        2x (30/60d)
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleGenerateInstallments(3)}
+                                                        className="text-[11px] h-8 bg-white"
+                                                    >
+                                                        3x (30/60/90d)
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        onClick={handleAddDuplicataRow}
+                                                        className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] h-8"
+                                                    >
+                                                        <Plus size={13} className="mr-1" /> Nova Linha
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            {/* TABELA DE DUPLICATAS */}
+                                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                                <Table>
+                                                    <TableHeader className="bg-slate-50">
+                                                        <TableRow>
+                                                            <TableHead className="w-28 text-center">Nº Duplicata</TableHead>
+                                                            <TableHead>Data de Vencimento *</TableHead>
+                                                            <TableHead className="text-right">Valor da Parcela (R$) *</TableHead>
+                                                            <TableHead className="w-12 text-right"></TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {duplicatas.length === 0 ? (
+                                                            <TableRow>
+                                                                <TableCell colSpan={4} className="h-24 text-center text-slate-400 italic">
+                                                                    Nenhuma duplicata configurada. Clique nos atalhos acima para gerar.
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        ) : (
+                                                            duplicatas.map((dup, idx) => (
+                                                                <TableRow key={idx}>
+                                                                    <TableCell>
+                                                                        <Input
+                                                                            value={dup.numero}
+                                                                            onChange={e => handleDuplicataChange(idx, 'numero', e.target.value)}
+                                                                            className="font-mono text-xs text-center bg-white h-8"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Input
+                                                                            type="date"
+                                                                            value={dup.dataVencimento}
+                                                                            onChange={e => handleDuplicataChange(idx, 'dataVencimento', e.target.value)}
+                                                                            className="font-mono text-xs bg-white h-8"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <Input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            value={dup.valor}
+                                                                            onChange={e => handleDuplicataChange(idx, 'valor', e.target.value)}
+                                                                            className="font-mono text-xs text-right bg-white h-8"
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell className="text-right">
+                                                                        <Button
+                                                                            type="button"
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            onClick={() => handleRemoveDuplicata(idx)}
+                                                                            className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
+                                                                        >
+                                                                            <Trash2 size={13} />
+                                                                        </Button>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+
+                                            {/* CONFERÊNCIA DE TOTAL DE DUPLICATAS */}
+                                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    {isDuplicatasBalanced ? (
+                                                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs">
+                                                            ✓ Soma das duplicatas confere 100% com a fatura
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge className="bg-rose-100 text-rose-800 border-rose-200 text-xs flex items-center gap-1">
+                                                            <AlertCircle size={13} /> Divergência: Diferença de R$ {(invoiceNetValue - totalDuplicatasValue).toFixed(2)}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+
+                                                <div className="font-mono text-xs text-right">
+                                                    <span className="text-slate-500">Total das Duplicatas: </span>
+                                                    <strong className={isDuplicatasBalanced ? 'text-emerald-700' : 'text-rose-600'}>
+                                                        {totalDuplicatasValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                    </strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    {/* ABA 5: TRANSPORTE & FRETE */}
                     <TabsContent value="transporte" className="space-y-4 mt-0">
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-4 border-b bg-slate-50/50">
@@ -763,12 +1333,12 @@ export default function CreateStandaloneNfePage() {
                         </Card>
                     </TabsContent>
 
-                    {/* ABA 5: OBSERVAÇÕES FISCAIS */}
+                    {/* ABA 6: OBSERVAÇÕES & RESUMO */}
                     <TabsContent value="observacoes" className="space-y-4 mt-0">
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-4 border-b bg-slate-50/50">
                                 <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
-                                    <MessageSquare size={16} className="text-orange-600" /> Informações Complementares (infCpl)
+                                    <MessageSquare size={16} className="text-orange-600" /> Informações Complementares (infCpl) & Resumo da Emissão
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-5 space-y-4">
@@ -777,25 +1347,33 @@ export default function CreateStandaloneNfePage() {
                                         Observações Fiscais de Interesse do Contribuinte
                                     </Label>
                                     <textarea
-                                        rows={5}
+                                        rows={4}
                                         value={additionalNotes}
                                         onChange={e => setAdditionalNotes(e.target.value)}
-                                        placeholder="Informações adicionais que sairão impressas no rodapé do DANFE (ex: Isenção conforme artigo..., dados bancários, pedidos de compra, etc)..."
+                                        placeholder="Informações adicionais impressas no rodapé do DANFE (ex: Isenção de ICMS conforme..., dados bancários para depósito, etc)..."
                                         className="w-full rounded-lg border border-slate-200 p-3 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                 </div>
 
-                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
-                                    <span className="font-bold text-slate-800 uppercase text-[10px] block">Resumo Final da Emissão Avulsa:</span>
-                                    <p className="text-slate-600">
-                                        Destinatário: <strong>{destName || 'Não Informado'}</strong> ({destState || 'UF'})
-                                    </p>
-                                    <p className="text-slate-600">
-                                        Natureza da Operação: <strong>{activeRule?.description || 'Não Selecionada'}</strong>
-                                    </p>
-                                    <p className="text-slate-600 font-mono">
-                                        Quantidade Total de Itens: <strong>{itemsList.length}</strong> | Valor Total da NF-e: <strong className="text-emerald-700">{totalNfeValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
-                                    </p>
+                                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                                    <span className="font-bold text-slate-800 uppercase text-[10px] block tracking-wider">
+                                        Espelho de Validação da Emissão:
+                                    </span>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-700">
+                                        <div>
+                                            <p>Destinatário: <strong>{destName || 'Não Informado'}</strong> ({destState})</p>
+                                            <p>Natureza: <strong>{activeRule?.description || 'Não Selecionada'}</strong></p>
+                                            <p>CFOP: <strong className="font-mono text-blue-700">{activeRule?.cfopStateInternal}</strong> / <strong className="font-mono text-purple-700">{activeRule?.cfopInterstate}</strong></p>
+                                        </div>
+                                        <div>
+                                            <p>Total Itens: <strong>{itemsList.length} SKU(s)</strong></p>
+                                            <p>Total Produtos: <strong className="font-mono text-emerald-700">{totalProductsValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></p>
+                                            <p>Cobrança: <strong>{hasFinancialBilling ? `Faturado (${duplicatas.length} parcelas)` : 'Sem Cobrança (tPag = 90)'}</strong></p>
+                                            {referencedKeys.length > 0 && (
+                                                <p className="text-slate-500 font-mono">Chaves Referenciadas: {referencedKeys.length}</p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

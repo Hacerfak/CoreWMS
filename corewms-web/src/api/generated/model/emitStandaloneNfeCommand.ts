@@ -5,6 +5,7 @@
  * OpenAPI spec version: v1
  */
 import type { StandaloneNfeItemCommand } from './standaloneNfeItemCommand';
+import type { StandaloneNfePaymentCommand } from './standaloneNfePaymentCommand';
 
 export interface EmitStandaloneNfeCommand {
   fiscalRuleId?: string;
@@ -48,4 +49,7 @@ export interface EmitStandaloneNfeCommand {
   vehiclePlate?: string | null;
   /** @nullable */
   vehiclePlateState?: string | null;
+  payment?: StandaloneNfePaymentCommand;
+  /** @nullable */
+  referencedAccessKeys?: string[] | null;
 }
