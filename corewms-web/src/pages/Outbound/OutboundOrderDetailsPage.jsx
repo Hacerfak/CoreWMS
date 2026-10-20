@@ -21,8 +21,8 @@ import {
     ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText, UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil, ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import CancelNfeModal from '@/pages/Outbound/CancelNfeModal';
-import CorrectionLetterModal from '@/pages/Outbound/CorrectionLetterModal';
+import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
+import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
 
 export default function OutboundOrderDetailsPage() {
     const { id: orderId } = useParams();

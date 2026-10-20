@@ -14,16 +14,21 @@ using NFe.Utils.Evento;
 
 namespace CoreWMS.Api.Features.Fiscal.Eventos;
 
+public record CancelNfeCommand(
+    Guid Id,
+    string Justification
+) : IRequest<IResult>;
+
 public record CancelOutboundNfeCommand(
     Guid OrderId,
     string Justification
 ) : IRequest<IResult>;
 
-public class CancelOutboundNfeCommandValidator : AbstractValidator<CancelOutboundNfeCommand>
+public class CancelNfeCommandValidator : AbstractValidator<CancelNfeCommand>
 {
-    public CancelOutboundNfeCommandValidator()
+    public CancelNfeCommandValidator()
     {
-        RuleFor(x => x.OrderId).NotEmpty().WithMessage("O ID do pedido é obrigatório.");
+        RuleFor(x => x.Id).NotEmpty().WithMessage("O identificador do documento fiscal ou pedido é obrigatório.");
         RuleFor(x => x.Justification)
             .NotEmpty().WithMessage("A justificativa de cancelamento é obrigatória.")
             .MinimumLength(15).WithMessage("A justificativa deve ter no mínimo 15 caracteres (Regra SEFAZ).")
@@ -31,13 +36,13 @@ public class CancelOutboundNfeCommandValidator : AbstractValidator<CancelOutboun
     }
 }
 
-public class CancelOutboundNfeHandler : IRequestHandler<CancelOutboundNfeCommand, IResult>
+public class CancelNfeHandler : IRequestHandler<CancelNfeCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly IZeusConfigurator _zeusConfigurator;
 
-    public CancelOutboundNfeHandler(
+    public CancelNfeHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
         IZeusConfigurator zeusConfigurator)
@@ -47,47 +52,67 @@ public class CancelOutboundNfeHandler : IRequestHandler<CancelOutboundNfeCommand
         _zeusConfigurator = zeusConfigurator;
     }
 
-    public async Task<IResult> Handle(CancelOutboundNfeCommand request, CancellationToken ct)
+    public async Task<IResult> Handle(CancelNfeCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Busca o pedido e a empresa emitente
-        var order = await _db.OutboundOrders
-            .Include(o => o.Company)
-            .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
-
-        if (order == null)
-            return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
-
-        // 2. Localiza a NF-e autorizada do pedido
+        // 1. Localiza o documento fiscal autorizado:
+        // Primeiro tenta localizar diretamente pelo Id do CompanyFiscalDocument (notas avulsas ou chamadas diretas)
         var authorizedDoc = await _db.CompanyFiscalDocuments
-    .FirstOrDefaultAsync(d => d.OutboundOrderId == order.Id
-                           && (int)d.Type >= 1 && (int)d.Type <= 6
-                           && d.Status == FiscalDocumentStatus.Authorized, ct);
+            .Include(d => d.Company)
+            .Include(d => d.OutboundOrder)
+                .ThenInclude(o => o!.Company)
+            .FirstOrDefaultAsync(d => d.Id == request.Id && d.CompanyId == companyId, ct);
+
+        // Se não encontrar por DocumentId, busca pelo OutboundOrderId vinculado (chamadas de dentro de detalhes de ordem)
+        if (authorizedDoc == null)
+        {
+            authorizedDoc = await _db.CompanyFiscalDocuments
+                .Include(d => d.Company)
+                .Include(d => d.OutboundOrder)
+                    .ThenInclude(o => o!.Company)
+                .FirstOrDefaultAsync(d => d.OutboundOrderId == request.Id
+                                       && (int)d.Type >= 1 && (int)d.Type <= 6
+                                       && d.Status == FiscalDocumentStatus.Authorized, ct);
+        }
 
         if (authorizedDoc == null)
-            return Results.BadRequest(new { Message = "Não há NF-e autorizada ativa para este pedido." });
+            return Results.NotFound(new { Message = "Nota fiscal ou pedido correspondente não localizado." });
+
+        if (authorizedDoc.Status != FiscalDocumentStatus.Authorized)
+            return Results.BadRequest(new { Message = $"Apenas notas com status 'Autorizada' podem ser canceladas. Status atual: {authorizedDoc.Status}." });
+
+        if (!authorizedDoc.Type.IsNfe())
+            return Results.BadRequest(new { Message = "Apenas notas fiscais eletrônicas podem ser canceladas." });
 
         if (string.IsNullOrWhiteSpace(authorizedDoc.AccessKey) || string.IsNullOrWhiteSpace(authorizedDoc.Protocol))
-            return Results.BadRequest(new { Message = "Dados de chave de acesso ou protocolo da NF-e não localizados no registro fiscal." });
+            return Results.BadRequest(new { Message = "Chave de acesso ou protocolo de autorização não encontrados no registro fiscal." });
 
-        var company = order.Company;
+        // 2. Resolve os dados da empresa emitente
+        var company = authorizedDoc.Company
+                   ?? authorizedDoc.OutboundOrder?.Company
+                   ?? await _db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, ct);
+
+        if (company == null)
+            return Results.NotFound(new { Message = "Empresa emitente não encontrada." });
+
         if (company.CertificateBytes == null || company.CertificateBytes.Length == 0)
             return Results.BadRequest(new { Message = "Certificado digital A1 não configurado para a empresa emitente." });
 
         var cnpjEmitente = string.Join("", (company.Cnpj ?? "").Where(char.IsDigit));
 
-        // 3. Configura comunicação Zeus SEFAZ
+        // 3. Configura a comunicação SEFAZ
         var tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao;
         var cfgServico = _zeusConfigurator.GetCompanyConfiguration(company, tpAmb);
+        cfgServico.ValidarSchemas = false;
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
             cfgServico.Certificado.ArrayBytesArquivo,
             cfgServico.Certificado.Senha,
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
-        // 4. Criação do documento fiscal de cancelamento (Pending)
-        var cancelDoc = new CompanyFiscalDocument(companyId, FiscalDocumentType.Cancelamento, order.Id);
+        // 4. Criação do documento do evento de cancelamento (herda o OutboundOrderId se houver, ou null para avulsas)
+        var cancelDoc = new CompanyFiscalDocument(companyId, FiscalDocumentType.Cancelamento, authorizedDoc.OutboundOrderId);
         _db.CompanyFiscalDocuments.Add(cancelDoc);
 
         // 5. Transmissão do Evento de Cancelamento (Código 110111)
@@ -106,14 +131,13 @@ public class CancelOutboundNfeHandler : IRequestHandler<CancelOutboundNfeCommand
         var retEvento = retornoEvento.Retorno?.retEvento?.FirstOrDefault();
         var infEvento = retEvento?.infEvento;
 
-        // Códigos válidos SEFAZ: 135 (Vinculado), 136 (Registrado), 155 (Fora do prazo)
         bool isSuccess = infEvento != null && (infEvento.cStat == 135 || infEvento.cStat == 136 || infEvento.cStat == 155);
 
         if (!isSuccess)
         {
             var motivoRejeicao = infEvento?.xMotivo
                               ?? retornoEvento.Retorno?.xMotivo
-                              ?? "Falha desconhecida no evento de cancelamento da SEFAZ.";
+                              ?? "Falha desconhecida no cancelamento da SEFAZ.";
 
             cancelDoc.MarkAsRejected($"[Rejeição SEFAZ {infEvento?.cStat ?? retornoEvento.Retorno?.cStat}]: {motivoRejeicao}");
             await _db.SaveChangesAsync(ct);
@@ -137,7 +161,7 @@ public class CancelOutboundNfeHandler : IRequestHandler<CancelOutboundNfeCommand
             message: infEvento.xMotivo
         );
 
-        // Atualiza a NF-e original para Canceled
+        // Atualiza o documento original da NF-e para Cancelada
         authorizedDoc.MarkAsCanceled(infEvento.xMotivo);
 
         await _db.SaveChangesAsync(ct);
@@ -159,9 +183,10 @@ public static class NfeCancellationEndpoints
     {
         var group = app.MapGroup("/api/fiscal/nfe").WithTags("Fiscal").RequireAuthorization();
 
-        group.MapPost("/cancel/{orderId:guid}", async (Guid orderId, CancelOutboundNfeCommand cmd, IMediator mediator) =>
+        // Aceita DocumentId (notas avulsas e diretas) ou OrderId (pedidos de saída)
+        group.MapPost("/cancel/{id:guid}", async (Guid id, CancelNfeCommand cmd, IMediator mediator) =>
         {
-            var command = cmd with { OrderId = orderId };
+            var command = cmd with { Id = id };
             return await mediator.Send(command);
         })
         .RequirePermission(Permissions.Outbound.Manage);

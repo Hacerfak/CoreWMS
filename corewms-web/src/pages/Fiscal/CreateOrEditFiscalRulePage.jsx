@@ -10,6 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import {
     ArrowLeft, Save, Plus, Pencil, Trash2, Filter,
     Layers, FileCode, Sparkles, CheckCircle2, Loader2, AlertCircle
 } from 'lucide-react';
@@ -80,6 +90,8 @@ export default function CreateOrEditFiscalRulePage() {
 
     // --- ABA 6: EXCEÇÕES VINCULADAS ---
     const [exceptions, setExceptions] = useState([]);
+    const [exceptionToDelete, setExceptionToDelete] = useState(null);
+    const [isDeletingException, setIsDeletingException] = useState(false);
 
     const loadRule = async () => {
         if (!id) return;
@@ -196,17 +208,21 @@ export default function CreateOrEditFiscalRulePage() {
         }
     };
 
-    const handleDeleteException = async (exceptionId) => {
-        if (!confirm('Deseja realmente remover esta linha de exceção fiscal?')) return;
+    const handleConfirmDeleteException = async () => {
+        if (!exceptionToDelete) return;
         try {
+            setIsDeletingException(true);
             await customInstance({
-                url: `/api/fiscal/rules/${id}/exceptions/${exceptionId}`,
+                url: `/api/fiscal/rules/${id}/exceptions/${exceptionToDelete.id}`,
                 method: 'DELETE'
             });
-            toast.success('Exceção fiscal excluída!');
+            toast.success('Linha de exceção fiscal excluída com sucesso!');
+            setExceptionToDelete(null);
             loadRule();
-        } catch {
-            toast.error('Erro ao excluir exceção fiscal.');
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao excluir exceção fiscal.');
+        } finally {
+            setIsDeletingException(false);
         }
     };
 
@@ -813,7 +829,7 @@ export default function CreateOrEditFiscalRulePage() {
                                                             type="button"
                                                             size="sm"
                                                             variant="ghost"
-                                                            onClick={() => handleDeleteException(exc.id)}
+                                                            onClick={() => setExceptionToDelete(exc)}
                                                             className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
                                                             title="Excluir"
                                                         >
@@ -830,6 +846,34 @@ export default function CreateOrEditFiscalRulePage() {
                     </TabsContent>
                 </Tabs>
             </form>
+
+            {/* ALERTA DE EXCLUSÃO DE LINHA DE EXCEÇÃO (SHADCN/UI) */}
+            <AlertDialog open={!!exceptionToDelete} onOpenChange={(open) => !open && setExceptionToDelete(null)}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                            <Trash2 className="h-5 w-5" /> Remover Linha de Exceção?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600">
+                            Tem certeza de que deseja remover esta linha de exceção fiscal vinculada à regra{' '}
+                            <strong className="text-slate-900">{description}</strong>?
+                            <br /><br />
+                            Os produtos e operações que atendiam a estes critérios passarão a seguir as alíquotas base da matriz.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingException}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmDeleteException}
+                            disabled={isDeletingException}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                        >
+                            {isDeletingException ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Remoção
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

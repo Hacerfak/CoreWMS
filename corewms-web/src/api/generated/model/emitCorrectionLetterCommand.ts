@@ -6,7 +6,7 @@
  */
 
 export interface EmitCorrectionLetterCommand {
-  orderId?: string;
+  id?: string;
   /** @nullable */
   correctionText?: string | null;
 }

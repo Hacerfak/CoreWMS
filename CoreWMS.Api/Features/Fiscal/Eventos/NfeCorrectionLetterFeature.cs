@@ -8,7 +8,6 @@ using DFe.Utils;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using NFe.Classes.Servicos.Tipos;
 using NFe.Servicos;
 using NFe.Utils.Consulta;
 using NFe.Utils.Evento;
@@ -16,7 +15,7 @@ using NFe.Utils.Evento;
 namespace CoreWMS.Api.Features.Fiscal.Eventos;
 
 public record EmitCorrectionLetterCommand(
-    Guid OrderId,
+    Guid Id,
     string CorrectionText
 ) : IRequest<IResult>;
 
@@ -24,7 +23,7 @@ public class EmitCorrectionLetterCommandValidator : AbstractValidator<EmitCorrec
 {
     public EmitCorrectionLetterCommandValidator()
     {
-        RuleFor(x => x.OrderId).NotEmpty().WithMessage("O ID do pedido é obrigatório.");
+        RuleFor(x => x.Id).NotEmpty().WithMessage("O identificador do documento fiscal ou pedido é obrigatório.");
         RuleFor(x => x.CorrectionText)
             .NotEmpty().WithMessage("O texto de correção é obrigatório.")
             .MinimumLength(15).WithMessage("A correção deve ter no mínimo 15 caracteres (Regra SEFAZ).")
@@ -52,39 +51,55 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Localiza a ordem e a empresa emitente
-        var order = await _db.OutboundOrders
-            .Include(o => o.Company)
-            .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
-
-        if (order == null)
-            return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
-
-        // 2. Localiza a NF-e autorizada original
+        // 1. Localiza o documento fiscal autorizado:
+        // Primeiro tenta diretamente por DocumentId
         var authorizedDoc = await _db.CompanyFiscalDocuments
-            .FirstOrDefaultAsync(d => d.OutboundOrderId == order.Id
-                           && (d.Type == FiscalDocumentType.Normal
-                            || d.Type == FiscalDocumentType.Complementar
-                            || d.Type == FiscalDocumentType.Ajuste
-                            || d.Type == FiscalDocumentType.Devolucao)
-                           && d.Status == FiscalDocumentStatus.Authorized, ct);
+            .Include(d => d.Company)
+            .Include(d => d.OutboundOrder)
+                .ThenInclude(o => o!.Company)
+            .FirstOrDefaultAsync(d => d.Id == request.Id && d.CompanyId == companyId, ct);
+
+        // Se não encontrar por DocumentId, busca por OutboundOrderId vinculado
+        if (authorizedDoc == null)
+        {
+            authorizedDoc = await _db.CompanyFiscalDocuments
+                .Include(d => d.Company)
+                .Include(d => d.OutboundOrder)
+                    .ThenInclude(o => o!.Company)
+                .FirstOrDefaultAsync(d => d.OutboundOrderId == request.Id
+                                       && (int)d.Type >= 1 && (int)d.Type <= 6
+                                       && d.Status == FiscalDocumentStatus.Authorized, ct);
+        }
 
         if (authorizedDoc == null)
-            return Results.BadRequest(new { Message = "Não há NF-e autorizada ativa para este pedido." });
+            return Results.NotFound(new { Message = "Nota fiscal ou pedido correspondente não localizado." });
+
+        if (authorizedDoc.Status != FiscalDocumentStatus.Authorized)
+            return Results.BadRequest(new { Message = $"Apenas notas fiscais autorizadas podem receber Carta de Correção. Status atual: {authorizedDoc.Status}." });
+
+        if (!authorizedDoc.Type.IsNfe())
+            return Results.BadRequest(new { Message = "Apenas notas fiscais eletrônicas podem receber Carta de Correção." });
 
         if (string.IsNullOrWhiteSpace(authorizedDoc.AccessKey))
-            return Results.BadRequest(new { Message = "Chave de acesso da NF-e não localizada." });
+            return Results.BadRequest(new { Message = "Chave de acesso da NF-e não localizada no registro fiscal." });
 
-        // 3. Determina a sequência do evento (1 a 20)
+        // 2. Determina a sequência do evento (1 a 20) com base na CHAVE DE ACESSO DA NOTA
         var currentSeq = await _db.CompanyFiscalDocuments
-            .CountAsync(d => d.OutboundOrderId == order.Id
-                  && d.Type == FiscalDocumentType.CartaCorrecao
-                  && d.Status == FiscalDocumentStatus.Authorized, ct) + 1;
+            .CountAsync(d => d.AccessKey == authorizedDoc.AccessKey
+                          && d.Type == FiscalDocumentType.CartaCorrecao
+                          && d.Status == FiscalDocumentStatus.Authorized, ct) + 1;
 
         if (currentSeq > 20)
             return Results.BadRequest(new { Message = "Atingido o limite máximo de 20 Cartas de Correção para esta NF-e (Regra SEFAZ)." });
 
-        var company = order.Company;
+        // 3. Resolve os dados da empresa emitente
+        var company = authorizedDoc.Company
+                   ?? authorizedDoc.OutboundOrder?.Company
+                   ?? await _db.Companies.FirstOrDefaultAsync(c => c.Id == companyId, ct);
+
+        if (company == null)
+            return Results.NotFound(new { Message = "Empresa emitente não encontrada." });
+
         if (company.CertificateBytes == null || company.CertificateBytes.Length == 0)
             return Results.BadRequest(new { Message = "Certificado digital A1 não configurado para a empresa emitente." });
 
@@ -92,8 +107,6 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
         var tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao;
 
         var cfgServico = _zeusConfigurator.GetCompanyConfiguration(company, tpAmb);
-
-        // DESATIVA A VALIDAÇÃO LOCAL DE SCHEMA PARA EVITAR COLISÃO DE XSD NO .NET
         cfgServico.ValidarSchemas = false;
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
@@ -101,8 +114,8 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
             cfgServico.Certificado.Senha,
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
-        // 4. Cria registro inicial do documento da CC-e
-        var correctionDoc = new CompanyFiscalDocument(companyId, FiscalDocumentType.CartaCorrecao, order.Id);
+        // 4. Cria registro inicial do documento da CC-e (preserva OutboundOrderId ou null para avulsas)
+        var correctionDoc = new CompanyFiscalDocument(companyId, FiscalDocumentType.CartaCorrecao, authorizedDoc.OutboundOrderId);
         _db.CompanyFiscalDocuments.Add(correctionDoc);
 
         // 5. Transmissão do Evento de Carta de Correção (tpEvento 110110)
@@ -120,7 +133,6 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
         var retEvento = retornoEvento.Retorno?.retEvento?.FirstOrDefault();
         var infEvento = retEvento?.infEvento;
 
-        // Códigos de homologação SEFAZ: 135 (Vinculado) ou 136 (Registrado)
         bool isSuccess = infEvento != null && (infEvento.cStat == 135 || infEvento.cStat == 136);
 
         if (!isSuccess)
@@ -171,9 +183,10 @@ public static class NfeCorrectionLetterEndpoints
     {
         var group = app.MapGroup("/api/fiscal/nfe").WithTags("Fiscal").RequireAuthorization();
 
-        group.MapPost("/correction-letter/{orderId:guid}", async (Guid orderId, EmitCorrectionLetterCommand cmd, IMediator mediator) =>
+        // Aceita DocumentId (notas avulsas e diretas) ou OrderId (pedidos de saída)
+        group.MapPost("/correction-letter/{id:guid}", async (Guid id, EmitCorrectionLetterCommand cmd, IMediator mediator) =>
         {
-            var command = cmd with { OrderId = orderId };
+            var command = cmd with { Id = id };
             return await mediator.Send(command);
         })
         .RequirePermission(Permissions.Outbound.Manage);

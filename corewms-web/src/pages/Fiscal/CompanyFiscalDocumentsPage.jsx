@@ -6,14 +6,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
-    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2, Settings
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import {
+    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2, Settings, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
-import CancelNfeModal from '@/pages/Outbound/CancelNfeModal';
-import CorrectionLetterModal from '@/pages/Outbound/CorrectionLetterModal';
+import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
+import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
 
 export default function CompanyFiscalDocumentsPage() {
     const navigate = useNavigate();
@@ -21,6 +30,10 @@ export default function CompanyFiscalDocumentsPage() {
     const [documents, setDocuments] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+
+    // Paginação
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
 
     // Filtros
     const [search, setSearch] = useState('');
@@ -37,9 +50,9 @@ export default function CompanyFiscalDocumentsPage() {
     const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
     const [selectedDocForCorrection, setSelectedDocForCorrection] = useState(null);
 
-    // Modal de Detalhes & Eventos
-    const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-    const [selectedDocForDetails, setSelectedDocForDetails] = useState(null);
+    // Estado do AlertDialog de Exclusão (shadcn/ui)
+    const [docToDelete, setDocToDelete] = useState(null);
+    const [isDeletingDoc, setIsDeletingDoc] = useState(false);
 
     const loadDocuments = async () => {
         try {
@@ -48,6 +61,8 @@ export default function CompanyFiscalDocumentsPage() {
             if (search) params.append('search', search);
             if (statusFilter !== 'ALL') params.append('status', statusFilter);
             if (typeFilter !== 'ALL') params.append('type', typeFilter);
+            params.append('page', page);
+            params.append('pageSize', pageSize);
 
             const res = await customInstance({
                 url: `/api/fiscal/documents?${params.toString()}`,
@@ -66,10 +81,11 @@ export default function CompanyFiscalDocumentsPage() {
 
     useEffect(() => {
         loadDocuments();
-    }, [statusFilter, typeFilter]);
+    }, [page, pageSize, statusFilter, typeFilter]);
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
+        setPage(1);
         loadDocuments();
     };
 
@@ -122,27 +138,33 @@ export default function CompanyFiscalDocumentsPage() {
         }
     };
 
-    const handleDeletePendingDoc = async (doc) => {
-        if (!confirm(`Deseja realmente excluir este documento fiscal #${doc.id}?`)) return;
+    const handleConfirmDeleteDoc = async () => {
+        if (!docToDelete) return;
         try {
+            setIsDeletingDoc(true);
             await customInstance({
-                url: `/api/fiscal/documents/${doc.id}`,
+                url: `/api/fiscal/documents/${docToDelete.id}`,
                 method: 'DELETE'
             });
-            toast.success('Nota fiscal removida com sucesso!');
+            toast.success('Documento fiscal excluído com sucesso!');
+            setDocToDelete(null);
             loadDocuments();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir documento fiscal.');
+        } finally {
+            setIsDeletingDoc(false);
         }
     };
 
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
     return (
-        <div className="flex flex-col space-y-6 animate-in fade-in duration-300">
+        <div className="flex flex-col h-full space-y-4 animate-in fade-in duration-300 min-h-0">
             {/* CABEÇALHO */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between shrink-0">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Documentos Fiscais & Histórico SEFAZ</h1>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <p className="text-sm text-slate-500 mt-0.5">
                         Gerencie todas as notas fiscais emitidas, eventos vinculados (CC-e e Cancelamento) e emissões avulsas.
                     </p>
                 </div>
@@ -163,8 +185,8 @@ export default function CompanyFiscalDocumentsPage() {
             </div>
 
             {/* BARRA DE FILTROS */}
-            <Card className="border-slate-200/80 bg-white shadow-xs">
-                <CardContent className="p-4">
+            <Card className="border-slate-200/80 bg-white shadow-xs shrink-0">
+                <CardContent className="p-3.5">
                     <form onSubmit={handleSearchSubmit} className="flex flex-col md:flex-row gap-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -177,7 +199,7 @@ export default function CompanyFiscalDocumentsPage() {
                         </div>
 
                         <div className="w-full md:w-44">
-                            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
                                 <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Status" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="ALL">Todos os Status</SelectItem>
@@ -190,7 +212,7 @@ export default function CompanyFiscalDocumentsPage() {
                         </div>
 
                         <div className="w-full md:w-48">
-                            <Select value={typeFilter} onValueChange={setTypeFilter}>
+                            <Select value={typeFilter} onValueChange={(val) => { setTypeFilter(val); setPage(1); }}>
                                 <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Finalidade" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="ALL">Todas as Finalidades</SelectItem>
@@ -211,27 +233,28 @@ export default function CompanyFiscalDocumentsPage() {
                 </CardContent>
             </Card>
 
-            {/* TABELA DE DOCUMENTOS */}
-            <Card className="border-slate-200/80 bg-white shadow-xs">
-                <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
+            {/* TABELA DE DOCUMENTOS OCUPANDO O RESTANTE TOTAL DA TELA */}
+            <Card className="border-slate-200/80 bg-white shadow-xs overflow-hidden flex-1 flex flex-col min-h-0">
+                <CardHeader className="p-3.5 border-b bg-slate-50/50 flex flex-row items-center justify-between shrink-0">
                     <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
                         <FileCode size={16} className="text-orange-600" /> Notas Fiscais Registradas na Empresa
                     </CardTitle>
                     <Badge variant="secondary" className="font-mono">{totalCount} Registro(s)</Badge>
                 </CardHeader>
-                <CardContent className="p-0 overflow-x-auto">
+
+                <CardContent className="p-0 flex-1 overflow-auto min-h-0 relative">
                     <Table>
-                        <TableHeader className="bg-slate-50">
+                        <TableHeader className="bg-slate-50 sticky top-0 z-10 shadow-xs">
                             <TableRow>
-                                <TableHead>Data Emissão</TableHead>
-                                <TableHead>Finalidade</TableHead>
-                                <TableHead>Destinatário / UF</TableHead>
-                                <TableHead>Origem / Pedido</TableHead>
-                                <TableHead>Chave de Acesso</TableHead>
-                                <TableHead className="text-right">Valor Total</TableHead>
-                                <TableHead className="text-center">Status</TableHead>
-                                <TableHead className="text-center">Eventos</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
+                                <TableHead className="bg-slate-50">Data Emissão</TableHead>
+                                <TableHead className="bg-slate-50">Finalidade</TableHead>
+                                <TableHead className="bg-slate-50">Destinatário / UF</TableHead>
+                                <TableHead className="bg-slate-50">Origem / Pedido</TableHead>
+                                <TableHead className="bg-slate-50">Chave de Acesso</TableHead>
+                                <TableHead className="text-right bg-slate-50">Valor Total</TableHead>
+                                <TableHead className="text-center bg-slate-50">Status</TableHead>
+                                <TableHead className="text-center bg-slate-50">Eventos</TableHead>
+                                <TableHead className="text-right bg-slate-50">Ações</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -309,7 +332,11 @@ export default function CompanyFiscalDocumentsPage() {
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {eventsCount > 0 ? (
-                                                    <Badge variant="secondary" className="cursor-pointer font-mono text-[10px]" onClick={() => { setSelectedDocForDetails(doc); setIsDetailsModalOpen(true); }}>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="cursor-pointer font-mono text-[10px] hover:bg-slate-200"
+                                                        onClick={() => navigate(`/fiscal/documentos/${doc.id}`)}
+                                                    >
                                                         {eventsCount} evento(s)
                                                     </Badge>
                                                 ) : (
@@ -321,15 +348,14 @@ export default function CompanyFiscalDocumentsPage() {
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        onClick={() => { setSelectedDocForDetails(doc); setIsDetailsModalOpen(true); }}
+                                                        onClick={() => navigate(`/fiscal/documentos/${doc.id}`)}
                                                         className="h-8 w-8 p-0"
-                                                        title="Ver Detalhes e Histórico"
+                                                        title="Ver Detalhes da NF-e"
                                                     >
                                                         <Eye size={14} className="text-slate-600" />
                                                     </Button>
 
-                                                    {/* DOWNLOAD XML (DISPONÍVEL PARA AUTORIZADA, REJEITADA OU PENDENTE) */}
-                                                    {(isAuthorized || isPendingOrRejected) && (
+                                                    {(isAuthorized || isPendingOrRejected) && doc.accessKey && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -386,7 +412,7 @@ export default function CompanyFiscalDocumentsPage() {
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            onClick={() => handleDeletePendingDoc(doc)}
+                                                            onClick={() => setDocToDelete(doc)}
                                                             className="h-8 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 font-medium px-2"
                                                             title="Excluir nota pendente/rejeitada"
                                                         >
@@ -402,116 +428,62 @@ export default function CompanyFiscalDocumentsPage() {
                         </TableBody>
                     </Table>
                 </CardContent>
-            </Card>
 
-            {/* MODAL DETALHES & HISTÓRICO DE EVENTOS */}
-            <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-                <DialogContent className="sm:max-w-2xl bg-white max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 font-bold flex items-center gap-2">
-                            <FileCode className="text-orange-600" size={20} />
-                            Detalhes do Documento Fiscal #{selectedDocForDetails?.accessKey ? selectedDocForDetails.accessKey.substring(25, 34) : selectedDocForDetails?.id}
-                        </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            Protocolos SEFAZ, chave de acesso e histórico de eventos vinculados (CC-e / Cancelamento).
-                        </DialogDescription>
-                    </DialogHeader>
+                {/* CONTROLE COMPLETO DE PAGINAÇÃO FIXO NO RODAPÉ */}
+                <div className="p-3.5 border-t border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 shrink-0">
+                    <div className="flex items-center gap-2">
+                        <span>
+                            Exibindo <strong>{totalCount === 0 ? 0 : (page - 1) * pageSize + 1}</strong> a <strong>{Math.min(page * pageSize, totalCount)}</strong> de <strong>{totalCount}</strong> documentos fiscais
+                        </span>
+                    </div>
 
-                    {selectedDocForDetails && (
-                        <div className="space-y-4 py-2 text-xs">
-                            <div className="p-3 bg-slate-50 border rounded-xl space-y-2 font-mono">
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 block uppercase">Chave de Acesso</span>
-                                        <span className="font-bold text-slate-800 break-all text-[11px]">{selectedDocForDetails.accessKey || '-'}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 block uppercase">Protocolo SEFAZ</span>
-                                        <span className="font-bold text-slate-800 text-[11px]">{selectedDocForDetails.protocol || '-'}</span>
-                                    </div>
-                                </div>
-                                <div className="pt-2 border-t border-slate-200 grid grid-cols-3 gap-2">
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 block uppercase">Finalidade</span>
-                                        <span className="font-semibold text-slate-700">{selectedDocForDetails.typeDescription}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 block uppercase">Status</span>
-                                        <span className="font-semibold text-slate-700">{selectedDocForDetails.status}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-400 block uppercase">Origem</span>
-                                        <span className="font-semibold text-slate-700">{selectedDocForDetails.outboundOrderNumber ? `Pedido #${selectedDocForDetails.outboundOrderNumber}` : 'Emissão Avulsa'}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <span className="font-bold text-slate-800 text-[11px] uppercase tracking-wider block">
-                                    Eventos Fiscais Registrados na SEFAZ ({selectedDocForDetails.linkedEvents?.length || 0})
-                                </span>
-
-                                {!selectedDocForDetails.linkedEvents || selectedDocForDetails.linkedEvents.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-lg border text-center">
-                                        Nenhum evento (Cancelamento ou Carta de Correção) foi emitido para esta NF-e até o momento.
-                                    </p>
-                                ) : (
-                                    <div className="border border-slate-200 rounded-lg overflow-hidden">
-                                        <Table>
-                                            <TableHeader className="bg-slate-50">
-                                                <TableRow>
-                                                    <TableHead>Data</TableHead>
-                                                    <TableHead>Evento</TableHead>
-                                                    <TableHead>Protocolo</TableHead>
-                                                    <TableHead className="text-right">Download</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {selectedDocForDetails.linkedEvents.map(evt => (
-                                                    <TableRow key={evt.id} className="text-xs font-mono">
-                                                        <TableCell>{new Date(evt.createdAt).toLocaleString('pt-BR')}</TableCell>
-                                                        <TableCell className="font-bold text-slate-800">{evt.typeDescription}</TableCell>
-                                                        <TableCell>{evt.protocol || '-'}</TableCell>
-                                                        <TableCell className="text-right">
-                                                            <div className="flex justify-end gap-1">
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() => handleDownloadXml(evt.id, selectedDocForDetails.accessKey)}
-                                                                    className="h-7 text-[11px] px-2"
-                                                                >
-                                                                    XML
-                                                                </Button>
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() => handleDownloadPdf(evt.id, selectedDocForDetails.accessKey)}
-                                                                    className="h-7 text-[11px] px-2"
-                                                                >
-                                                                    PDF
-                                                                </Button>
-                                                            </div>
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                )}
-                            </div>
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 mr-3">
+                            <span>Linhas por página:</span>
+                            <Select value={String(pageSize)} onValueChange={(val) => { setPageSize(Number(val)); setPage(1); }}>
+                                <SelectTrigger className="h-8 w-16 bg-white text-xs font-mono"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="10">10</SelectItem>
+                                    <SelectItem value="25">25</SelectItem>
+                                    <SelectItem value="50">50</SelectItem>
+                                    <SelectItem value="100">100</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
-                    )}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>Fechar</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page <= 1 || isLoading}
+                            className="h-8 text-xs bg-white"
+                        >
+                            <ChevronLeft size={14} className="mr-1" /> Anterior
+                        </Button>
+
+                        <span className="font-mono px-2 text-slate-700 font-semibold">
+                            {page} / {totalPages}
+                        </span>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages || isLoading}
+                            className="h-8 text-xs bg-white"
+                        >
+                            Próximo <ChevronRight size={14} className="ml-1" />
+                        </Button>
+                    </div>
+                </div>
+            </Card>
 
             {/* MODAL CANCELAMENTO */}
             <CancelNfeModal
                 open={isCancelModalOpen}
                 onOpenChange={setIsCancelModalOpen}
-                orderId={selectedDocForCancel?.outboundOrderId || selectedDocForCancel?.id}
+                orderId={selectedDocForCancel?.outboundOrderId}
+                documentId={selectedDocForCancel?.id}
                 orderNumber={selectedDocForCancel?.outboundOrderNumber || 'Avulsa'}
                 accessKey={selectedDocForCancel?.accessKey}
                 onSuccess={loadDocuments}
@@ -521,11 +493,44 @@ export default function CompanyFiscalDocumentsPage() {
             <CorrectionLetterModal
                 open={isCorrectionModalOpen}
                 onOpenChange={setIsCorrectionModalOpen}
-                orderId={selectedDocForCorrection?.outboundOrderId || selectedDocForCorrection?.id}
+                orderId={selectedDocForCorrection?.outboundOrderId}
+                documentId={selectedDocForCorrection?.id}
                 orderNumber={selectedDocForCorrection?.outboundOrderNumber || 'Avulsa'}
                 accessKey={selectedDocForCorrection?.accessKey}
                 onSuccess={loadDocuments}
             />
+
+            {/* ALERTA DE EXCLUSÃO DE DOCUMENTO FISCAL (SHADCN/UI) */}
+            <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                            <Trash2 className="h-5 w-5" /> Excluir Documento Fiscal?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600">
+                            Tem certeza de que deseja remover o documento fiscal{' '}
+                            <strong className="text-slate-900 font-mono">
+                                {docToDelete?.accessKey
+                                    ? `${docToDelete.accessKey.substring(0, 8)}...${docToDelete.accessKey.substring(36)}`
+                                    : `#${docToDelete?.id}`}
+                            </strong>?
+                            <br /><br />
+                            Esta ação removerá a nota rejeitada/pendente e permitirá gerar uma nova NF-e sem bloqueios de notas ativas.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingDoc}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmDeleteDoc}
+                            disabled={isDeletingDoc}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                        >
+                            {isDeletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Exclusão
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

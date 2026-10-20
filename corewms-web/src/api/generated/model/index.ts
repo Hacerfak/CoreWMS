@@ -12,6 +12,7 @@ export * from './addVolumetricRecordCommand';
 export * from './applyFiscalAdjustmentCommand';
 export * from './assignUserRequest';
 export * from './billingServiceType';
+export * from './cancelNfeCommand';
 export * from './cancelOutboundNfeCommand';
 export * from './changeQualityCommand';
 export * from './companyLoginDto';

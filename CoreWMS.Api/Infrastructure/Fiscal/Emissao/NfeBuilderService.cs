@@ -558,7 +558,7 @@ public class NfeBuilderService
                 else
                 {
                     // Lote sem datas completas -> Injeta em infAdProd para impressão na DANFe sem violar schema
-                    batchNotes.Add($"Lote: {b.Batch} (Qtd: {b.Quantity.ToString("G29", PtBrCulture)})");
+                    batchNotes.Add($"Lote: {b.Batch} ");
                 }
             }
 

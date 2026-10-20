@@ -1,31 +1,48 @@
 import { useState } from 'react';
 import { customInstance } from '@/api/orval-mutator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle,
+    DialogDescription, DialogFooter
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, Ban, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Ban, Loader2, AlertTriangle, FileText, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function CancelNfeModal({ open, onOpenChange, orderId, orderNumber, accessKey, onSuccess }) {
+export default function CancelNfeModal({
+    open,
+    onOpenChange,
+    orderId,
+    documentId,
+    orderNumber,
+    accessKey,
+    onSuccess
+}) {
     const [justification, setJustification] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Funciona perfeitamente tanto para Notas Avulsas quanto vinculadas a Pedidos
+    const targetId = documentId || orderId;
     const charCount = justification.trim().length;
-    const isValidLength = charCount >= 15 && charCount <= 255;
+    const isJustificationValid = justification.trim().length >= 15 && justification.trim().length <= 255;
 
-    const handleCancelNfe = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (e) => {
+        e?.preventDefault();
 
-        if (charCount < 15) {
-            toast.error('A justificativa deve ter no mínimo 15 caracteres (exigência SEFAZ).');
-            return;
+        if (!targetId) {
+            return toast.error('Identificador da NF-e não informado.');
+        }
+
+        if (justification.trim().length < 15) {
+            return toast.warning('A justificativa de cancelamento deve ter no mínimo 15 caracteres (Exigência SEFAZ).');
         }
 
         try {
             setIsSubmitting(true);
-
             const res = await customInstance({
-                url: `/api/fiscal/nfe/cancel/${orderId}`,
+                url: `/api/fiscal/nfe/cancel/${targetId}`,
                 method: 'POST',
                 data: {
                     justification: justification.trim()
@@ -33,14 +50,12 @@ export default function CancelNfeModal({ open, onOpenChange, orderId, orderNumbe
             });
 
             const data = res?.data || res;
-            toast.success(data?.message || 'NF-e Cancelada com sucesso na SEFAZ!');
-
+            toast.success(data?.message || 'NF-e cancelada com sucesso na SEFAZ!');
             setJustification('');
             onOpenChange(false);
             if (onSuccess) onSuccess();
         } catch (error) {
-            const errorMsg = error.response?.data?.message || error.message || 'Falha ao registrar evento de cancelamento na SEFAZ.';
-            toast.error(errorMsg);
+            toast.error(error.response?.data?.message || 'Erro ao cancelar NF-e na SEFAZ.');
         } finally {
             setIsSubmitting(false);
         }
@@ -54,11 +69,11 @@ export default function CancelNfeModal({ open, onOpenChange, orderId, orderNumbe
                         <Ban className="text-rose-600" size={20} /> Cancelamento de NF-e na SEFAZ
                     </DialogTitle>
                     <DialogDescription className="text-xs text-slate-500">
-                        Registro oficial do evento de cancelamento da Nota Fiscal vinculada ao Pedido #{orderNumber}.
+                        Registro oficial do evento de cancelamento da Nota Fiscal.
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleCancelNfe} className="space-y-4 py-2">
+                <form onSubmit={handleSubmit} className="space-y-4 py-2">
                     {/* ALERTA DE ATENÇÃO */}
                     <div className="p-3 bg-rose-50 border border-rose-200/80 rounded-xl space-y-1 text-xs">
                         <div className="flex items-center gap-1.5 font-bold text-rose-900">
@@ -116,7 +131,7 @@ export default function CancelNfeModal({ open, onOpenChange, orderId, orderNumbe
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isSubmitting || !isValidLength}
+                            disabled={isSubmitting || !isJustificationValid}
                             className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 px-4 text-xs"
                         >
                             {isSubmitting ? (

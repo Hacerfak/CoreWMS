@@ -1,31 +1,48 @@
 import { useState } from 'react';
 import { customInstance } from '@/api/orval-mutator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle,
+    DialogDescription, DialogFooter
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, FileSignature, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { FileSignature, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function CorrectionLetterModal({ open, onOpenChange, orderId, orderNumber, accessKey, onSuccess }) {
+export default function CorrectionLetterModal({
+    open,
+    onOpenChange,
+    orderId,
+    documentId,
+    orderNumber,
+    accessKey,
+    onSuccess
+}) {
     const [correctionText, setCorrectionText] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Funciona perfeitamente tanto para Notas Avulsas quanto vinculadas a Pedidos
+    const targetId = documentId || orderId;
     const charCount = correctionText.trim().length;
-    const isValidLength = charCount >= 15 && charCount <= 1000;
+    const isTextValid = correctionText.trim().length >= 15 && correctionText.trim().length <= 1000;
 
-    const handleSendCorrection = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (e) => {
+        e?.preventDefault();
 
-        if (charCount < 15) {
-            toast.error('O texto da correção deve ter no mínimo 15 caracteres (exigência SEFAZ).');
-            return;
+        if (!targetId) {
+            return toast.error('Identificador da NF-e não informado.');
+        }
+
+        if (correctionText.trim().length < 15) {
+            return toast.warning('O texto da carta de correção deve ter no mínimo 15 caracteres (Exigência SEFAZ).');
         }
 
         try {
             setIsSubmitting(true);
-
             const res = await customInstance({
-                url: `/api/fiscal/nfe/correction-letter/${orderId}`,
+                url: `/api/fiscal/nfe/correction-letter/${targetId}`,
                 method: 'POST',
                 data: {
                     correctionText: correctionText.trim()
@@ -34,13 +51,11 @@ export default function CorrectionLetterModal({ open, onOpenChange, orderId, ord
 
             const data = res?.data || res;
             toast.success(data?.message || 'Carta de Correção registrada com sucesso na SEFAZ!');
-
             setCorrectionText('');
             onOpenChange(false);
             if (onSuccess) onSuccess();
         } catch (error) {
-            const errorMsg = error.response?.data?.message || error.message || 'Falha ao registrar Carta de Correção na SEFAZ.';
-            toast.error(errorMsg);
+            toast.error(error.response?.data?.message || 'Erro ao registrar Carta de Correção na SEFAZ.');
         } finally {
             setIsSubmitting(false);
         }
@@ -54,11 +69,11 @@ export default function CorrectionLetterModal({ open, onOpenChange, orderId, ord
                         <FileSignature className="text-purple-600" size={20} /> Carta de Correção Eletrônica (CC-e)
                     </DialogTitle>
                     <DialogDescription className="text-xs text-slate-500">
-                        Emissão de evento de retificação para a NF-e vinculada ao Pedido #{orderNumber}.
+                        Emissão de evento de retificação para a NF-e.
                     </DialogDescription>
                 </DialogHeader>
 
-                <form onSubmit={handleSendCorrection} className="space-y-4 py-2">
+                <form onSubmit={handleSubmit} className="space-y-4 py-2">
                     {/* ADVERTÊNCIA LEGAL SEFAZ */}
                     <div className="p-3 bg-purple-50 border border-purple-200/80 rounded-xl space-y-1.5 text-xs text-purple-900">
                         <div className="flex items-center gap-1.5 font-bold text-purple-950">
@@ -117,7 +132,7 @@ export default function CorrectionLetterModal({ open, onOpenChange, orderId, ord
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isSubmitting || !isValidLength}
+                            disabled={isSubmitting || !isTextValid}
                             className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 px-4 text-xs"
                         >
                             {isSubmitting ? (

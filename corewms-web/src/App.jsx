@@ -41,6 +41,7 @@ import FiscalOperationRulesPage from '@/pages/Fiscal/FiscalOperationRulesPage';
 import CreateOrEditFiscalRulePage from '@/pages/Fiscal/CreateOrEditFiscalRulePage';
 import CreateOrEditRuleExceptionPage from '@/pages/Fiscal/CreateOrEditRuleExceptionPage';
 import CompanyFiscalDocumentsPage from '@/pages/Fiscal/CompanyFiscalDocumentsPage';
+import CompanyFiscalDocumentDetailsPage from '@/pages/Fiscal/CompanyFiscalDocumentDetailsPage';
 import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
 
 const PrivateRoute = () => {
@@ -181,6 +182,7 @@ export default function App() {
                 <Route path="/fiscal/regras/:ruleId/excecoes/nova" element={<CreateOrEditRuleExceptionPage />} />
                 <Route path="/fiscal/regras/:ruleId/excecoes/:exceptionId" element={<CreateOrEditRuleExceptionPage />} />
                 <Route path="/fiscal/documentos" element={<CompanyFiscalDocumentsPage />} />
+                <Route path="/fiscal/documentos/:id" element={<CompanyFiscalDocumentDetailsPage />} />
                 <Route path="/fiscal/documentos/novo" element={<CreateStandaloneNfePage />} />
               </Route>
 

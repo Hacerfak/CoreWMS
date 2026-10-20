@@ -25,7 +25,7 @@ import type {
 
 import type {
   AddOrUpdateExceptionCommand,
-  CancelOutboundNfeCommand,
+  CancelNfeCommand,
   EmitCorrectionLetterCommand,
   EmitOutboundNfeCommand,
   EmitStandaloneNfeCommand,
@@ -325,7 +325,93 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteApiFiscalDocumentsIdMutationOptions(options), queryClient);
     }
-    export const deleteApiFiscalRulesRuleIdExceptionsExceptionId = (
+    export const getApiFiscalDocumentsId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/documents/${id}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiFiscalDocumentsIdQueryKey = (id: string,) => {
+    return [
+    `/api/fiscal/documents/${id}`
+    ] as const;
+    }
+
+
+export const getGetApiFiscalDocumentsIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalDocumentsIdQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>> = ({ signal }) => getApiFiscalDocumentsId(id, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiFiscalDocumentsIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>>
+export type GetApiFiscalDocumentsIdQueryError = unknown
+
+
+export function useGetApiFiscalDocumentsId<TData = Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalDocumentsId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalDocumentsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalDocumentsId<TData = Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalDocumentsId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalDocumentsId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalDocumentsId<TData = Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiFiscalDocumentsId<TData = Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiFiscalDocumentsIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const deleteApiFiscalRulesRuleIdExceptionsExceptionId = (
     ruleId: string,
     exceptionId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -1004,17 +1090,17 @@ export function useGetApiFiscalNfeDocumentIdXml<TData = Awaited<ReturnType<typeo
 
 
 
-export const postApiFiscalNfeCancelOrderId = (
-    orderId: string,
-    cancelOutboundNfeCommand: CancelOutboundNfeCommand,
+export const postApiFiscalNfeCancelId = (
+    id: string,
+    cancelNfeCommand: CancelNfeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/fiscal/nfe/cancel/${orderId}`, method: 'POST',
+      {url: `/api/fiscal/nfe/cancel/${id}`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
-      data: cancelOutboundNfeCommand, signal
+      data: cancelNfeCommand, signal
     },
       options);
     }
@@ -1022,13 +1108,13 @@ export const postApiFiscalNfeCancelOrderId = (
 
 
 
-export const getPostApiFiscalNfeCancelOrderIdMutationKey = () => ['postApiFiscalNfeCancelOrderId'] as const;
+export const getPostApiFiscalNfeCancelIdMutationKey = () => ['postApiFiscalNfeCancelId'] as const;
 
-export const getPostApiFiscalNfeCancelOrderIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCancelOrderId>>, TError,PostApiFiscalNfeCancelOrderIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCancelOrderId>>, TError,PostApiFiscalNfeCancelOrderIdMutationVariables, TContext> => {
+export const getPostApiFiscalNfeCancelIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCancelId>>, TError,PostApiFiscalNfeCancelIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCancelId>>, TError,PostApiFiscalNfeCancelIdMutationVariables, TContext> => {
 
-const mutationKey = getPostApiFiscalNfeCancelOrderIdMutationKey();
+const mutationKey = getPostApiFiscalNfeCancelIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1038,10 +1124,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeCancelOrderId>>, PostApiFiscalNfeCancelOrderIdMutationVariables> = (props) => {
-          const {orderId,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeCancelId>>, PostApiFiscalNfeCancelIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  postApiFiscalNfeCancelOrderId(orderId,data,requestOptions)
+          return  postApiFiscalNfeCancelId(id,data,requestOptions)
         }
 
 
@@ -1051,30 +1137,30 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiFiscalNfeCancelOrderIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeCancelOrderId>>>
-    export type PostApiFiscalNfeCancelOrderIdMutationBody = CancelOutboundNfeCommand
-    export type PostApiFiscalNfeCancelOrderIdMutationError = unknown
-    export type PostApiFiscalNfeCancelOrderIdMutationVariables = {orderId: string;data: CancelOutboundNfeCommand}
+    export type PostApiFiscalNfeCancelIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeCancelId>>>
+    export type PostApiFiscalNfeCancelIdMutationBody = CancelNfeCommand
+    export type PostApiFiscalNfeCancelIdMutationError = unknown
+    export type PostApiFiscalNfeCancelIdMutationVariables = {id: string;data: CancelNfeCommand}
 
-    export const usePostApiFiscalNfeCancelOrderId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCancelOrderId>>, TError,PostApiFiscalNfeCancelOrderIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiFiscalNfeCancelId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCancelId>>, TError,PostApiFiscalNfeCancelIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiFiscalNfeCancelOrderId>>,
+        Awaited<ReturnType<typeof postApiFiscalNfeCancelId>>,
         TError,
-        PostApiFiscalNfeCancelOrderIdMutationVariables,
+        PostApiFiscalNfeCancelIdMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiFiscalNfeCancelOrderIdMutationOptions(options), queryClient);
+      return useMutation(getPostApiFiscalNfeCancelIdMutationOptions(options), queryClient);
     }
-    export const postApiFiscalNfeCorrectionLetterOrderId = (
-    orderId: string,
+    export const postApiFiscalNfeCorrectionLetterId = (
+    id: string,
     emitCorrectionLetterCommand: EmitCorrectionLetterCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/fiscal/nfe/correction-letter/${orderId}`, method: 'POST',
+      {url: `/api/fiscal/nfe/correction-letter/${id}`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
       data: emitCorrectionLetterCommand, signal
     },
@@ -1084,13 +1170,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getPostApiFiscalNfeCorrectionLetterOrderIdMutationKey = () => ['postApiFiscalNfeCorrectionLetterOrderId'] as const;
+export const getPostApiFiscalNfeCorrectionLetterIdMutationKey = () => ['postApiFiscalNfeCorrectionLetterId'] as const;
 
-export const getPostApiFiscalNfeCorrectionLetterOrderIdMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterOrderId>>, TError,PostApiFiscalNfeCorrectionLetterOrderIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterOrderId>>, TError,PostApiFiscalNfeCorrectionLetterOrderIdMutationVariables, TContext> => {
+export const getPostApiFiscalNfeCorrectionLetterIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterId>>, TError,PostApiFiscalNfeCorrectionLetterIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterId>>, TError,PostApiFiscalNfeCorrectionLetterIdMutationVariables, TContext> => {
 
-const mutationKey = getPostApiFiscalNfeCorrectionLetterOrderIdMutationKey();
+const mutationKey = getPostApiFiscalNfeCorrectionLetterIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1100,10 +1186,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterOrderId>>, PostApiFiscalNfeCorrectionLetterOrderIdMutationVariables> = (props) => {
-          const {orderId,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterId>>, PostApiFiscalNfeCorrectionLetterIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  postApiFiscalNfeCorrectionLetterOrderId(orderId,data,requestOptions)
+          return  postApiFiscalNfeCorrectionLetterId(id,data,requestOptions)
         }
 
 
@@ -1113,20 +1199,20 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PostApiFiscalNfeCorrectionLetterOrderIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterOrderId>>>
-    export type PostApiFiscalNfeCorrectionLetterOrderIdMutationBody = EmitCorrectionLetterCommand
-    export type PostApiFiscalNfeCorrectionLetterOrderIdMutationError = unknown
-    export type PostApiFiscalNfeCorrectionLetterOrderIdMutationVariables = {orderId: string;data: EmitCorrectionLetterCommand}
+    export type PostApiFiscalNfeCorrectionLetterIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterId>>>
+    export type PostApiFiscalNfeCorrectionLetterIdMutationBody = EmitCorrectionLetterCommand
+    export type PostApiFiscalNfeCorrectionLetterIdMutationError = unknown
+    export type PostApiFiscalNfeCorrectionLetterIdMutationVariables = {id: string;data: EmitCorrectionLetterCommand}
 
-    export const usePostApiFiscalNfeCorrectionLetterOrderId = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterOrderId>>, TError,PostApiFiscalNfeCorrectionLetterOrderIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePostApiFiscalNfeCorrectionLetterId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterId>>, TError,PostApiFiscalNfeCorrectionLetterIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterOrderId>>,
+        Awaited<ReturnType<typeof postApiFiscalNfeCorrectionLetterId>>,
         TError,
-        PostApiFiscalNfeCorrectionLetterOrderIdMutationVariables,
+        PostApiFiscalNfeCorrectionLetterIdMutationVariables,
         TContext
       > => {
-      return useMutation(getPostApiFiscalNfeCorrectionLetterOrderIdMutationOptions(options), queryClient);
+      return useMutation(getPostApiFiscalNfeCorrectionLetterIdMutationOptions(options), queryClient);
     }
     export const postApiFiscalNfeEmitOrderId = (
     orderId: string,
