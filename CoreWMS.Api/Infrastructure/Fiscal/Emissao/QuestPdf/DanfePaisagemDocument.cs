@@ -1,9 +1,7 @@
 using NFe.Classes;
 using NFe.Classes.Informacoes.Detalhe.Tributacao;
 using NFe.Classes.Informacoes.Transporte;
-using NFe.Classes.Informacoes.Identificacao.Tipos;
 using NFe.Utils;
-using NFe.Utils.Tributacao.Estadual;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;

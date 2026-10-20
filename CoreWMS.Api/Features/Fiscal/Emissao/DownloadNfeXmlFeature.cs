@@ -29,10 +29,13 @@ public class DownloadNfeXmlHandler : IRequestHandler<DownloadNfeXmlQuery, IResul
 
         byte[] xmlBytes = Encoding.UTF8.GetBytes(doc.RawXml);
 
-        string suffix = doc.Type.IsEvent() ? "-procEvento.xml" : "-procNFe.xml";
+        string suffix = doc.Type.IsEvent()
+            ? "-procEvento.xml"
+            : (doc.Status == FiscalDocumentStatus.Authorized ? "-procNFe.xml" : "-nfe-assinado.xml");
+
         string fileName = $"{doc.AccessKey ?? doc.Id.ToString()}{suffix}";
 
-        return Results.File(xmlBytes, "application/xml", fileName);
+        return Results.File(xmlBytes, "application/xml; charset=utf-8", fileName);
     }
 }
 

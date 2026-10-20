@@ -71,7 +71,7 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
 
         bool isReturnToCustomer = parsedData.Recipient.CnpjCpf == customer.Cnpj;
 
-        // Instanciação da Ordem com o payload completo da SEFAZ
+        // Instanciação da Ordem com os parâmetros completos da transportadora (Endereço, Município e UF)
         var order = new OutboundOrder(
             companyId,
             customer.Id,
@@ -96,6 +96,9 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
             parsedData.CarrierCnpjCpf,
             parsedData.CarrierName,
             parsedData.CarrierIe,
+            parsedData.CarrierAddress,
+            parsedData.CarrierCity,
+            parsedData.CarrierState,
             parsedData.VehiclePlate,
             parsedData.VehiclePlateState,
             parsedData.FreightModality,

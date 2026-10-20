@@ -96,6 +96,9 @@ public class NfeParserService : INfeParserService
         string? carrierCnpjCpf = null;
         string? carrierName = null;
         string? carrierIe = null;
+        string? carrierAddress = null;
+        string? carrierCity = null;
+        string? carrierState = null;
 
         var transporta = transp?.Element(Ns + "transporta");
         if (transporta != null)
@@ -103,6 +106,9 @@ public class NfeParserService : INfeParserService
             carrierCnpjCpf = transporta.Element(Ns + "CNPJ")?.Value ?? transporta.Element(Ns + "CPF")?.Value;
             carrierName = transporta.Element(Ns + "xNome")?.Value;
             carrierIe = transporta.Element(Ns + "IE")?.Value;
+            carrierAddress = transporta.Element(Ns + "xEnder")?.Value;
+            carrierCity = transporta.Element(Ns + "xMun")?.Value;
+            carrierState = transporta.Element(Ns + "UF")?.Value;
         }
 
         string? vehiclePlate = null;
@@ -186,6 +192,9 @@ public class NfeParserService : INfeParserService
             carrierCnpjCpf,
             carrierName,
             carrierIe,
+            carrierAddress,
+            carrierCity,
+            carrierState,
             vehiclePlate,
             vehiclePlateState,
             items,

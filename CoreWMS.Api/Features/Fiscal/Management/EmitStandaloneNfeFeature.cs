@@ -36,8 +36,8 @@ public record StandaloneNfeDuplicataCommand(
 
 public record StandaloneNfePaymentCommand(
     bool GerarCobranca,
-    int FormaPagamento = 15, // 90 = Sem Pagamento, 15 = Boleto, 14 = Duplicata, 17 = PIX
-    int IndicadorPagamento = 1, // 0 = À Vista, 1 = A Prazo
+    int FormaPagamento = 15,
+    int IndicadorPagamento = 1,
     string? NumeroFatura = null,
     decimal? ValorOriginalFatura = null,
     decimal? ValorDescontoFatura = null,
@@ -68,6 +68,9 @@ public record EmitStandaloneNfeCommand(
     string? CarrierCnpjCpf = null,
     string? CarrierName = null,
     string? CarrierStateRegistration = null,
+    string? CarrierAddress = null,
+    string? CarrierCity = null,
+    string? CarrierState = null,
     string? VehiclePlate = null,
     string? VehiclePlateState = null,
     StandaloneNfePaymentCommand? Payment = null,
@@ -132,7 +135,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
         if (company.CertificateBytes == null || company.CertificateBytes.Length == 0)
             return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado para esta empresa." });
 
-        // 1. Mapeamento de Pagamento e Duplicatas
         NfePaymentInput? paymentInput = null;
         if (request.Payment != null)
         {
@@ -162,7 +164,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             );
         }
 
-        // 2. Constrói o DTO completo de entrada para o builder
         var builderInput = new StandaloneNfeInput(
             CompanyId: companyId,
             FiscalRuleId: request.FiscalRuleId,
@@ -196,6 +197,9 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             CarrierCnpjCpf: request.CarrierCnpjCpf,
             CarrierName: request.CarrierName,
             CarrierStateRegistration: request.CarrierStateRegistration,
+            CarrierAddress: request.CarrierAddress,
+            CarrierCity: request.CarrierCity,
+            CarrierState: request.CarrierState,
             VehiclePlate: request.VehiclePlate,
             VehiclePlateState: request.VehiclePlateState,
             Payment: paymentInput
@@ -219,7 +223,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
 
             (nfe, rule) = await _builder.BuildAsync(buildRequest, ct);
 
-            // Injeta as chaves referenciadas na emissão avulsa (se informadas)
             if (request.ReferencedAccessKeys != null && request.ReferencedAccessKeys.Any())
             {
                 nfe.infNFe.ide.NFref ??= new List<NFe.Classes.Informacoes.Identificacao.NFref>();
@@ -234,7 +237,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
         }
 
-        // 3. Registra o documento inicial no banco
         var fiscalDoc = new CompanyFiscalDocument(companyId, rule.Finalidade, outboundOrderId: null);
         _db.CompanyFiscalDocuments.Add(fiscalDoc);
 
@@ -247,11 +249,20 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             cfgServico.Certificado.Senha,
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
-        // 4. Assina e valida
+        string xmlAssinado;
+        string chaveAcesso;
+
         try
         {
             nfe.Assina(cfgServico);
             nfe.Valida(cfgServico);
+
+            xmlAssinado = nfe.ObterXmlString();
+            chaveAcesso = nfe.infNFe.Id?.Replace("NFe", "").Trim() ?? "";
+
+            // Salva na entidade antes do envio para a SEFAZ
+            fiscalDoc.SetTransmittedXml(chaveAcesso, xmlAssinado);
+            await _db.SaveChangesAsync(ct);
         }
         catch (Exception ex)
         {
@@ -260,7 +271,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             return Results.BadRequest(new { Message = $"Falha na validação do XML: {ex.Message}" });
         }
 
-        // 5. Transmissão síncrona
         using var servicoNFe = new ServicosNFe(cfgServico, certificado);
         var loteId = new Random().Next(1000, 99999);
         var retornoEnvio = servicoNFe.NFeAutorizacao(loteId, IndicadorSincronizacao.Sincrono, new List<NFe.Classes.NFe> { nfe }, false);
@@ -269,12 +279,16 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
         if (retornoEnvio?.Retorno?.protNFe == null || (prot?.cStat != 100 && prot?.cStat != 150))
         {
             string motivo = prot?.xMotivo ?? retornoEnvio?.Retorno?.xMotivo ?? "Rejeição SEFAZ";
-            fiscalDoc.MarkAsRejected($"[Rejeição SEFAZ {prot?.cStat ?? retornoEnvio?.Retorno?.cStat}]: {motivo}");
+            fiscalDoc.MarkAsRejected($"[Rejeição SEFAZ {prot?.cStat ?? retornoEnvio?.Retorno?.cStat}]: {motivo}", chaveAcesso, xmlAssinado);
             await _db.SaveChangesAsync(ct);
-            return Results.BadRequest(new { Message = $"NF-e Rejeitada pela SEFAZ: {motivo}", DocumentId = fiscalDoc.Id });
+            return Results.BadRequest(new
+            {
+                Message = $"NF-e Rejeitada pela SEFAZ: {motivo}",
+                DocumentId = fiscalDoc.Id,
+                AccessKey = chaveAcesso
+            });
         }
 
-        // 6. Autorizou -> Persiste XML e atualiza sequencial
         var proc = new NFe.Classes.nfeProc { NFe = nfe, protNFe = retornoEnvio.Retorno.protNFe, versao = retornoEnvio.Retorno.versao };
         fiscalDoc.MarkAsAuthorized(prot.chNFe, prot.nProt, proc.ObterXmlString(), prot.xMotivo);
 

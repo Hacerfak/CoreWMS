@@ -36,7 +36,7 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
-        if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "XML autorizado não disponível." });
+        if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "XML não disponível." });
 
         try
         {

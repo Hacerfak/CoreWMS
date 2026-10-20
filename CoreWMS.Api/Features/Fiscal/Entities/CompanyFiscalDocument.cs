@@ -6,17 +6,14 @@ namespace CoreWMS.Api.Features.Fiscal.Entities;
 
 public enum FiscalDocumentType
 {
-    // --- FINALIDADES OFICIAIS SEFAZ (tag <finNFe>) ---
-    Normal = 1,          // 1 = NF-e normal
-    Complementar = 2,    // 2 = NF-e complementar
-    Ajuste = 3,          // 3 = NF-e de ajuste
-    Devolucao = 4,       // 4 = Devolução de mercadoria / Retorno
-    NotaCredito = 5,     // 5 = Nota de Crédito (Reforma Tributária - IBS/CBS)
-    NotaDebito = 6,      // 6 = Nota de Débito (Reforma Tributária - IBS/CBS)
-
-    // --- EVENTOS FISCAIS SEFAZ ---
-    Cancelamento = 7,    // Evento Cancelamento (tpEvento 110111)
-    CartaCorrecao = 8    // Evento Carta de Correção - CC-e (tpEvento 110110)
+    Normal = 1,
+    Complementar = 2,
+    Ajuste = 3,
+    Devolucao = 4,
+    NotaCredito = 5,
+    NotaDebito = 6,
+    Cancelamento = 7,
+    CartaCorrecao = 8
 }
 
 public enum FiscalDocumentStatus
@@ -31,21 +28,14 @@ public class CompanyFiscalDocument : AuditableEntity
 {
     public Guid CompanyId { get; private set; }
     public Company Company { get; private set; } = null!;
-
-    // Opcional: nulo quando for emissão de nota avulsa
     public Guid? OutboundOrderId { get; private set; }
     public OutboundOrder? OutboundOrder { get; private set; }
-
     public FiscalDocumentType Type { get; private set; }
     public FiscalDocumentStatus Status { get; private set; }
-
     public string? AccessKey { get; private set; }
     public string? Protocol { get; private set; }
     public string? ReturnMessage { get; private set; }
-
     public string? RawXml { get; private set; }
-
-    // --- PROPRIEDADES E MÉTODOS DE IDENTIFICAÇÃO DIRETO NA ENTIDADE ---
     public bool IsNfe => Type.IsNfe();
     public bool IsEvent => Type.IsEvent();
 
@@ -64,6 +54,13 @@ public class CompanyFiscalDocument : AuditableEntity
     {
     }
 
+    public void SetTransmittedXml(string accessKey, string rawXml)
+    {
+        AccessKey = accessKey?.Trim();
+        RawXml = rawXml;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void MarkAsAuthorized(string accessKey, string protocol, string rawXml, string message)
     {
         Status = FiscalDocumentStatus.Authorized;
@@ -74,10 +71,12 @@ public class CompanyFiscalDocument : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void MarkAsRejected(string message)
+    public void MarkAsRejected(string message, string? accessKey = null, string? rawXml = null)
     {
         Status = FiscalDocumentStatus.Rejected;
         ReturnMessage = message?.Trim();
+        if (!string.IsNullOrWhiteSpace(accessKey)) AccessKey = accessKey.Trim();
+        if (!string.IsNullOrWhiteSpace(rawXml)) RawXml = rawXml;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -91,9 +90,6 @@ public class CompanyFiscalDocument : AuditableEntity
 
 public static class FiscalDocumentTypeExtensions
 {
-    /// <summary>
-    /// Retorna verdadeiro para qualquer uma das finalidades de NF-e (1 a 6)
-    /// </summary>
     public static bool IsNfe(this FiscalDocumentType type) =>
         type is FiscalDocumentType.Normal
              or FiscalDocumentType.Complementar
@@ -102,9 +98,6 @@ public static class FiscalDocumentTypeExtensions
              or FiscalDocumentType.NotaCredito
              or FiscalDocumentType.NotaDebito;
 
-    /// <summary>
-    /// Retorna verdadeiro para eventos vinculados à NF-e (Cancelamento ou CC-e)
-    /// </summary>
     public static bool IsEvent(this FiscalDocumentType type) =>
         type is FiscalDocumentType.Cancelamento or FiscalDocumentType.CartaCorrecao;
 }

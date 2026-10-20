@@ -28,6 +28,9 @@ const outboundOrderHeaderSchema = z.object({
     carrierCnpjCpf: z.string().optional().nullable(),
     carrierName: z.string().optional().nullable(),
     carrierStateRegistration: z.string().optional().nullable(),
+    carrierAddress: z.string().optional().nullable(),
+    carrierCity: z.string().optional().nullable(),
+    carrierState: z.string().optional().nullable(),
     vehiclePlate: z.string().optional().nullable(),
     vehiclePlateState: z.string().optional().nullable(),
     freightModality: z.coerce.number().default(9),
@@ -58,6 +61,9 @@ export default function CreateOutboundOrderPage() {
             carrierCnpjCpf: '',
             carrierName: '',
             carrierStateRegistration: '',
+            carrierAddress: '',
+            carrierCity: '',
+            carrierState: 'RS',
             vehiclePlate: '',
             vehiclePlateState: 'RS',
             freightModality: 9,
@@ -79,7 +85,7 @@ export default function CreateOutboundOrderPage() {
             .catch(() => toast.error('Erro ao carregar depositantes.'));
     }, []);
 
-    // Carrega dados se for Edição
+    // Carrega dados no modo de Edição
     useEffect(() => {
         if (isEditMode) {
             setIsLoading(true);
@@ -100,6 +106,9 @@ export default function CreateOutboundOrderPage() {
                         carrierCnpjCpf: order.carrierCnpjCpf || '',
                         carrierName: order.carrierName || '',
                         carrierStateRegistration: order.carrierStateRegistration || '',
+                        carrierAddress: order.carrierAddress || '',
+                        carrierCity: order.carrierCity || '',
+                        carrierState: order.carrierState || 'RS',
                         vehiclePlate: order.vehiclePlate || '',
                         vehiclePlateState: order.vehiclePlateState || 'RS',
                         freightModality: order.freightModality ?? 9,
@@ -125,6 +134,21 @@ export default function CreateOutboundOrderPage() {
             toast.success('Dados da transportadora sincronizados da SEFAZ!');
             setValue('carrierName', sefazData.corporateName || '');
             setValue('carrierStateRegistration', sefazData.stateRegistration || '');
+
+            const addressParts = [
+                sefazData.street,
+                sefazData.number,
+                sefazData.complement,
+                sefazData.neighborhood
+            ].filter(Boolean);
+
+            setValue('carrierAddress', addressParts.join(', ') || '');
+            setValue('carrierCity', sefazData.cityName || '');
+            setValue('carrierState', sefazData.state || carrierState || 'RS');
+
+            if (!watch('vehiclePlateState')) {
+                setValue('vehiclePlateState', sefazData.state || 'RS');
+            }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Não foi possível consultar a transportadora na SEFAZ.');
         } finally {
@@ -137,8 +161,11 @@ export default function CreateOutboundOrderPage() {
             setIsSaving(true);
             const cleanPayload = {
                 ...data,
-                isReturnToCustomer: true, // Garante estritamente retorno para o depositante
+                isReturnToCustomer: true,
                 carrierCnpjCpf: data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
+                carrierAddress: data.carrierAddress?.trim() || null,
+                carrierCity: data.carrierCity?.trim() || null,
+                carrierState: data.carrierState?.trim()?.toUpperCase() || null,
                 freightModality: Number(data.freightModality),
                 expectedShipDate: new Date(data.expectedShipDate).toISOString()
             };
@@ -268,7 +295,7 @@ export default function CreateOutboundOrderPage() {
                     </div>
                 </div>
 
-                {/* BLOCO 2: DESTINATÁRIO (SEMPRE O PRÓPRIO DEPOSITANTE) */}
+                {/* BLOCO 2: DESTINATÁRIO */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
                     <div className="flex items-center justify-between border-b pb-3">
                         <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -350,7 +377,7 @@ export default function CreateOutboundOrderPage() {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                         <div className="space-y-1.5 md:col-span-2">
                             <Label className="text-xs">Nome / Razão Social Transportadora</Label>
-                            <Input {...register('carrierName')} className="text-xs bg-white" />
+                            <Input {...register('carrierName')} placeholder="Razão social da transportadora" className="text-xs bg-white" />
                         </div>
 
                         <div className="space-y-1.5">
@@ -369,12 +396,35 @@ export default function CreateOutboundOrderPage() {
                         </div>
                     </div>
 
+                    {/* DADOS DE MORADA E UF DA TRANSPORTADORA (SEFAZ <transporta>) */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                        <div className="space-y-1.5 md:col-span-2">
+                            <Label className="text-xs">Morada da Transportadora (xEnder)</Label>
+                            <Input {...register('carrierAddress')} placeholder="Rua, Número, Bairro..." className="text-xs bg-white" />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-xs">Município (xMun)</Label>
+                            <Input {...register('carrierCity')} placeholder="Cidade da transportadora" className="text-xs bg-white" />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
+                            <Select value={watch('carrierState')} onValueChange={(val) => setValue('carrierState', val)}>
+                                <SelectTrigger className="text-xs bg-white font-mono font-bold"><SelectValue placeholder="UF" /></SelectTrigger>
+                                <SelectContent>
+                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
                     <div className="space-y-1.5 border-t border-slate-100 pt-3">
                         <Label className="text-xs">Observações Adicionais / Instruções de Entrega (infCpl)</Label>
                         <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs bg-white" />
                     </div>
                 </div>
-            </form >
-        </div >
+            </form>
+        </div>
     );
 }

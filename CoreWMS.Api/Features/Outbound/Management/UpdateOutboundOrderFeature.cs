@@ -31,6 +31,9 @@ public record UpdateOutboundOrderCommand(
     string? CarrierCnpjCpf,
     string? CarrierName,
     string? CarrierStateRegistration,
+    string? CarrierAddress,
+    string? CarrierCity,
+    string? CarrierState,
     string? VehiclePlate,
     string? VehiclePlateState,
     int FreightModality,
@@ -43,6 +46,8 @@ public class UpdateOutboundOrderCommandValidator : AbstractValidator<UpdateOutbo
     {
         RuleFor(x => x.Id).NotEmpty();
         RuleFor(x => x.ExpectedShipDate).NotEmpty().WithMessage("A data prevista de envio é obrigatória.");
+        When(x => !string.IsNullOrWhiteSpace(x.CarrierState), () =>
+            RuleFor(x => x.CarrierState).Length(2).WithMessage("A UF da transportadora deve ter 2 caracteres."));
     }
 }
 
@@ -135,6 +140,9 @@ public class UpdateOutboundOrderHandler : IRequestHandler<UpdateOutboundOrderCom
             request.CarrierCnpjCpf,
             request.CarrierName,
             request.CarrierStateRegistration,
+            request.CarrierAddress,
+            request.CarrierCity,
+            request.CarrierState,
             request.VehiclePlate,
             request.VehiclePlateState,
             request.FreightModality,

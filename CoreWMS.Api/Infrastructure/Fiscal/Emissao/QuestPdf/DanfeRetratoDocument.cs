@@ -430,7 +430,7 @@ public class DanfeRetratoDocument : IDocument
 
             col.Item().PaddingTop(2).Row(r =>
             {
-                r.RelativeItem().Text($"Impresso em {DateTime.Now:dd/MM/yyyy HH:mm:ss} | CoreWMS QuestPDF").FontSize(4.5f).FontColor(Colors.Grey.Darken1);
+                r.RelativeItem().Text($"Impresso em {DateTime.Now:dd/MM/yyyy HH:mm:ss}").FontSize(4.5f).FontColor(Colors.Grey.Darken1);
                 r.RelativeItem().AlignRight().Text("Powered by CoreWMS - Eder Gross Cichelero").FontSize(4.5f).FontColor(Colors.Grey.Darken1);
             });
         });

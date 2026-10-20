@@ -46,6 +46,12 @@ export interface EmitStandaloneNfeCommand {
   /** @nullable */
   carrierStateRegistration?: string | null;
   /** @nullable */
+  carrierAddress?: string | null;
+  /** @nullable */
+  carrierCity?: string | null;
+  /** @nullable */
+  carrierState?: string | null;
+  /** @nullable */
   vehiclePlate?: string | null;
   /** @nullable */
   vehiclePlateState?: string | null;

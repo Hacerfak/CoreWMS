@@ -93,6 +93,9 @@ export default function CreateStandaloneNfePage() {
     const [carrierCnpjCpf, setCarrierCnpjCpf] = useState('');
     const [carrierName, setCarrierName] = useState('');
     const [carrierIe, setCarrierIe] = useState('');
+    const [carrierAddress, setCarrierAddress] = useState('');
+    const [carrierCity, setCarrierCity] = useState('');
+    const [carrierState, setCarrierState] = useState('RS');
     const [vehiclePlate, setVehiclePlate] = useState('');
     const [vehiclePlateState, setVehiclePlateState] = useState('RS');
 
@@ -139,7 +142,7 @@ export default function CreateStandaloneNfePage() {
         return fiscalRules.find(r => r.id === fiscalRuleId);
     }, [fiscalRules, fiscalRuleId]);
 
-    // Identificação de CFOP 5124 para sugestão automática de faturamento comercial
+    // Identificação de CFOP 5124 para sugestão automática de faturação comercial
     useEffect(() => {
         if (activeRule) {
             const is5124OrService =
@@ -236,13 +239,28 @@ export default function CreateStandaloneNfePage() {
         try {
             setIsConsultingCarrierSefaz(true);
             const sefazData = await customInstance({
-                url: `/api/customers/consult-sefaz/${cleanCnpj}?uf=${vehiclePlateState || 'RS'}`,
+                url: `/api/customers/consult-sefaz/${cleanCnpj}?uf=${carrierState || vehiclePlateState || 'RS'}`,
                 method: 'POST'
             });
 
             toast.success('Dados da transportadora sincronizados da SEFAZ!');
             setCarrierName(sefazData.corporateName || '');
             setCarrierIe(sefazData.stateRegistration || '');
+
+            const addressParts = [
+                sefazData.street,
+                sefazData.number,
+                sefazData.complement,
+                sefazData.neighborhood
+            ].filter(Boolean);
+
+            setCarrierAddress(addressParts.join(', ') || '');
+            setCarrierCity(sefazData.cityName || '');
+            setCarrierState(sefazData.state || carrierState || 'RS');
+
+            if (!vehiclePlateState) {
+                setVehiclePlateState(sefazData.state || 'RS');
+            }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Falha ao consultar transportadora na SEFAZ.');
         } finally {
@@ -429,6 +447,9 @@ export default function CreateStandaloneNfePage() {
                 carrierCnpjCpf: carrierCnpjCpf ? carrierCnpjCpf.replace(/\D/g, '') : null,
                 carrierName: carrierName.trim() || null,
                 carrierStateRegistration: carrierIe.trim() || null,
+                carrierAddress: carrierAddress ? carrierAddress.trim() : null,
+                carrierCity: carrierCity ? carrierCity.trim() : null,
+                carrierState: carrierState ? carrierState.trim().toUpperCase() : null,
                 vehiclePlate: vehiclePlate.trim().toUpperCase() || null,
                 vehiclePlateState: vehiclePlateState?.trim().toUpperCase() || 'RS',
                 items: itemsList.map(i => ({
@@ -1327,6 +1348,39 @@ export default function CreateStandaloneNfePage() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* CAMPOS DE MORADA E UF DA TRANSPORTADORA (SEFAZ <transporta>) */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <Label className="text-xs">Morada da Transportadora (xEnder)</Label>
+                                        <Input
+                                            value={carrierAddress}
+                                            onChange={e => setCarrierAddress(e.target.value)}
+                                            placeholder="Rua, Número, Bairro..."
+                                            className="text-xs bg-white h-9"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs">Município (xMun)</Label>
+                                        <Input
+                                            value={carrierCity}
+                                            onChange={e => setCarrierCity(e.target.value)}
+                                            placeholder="Cidade da transportadora"
+                                            className="text-xs bg-white h-9"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
+                                        <Select value={carrierState} onValueChange={setCarrierState}>
+                                            <SelectTrigger className="text-xs bg-white font-mono font-bold h-9"><SelectValue placeholder="UF" /></SelectTrigger>
+                                            <SelectContent>
+                                                {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                 </div>
                             </CardContent>

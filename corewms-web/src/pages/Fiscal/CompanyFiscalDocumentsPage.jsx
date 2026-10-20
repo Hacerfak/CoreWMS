@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
-    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2
+    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2, Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Outbound/CancelNfeModal';
@@ -122,15 +122,14 @@ export default function CompanyFiscalDocumentsPage() {
         }
     };
 
-    // Exclusão de nota fiscal pendente ou rejeitada
     const handleDeletePendingDoc = async (doc) => {
-        if (!confirm(`Deseja realmente excluir este documento fiscal pendente/rejeitado #${doc.id}?`)) return;
+        if (!confirm(`Deseja realmente excluir este documento fiscal #${doc.id}?`)) return;
         try {
             await customInstance({
                 url: `/api/fiscal/documents/${doc.id}`,
                 method: 'DELETE'
             });
-            toast.success('Nota fiscal pendente/rejeitada removida com sucesso!');
+            toast.success('Nota fiscal removida com sucesso!');
             loadDocuments();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir documento fiscal.');
@@ -147,9 +146,20 @@ export default function CompanyFiscalDocumentsPage() {
                         Gerencie todas as notas fiscais emitidas, eventos vinculados (CC-e e Cancelamento) e emissões avulsas.
                     </p>
                 </div>
-                <Button onClick={() => navigate('/fiscal/documentos/novo')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
-                    <Plus className="mr-1.5 h-4 w-4" /> Nova NF-e Avulsa
-                </Button>
+
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => navigate('/fiscal/regras')}
+                        className="bg-white text-slate-700 border-slate-300 hover:bg-slate-50 font-semibold h-9"
+                    >
+                        <Settings className="mr-1.5 h-4 w-4 text-slate-500" /> Gerenciar Regras Fiscais
+                    </Button>
+
+                    <Button onClick={() => navigate('/fiscal/documentos/novo')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
+                        <Plus className="mr-1.5 h-4 w-4" /> Nova NF-e Avulsa
+                    </Button>
+                </div>
             </div>
 
             {/* BARRA DE FILTROS */}
@@ -318,19 +328,21 @@ export default function CompanyFiscalDocumentsPage() {
                                                         <Eye size={14} className="text-slate-600" />
                                                     </Button>
 
-                                                    {/* BOTÕES DE NOTA AUTORIZADA */}
+                                                    {/* DOWNLOAD XML (DISPONÍVEL PARA AUTORIZADA, REJEITADA OU PENDENTE) */}
+                                                    {(isAuthorized || isPendingOrRejected) && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleDownloadXml(doc.id, doc.accessKey)}
+                                                            className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium px-2"
+                                                            title="Baixar XML"
+                                                        >
+                                                            <FileCode size={13} className="mr-1 text-blue-600" /> XML
+                                                        </Button>
+                                                    )}
+
                                                     {isAuthorized && (
                                                         <>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleDownloadXml(doc.id, doc.accessKey)}
-                                                                className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium px-2"
-                                                                title="Baixar XML"
-                                                            >
-                                                                <FileCode size={13} className="mr-1 text-blue-600" /> XML
-                                                            </Button>
-
                                                             <Button
                                                                 size="sm"
                                                                 variant="outline"
@@ -370,7 +382,6 @@ export default function CompanyFiscalDocumentsPage() {
                                                         </>
                                                     )}
 
-                                                    {/* BOTÃO EXCLUIR NOTA PENDENTE OU REJEITADA */}
                                                     {isPendingOrRejected && (
                                                         <Button
                                                             size="sm"

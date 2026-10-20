@@ -640,7 +640,7 @@ public class NfeBuilderService
             indPres = (PresencaComprador)ctx.Identificacao.IndPres,
             indIntermed = IndicadorIntermediador.iiSemIntermediador,
             procEmi = ProcessoEmissao.peAplicativoContribuinte,
-            verProc = "CoreWMS Fiscal 2.0"
+            verProc = "CoreWMS 1.0"
         };
 
         if (ctx.Company.Environment == 1 && ctx.Identificacao.OriginAccessKeys.Any())
@@ -900,27 +900,39 @@ public class NfeBuilderService
                 parsedCst = CSTIBSCBS.cst410;
             }
 
-            var aliqIbs = p.AliqIbs > 0 ? p.AliqIbs : 0.10m;
-            var aliqCbs = p.AliqCbs > 0 ? p.AliqCbs : 0.90m;
-            var vIbsUf = Math.Round(valorTotalItem * (aliqIbs / 100m), 2);
-            var vCbs = Math.Round(valorTotalItem * (aliqCbs / 100m), 2);
-
             string cClassTrib = !string.IsNullOrWhiteSpace(p.ClassificacaoTributaria)
                 ? p.ClassificacaoTributaria.Trim()
                 : (rawIbs == "000" ? "000001" : "410999");
 
-            impostos.IBSCBS = new IBSCBS
+            // REGRA SEFAZ NT 2025.002 (Rejeição 1021):
+            // CSTs com ind_gIBSCBS = 0 (410 = Não incidência/Imunidade, 400 = Isenção, 500, etc.)
+            // NÃO PODEM conter o grupo de cálculo <gIBSCBS> no XML!
+            bool exigeCalculoIbsCbs = rawIbs is not ("410" or "400" or "500");
+
+            gIBSCBS? gIbsCbs = null;
+
+            if (exigeCalculoIbsCbs)
             {
-                CST = parsedCst,
-                cClassTrib = cClassTrib,
-                gIBSCBS = new gIBSCBS
+                var aliqIbs = p.AliqIbs > 0 ? p.AliqIbs : 0.10m;
+                var aliqCbs = p.AliqCbs > 0 ? p.AliqCbs : 0.90m;
+                var vIbsUf = Math.Round(valorTotalItem * (aliqIbs / 100m), 2);
+                var vCbs = Math.Round(valorTotalItem * (aliqCbs / 100m), 2);
+
+                gIbsCbs = new gIBSCBS
                 {
                     vBC = valorTotalItem,
                     gIBSUF = new gIBSUF { pIBSUF = aliqIbs, vIBSUF = vIbsUf },
                     gIBSMun = new gIBSMun { pIBSMun = 0, vIBSMun = 0 },
                     gCBS = new gCBS { pCBS = aliqCbs, vCBS = vCbs },
                     vIBS = vIbsUf
-                }
+                };
+            }
+
+            impostos.IBSCBS = new IBSCBS
+            {
+                CST = parsedCst,
+                cClassTrib = cClassTrib,
+                gIBSCBS = gIbsCbs // <-- null para CST 410, evitando a Rejeição 1021!
             };
         }
 
@@ -1195,10 +1207,24 @@ public class NfeBuilderService
 
         var totalVNF = Math.Round(totalVProd + totalVST + totalVIPI, 2);
 
+        // REGRA W34-20 (Evita a Rejeição 1119):
+        // Se QUALQUER item declarar <IBSCBS> (mesmo com CST 410 isento/não tributado),
+        // o grupo <IBSCBSTot> DEVE ser informado no <total>!
         var temReformaTributaria = nfe.infNFe.det.Any(d => d.imposto?.IBSCBS != null);
-        var totalVBCIbsCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.vBC) : 0m;
-        var totalVIbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gIBSUF.vIBSUF) : 0m;
-        var totalVCbs = temReformaTributaria ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS != null).Sum(d => d.imposto.IBSCBS.gIBSCBS.gCBS.vCBS) : 0m;
+
+        // REGRA W35-10: Soma apenas os itens que possuem <gIBSCBS> calculado.
+        // Se todos forem CST 410, a soma resultará com precisão em 0.00.
+        var totalVBCIbsCbs = temReformaTributaria
+            ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS?.gIBSCBS != null).Sum(d => d.imposto!.IBSCBS!.gIBSCBS!.vBC)
+            : 0m;
+
+        var totalVIbs = temReformaTributaria
+            ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS?.gIBSCBS?.gIBSUF != null).Sum(d => d.imposto!.IBSCBS!.gIBSCBS!.gIBSUF.vIBSUF)
+            : 0m;
+
+        var totalVCbs = temReformaTributaria
+            ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS?.gIBSCBS?.gCBS != null).Sum(d => d.imposto!.IBSCBS!.gIBSCBS!.gCBS.vCBS)
+            : 0m;
 
         nfe.infNFe.total = new total
         {
@@ -1226,14 +1252,15 @@ public class NfeBuilderService
                 vOutro = 0,
                 vTotTrib = 0
             },
+            // Informa <IBSCBSTot> sempre que houver itens com IBSCBS (mesmo com valores zerados)
             IBSCBSTot = temReformaTributaria ? new IBSCBSTot
             {
-                vBCIBSCBS = totalVBCIbsCbs,
+                vBCIBSCBS = Math.Round(totalVBCIbsCbs, 2),
                 gIBS = new gIBSTotal
                 {
-                    gIBSUF = new gIBSUFTotal { vDif = 0, vDevTrib = 0, vIBSUF = totalVIbs },
+                    gIBSUF = new gIBSUFTotal { vDif = 0, vDevTrib = 0, vIBSUF = Math.Round(totalVIbs, 2) },
                     gIBSMun = new gIBSMunTotal { vDif = 0, vDevTrib = 0, vIBSMun = 0 },
-                    vIBS = totalVIbs,
+                    vIBS = Math.Round(totalVIbs, 2),
                     vCredPres = 0,
                     vCredPresCondSus = 0
                 },
@@ -1241,7 +1268,7 @@ public class NfeBuilderService
                 {
                     vDif = 0,
                     vDevTrib = 0,
-                    vCBS = totalVCbs,
+                    vCBS = Math.Round(totalVCbs, 2),
                     vCredPres = 0,
                     vCredPresCondSus = 0
                 }
@@ -1358,7 +1385,7 @@ public class NfeBuilderService
     );
 
     private record NfeCanonicalItem(
-        CoreWMS.Api.Features.Products.Entities.Product Product,
+        Features.Products.Entities.Product Product,
         decimal Quantity,
         decimal UnitValue,
         decimal InboundUnitValue,

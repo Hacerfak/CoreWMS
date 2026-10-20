@@ -1543,10 +1543,19 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<string>("AdditionalNotes")
                         .HasColumnType("text");
 
+                    b.Property<string>("CarrierAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CarrierCity")
+                        .HasColumnType("text");
+
                     b.Property<string>("CarrierCnpjCpf")
                         .HasColumnType("text");
 
                     b.Property<string>("CarrierName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CarrierState")
                         .HasColumnType("text");
 
                     b.Property<string>("CarrierStateRegistration")

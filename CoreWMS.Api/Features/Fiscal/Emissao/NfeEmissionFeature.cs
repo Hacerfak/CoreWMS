@@ -59,12 +59,9 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
-        // 1. Permite emissão se estiver pronto na doca ou se já estiver expedido (reemissão após cancelamento)
         if (order.Status != OutboundOrderStatus.ReadyToShip && order.Status != OutboundOrderStatus.Shipped)
             return Results.BadRequest(new { Message = "O pedido precisa estar pronto na doca ou já expedido (com NF-e cancelada) para emitir uma nova NF-e." });
 
-        // 2. REGRA DE OURO: Só permite gerar nova nota quando TODAS as notas do tipo Return ou Shipment estiverem canceladas
-        // Só permite gerar nova nota quando TODAS as notas fiscais (1 a 6) estiverem canceladas
         var hasActiveNfe = await _db.CompanyFiscalDocuments
             .AnyAsync(d => d.OutboundOrderId == order.Id
                         && (int)d.Type >= 1 && (int)d.Type <= 6
@@ -81,8 +78,6 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
 
         var tpAmb = company.Environment == 1 ? TipoAmbiente.Producao : TipoAmbiente.Homologacao;
         var cfgServico = _zeusConfigurator.GetCompanyConfiguration(company, tpAmb);
-
-        // Desativa a validação local redundante de schema para evitar bloqueios no .NET
         cfgServico.ValidarSchemas = false;
 
         using var certificado = CertificadoDigitalUtils.ObterDosBytes(
@@ -90,7 +85,6 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             cfgServico.Certificado.Senha,
             System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.MachineKeySet);
 
-        // 3. CHECK DE STATUS DA SEFAZ (CACHE DE 1 HORA)
         var cacheKey = $"SEFAZ_STATUS_{cfgServico.cUF}_{cfgServico.tpAmb}";
         if (!_cache.TryGetValue(cacheKey, out bool isSefazUp))
         {
@@ -110,7 +104,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
         if (!isSefazUp)
             return Results.BadRequest(new { Message = $"A SEFAZ do estado {cfgServico.cUF} encontra-se inoperante ou em contingência." });
 
-        // 4. CONSTRUÇÃO DO XML COM BASE NA REGRA FISCAL SELECIONADA
+        // 1. CONSTRUÇÃO DO XML
         NFe.Classes.NFe nfe;
         FiscalOperationRule rule;
 
@@ -123,13 +117,13 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             return Results.BadRequest(new { Message = $"Falha ao montar o XML da NF-e: {ex.Message}" });
         }
 
-        // Determina o tipo do documento fiscal com base na Natureza de Operação aplicada
-        (nfe, rule) = await _builder.BuildOutboundNfeAsync(order.Id, request.FiscalRuleId, ct);
-
-        // Assume a finalidade da Natureza de Operação (Normal, Devolução, Nota de Crédito, etc.)
         var fiscalDoc = new CompanyFiscalDocument(companyId, rule.Finalidade, order.Id);
         _db.CompanyFiscalDocuments.Add(fiscalDoc);
 
+        string xmlAssinado;
+        string chNfe;
+
+        // 2. ASSINATURA, VALIDAÇÃO E PERSISTÊNCIA IMEDIATA DO XML
         try
         {
             if (request.CustomIndFinal.HasValue)
@@ -149,6 +143,13 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
 
             nfe.Assina(cfgServico);
             nfe.Valida(cfgServico);
+
+            xmlAssinado = nfe.ObterXmlString();
+            chNfe = nfe.infNFe.Id?.Replace("NFe", "").Trim() ?? "";
+
+            // Salva na entidade antes do envio para a SEFAZ
+            fiscalDoc.SetTransmittedXml(chNfe, xmlAssinado);
+            await _db.SaveChangesAsync(ct);
         }
         catch (Exception ex)
         {
@@ -157,7 +158,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             return Results.BadRequest(new { Message = $"Falha ao validar a NF-e: {ex.Message}" });
         }
 
-        // 5. TRANSMISSÃO SÍNCRONA
+        // 3. TRANSMISSÃO SÍNCRONA
         using var servicoNFe = new ServicosNFe(cfgServico, certificado);
         var loteId = new Random().Next(1000, 99999);
         var retornoEnvio = servicoNFe.NFeAutorizacao(loteId, IndicadorSincronizacao.Sincrono, new List<NFe.Classes.NFe> { nfe }, false);
@@ -167,7 +168,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
         if (retornoEnvio?.Retorno?.protNFe == null || (prot?.cStat != 100 && prot?.cStat != 150))
         {
             string motivoRejeicao = prot?.xMotivo ?? retornoEnvio?.Retorno?.xMotivo ?? "Erro desconhecido de autorização SEFAZ.";
-            fiscalDoc.MarkAsRejected($"[Rejeição SEFAZ {prot?.cStat ?? retornoEnvio?.Retorno?.cStat}]: {motivoRejeicao}");
+            fiscalDoc.MarkAsRejected($"[Rejeição SEFAZ {prot?.cStat ?? retornoEnvio?.Retorno?.cStat}]: {motivoRejeicao}", chNfe, xmlAssinado);
 
             if (retornoEnvio?.Retorno?.cStat == 108 || retornoEnvio?.Retorno?.cStat == 109)
                 _cache.Remove(cacheKey);
@@ -178,11 +179,12 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             {
                 Code = "SEFAZ_REJECTION",
                 Message = $"NF-e Rejeitada pela SEFAZ: {motivoRejeicao}",
-                FiscalDocumentId = fiscalDoc.Id
+                FiscalDocumentId = fiscalDoc.Id,
+                AccessKey = chNfe
             });
         }
 
-        // 6. AUTORIZOU -> GRAVA XML, VINCULA DETALHES NA ORDEM E INCREMENTA SEQUENCIAL
+        // 4. AUTORIZADO -> GRAVA XML COMPLETO COM PROTOCOLO (nfeProc)
         var nfeProc = new NFe.Classes.nfeProc
         {
             NFe = nfe,
@@ -191,16 +193,12 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
         };
 
         var xmlAutorizado = nfeProc.ObterXmlString();
-        var chNfe = prot.chNFe;
+        var chNfeAutorizada = prot.chNFe;
         var nProt = prot.nProt;
         var nNfEmitida = nfe.infNFe.ide.nNF;
 
-        fiscalDoc.MarkAsAuthorized(chNfe, nProt, xmlAutorizado, prot.xMotivo);
-
-        // Atualiza a numeração e chave ativa na ordem sem alterar seu status
-        order.SetInvoiceDetails(nNfEmitida.ToString(), nfe.infNFe.ide.serie.ToString(), chNfe);
-
-        // Incrementa numeração da empresa
+        fiscalDoc.MarkAsAuthorized(chNfeAutorizada, nProt, xmlAutorizado, prot.xMotivo);
+        order.SetInvoiceDetails(nNfEmitida.ToString(), nfe.infNFe.ide.serie.ToString(), chNfeAutorizada);
         company.UpdateNfeAndTransportDetails(company.NfeSerie, company.NfeNextNumber + 1, company.Rntrc);
 
         await _db.SaveChangesAsync(ct);
@@ -209,7 +207,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
         {
             Message = $"NF-e Nº {nNfEmitida} Autorizada com Sucesso!",
             DocumentId = fiscalDoc.Id,
-            AccessKey = chNfe,
+            AccessKey = chNfeAutorizada,
             Protocol = nProt,
             InvoiceNumber = nNfEmitida.ToString()
         });
