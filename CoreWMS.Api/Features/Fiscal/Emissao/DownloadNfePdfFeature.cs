@@ -2,6 +2,7 @@ using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Fiscal.Emissao.QuestPdf;
+using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 using DFe.Utils;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -123,7 +124,7 @@ public class DownloadNfePdfHandler : IRequestHandler<DownloadNfePdfQuery, IResul
     }
 }
 
-public static class DownloadNfePdfEndpoints
+/* public static class DownloadNfePdfEndpoints
 {
     public static void MapDownloadNfePdfEndpoints(this IEndpointRouteBuilder app)
     {
@@ -131,6 +132,38 @@ public static class DownloadNfePdfEndpoints
             await mediator.Send(new DownloadNfePdfQuery(documentId)))
             .WithTags("Fiscal")
             .RequireAuthorization()
+            .RequirePermission(Identity.Constants.Permissions.Outbound.View);
+    }
+} */
+
+public static class DownloadNfePdfEndpoints
+{
+    public static void MapDownloadNfePdfEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/fiscal/nfe").WithTags("Fiscal").RequireAuthorization();
+
+        // NOVO: Renderização Oficial da DANFE em HTML / CSS
+        group.MapGet("/{documentId:guid}/danfe-html", async (Guid documentId, ApplicationDbContext db) =>
+        {
+            var doc = await db.CompanyFiscalDocuments
+                .AsNoTracking()
+                .Include(d => d.Company)
+                .Include(d => d.OutboundOrder).ThenInclude(o => o!.Company)
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (doc == null || string.IsNullOrWhiteSpace(doc.RawXml))
+                return Results.NotFound(new { Message = "Documento fiscal ou XML não localizado." });
+
+            string? logoBase64 = doc.Company?.LogoBase64 ?? doc.OutboundOrder?.Company?.LogoBase64;
+            var html = DanfeHtmlGenerator.Generate(doc.RawXml, logoBase64);
+
+            return Results.Content(html, "text/html; charset=utf-8");
+        })
+        .RequirePermission(Identity.Constants.Permissions.Outbound.View);
+
+        // Mantém a rota /pdf para compatibilidade com fluxos legados
+        group.MapGet("/{documentId:guid}/pdf", async (Guid documentId, IMediator mediator) =>
+            await mediator.Send(new DownloadNfePdfQuery(documentId)))
             .RequirePermission(Identity.Constants.Permissions.Outbound.View);
     }
 }

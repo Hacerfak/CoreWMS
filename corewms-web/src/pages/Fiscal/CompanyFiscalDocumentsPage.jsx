@@ -89,7 +89,7 @@ export default function CompanyFiscalDocumentsPage() {
         loadDocuments();
     };
 
-    const handleDownloadPdf = async (docId, accessKey) => {
+    /* const handleDownloadPdf = async (docId, accessKey) => {
         try {
             setDownloadingDocId(docId);
             const response = await customInstance({
@@ -112,6 +112,37 @@ export default function CompanyFiscalDocumentsPage() {
             toast.error('Erro ao baixar PDF fiscal.');
         } finally {
             setDownloadingDocId(null);
+        }
+    }; */
+
+    const handleDownloadPdf = async (docId) => {
+        // 1. Abre a nova aba imediatamente no clique para o navegador não bloquear como pop-up
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(`
+            <div style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; color: #475569; font-size: 14px;">
+                Carregando DANFE oficial...
+            </div>
+        `);
+        }
+
+        try {
+            // 2. Busca o HTML através do client HTTP com o token Bearer
+            const html = await customInstance({
+                url: `/api/fiscal/nfe/${docId}/danfe-html`,
+                method: 'GET',
+                responseType: 'text'
+            });
+
+            // 3. Injeta o HTML oficial da SEFAZ na nova aba
+            if (printWindow) {
+                printWindow.document.open();
+                printWindow.document.write(html);
+                printWindow.document.close();
+            }
+        } catch (error) {
+            if (printWindow) printWindow.close();
+            toast.error('Erro ao carregar visualização da DANFE.');
         }
     };
 
@@ -372,7 +403,7 @@ export default function CompanyFiscalDocumentsPage() {
                                                             <Button
                                                                 size="sm"
                                                                 variant="outline"
-                                                                onClick={() => handleDownloadPdf(doc.id, doc.accessKey)}
+                                                                onClick={() => handleDownloadPdf(doc.id)}
                                                                 disabled={downloadingDocId === doc.id}
                                                                 className="h-8 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-medium px-2"
                                                                 title="Baixar DANFE em PDF"

@@ -37,8 +37,13 @@ export default function OutboundOrderDetailsPage() {
     const [isRevertingShipment, setIsRevertingShipment] = useState(false);
     const [isCancelingOrder, setIsCancelingOrder] = useState(false);
     const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+
+    // Diálogos de Confirmação (shadcn/ui)
     const [isCancelOrderDialogOpen, setIsCancelOrderDialogOpen] = useState(false);
     const [isDeleteOrderDialogOpen, setIsDeleteOrderDialogOpen] = useState(false);
+    const [isRevertOrderDialogOpen, setIsRevertOrderDialogOpen] = useState(false);
+    const [docToDelete, setDocToDelete] = useState(null);
+    const [isDeletingDoc, setIsDeletingDoc] = useState(false);
 
     // Modais Fiscais
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -129,27 +134,27 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Exclusão de Nota Fiscal Pendente ou Rejeitada
-    const handleDeletePendingDoc = async (doc) => {
-        if (!confirm(`Deseja realmente excluir esta nota fiscal pendente/rejeitada #${doc.id}?`)) return;
+    // Exclusão de Nota Fiscal Pendente ou Rejeitada (com AlertDialog)
+    const handleConfirmDeleteDoc = async () => {
+        if (!docToDelete) return;
         try {
+            setIsDeletingDoc(true);
             await customInstance({
-                url: `/api/fiscal/documents/${doc.id}`,
+                url: `/api/fiscal/documents/${docToDelete.id}`,
                 method: 'DELETE'
             });
-            toast.success('Documento fiscal pendente removido com sucesso!');
+            toast.success('Documento fiscal removido com sucesso!');
+            setDocToDelete(null);
             loadOrderDetails();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir documento fiscal.');
+        } finally {
+            setIsDeletingDoc(false);
         }
     };
 
-    // Estorno da Expedição
-    const handleRevertShipment = async () => {
-        const confirmMsg = `Deseja realmente estornar a expedição da Ordem #${order?.orderNumber}?\n\nEsta ação irá:\n1. Devolver o saldo para as Unidades Logísticas (HUs).\n2. Restaurar o saldo alocado no estoque.\n3. Registrar a movimentação de estorno no Kardex.\n4. Retornar a ordem para 'Pronto para Expedir' (ReadyToShip), permitindo reemitir a nota fiscal ou cancelar o pedido.`;
-
-        if (!confirm(confirmMsg)) return;
-
+    // Estorno da Expedição (com AlertDialog)
+    const handleConfirmRevertShipment = async () => {
         try {
             setIsRevertingShipment(true);
             const res = await customInstance({
@@ -159,6 +164,7 @@ export default function OutboundOrderDetailsPage() {
 
             const data = res?.data || res;
             toast.success(data?.message || 'Expedição estornada com sucesso!');
+            setIsRevertOrderDialogOpen(false);
             loadOrderDetails();
         } catch (error) {
             toast.error(error.response?.data?.message || error.message || 'Erro ao estornar expedição.');
@@ -304,7 +310,7 @@ export default function OutboundOrderDetailsPage() {
                     {canManageShippedOrder && (
                         <>
                             <Button
-                                onClick={handleRevertShipment}
+                                onClick={() => setIsRevertOrderDialogOpen(true)}
                                 disabled={isRevertingShipment}
                                 variant="outline"
                                 className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold h-9"
@@ -626,7 +632,7 @@ export default function OutboundOrderDetailsPage() {
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
-                                                                        onClick={() => handleDeletePendingDoc(doc)}
+                                                                        onClick={() => setDocToDelete(doc)}
                                                                         className="h-8 text-xs bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 font-medium px-2"
                                                                         title="Excluir nota pendente/rejeitada para destravar o pedido"
                                                                     >
@@ -746,6 +752,70 @@ export default function OutboundOrderDetailsPage() {
                     )}
                 </div>
             </div>
+
+            {/* MODAL DE CONFIRMAÇÃO DE ESTORNO DA EXPEDIÇÃO (SHADCN/UI) */}
+            <AlertDialog open={isRevertOrderDialogOpen} onOpenChange={setIsRevertOrderDialogOpen}>
+                <AlertDialogContent className="bg-white sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-amber-800">
+                            <RotateCcw className="h-5 w-5 text-amber-600" /> Estornar Expedição da Ordem?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                            <span>
+                                Deseja realmente estornar a expedição da Ordem <strong className="text-slate-900 font-mono">#{order?.orderNumber}</strong>?
+                            </span>
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-[11px] text-amber-950 space-y-1 mt-2">
+                                <span className="font-bold block uppercase text-[10px] text-amber-900">Esta ação irá:</span>
+                                <ol className="list-decimal list-inside space-y-0.5 text-slate-700">
+                                    <li>Devolver o saldo para as Unidades Logísticas (HUs).</li>
+                                    <li>Restaurar o saldo alocado no estoque.</li>
+                                    <li>Registrar a movimentação de estorno no Kardex.</li>
+                                    <li>Retornar a ordem para <strong>Pronto para Expedir</strong> (ReadyToShip), permitindo reemitir a nota fiscal ou cancelar o pedido.</li>
+                                </ol>
+                            </div>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-2">
+                        <AlertDialogCancel disabled={isRevertingShipment}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmRevertShipment}
+                            disabled={isRevertingShipment}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                        >
+                            {isRevertingShipment ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Estorno
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE DOCUMENTO PENDENTE/REJEITADO (SHADCN/UI) */}
+            <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
+                <AlertDialogContent className="bg-white">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                            <Trash2 className="h-5 w-5" /> Excluir Documento Fiscal?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600">
+                            Tem certeza de que deseja remover o documento fiscal{' '}
+                            <strong className="text-slate-900 font-mono">#{docToDelete?.id}</strong>?
+                            <br /><br />
+                            Esta ação removerá a nota rejeitada/pendente e permitirá gerar uma nova NF-e sem bloqueios de notas ativas.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeletingDoc}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmDeleteDoc}
+                            disabled={isDeletingDoc}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                        >
+                            {isDeletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Exclusão
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO DO PEDIDO */}
             <AlertDialog open={isCancelOrderDialogOpen} onOpenChange={setIsCancelOrderDialogOpen}>

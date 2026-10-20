@@ -919,93 +919,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPatchApiFiscalRulesIdToggleMutationOptions(options), queryClient);
     }
-    export const getApiFiscalNfeDocumentIdPdf = (
-    documentId: string,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/fiscal/nfe/${documentId}/pdf`, method: 'GET', signal
-    },
-      options);
-    }
-
-
-
-
-export const getGetApiFiscalNfeDocumentIdPdfQueryKey = (documentId: string,) => {
-    return [
-    `/api/fiscal/nfe/${documentId}/pdf`
-    ] as const;
-    }
-
-
-export const getGetApiFiscalNfeDocumentIdPdfQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalNfeDocumentIdPdfQueryKey(documentId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>> = ({ signal }) => getApiFiscalNfeDocumentIdPdf(documentId, requestOptions, signal);
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetApiFiscalNfeDocumentIdPdfQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>>
-export type GetApiFiscalNfeDocumentIdPdfQueryError = unknown
-
-
-export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
- documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>,
-          TError,
-          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>,
-          TError,
-          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
- documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetApiFiscalNfeDocumentIdPdfQueryOptions(documentId,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getApiFiscalNfeDocumentIdXml = (
+    export const getApiFiscalNfeDocumentIdXml = (
     documentId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -1215,7 +1129,179 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiFiscalNfeCorrectionLetterIdMutationOptions(options), queryClient);
     }
-    export const postApiFiscalNfeEmitOrderId = (
+    export const getApiFiscalNfeDocumentIdDanfeHtml = (
+    documentId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/nfe/${documentId}/danfe-html`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiFiscalNfeDocumentIdDanfeHtmlQueryKey = (documentId: string,) => {
+    return [
+    `/api/fiscal/nfe/${documentId}/danfe-html`
+    ] as const;
+    }
+
+
+export const getGetApiFiscalNfeDocumentIdDanfeHtmlQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError = unknown>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalNfeDocumentIdDanfeHtmlQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>> = ({ signal }) => getApiFiscalNfeDocumentIdDanfeHtml(documentId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiFiscalNfeDocumentIdDanfeHtmlQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>>
+export type GetApiFiscalNfeDocumentIdDanfeHtmlQueryError = unknown
+
+
+export function useGetApiFiscalNfeDocumentIdDanfeHtml<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError = unknown>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalNfeDocumentIdDanfeHtml<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError = unknown>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalNfeDocumentIdDanfeHtml<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError = unknown>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiFiscalNfeDocumentIdDanfeHtml<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError = unknown>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiFiscalNfeDocumentIdDanfeHtmlQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiFiscalNfeDocumentIdPdf = (
+    documentId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/nfe/${documentId}/pdf`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiFiscalNfeDocumentIdPdfQueryKey = (documentId: string,) => {
+    return [
+    `/api/fiscal/nfe/${documentId}/pdf`
+    ] as const;
+    }
+
+
+export const getGetApiFiscalNfeDocumentIdPdfQueryOptions = <TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiFiscalNfeDocumentIdPdfQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>> = ({ signal }) => getApiFiscalNfeDocumentIdPdf(documentId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiFiscalNfeDocumentIdPdfQueryResult = NonNullable<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>>
+export type GetApiFiscalNfeDocumentIdPdfQueryError = unknown
+
+
+export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>,
+          TError,
+          Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiFiscalNfeDocumentIdPdfQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiFiscalNfeEmitOrderId = (
     orderId: string,
     emitOutboundNfeCommand: EmitOutboundNfeCommand,
     params?: PostApiFiscalNfeEmitOrderIdParams,
