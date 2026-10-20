@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, Send, Loader2, Sparkles, Plus, Trash2,
     FileText, UserCheck, Layers, Truck, MessageSquare, CreditCard,
-    Calendar, Tag, Link as LinkIcon, DollarSign, Calculator, CheckCircle2, AlertCircle
+    Calendar, Tag, Link as LinkIcon, DollarSign, Calculator, CheckCircle2, AlertCircle, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -102,6 +102,8 @@ export default function CreateStandaloneNfePage() {
     // --- ABA 6: OBSERVAÇÕES FISCAIS ---
     const [additionalNotes, setAdditionalNotes] = useState('');
 
+    const isSemFrete = Number(freightModality) === 9;
+
     const extractArray = (res) => {
         if (Array.isArray(res)) return res;
         if (Array.isArray(res?.items)) return res.items;
@@ -142,7 +144,6 @@ export default function CreateStandaloneNfePage() {
         return fiscalRules.find(r => r.id === fiscalRuleId);
     }, [fiscalRules, fiscalRuleId]);
 
-    // Identificação de CFOP 5124 para sugestão automática de faturação comercial
     useEffect(() => {
         if (activeRule) {
             const is5124OrService =
@@ -154,24 +155,21 @@ export default function CreateStandaloneNfePage() {
 
             if (is5124OrService) {
                 setHasFinancialBilling(true);
-                setPaymentMethod('15'); // Boleto
-                setPaymentIndicator('1'); // A Prazo
+                setPaymentMethod('15');
+                setPaymentIndicator('1');
             }
         }
     }, [activeRule]);
 
-    // Total dos Produtos
     const totalProductsValue = useMemo(() => {
         return itemsList.reduce((acc, curr) => acc + curr.totalValue, 0);
     }, [itemsList]);
 
-    // Valor Líquido da Fatura
     const invoiceNetValue = useMemo(() => {
         const disc = parseFloat(invoiceDiscount) || 0;
         return Math.max(0, totalProductsValue - disc);
     }, [totalProductsValue, invoiceDiscount]);
 
-    // Soma das Duplicatas
     const totalDuplicatasValue = useMemo(() => {
         return duplicatas.reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0);
     }, [duplicatas]);
@@ -182,7 +180,6 @@ export default function CreateStandaloneNfePage() {
         return Math.abs(totalDuplicatasValue - invoiceNetValue) < 0.01;
     }, [hasFinancialBilling, duplicatas.length, totalDuplicatasValue, invoiceNetValue]);
 
-    // Adição de Chave Referenciada (NFref)
     const handleAddReferencedKey = () => {
         const cleanKey = refKeyInput.replace(/\D/g, '');
         if (cleanKey.length !== 44) {
@@ -200,7 +197,6 @@ export default function CreateStandaloneNfePage() {
         setReferencedKeys(prev => prev.filter(k => k !== keyToRemove));
     };
 
-    // Consulta SEFAZ Destinatário
     const handleConsultDestSefaz = async () => {
         const cleanCnpj = destCnpjCpf.replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Informe um CNPJ válido com 14 dígitos para consultar.');
@@ -231,7 +227,6 @@ export default function CreateStandaloneNfePage() {
         }
     };
 
-    // Consulta SEFAZ Transportadora
     const handleConsultCarrierSefaz = async () => {
         const cleanCnpj = carrierCnpjCpf.replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Informe um CNPJ válido com 14 dígitos para consultar.');
@@ -268,7 +263,6 @@ export default function CreateStandaloneNfePage() {
         }
     };
 
-    // Inclusão de Item com Lote e Pedido
     const handleAddItem = () => {
         if (!selectedProductId) return toast.warning('Selecione um produto do catálogo.');
         const qtyNum = parseFloat(itemQty);
@@ -313,7 +307,6 @@ export default function CreateStandaloneNfePage() {
         setItemsList(prev => prev.filter((_, i) => i !== idx));
     };
 
-    // Gerador Automático de Parcelas / Duplicatas
     const handleGenerateInstallments = (count) => {
         if (invoiceNetValue <= 0) {
             return toast.warning('O valor total dos produtos deve ser maior que zero para gerar parcelas.');
@@ -368,7 +361,6 @@ export default function CreateStandaloneNfePage() {
         });
     };
 
-    // Transmissão da NF-e Avulsa à SEFAZ
     const handleSubmitNfe = async (e) => {
         e?.preventDefault();
 
@@ -405,7 +397,6 @@ export default function CreateStandaloneNfePage() {
         try {
             setIsSubmitting(true);
 
-            // Monta o payload de Cobrança / Pagamento
             const paymentPayload = hasFinancialBilling ? {
                 gerarCobranca: true,
                 formaPagamento: Number(paymentMethod),
@@ -421,7 +412,7 @@ export default function CreateStandaloneNfePage() {
                 }))
             } : {
                 gerarCobranca: false,
-                formaPagamento: 90, // Sem Pagamento
+                formaPagamento: 90,
                 indicadorPagamento: 0
             };
 
@@ -444,14 +435,17 @@ export default function CreateStandaloneNfePage() {
                 tpImp: Number(tpImp),
                 additionalNotes: additionalNotes.trim() || null,
                 freightModality: Number(freightModality),
-                carrierCnpjCpf: carrierCnpjCpf ? carrierCnpjCpf.replace(/\D/g, '') : null,
-                carrierName: carrierName.trim() || null,
-                carrierStateRegistration: carrierIe.trim() || null,
-                carrierAddress: carrierAddress ? carrierAddress.trim() : null,
-                carrierCity: carrierCity ? carrierCity.trim() : null,
-                carrierState: carrierState ? carrierState.trim().toUpperCase() : null,
-                vehiclePlate: vehiclePlate.trim().toUpperCase() || null,
-                vehiclePlateState: vehiclePlateState?.trim().toUpperCase() || 'RS',
+
+                // Se modalidade for 9 (Sem Frete), envia estritamente nulo
+                carrierCnpjCpf: !isSemFrete && carrierCnpjCpf ? carrierCnpjCpf.replace(/\D/g, '') : null,
+                carrierName: !isSemFrete ? (carrierName.trim() || null) : null,
+                carrierStateRegistration: !isSemFrete ? (carrierIe.trim() || null) : null,
+                carrierAddress: !isSemFrete ? (carrierAddress ? carrierAddress.trim() : null) : null,
+                carrierCity: !isSemFrete ? (carrierCity ? carrierCity.trim() : null) : null,
+                carrierState: !isSemFrete ? (carrierState ? carrierState.trim().toUpperCase() : null) : null,
+                vehiclePlate: !isSemFrete ? (vehiclePlate.trim().toUpperCase() || null) : null,
+                vehiclePlateState: !isSemFrete ? (vehiclePlateState?.trim().toUpperCase() || 'RS') : null,
+
                 items: itemsList.map(i => ({
                     productId: i.productId,
                     quantity: i.quantity,
@@ -505,7 +499,7 @@ export default function CreateStandaloneNfePage() {
                             <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-xs">CFOP 5124 / Avulsa</Badge>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            Emissão de Nota Fiscal com suporte completo a cobrança, faturas, duplicatas, rastreabilidade e pedidos.
+                            Emissão de Nota Fiscal com suporte a cobrança, faturas, duplicatas, rastreabilidade e pedidos.
                         </p>
                     </div>
                 </div>
@@ -627,7 +621,7 @@ export default function CreateStandaloneNfePage() {
                                     </div>
                                 </div>
 
-                                {/* CHAVES DE ACESSO REFERENCIADAS (NFREF) */}
+                                {/* CHAVES DE ACESSO REFERENCIADAS */}
                                 <div className="border-t border-slate-100 pt-4 space-y-3">
                                     <div className="flex items-center justify-between">
                                         <div>
@@ -803,7 +797,7 @@ export default function CreateStandaloneNfePage() {
                         </Card>
                     </TabsContent>
 
-                    {/* ABA 3: ITENS & VALORES COM RASTREABILIDADE & PEDIDO */}
+                    {/* ABA 3: ITENS & VALORES */}
                     <TabsContent value="itens" className="space-y-4 mt-0">
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-4 border-b bg-slate-50/50">
@@ -863,7 +857,6 @@ export default function CreateStandaloneNfePage() {
                                     </div>
                                 </div>
 
-                                {/* CAMPOS DE RASTREABILIDADE & PEDIDO DE COMPRA */}
                                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                                     <div className="flex items-center justify-between border-b pb-2">
                                         <span className="text-[11px] font-bold uppercase text-slate-700 flex items-center gap-1.5">
@@ -931,7 +924,6 @@ export default function CreateStandaloneNfePage() {
                             </CardContent>
                         </Card>
 
-                        {/* LISTAGEM DE ITENS INSERIDOS */}
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-4 border-b bg-slate-50/50 flex flex-row items-center justify-between">
                                 <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
@@ -1057,7 +1049,6 @@ export default function CreateStandaloneNfePage() {
                                     </div>
                                 ) : (
                                     <div className="space-y-5">
-                                        {/* FORMA E PRAZO DE PAGAMENTO */}
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div className="space-y-1.5 md:col-span-2">
                                                 <Label className="text-xs font-semibold text-slate-800">Forma de Pagamento (tPag) *</Label>
@@ -1093,7 +1084,6 @@ export default function CreateStandaloneNfePage() {
                                             </div>
                                         </div>
 
-                                        {/* VALORES DA FATURA */}
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                                             <div className="space-y-1">
                                                 <span className="text-[11px] font-semibold text-slate-600 uppercase block">Valor Original</span>
@@ -1121,7 +1111,6 @@ export default function CreateStandaloneNfePage() {
                                             </div>
                                         </div>
 
-                                        {/* GERADOR RÁPIDO DE PARCELAS */}
                                         <div className="space-y-3 pt-2">
                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                                 <div>
@@ -1172,7 +1161,6 @@ export default function CreateStandaloneNfePage() {
                                                 </div>
                                             </div>
 
-                                            {/* TABELA DE DUPLICATAS */}
                                             <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                                                 <Table>
                                                     <TableHeader className="bg-slate-50">
@@ -1235,7 +1223,6 @@ export default function CreateStandaloneNfePage() {
                                                 </Table>
                                             </div>
 
-                                            {/* CONFERÊNCIA DE TOTAL DE DUPLICATAS */}
                                             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     {isDuplicatasBalanced ? (
@@ -1273,116 +1260,130 @@ export default function CreateStandaloneNfePage() {
                             </CardHeader>
                             <CardContent className="p-5 space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="space-y-1.5 md:col-span-2">
+                                    <div className="space-y-1.5 md:col-span-3">
                                         <Label className="text-xs font-semibold text-slate-800">Modalidade do Frete *</Label>
                                         <Select value={freightModality} onValueChange={setFreightModality}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
+                                                <SelectItem value="9">9 - Sem Ocorrência de Transporte (Padrão)</SelectItem>
                                                 <SelectItem value="0">0 - Contratação do Frete por conta do Remetente (CIF)</SelectItem>
                                                 <SelectItem value="1">1 - Contratação do Frete por conta do Destinatário (FOB)</SelectItem>
                                                 <SelectItem value="2">2 - Contratação do Frete por conta de Terceiros</SelectItem>
                                                 <SelectItem value="3">3 - Transporte Próprio por conta do Remetente</SelectItem>
                                                 <SelectItem value="4">4 - Transporte Próprio por conta do Destinatário</SelectItem>
-                                                <SelectItem value="9">9 - Sem Ocorrência de Transporte</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">CNPJ da Transportadora</Label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                value={carrierCnpjCpf}
-                                                onChange={e => setCarrierCnpjCpf(e.target.value)}
-                                                placeholder="00.000.000/0000-00"
-                                                className="font-mono text-xs flex-1 bg-white h-9"
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={handleConsultCarrierSefaz}
-                                                disabled={isConsultingCarrierSefaz}
-                                                className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
-                                            >
-                                                {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                                                SEFAZ
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
-                                    <div className="space-y-1.5 md:col-span-2">
-                                        <Label className="text-xs">Razão Social Transportadora</Label>
-                                        <Input
-                                            value={carrierName}
-                                            onChange={e => setCarrierName(e.target.value)}
-                                            placeholder="Nome da Transportadora"
-                                            className="text-xs bg-white h-9"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Inscrição Estadual Transportadora</Label>
-                                        <Input
-                                            value={carrierIe}
-                                            onChange={e => setCarrierIe(e.target.value)}
-                                            placeholder="IE da Transportadora"
-                                            className="font-mono text-xs bg-white h-9"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Placa do Veículo / UF</Label>
-                                        <div className="flex gap-2">
-                                            <Input
-                                                value={vehiclePlate}
-                                                onChange={e => setVehiclePlate(e.target.value)}
-                                                placeholder="ABC1D23"
-                                                className="font-mono uppercase text-xs bg-white h-9 flex-1"
-                                            />
-                                            <Select value={vehiclePlateState} onValueChange={setVehiclePlateState}>
-                                                <SelectTrigger className="text-xs bg-white w-20 h-9"><SelectValue /></SelectTrigger>
-                                                <SelectContent>
-                                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* CAMPOS DE MORADA E UF DA TRANSPORTADORA (SEFAZ <transporta>) */}
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
-                                    <div className="space-y-1.5 md:col-span-2">
-                                        <Label className="text-xs">Morada da Transportadora (xEnder)</Label>
-                                        <Input
-                                            value={carrierAddress}
-                                            onChange={e => setCarrierAddress(e.target.value)}
-                                            placeholder="Rua, Número, Bairro..."
-                                            className="text-xs bg-white h-9"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs">Município (xMun)</Label>
-                                        <Input
-                                            value={carrierCity}
-                                            onChange={e => setCarrierCity(e.target.value)}
-                                            placeholder="Cidade da transportadora"
-                                            className="text-xs bg-white h-9"
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
-                                        <Select value={carrierState} onValueChange={setCarrierState}>
-                                            <SelectTrigger className="text-xs bg-white font-mono font-bold h-9"><SelectValue placeholder="UF" /></SelectTrigger>
-                                            <SelectContent>
-                                                {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                 </div>
+
+                                {isSemFrete ? (
+                                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs text-slate-600">
+                                        <div className="flex items-center gap-2 font-bold text-slate-800">
+                                            <Badge variant="outline" className="font-mono text-xs">modFrete = 9</Badge> Sem Ocorrência de Transporte
+                                        </div>
+                                        <p className="leading-relaxed">
+                                            Para a modalidade sem frete, a SEFAZ dispensa o preenchimento de transportadora, placa de veículo e volumes de transporte. O XML será emitido contendo apenas a indicação legal <code className="font-mono text-slate-800 font-bold">&lt;modFrete&gt;9&lt;/modFrete&gt;</code>.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4 pt-2 border-t border-slate-100">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">CNPJ da Transportadora</Label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        value={carrierCnpjCpf}
+                                                        onChange={e => setCarrierCnpjCpf(e.target.value)}
+                                                        placeholder="00.000.000/0000-00"
+                                                        className="font-mono text-xs flex-1 bg-white h-9"
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        onClick={handleConsultCarrierSefaz}
+                                                        disabled={isConsultingCarrierSefaz}
+                                                        className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
+                                                    >
+                                                        {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                                        SEFAZ
+                                                    </Button>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1.5 md:col-span-2">
+                                                <Label className="text-xs">Razão Social Transportadora</Label>
+                                                <Input
+                                                    value={carrierName}
+                                                    onChange={e => setCarrierName(e.target.value)}
+                                                    placeholder="Nome da Transportadora"
+                                                    className="text-xs bg-white h-9"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">Inscrição Estadual Transportadora</Label>
+                                                <Input
+                                                    value={carrierIe}
+                                                    onChange={e => setCarrierIe(e.target.value)}
+                                                    placeholder="IE da Transportadora"
+                                                    className="font-mono text-xs bg-white h-9"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs">Placa do Veículo / UF</Label>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        value={vehiclePlate}
+                                                        onChange={e => setVehiclePlate(e.target.value)}
+                                                        placeholder="ABC1D23"
+                                                        className="font-mono uppercase text-xs bg-white h-9 flex-1"
+                                                    />
+                                                    <Select value={vehiclePlateState} onValueChange={setVehiclePlateState}>
+                                                        <SelectTrigger className="text-xs bg-white w-20 h-9"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-1.5 md:col-span-2">
+                                                <Label className="text-xs">Endereço da Transportadora (xEnder)</Label>
+                                                <Input
+                                                    value={carrierAddress}
+                                                    onChange={e => setCarrierAddress(e.target.value)}
+                                                    placeholder="Rua, Número, Bairro..."
+                                                    className="text-xs bg-white h-9"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                                            <div className="space-y-1.5 md:col-span-2">
+                                                <Label className="text-xs">Município (xMun)</Label>
+                                                <Input
+                                                    value={carrierCity}
+                                                    onChange={e => setCarrierCity(e.target.value)}
+                                                    placeholder="Cidade da transportadora"
+                                                    className="text-xs bg-white h-9"
+                                                />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
+                                                <Select value={carrierState} onValueChange={setCarrierState}>
+                                                    <SelectTrigger className="text-xs bg-white font-mono font-bold h-9"><SelectValue placeholder="UF" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -1404,7 +1405,7 @@ export default function CreateStandaloneNfePage() {
                                         rows={4}
                                         value={additionalNotes}
                                         onChange={e => setAdditionalNotes(e.target.value)}
-                                        placeholder="Informações adicionais impressas no rodapé do DANFE (ex: Isenção de ICMS conforme..., dados bancários para depósito, etc)..."
+                                        placeholder="Informações adicionais impressas no rodapé do DANFE..."
                                         className="w-full rounded-lg border border-slate-200 p-3 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
                                 </div>
@@ -1422,10 +1423,8 @@ export default function CreateStandaloneNfePage() {
                                         <div>
                                             <p>Total Itens: <strong>{itemsList.length} SKU(s)</strong></p>
                                             <p>Total Produtos: <strong className="font-mono text-emerald-700">{totalProductsValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></p>
+                                            <p>Frete: <strong>{isSemFrete ? '9 - Sem Frete (Dispensado)' : 'Com Frete Informado'}</strong></p>
                                             <p>Cobrança: <strong>{hasFinancialBilling ? `Faturado (${duplicatas.length} parcelas)` : 'Sem Cobrança (tPag = 90)'}</strong></p>
-                                            {referencedKeys.length > 0 && (
-                                                <p className="text-slate-500 font-mono">Chaves Referenciadas: {referencedKeys.length}</p>
-                                            )}
                                         </div>
                                     </div>
                                 </div>

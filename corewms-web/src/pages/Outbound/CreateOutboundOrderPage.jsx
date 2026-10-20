@@ -73,7 +73,9 @@ export default function CreateOutboundOrderPage() {
 
     const selectedCustomerId = watch('customerId');
     const carrierCnpjCpf = watch('carrierCnpjCpf');
-    const carrierState = watch('vehiclePlateState');
+    const carrierState = watch('carrierState');
+    const freightModality = watch('freightModality');
+    const isSemFrete = Number(freightModality) === 9;
 
     const selectedCustomer = useMemo(() => {
         return customers.find(c => c.id === selectedCustomerId);
@@ -159,15 +161,23 @@ export default function CreateOutboundOrderPage() {
     const onSubmit = async (data) => {
         try {
             setIsSaving(true);
+            const isNoFreight = Number(data.freightModality) === 9;
+
             const cleanPayload = {
                 ...data,
                 isReturnToCustomer: true,
-                carrierCnpjCpf: data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
-                carrierAddress: data.carrierAddress?.trim() || null,
-                carrierCity: data.carrierCity?.trim() || null,
-                carrierState: data.carrierState?.trim()?.toUpperCase() || null,
                 freightModality: Number(data.freightModality),
-                expectedShipDate: new Date(data.expectedShipDate).toISOString()
+                expectedShipDate: new Date(data.expectedShipDate).toISOString(),
+
+                // Limpa campos se a modalidade for 9 (Sem Frete)
+                carrierCnpjCpf: !isNoFreight && data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
+                carrierName: !isNoFreight ? (data.carrierName?.trim() || null) : null,
+                carrierStateRegistration: !isNoFreight ? (data.carrierStateRegistration?.trim() || null) : null,
+                carrierAddress: !isNoFreight ? (data.carrierAddress?.trim() || null) : null,
+                carrierCity: !isNoFreight ? (data.carrierCity?.trim() || null) : null,
+                carrierState: !isNoFreight ? (data.carrierState?.trim()?.toUpperCase() || null) : null,
+                vehiclePlate: !isNoFreight ? (data.vehiclePlate?.trim()?.toUpperCase() || null) : null,
+                vehiclePlateState: !isNoFreight ? (data.vehiclePlateState?.trim()?.toUpperCase() || null) : null
             };
 
             if (isEditMode) {
@@ -337,87 +347,102 @@ export default function CreateOutboundOrderPage() {
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1.5 md:col-span-2">
+                        <div className="space-y-1.5 md:col-span-3">
                             <Label className="text-xs">Modalidade do Frete *</Label>
                             <Select value={watch('freightModality')?.toString()} onValueChange={(val) => setValue('freightModality', Number(val))}>
                                 <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                 <SelectContent>
+                                    <SelectItem value="9">9 - Sem Ocorrência de Transporte (Padrão)</SelectItem>
                                     <SelectItem value="0">0 - Contratação do Frete por conta do Remetente (CIF)</SelectItem>
                                     <SelectItem value="1">1 - Contratação do Frete por conta do Destinatário (FOB)</SelectItem>
                                     <SelectItem value="2">2 - Contratação do Frete por conta de Terceiros</SelectItem>
                                     <SelectItem value="3">3 - Transporte Próprio por conta do Remetente</SelectItem>
                                     <SelectItem value="4">4 - Transporte Próprio por conta do Destinatário</SelectItem>
-                                    <SelectItem value="9">9 - Sem Ocorrência de Transporte</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
 
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">CNPJ Transportadora</Label>
-                            <div className="flex gap-2">
-                                <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white h-9" />
-                                <Button
-                                    type="button" variant="outline"
-                                    onClick={handleConsultCarrierSefaz}
-                                    disabled={isConsultingCarrierSefaz}
-                                    className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
-                                >
-                                    {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                                    SEFAZ
-                                </Button>
+                    {/* SELEÇÃO CONDICIONAL: CASO MODALIDADE SEJA 9 (SEM FRETE) */}
+                    {isSemFrete ? (
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs text-slate-600">
+                            <div className="flex items-center gap-2 font-bold text-slate-800">
+                                <Badge variant="outline" className="font-mono text-xs">modFrete = 9</Badge> Sem Ocorrência de Transporte
+                            </div>
+                            <p className="leading-relaxed">
+                                Para ordens com modalidade sem frete, a SEFAZ dispensa o preenchimento de transportadora, placa de veículo e volumes de transporte. O XML da NF-e conterá apenas a indicação legal <code className="font-mono text-slate-800 font-bold">&lt;modFrete&gt;9&lt;/modFrete&gt;</code>.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4 pt-2 border-t border-slate-100">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">CNPJ Transportadora</Label>
+                                    <div className="flex gap-2">
+                                        <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white h-9" />
+                                        <Button
+                                            type="button" variant="outline"
+                                            onClick={handleConsultCarrierSefaz}
+                                            disabled={isConsultingCarrierSefaz}
+                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
+                                        >
+                                            {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                            SEFAZ
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Inscrição Estadual Transportadora</Label>
+                                    <Input {...register('carrierStateRegistration')} placeholder="IE..." className="font-mono text-xs bg-white" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <Label className="text-xs">Nome / Razão Social Transportadora</Label>
+                                    <Input {...register('carrierName')} placeholder="Razão social da transportadora" className="text-xs bg-white" />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Placa do Veículo</Label>
+                                    <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs bg-white" />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">UF da Placa</Label>
+                                    <Select value={watch('vehiclePlateState')} onValueChange={(val) => setValue('vehiclePlateState', val)}>
+                                        <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
+                                <div className="space-y-1.5 md:col-span-2">
+                                    <Label className="text-xs">Endereço da Transportadora (xEnder)</Label>
+                                    <Input {...register('carrierAddress')} placeholder="Rua, Número, Bairro..." className="text-xs bg-white" />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs">Município (xMun)</Label>
+                                    <Input {...register('carrierCity')} placeholder="Cidade da transportadora" className="text-xs bg-white" />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
+                                    <Select value={watch('carrierState')} onValueChange={(val) => setValue('carrierState', val)}>
+                                        <SelectTrigger className="text-xs bg-white font-mono font-bold"><SelectValue placeholder="UF" /></SelectTrigger>
+                                        <SelectContent>
+                                            {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
                         </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">Inscrição Estadual Transportadora</Label>
-                            <Input {...register('carrierStateRegistration')} placeholder="IE..." className="font-mono text-xs bg-white" />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
-                        <div className="space-y-1.5 md:col-span-2">
-                            <Label className="text-xs">Nome / Razão Social Transportadora</Label>
-                            <Input {...register('carrierName')} placeholder="Razão social da transportadora" className="text-xs bg-white" />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">Placa do Veículo</Label>
-                            <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs bg-white" />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">UF da Placa</Label>
-                            <Select value={watch('vehiclePlateState')} onValueChange={(val) => setValue('vehiclePlateState', val)}>
-                                <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    {/* DADOS DE MORADA E UF DA TRANSPORTADORA (SEFAZ <transporta>) */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
-                        <div className="space-y-1.5 md:col-span-2">
-                            <Label className="text-xs">Morada da Transportadora (xEnder)</Label>
-                            <Input {...register('carrierAddress')} placeholder="Rua, Número, Bairro..." className="text-xs bg-white" />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">Município (xMun)</Label>
-                            <Input {...register('carrierCity')} placeholder="Cidade da transportadora" className="text-xs bg-white" />
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
-                            <Select value={watch('carrierState')} onValueChange={(val) => setValue('carrierState', val)}>
-                                <SelectTrigger className="text-xs bg-white font-mono font-bold"><SelectValue placeholder="UF" /></SelectTrigger>
-                                <SelectContent>
-                                    {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
+                    )}
 
                     <div className="space-y-1.5 border-t border-slate-100 pt-3">
                         <Label className="text-xs">Observações Adicionais / Instruções de Entrega (infCpl)</Label>

@@ -9,7 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, CheckCircle2, Loader2, FileCode, UserCheck, Layers, RefreshCw } from 'lucide-react';
+import {
+    ArrowLeft, CheckCircle2, Loader2, FileCode, UserCheck, Layers,
+    RefreshCw, Split, Link as LinkIcon, FileText
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function OutboundFiscalReviewPage() {
@@ -90,7 +93,7 @@ export default function OutboundFiscalReviewPage() {
         try {
             setIsSubmitting(true);
 
-            // PASSO 1: Emitir e Autorizar a NF-e na SEFAZ enviando a Natureza Universal
+            // PASSO 1: Emitir e Autorizar a(s) NF-e(s) na SEFAZ
             const emitPayload = {
                 orderId,
                 fiscalRuleId,
@@ -112,7 +115,12 @@ export default function OutboundFiscalReviewPage() {
                 throw new Error(emitData?.message || 'Falha na autorização da NF-e junto à SEFAZ.');
             }
 
-            toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
+            const invoicesCount = emitData?.invoices?.length || 1;
+            if (invoicesCount > 1) {
+                toast.success(`${invoicesCount} NF-es autorizadas com sucesso na SEFAZ (desmembradas por NF de Remessa)!`);
+            } else {
+                toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
+            }
 
             // PASSO 2: Finaliza a expedição física no WMS apenas se o pedido ainda não tiver sido expedido
             if (!isAlreadyShipped) {
@@ -148,6 +156,8 @@ export default function OutboundFiscalReviewPage() {
         );
     }
 
+    const isMultipleNfes = (previewData?.suggestedNfeCount || 1) > 1;
+
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             {/* CABEÇALHO */}
@@ -157,7 +167,7 @@ export default function OutboundFiscalReviewPage() {
                         <ArrowLeft className="h-4 w-4 mr-1.5" /> Voltar
                     </Button>
                     <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <h1 className="text-xl font-bold text-slate-900">
                                 {isAlreadyShipped ? 'Reemissão de NF-e (Pedido Expedido)' : 'Revisão Fiscal & Emissão NF-e'} #{previewData?.orderNumber}
                             </h1>
@@ -165,6 +175,11 @@ export default function OutboundFiscalReviewPage() {
                                 <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Expedido</Badge>
                             ) : (
                                 <Badge className="bg-orange-100 text-orange-800 border-orange-200">Pronto p/ Expedir</Badge>
+                            )}
+                            {isMultipleNfes && (
+                                <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-xs flex items-center gap-1">
+                                    <Split size={12} /> {previewData.suggestedNfeCount} NF-es Vinculadas
+                                </Badge>
                             )}
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
@@ -185,10 +200,28 @@ export default function OutboundFiscalReviewPage() {
                         ) : (
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                         )}
-                        {isAlreadyShipped ? 'Transmitir Nova NF-e à SEFAZ' : 'Autorizar & Expedir'}
+                        {isAlreadyShipped
+                            ? (isMultipleNfes ? `Transmitir ${previewData.suggestedNfeCount} Novas NF-es` : 'Transmitir Nova NF-e à SEFAZ')
+                            : (isMultipleNfes ? `Autorizar ${previewData.suggestedNfeCount} NF-es & Expedir` : 'Autorizar & Expedir')
+                        }
                     </Button>
                 </div>
             </div>
+
+            {/* AVISO QUANDO O CLIENTE EXIGE 1 NF POR NF DE REMESSA */}
+            {isMultipleNfes && (
+                <div className="p-4 bg-purple-50/80 border border-purple-200 rounded-xl flex items-start gap-3 text-xs text-purple-950">
+                    <Split className="h-5 w-5 text-purple-700 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                        <strong className="block text-sm text-purple-900 font-semibold">
+                            Regra do Depositante: 1 NF-e de Retorno por NF-e de Remessa
+                        </strong>
+                        <p className="text-purple-800 leading-relaxed">
+                            O cadastro do depositante <strong>{previewData?.customerName}</strong> exige que os itens não sejam agrupados em uma única NF-e. Como as mercadorias separadas têm origem em <strong>{previewData.suggestedNfeCount} notas fiscais de remessa distintas</strong>, o sistema transmitirá <strong>{previewData.suggestedNfeCount} NF-es de retorno individuais</strong>, cada uma referenciando a respetiva nota de entrada.
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* CONTEÚDO */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -278,8 +311,10 @@ export default function OutboundFiscalReviewPage() {
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
-                                <span className="flex items-center gap-2"><Layers size={16} className="text-orange-600" /> Itens, CFOP Resolvido e Tributação</span>
-                                <Badge variant="secondary" className="font-mono">{previewData?.items?.length || 0} Item(ns)</Badge>
+                                <span className="flex items-center gap-2">
+                                    <Layers size={16} className="text-orange-600" /> Itens Desmembrados por NF de Remessa
+                                </span>
+                                <Badge variant="secondary" className="font-mono">{previewData?.items?.length || 0} Linha(s)</Badge>
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4">
@@ -288,6 +323,7 @@ export default function OutboundFiscalReviewPage() {
                                     <TableHeader className="bg-slate-50">
                                         <TableRow>
                                             <TableHead>SKU / Descrição</TableHead>
+                                            <TableHead>Origem / Remessa</TableHead>
                                             <TableHead className="text-center">CFOP</TableHead>
                                             <TableHead className="text-center">CST / CSOSN</TableHead>
                                             <TableHead className="text-right">Qtd</TableHead>
@@ -301,6 +337,18 @@ export default function OutboundFiscalReviewPage() {
                                                 <TableCell>
                                                     <span className="font-mono font-bold text-xs text-slate-900 block">{item.skuCode}</span>
                                                     <span className="text-[11px] text-slate-500">{item.description}</span>
+                                                </TableCell>
+                                                <TableCell className="font-mono text-xs space-y-1">
+                                                    {item.inboundInvoiceNumber ? (
+                                                        <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-800 border-blue-200 flex items-center gap-1 w-fit">
+                                                            <FileText size={10} className="text-blue-600" /> NF Remessa #{item.inboundInvoiceNumber}
+                                                        </Badge>
+                                                    ) : (
+                                                        <span className="text-slate-400 text-[10px]">-</span>
+                                                    )}
+                                                    {item.batch && (
+                                                        <span className="text-[10px] text-slate-500 block">Lote: {item.batch}</span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="text-center font-mono font-bold text-xs text-purple-700">
                                                     <Badge variant="outline" className="text-purple-700 border-purple-200 bg-purple-50">{item.cfop}</Badge>
@@ -354,8 +402,24 @@ export default function OutboundFiscalReviewPage() {
                                 <span className="font-bold text-slate-900 block">{previewData?.defaultNaturezaOperacao}</span>
                             </div>
 
+                            {/* CHAVES DE REMESSA REFERENCIADAS (NFREF) */}
+                            {previewData?.referencedAccessKeys?.length > 0 && (
+                                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                                    <span className="text-slate-400 block text-[10px] uppercase font-semibold flex items-center gap-1">
+                                        <LinkIcon size={12} className="text-orange-600" /> Chaves de Remessa Referenciadas ({previewData.referencedAccessKeys.length})
+                                    </span>
+                                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                                        {previewData.referencedAccessKeys.map((key, kIdx) => (
+                                            <div key={kIdx} className="bg-slate-50 p-1.5 rounded border border-slate-200 font-mono text-[10px] text-slate-800 truncate" title={key}>
+                                                {key}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="pt-3 border-t border-slate-100 space-y-1">
-                                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Valor Total da Nota Fiscal</span>
+                                <span className="text-slate-400 block text-[10px] uppercase font-semibold">Valor Total da Carga</span>
                                 <span className="font-mono font-extrabold text-xl text-emerald-700 block">
                                     {previewData?.totalProductsValue?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                 </span>

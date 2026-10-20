@@ -7,4 +7,5 @@
 
 export type GetApiOutboundOrdersOrderIdFiscalPreviewParams = {
 fiscalRuleId?: string;
+inboundOrderIdFilter?: string;
 };

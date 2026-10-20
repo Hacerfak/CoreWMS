@@ -24,10 +24,6 @@ using NFe.Classes.Informacoes.Transporte;
 
 namespace CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 
-// =========================================================================================
-// MODELOS PÚBLICOS DE ENTRADA
-// =========================================================================================
-
 public record StandaloneNfeItemInput(
     Guid ProductId,
     decimal Quantity,
@@ -36,7 +32,8 @@ public record StandaloneNfeItemInput(
     DateTime? ManufactureDate = null,
     DateTime? ExpirationDate = null,
     string? XPed = null,
-    int? NItemPed = null
+    int? NItemPed = null,
+    string? InboundInvoiceNumber = null
 );
 
 public record NfeDuplicataInput(
@@ -92,6 +89,7 @@ public record NfeBuildRequest(
     Guid FiscalRuleId,
     Guid? CompanyId = null,
     Guid? OutboundOrderId = null,
+    Guid? InboundOrderIdFilter = null, // Suporte ao parâmetro ReturnInvoicePerReferencedInvoice
     StandaloneNfeInput? ManualInput = null,
     NfePaymentInput? Payment = null,
     int? CustomIndFinal = null,
@@ -99,10 +97,6 @@ public record NfeBuildRequest(
     int? CustomTpImp = null,
     string? CustomAdditionalNotes = null
 );
-
-// =========================================================================================
-// SERVIÇO PRINCIPAL DO BUILDER DE NF-e
-// =========================================================================================
 
 public class NfeBuilderService
 {
@@ -114,25 +108,18 @@ public class NfeBuilderService
         _db = db;
     }
 
-    /// <summary>
-    /// Pipeline canônico unificado para geração do XML de qualquer NF-e (Ordem de Saída ou Avulsa).
-    /// </summary>
     public async Task<(NFe.Classes.NFe Nfe, FiscalOperationRule Rule)> BuildAsync(NfeBuildRequest request, CancellationToken ct = default)
     {
-        // 1. Resolve o contexto de negócio (seja via Ordem, Manual ou Híbrido)
         var context = await ResolveContextAsync(request, ct);
-
-        // 2. Executa a montagem canônica do documento
         var nfe = AssembleNfe(context);
-
         return (nfe, context.Rule);
     }
 
-    // Atalho retrocompatível para ordens de saída
     public Task<(NFe.Classes.NFe Nfe, FiscalOperationRule Rule)> BuildOutboundNfeAsync(
         Guid outboundOrderId,
         Guid fiscalRuleId,
         CancellationToken ct = default,
+        Guid? inboundOrderIdFilter = null,
         NfePaymentInput? payment = null,
         int? customIndFinal = null,
         int? customIndPres = null,
@@ -142,6 +129,7 @@ public class NfeBuilderService
         var request = new NfeBuildRequest(
             FiscalRuleId: fiscalRuleId,
             OutboundOrderId: outboundOrderId,
+            InboundOrderIdFilter: inboundOrderIdFilter,
             Payment: payment,
             CustomIndFinal: customIndFinal,
             CustomIndPres: customIndPres,
@@ -152,7 +140,6 @@ public class NfeBuilderService
         return BuildAsync(request, ct);
     }
 
-    // Atalho retrocompatível para emissões manuais / avulsas
     public Task<(NFe.Classes.NFe Nfe, FiscalOperationRule Rule)> BuildStandaloneNfeAsync(
         StandaloneNfeInput input,
         CancellationToken ct = default)
@@ -167,16 +154,12 @@ public class NfeBuilderService
         return BuildAsync(request, ct);
     }
 
-    // =========================================================================================
-    // 1. RESOLUÇÃO E NORMALIZAÇÃO DO CONTEXTO DE GERAÇÃO
-    // =========================================================================================
     private async Task<NfeBuildContext> ResolveContextAsync(NfeBuildRequest request, CancellationToken ct)
     {
         OutboundOrder? order = null;
         Company? company = null;
         var manual = request.ManualInput;
 
-        // A) Carrega Ordem se informada
         if (request.OutboundOrderId.HasValue && request.OutboundOrderId.Value != Guid.Empty)
         {
             order = await _db.OutboundOrders
@@ -201,41 +184,136 @@ public class NfeBuilderService
                 ?? throw new InvalidOperationException("Empresa emitente não encontrada.");
         }
 
-        // B) Carrega Regra Fiscal com Exceções
         var rule = await _db.FiscalOperationRules
             .AsNoTracking()
             .Include(r => r.Exceptions.Where(e => e.IsActive))
             .FirstOrDefaultAsync(r => r.Id == request.FiscalRuleId && r.CompanyId == company.Id && r.IsActive, ct)
             ?? throw new InvalidOperationException("A Natureza de Operação selecionada não foi encontrada ou está inativa.");
 
-        // C) Chaves referenciadas de entrada (NFref) via alocações de estoque da ordem
+        // Consulta Alocações e Chaves de NF-e de Entrada (Remessa)
         var originAccessKeys = new List<string>();
-        var allocations = new List<OutboundAllocation>();
+        var canonicalItems = new List<NfeCanonicalItem>();
 
         if (order != null)
         {
-            allocations = await _db.OutboundAllocations
+            // Busca alocações físicas separadas com a HU
+            var allocationsQuery = _db.OutboundAllocations
                 .AsNoTracking()
                 .Include(a => a.HandlingUnit)
-                .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
-                .ToListAsync(ct);
+                .Where(a => a.OutboundOrderId == order.Id && a.IsPicked);
 
-            originAccessKeys = await _db.OutboundAllocations
-                .AsNoTracking()
-                .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
-                .Join(_db.HandlingUnits.AsNoTracking().Where(h => h.CompanyId == order.CompanyId),
-                    a => a.HandlingUnitId, h => h.Id, (a, h) => h.ReceiptDocumentId)
-                .Where(docId => docId.HasValue)
-                .Join(_db.InboundOrders.AsNoTracking(),
-                    docId => docId, o => o.Id, (docId, o) => o.AccessKey)
+            var pickedAllocations = await allocationsQuery.ToListAsync(ct);
+
+            // Carrega documentos de entrada (NF-e de Remessa) das HUs
+            var receiptDocIds = pickedAllocations
+                .Where(a => a.HandlingUnit?.ReceiptDocumentId != null)
+                .Select(a => a.HandlingUnit!.ReceiptDocumentId!.Value)
                 .Distinct()
-                .ToListAsync(ct);
+                .ToList();
+
+            var inboundOrders = await _db.InboundOrders
+                .AsNoTracking()
+                .Where(io => receiptDocIds.Contains(io.Id))
+                .ToDictionaryAsync(io => io.Id, ct);
+
+            // Se o filtro de 1 NF por NF de entrada estiver ativo, filtra as alocações daquela NF de entrada
+            if (request.InboundOrderIdFilter.HasValue && request.InboundOrderIdFilter.Value != Guid.Empty)
+            {
+                pickedAllocations = pickedAllocations
+                    .Where(a => a.HandlingUnit?.ReceiptDocumentId == request.InboundOrderIdFilter.Value)
+                    .ToList();
+            }
+
+            // Chaves de Acesso referenciadas (<NFref>)
+            originAccessKeys = pickedAllocations
+                .Where(a => a.HandlingUnit?.ReceiptDocumentId != null && inboundOrders.ContainsKey(a.HandlingUnit.ReceiptDocumentId.Value))
+                .Select(a => inboundOrders[a.HandlingUnit!.ReceiptDocumentId!.Value].AccessKey)
+                .Where(k => !string.IsNullOrWhiteSpace(k))
+                .Distinct()
+                .ToList()!;
+
+            int lineCounter = 1;
+
+            // REGRA: NUNCA AGRUPAR OS MESMOS SKUS DE NF-Es DE ENTRADA DIFERENTES!
+            // Agrupamos as alocações por: Item do Pedido + NF de Entrada (ReceiptDocumentId)
+            var allocationsByItemAndInbound = pickedAllocations
+                .GroupBy(a => new
+                {
+                    a.OutboundOrderItemId,
+                    ReceiptDocumentId = a.HandlingUnit?.ReceiptDocumentId
+                })
+                .ToList();
+
+            if (!allocationsByItemAndInbound.Any())
+            {
+                // Fallback caso a ordem ainda não tenha passado pelo coletor (ex: testes pré-coleta com itens embalados)
+                foreach (var item in order.Items.Where(i => i.PackedQuantity > 0))
+                {
+                    canonicalItems.Add(new NfeCanonicalItem(
+                        Product: item.Product!,
+                        Quantity: item.PackedQuantity,
+                        UnitValue: item.UnitValue,
+                        InboundUnitValue: item.InboundUnitValue,
+                        LineNumber: lineCounter++,
+                        XPed: order.OrderNumber,
+                        NItemPed: item.LineNumber,
+                        InboundInvoiceNumber: null,
+                        Batches: new List<NfeBatchTraceDto>()
+                    ));
+                }
+            }
+            else
+            {
+                foreach (var group in allocationsByItemAndInbound)
+                {
+                    var orderItem = order.Items.FirstOrDefault(i => i.Id == group.Key.OutboundOrderItemId);
+                    if (orderItem?.Product == null) continue;
+
+                    decimal groupQuantity = group.Sum(a => a.Quantity);
+
+                    // Identifica número da NF-e de Entrada / Remessa
+                    string? inboundInvoiceNumber = null;
+                    if (group.Key.ReceiptDocumentId.HasValue && inboundOrders.TryGetValue(group.Key.ReceiptDocumentId.Value, out var inb))
+                    {
+                        inboundInvoiceNumber = !string.IsNullOrWhiteSpace(inb.InvoiceNumber)
+                            ? inb.InvoiceNumber.TrimStart('0')
+                            : (!string.IsNullOrWhiteSpace(inb.AccessKey) && inb.AccessKey.Length >= 34
+                                ? inb.AccessKey.Substring(25, 9).TrimStart('0')
+                                : inb.InvoiceNumber);
+                    }
+
+                    // Lotes contidos neste grupo de NF de entrada
+                    var batchList = group
+                        .Where(a => !string.IsNullOrWhiteSpace(a.HandlingUnit?.Batch))
+                        .GroupBy(a => new
+                        {
+                            Batch = a.HandlingUnit!.Batch!.Trim(),
+                            a.HandlingUnit.ManufactureDate,
+                            a.HandlingUnit.ExpirationDate
+                        })
+                        .Select(bg => new NfeBatchTraceDto(
+                            Batch: bg.Key.Batch,
+                            Quantity: bg.Sum(x => x.Quantity),
+                            ManufactureDate: bg.Key.ManufactureDate,
+                            ExpirationDate: bg.Key.ExpirationDate
+                        ))
+                        .ToList();
+
+                    canonicalItems.Add(new NfeCanonicalItem(
+                        Product: orderItem.Product,
+                        Quantity: groupQuantity,
+                        UnitValue: orderItem.UnitValue,
+                        InboundUnitValue: orderItem.InboundUnitValue,
+                        LineNumber: lineCounter++,
+                        XPed: order.OrderNumber,
+                        NItemPed: orderItem.LineNumber,
+                        InboundInvoiceNumber: inboundInvoiceNumber,
+                        Batches: batchList
+                    ));
+                }
+            }
         }
-
-        // D) Resolução dos Itens com Rastreabilidade
-        var canonicalItems = new List<NfeCanonicalItem>();
-
-        if (manual?.Items != null && manual.Items.Any())
+        else if (manual?.Items != null && manual.Items.Any())
         {
             var productIds = manual.Items.Select(i => i.ProductId).Distinct().ToList();
             var products = await _db.Products
@@ -268,53 +346,13 @@ public class NfeBuilderService
                     LineNumber: item.NItemPed ?? line++,
                     XPed: item.XPed,
                     NItemPed: item.NItemPed,
-                    Batches: batchList
-                ));
-            }
-        }
-        else if (order != null)
-        {
-            var packedItems = order.Items.Where(i => i.PackedQuantity > 0).ToList();
-            if (!packedItems.Any())
-                throw new InvalidOperationException($"Nenhum item empacotado/separado foi encontrado no Pedido #{order.OrderNumber}.");
-
-            foreach (var item in packedItems)
-            {
-                if (item.Product == null)
-                    throw new InvalidOperationException($"Produto não encontrado para o item SKU '{item.SkuCode}'.");
-
-                // Agrupa HUs alocadas para este item por Lote, Fabricação e Validade
-                var itemAllocs = allocations.Where(a => a.OutboundOrderItemId == item.Id).ToList();
-                var batchList = itemAllocs
-                    .Where(a => !string.IsNullOrWhiteSpace(a.HandlingUnit?.Batch))
-                    .GroupBy(a => new
-                    {
-                        Batch = a.HandlingUnit.Batch!.Trim(),
-                        a.HandlingUnit.ManufactureDate,
-                        a.HandlingUnit.ExpirationDate
-                    })
-                    .Select(g => new NfeBatchTraceDto(
-                        Batch: g.Key.Batch,
-                        Quantity: g.Sum(x => x.Quantity),
-                        ManufactureDate: g.Key.ManufactureDate,
-                        ExpirationDate: g.Key.ExpirationDate
-                    ))
-                    .ToList();
-
-                canonicalItems.Add(new NfeCanonicalItem(
-                    Product: item.Product,
-                    Quantity: item.PackedQuantity,
-                    UnitValue: item.UnitValue,
-                    InboundUnitValue: item.InboundUnitValue,
-                    LineNumber: item.LineNumber,
-                    XPed: order.OrderNumber,
-                    NItemPed: item.LineNumber,
+                    InboundInvoiceNumber: item.InboundInvoiceNumber,
                     Batches: batchList
                 ));
             }
         }
 
-        // E) Resolução do Destinatário
+        // Resolução do Destinatário
         var destState = !string.IsNullOrWhiteSpace(manual?.DestinationState)
             ? manual.DestinationState.Trim().ToUpper()
             : (!string.IsNullOrWhiteSpace(order?.DestinationState)
@@ -352,8 +390,7 @@ public class NfeBuilderService
         var destCity = manual?.DestinationCity ?? order?.DestinationCity ?? order?.Customer?.CityName ?? "NÃO INFORMADO";
         var destZip = manual?.DestinationZipCode ?? order?.DestinationZipCode ?? order?.Customer?.ZipCode ?? "00000000";
 
-        // F) Transporte e Pesos
-        // G) Resolução de Transporte
+        // Transporte
         int freightModality = manual?.FreightModality ?? order?.FreightModality ?? 9;
         var carrierCnpjCpf = manual?.CarrierCnpjCpf ?? order?.CarrierCnpjCpf;
         var carrierName = manual?.CarrierName ?? order?.CarrierName;
@@ -363,7 +400,6 @@ public class NfeBuilderService
         var vehiclePlate = manual?.VehiclePlate ?? order?.VehiclePlate;
         var vehiclePlateState = manual?.VehiclePlateState ?? order?.VehiclePlateState;
 
-        // UF da transportadora com fallback para a UF da placa ou UF do armazém
         var carrierState = manual?.CarrierState
             ?? order?.CarrierState
             ?? vehiclePlateState
@@ -395,7 +431,6 @@ public class NfeBuilderService
             ? orderVolumes.First().PackagingType?.Description ?? "VOLUMES"
             : "VOLUMES";
 
-        // G) Numeração
         int nNf = company.NfeNextNumber;
         if (order != null && !string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf) && parsedNf > 0)
             nNf = parsedNf;
@@ -455,9 +490,6 @@ public class NfeBuilderService
         );
     }
 
-    // =========================================================================================
-    // 2. MONTAGEM ÚNICA DAS SEÇÕES DO XML DA NF-e
-    // =========================================================================================
     private NFe.Classes.NFe AssembleNfe(NfeBuildContext ctx)
     {
         var nfe = new NFe.Classes.NFe
@@ -489,9 +521,6 @@ public class NfeBuilderService
             var taxParams = ResolverParametrosItem(ctx.Rule, ctx.Identificacao.DestState, ncm, origem);
             var cfopStr = ctx.Identificacao.IsInterstate ? taxParams.CfopInterstate : taxParams.CfopStateInternal;
 
-            // DETERMINAÇÃO DO PREÇO UNITÁRIO CONFORME O CFOP DA OPERAÇÃO:
-            // 5906 / 6906 / 5907 / 6907 / 5902 / 6902 / 5903 / 6903 / 5921: Retorno Físico/Simbólico/Insumos -> InboundUnitValue
-            // 5124 / 6124 / 5923 / 6923: Serviços / Remessa por Conta e Ordem -> UnitValue
             bool isRetornoArmazemOuInsumo = cfopStr is "5906" or "6906" or "5907" or "6907"
                                                    or "5902" or "6902" or "5903" or "6903"
                                                    or "5921" or "6921"
@@ -522,7 +551,6 @@ public class NfeBuilderService
                 indTot = IndicadorTotal.ValorDoItemCompoeTotalNF
             };
 
-            // CAMPOS: NÚMERO DO PEDIDO E NÚMERO DO ITEM DO PEDIDO
             var xPedVal = item.XPed ?? ctx.Order?.OrderNumber;
             if (!string.IsNullOrWhiteSpace(xPedVal))
             {
@@ -536,17 +564,23 @@ public class NfeBuilderService
                 prod.nItemPed = nItemPedVal;
             }
 
-            // RASTREABILIDADE DE LOTES (<rastro> vs infAdProd)
+            // RASTREABILIDADE (<rastro> e infAdProd)
             var rastroList = new List<rastro>();
-            var batchNotes = new List<string>();
+            var itemComplementNotes = new List<string>();
 
+            // 1. INCLUSÃO DO NÚMERO DA NF-E DE REMESSA NO ITEM
+            if (!string.IsNullOrWhiteSpace(item.InboundInvoiceNumber))
+            {
+                itemComplementNotes.Add($"NF-e: {item.InboundInvoiceNumber.Trim()}");
+            }
+
+            // 2. LOTES
             foreach (var b in item.Batches)
             {
                 bool hasFullDates = b.ManufactureDate.HasValue && b.ExpirationDate.HasValue;
 
                 if (hasFullDates)
                 {
-                    // Lote com fabricação e validade completos -> Gera a tag <rastro>
                     rastroList.Add(new rastro
                     {
                         nLote = b.Batch,
@@ -557,8 +591,7 @@ public class NfeBuilderService
                 }
                 else
                 {
-                    // Lote sem datas completas -> Injeta em infAdProd para impressão na DANFe sem violar schema
-                    batchNotes.Add($"Lote: {b.Batch} ");
+                    itemComplementNotes.Add($"Lote: {b.Batch.ToString()}");
                 }
             }
 
@@ -567,8 +600,6 @@ public class NfeBuilderService
                 prod.rastro = rastroList;
             }
 
-
-
             var det = new det
             {
                 nItem = nItem++,
@@ -576,12 +607,10 @@ public class NfeBuilderService
                 imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)
             };
 
-            if (batchNotes.Any())
+            // Injeta dados complementares do item (NF de Remessa + Lotes parciais)
+            if (itemComplementNotes.Any())
             {
-                var batchText = string.Join("; ", batchNotes);
-                det.infAdProd = string.IsNullOrWhiteSpace(det.infAdProd)
-                    ? batchText
-                    : $"{det.infAdProd} | {batchText}";
+                det.infAdProd = string.Join(" | ", itemComplementNotes);
             }
 
             nfe.infNFe.det.Add(det);
@@ -595,25 +624,18 @@ public class NfeBuilderService
             }
         }
 
-        // Totais Fiscais
         CalcularTotaisNfe(nfe);
-
-        // Cobrança, Duplicatas e Formas de Pagamento
         ConfigurarCobrancaEPagamento(nfe, ctx);
 
         return nfe;
     }
 
-    // =========================================================================================
-    // 3. CONSTRUTORES DE CADA BLOCO XML
-    // =========================================================================================
     private static ide BuildIde(NfeBuildContext ctx)
     {
         var companyState = !string.IsNullOrWhiteSpace(ctx.Company.State) ? ctx.Company.State.Trim().ToUpper() : "RS";
         if (!Enum.TryParse<DFe.Classes.Entidades.Estado>(companyState, out var ufEnum))
             ufEnum = DFe.Classes.Entidades.Estado.RS;
 
-        // Garante no máximo 60 caracteres exigidos pela SEFAZ
         var natOpDesc = ctx.Rule.Description?.Trim() ?? "OPERACAO FISCAL";
         if (natOpDesc.Length > 60)
         {
@@ -624,7 +646,7 @@ public class NfeBuilderService
         {
             cUF = ufEnum,
             cNF = new Random().Next(10000000, 99999999).ToString("D8"),
-            natOp = natOpDesc, // <-- Valor sanitizado e limitado em 60 caracteres
+            natOp = natOpDesc,
             mod = ModeloDocumento.NFe,
             serie = ctx.Identificacao.Serie,
             nNF = ctx.Identificacao.Number,
@@ -640,7 +662,7 @@ public class NfeBuilderService
             indPres = (PresencaComprador)ctx.Identificacao.IndPres,
             indIntermed = IndicadorIntermediador.iiSemIntermediador,
             procEmi = ProcessoEmissao.peAplicativoContribuinte,
-            verProc = "CoreWMS 1.0"
+            verProc = "CoreWMS Fiscal 2.0"
         };
 
         if (ctx.Company.Environment == 1 && ctx.Identificacao.OriginAccessKeys.Any())
@@ -744,6 +766,11 @@ public class NfeBuilderService
 
         var t = new transp { modFrete = modFrete };
 
+        if (modFrete == ModalidadeFrete.mfSemFrete)
+        {
+            return t;
+        }
+
         if (!string.IsNullOrWhiteSpace(data.CarrierCnpjCpf) || !string.IsNullOrWhiteSpace(data.CarrierName))
         {
             t.transporta = new transporta
@@ -786,16 +813,11 @@ public class NfeBuilderService
         return t;
     }
 
-    // =========================================================================================
-    // 4. CONFIGURAÇÃO DE COBRANÇA, DUPLICATAS E FORMAS DE PAGAMENTO
-    // =========================================================================================
     private static void ConfigurarCobrancaEPagamento(NFe.Classes.NFe nfe, NfeBuildContext ctx)
     {
         var totalVNF = nfe.infNFe.total.ICMSTot.vNF;
         var pay = ctx.Payment;
 
-        // Detecta se a operação é puramente de remessa/retorno sem valor comercial a cobrar:
-        // CFOPs 5906, 5907, 5902, 5903, 5921, 5923
         bool isNonFinancialOperation = pay == null && ctx.Items.All(i =>
             i.Product.Ncm != null && (
                 ctx.Rule.CfopStateInternal is "5906" or "5907" or "5902" or "5903" or "5921" or "5923" ||
@@ -805,7 +827,6 @@ public class NfeBuilderService
 
         bool gerarCobranca = (pay?.GerarCobranca == true) || (!isNonFinancialOperation && pay?.Duplicatas?.Any() == true);
 
-        // 1. FATURAS E DUPLICATAS (<cobr>)
         if (gerarCobranca && pay?.Duplicatas?.Any() == true)
         {
             nfe.infNFe.cobr = new cobr
@@ -826,10 +847,8 @@ public class NfeBuilderService
             };
         }
 
-        // 2. FORMAS DE PAGAMENTO (<pag>)
         if (isNonFinancialOperation || (pay != null && pay.FormaPagamento == FormaPagamento.fpSemPagamento))
         {
-            // Padrão para 5906, 5907, 5902, 5903, 5921, 5923: 90 = Sem Pagamento
             nfe.infNFe.pag = new List<pag>
             {
                 new pag
@@ -847,7 +866,6 @@ public class NfeBuilderService
         }
         else
         {
-            // Operações Faturadas (Ex: 5124 Industrialização, Venda ou Cobrança Acordada)
             var tPag = pay?.FormaPagamento ?? (gerarCobranca ? FormaPagamento.fpDuplicataMercantil : FormaPagamento.fpBoletoBancario);
             var indPag = pay?.IndicadorPagamentoDetalhePagamento ?? (gerarCobranca ? IndicadorPagamentoDetalhePagamento.ipDetPgPrazo : IndicadorPagamentoDetalhePagamento.ipDetPgVista);
             var vPag = pay?.ValorLiquidoFatura ?? totalVNF;
@@ -869,7 +887,6 @@ public class NfeBuilderService
             };
         }
 
-        // Responsável Técnico
         nfe.infNFe.infRespTec = new Shared.NFe.Classes.Informacoes.InfRespTec.infRespTec
         {
             CNPJ = "64615275000112",
@@ -879,9 +896,6 @@ public class NfeBuilderService
         };
     }
 
-    // =========================================================================================
-    // 5. MOTOR TRIBUTÁRIO (ICMS, IPI, PIS, COFINS, IBS/CBS REFORMA TRIBUTÁRIA)
-    // =========================================================================================
     private imposto BuildImpostos(ResolvedTaxParams p, decimal valorTotalItem, CRT companyCrt, OrigemMercadoria origem)
     {
         var impostos = new imposto
@@ -904,11 +918,7 @@ public class NfeBuilderService
                 ? p.ClassificacaoTributaria.Trim()
                 : (rawIbs == "000" ? "000001" : "410999");
 
-            // REGRA SEFAZ NT 2025.002 (Rejeição 1021):
-            // CSTs com ind_gIBSCBS = 0 (410 = Não incidência/Imunidade, 400 = Isenção, 500, etc.)
-            // NÃO PODEM conter o grupo de cálculo <gIBSCBS> no XML!
             bool exigeCalculoIbsCbs = rawIbs is not ("410" or "400" or "500");
-
             gIBSCBS? gIbsCbs = null;
 
             if (exigeCalculoIbsCbs)
@@ -932,7 +942,7 @@ public class NfeBuilderService
             {
                 CST = parsedCst,
                 cClassTrib = cClassTrib,
-                gIBSCBS = gIbsCbs // <-- null para CST 410, evitando a Rejeição 1021!
+                gIBSCBS = gIbsCbs
             };
         }
 
@@ -1207,13 +1217,8 @@ public class NfeBuilderService
 
         var totalVNF = Math.Round(totalVProd + totalVST + totalVIPI, 2);
 
-        // REGRA W34-20 (Evita a Rejeição 1119):
-        // Se QUALQUER item declarar <IBSCBS> (mesmo com CST 410 isento/não tributado),
-        // o grupo <IBSCBSTot> DEVE ser informado no <total>!
         var temReformaTributaria = nfe.infNFe.det.Any(d => d.imposto?.IBSCBS != null);
 
-        // REGRA W35-10: Soma apenas os itens que possuem <gIBSCBS> calculado.
-        // Se todos forem CST 410, a soma resultará com precisão em 0.00.
         var totalVBCIbsCbs = temReformaTributaria
             ? nfe.infNFe.det.Where(d => d.imposto?.IBSCBS?.gIBSCBS != null).Sum(d => d.imposto!.IBSCBS!.gIBSCBS!.vBC)
             : 0m;
@@ -1252,7 +1257,6 @@ public class NfeBuilderService
                 vOutro = 0,
                 vTotTrib = 0
             },
-            // Informa <IBSCBSTot> sempre que houver itens com IBSCBS (mesmo com valores zerados)
             IBSCBSTot = temReformaTributaria ? new IBSCBSTot
             {
                 vBCIBSCBS = Math.Round(totalVBCIbsCbs, 2),
@@ -1319,8 +1323,9 @@ public class NfeBuilderService
         };
     }
 
-    private static OrigemMercadoria ObterOrigemProduto(object product)
+    private static OrigemMercadoria ObterOrigemProduto(object? product)
     {
+        if (product == null) return OrigemMercadoria.OmNacional;
         var prop = product.GetType().GetProperty("Origin") ?? product.GetType().GetProperty("Origem");
         if (prop != null)
         {
@@ -1373,10 +1378,6 @@ public class NfeBuilderService
         };
     }
 
-    // =========================================================================================
-    // MODELOS INTERNOS DO CONTEXTO CANÔNICO
-    // =========================================================================================
-
     private record NfeBatchTraceDto(
         string Batch,
         decimal Quantity,
@@ -1392,6 +1393,7 @@ public class NfeBuilderService
         int LineNumber,
         string? XPed,
         int? NItemPed,
+        string? InboundInvoiceNumber,
         List<NfeBatchTraceDto> Batches
     );
 

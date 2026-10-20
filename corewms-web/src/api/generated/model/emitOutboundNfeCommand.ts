@@ -9,6 +9,8 @@ export interface EmitOutboundNfeCommand {
   orderId?: string;
   fiscalRuleId?: string;
   /** @nullable */
+  inboundOrderIdFilter?: string | null;
+  /** @nullable */
   customIndFinal?: number | null;
   /** @nullable */
   customIndPres?: number | null;
