@@ -82,6 +82,8 @@ export * from './packOrderItemCommand';
 export * from './pickItemCommand';
 export * from './postApiCompaniesBody';
 export * from './postApiCustomersConsultSefazCnpjParams';
+export * from './postApiFiscalNfeDocumentIdEmailGoogleParams';
+export * from './postApiFiscalNfeDocumentIdEmailParams';
 export * from './postApiFiscalNfeEmitOrderIdParams';
 export * from './postApiInboundImportBody';
 export * from './postApiInboundLegacyImportBody';

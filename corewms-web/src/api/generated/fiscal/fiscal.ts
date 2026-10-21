@@ -30,6 +30,8 @@ import type {
   EmitOutboundNfeCommand,
   EmitStandaloneNfeCommand,
   GetApiFiscalDocumentsParams,
+  PostApiFiscalNfeDocumentIdEmailGoogleParams,
+  PostApiFiscalNfeDocumentIdEmailParams,
   PostApiFiscalNfeEmitOrderIdParams,
   SaveFiscalOperationRuleCommand
 } from '../model';
@@ -1005,7 +1007,129 @@ export function useGetApiFiscalNfeDocumentIdXml<TData = Awaited<ReturnType<typeo
 
 
 
-export const postApiFiscalNfeCancelId = (
+export const postApiFiscalNfeDocumentIdEmail = (
+    documentId: string,
+    params: PostApiFiscalNfeDocumentIdEmailParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/nfe/${documentId}/email`, method: 'POST',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiFiscalNfeDocumentIdEmailMutationKey = () => ['postApiFiscalNfeDocumentIdEmail'] as const;
+
+export const getPostApiFiscalNfeDocumentIdEmailMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmail>>, TError,PostApiFiscalNfeDocumentIdEmailMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmail>>, TError,PostApiFiscalNfeDocumentIdEmailMutationVariables, TContext> => {
+
+const mutationKey = getPostApiFiscalNfeDocumentIdEmailMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmail>>, PostApiFiscalNfeDocumentIdEmailMutationVariables> = (props) => {
+          const {documentId,params} = props ?? {};
+
+          return  postApiFiscalNfeDocumentIdEmail(documentId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFiscalNfeDocumentIdEmailMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmail>>>
+
+    export type PostApiFiscalNfeDocumentIdEmailMutationError = unknown
+    export type PostApiFiscalNfeDocumentIdEmailMutationVariables = {documentId: string;params: PostApiFiscalNfeDocumentIdEmailParams}
+
+    export const usePostApiFiscalNfeDocumentIdEmail = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmail>>, TError,PostApiFiscalNfeDocumentIdEmailMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmail>>,
+        TError,
+        PostApiFiscalNfeDocumentIdEmailMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFiscalNfeDocumentIdEmailMutationOptions(options), queryClient);
+    }
+    export const postApiFiscalNfeDocumentIdEmailGoogle = (
+    documentId: string,
+    params: PostApiFiscalNfeDocumentIdEmailGoogleParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/fiscal/nfe/${documentId}/email-google`, method: 'POST',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiFiscalNfeDocumentIdEmailGoogleMutationKey = () => ['postApiFiscalNfeDocumentIdEmailGoogle'] as const;
+
+export const getPostApiFiscalNfeDocumentIdEmailGoogleMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmailGoogle>>, TError,PostApiFiscalNfeDocumentIdEmailGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmailGoogle>>, TError,PostApiFiscalNfeDocumentIdEmailGoogleMutationVariables, TContext> => {
+
+const mutationKey = getPostApiFiscalNfeDocumentIdEmailGoogleMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmailGoogle>>, PostApiFiscalNfeDocumentIdEmailGoogleMutationVariables> = (props) => {
+          const {documentId,params} = props ?? {};
+
+          return  postApiFiscalNfeDocumentIdEmailGoogle(documentId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiFiscalNfeDocumentIdEmailGoogleMutationResult = NonNullable<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmailGoogle>>>
+
+    export type PostApiFiscalNfeDocumentIdEmailGoogleMutationError = unknown
+    export type PostApiFiscalNfeDocumentIdEmailGoogleMutationVariables = {documentId: string;params: PostApiFiscalNfeDocumentIdEmailGoogleParams}
+
+    export const usePostApiFiscalNfeDocumentIdEmailGoogle = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmailGoogle>>, TError,PostApiFiscalNfeDocumentIdEmailGoogleMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiFiscalNfeDocumentIdEmailGoogle>>,
+        TError,
+        PostApiFiscalNfeDocumentIdEmailGoogleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiFiscalNfeDocumentIdEmailGoogleMutationOptions(options), queryClient);
+    }
+    export const postApiFiscalNfeCancelId = (
     id: string,
     cancelNfeCommand: CancelNfeCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

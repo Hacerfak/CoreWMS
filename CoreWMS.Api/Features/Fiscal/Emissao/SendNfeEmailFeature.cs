@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CoreWMS.Api.Features.Fiscal.Entities;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NFe.Utils.Email;
 
@@ -24,17 +26,26 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
     private readonly ApplicationDbContext _db;
     private readonly ILogger<SendNfeEmailHandler> _logger;
     private readonly IWebHostEnvironment _env;
+    private readonly IConfiguration _config;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public SendNfeEmailHandler(ApplicationDbContext db, ILogger<SendNfeEmailHandler> logger, IWebHostEnvironment env)
+    public SendNfeEmailHandler(
+        ApplicationDbContext db,
+        ILogger<SendNfeEmailHandler> logger,
+        IWebHostEnvironment env,
+        IConfiguration config,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _logger = logger;
         _env = env;
+        _config = config;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<IResult> Handle(SendNfeEmailCommand request, CancellationToken ct)
     {
-        _logger.LogInformation("[EMAIL] A preparar envio de NF-e para: {Email}", request.DestinationEmail);
+        _logger.LogInformation("[EMAIL SMTP] Preparando envio de NF-e para: {Email}", request.DestinationEmail);
 
         var doc = await _db.CompanyFiscalDocuments
             .Include(d => d.Company)
@@ -42,55 +53,90 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
             .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
-        if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "XML autorizado não está disponível." });
+        if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "XML autorizado não disponível." });
 
         string caminhoXmlTemporario = string.Empty;
 
         try
         {
-            string diretorioBase = Path.Combine(_env.ContentRootPath, "uploads", "NFePdf");
+            // Resolução da URL base pública da aplicação
+            var requestHttp = _httpContextAccessor.HttpContext?.Request;
+            string baseUrl = _config["App:PublicBaseUrl"]
+                ?? (requestHttp != null ? $"{requestHttp.Scheme}://{requestHttp.Host}" : "https://corewms.com.br");
 
-            // Define o nome do PDF de acordo com o tipo (DANFE, CC-e ou Cancelamento)
-            string pdfFileName = doc.Type switch
-            {
-                FiscalDocumentType.CartaCorrecao => $"{doc.AccessKey}-cce.pdf",
-                FiscalDocumentType.Cancelamento => $"{doc.AccessKey}-cancelamento.pdf",
-                _ => $"{doc.AccessKey}-danfe.pdf"
-            };
-
-            string caminhoPdf = Path.Combine(diretorioBase, pdfFileName);
-
-            // Fallback de compatibilidade se o arquivo tiver sido gravado com sufixo -danfe.pdf
-            if (!File.Exists(caminhoPdf))
-            {
-                caminhoPdf = Path.Combine(diretorioBase, $"{doc.AccessKey}-danfe.pdf");
-            }
-
-            if (!File.Exists(caminhoPdf))
-            {
-                return Results.BadRequest(new { Message = "O PDF do documento fiscal não foi encontrado. Por favor, gere o PDF primeiro." });
-            }
-
-            caminhoXmlTemporario = Path.Combine(diretorioBase, $"{doc.AccessKey}_{Guid.NewGuid():N}.xml");
-            await File.WriteAllTextAsync(caminhoXmlTemporario, doc.RawXml, ct);
+            string danfePublicUrl = $"{baseUrl.TrimEnd('/')}/public/danfe/{doc.AccessKey}";
 
             string identificadorDocumento = doc.OutboundOrder != null
                 ? $"Pedido #{doc.OutboundOrder.OrderNumber}"
-                : $"Documento Fiscal #{doc.AccessKey ?? doc.Id.ToString()}";
+                : $"Documento Fiscal #{doc.AccessKey}";
 
             string nomeRemetente = doc.Company?.TradeName
+                ?? doc.Company?.CorporateName
                 ?? doc.OutboundOrder?.Company?.TradeName
-                ?? "Departamento de Faturamento";
+                ?? "Faturamento CoreWMS";
+
+            // Salva o XML em pasta temporária apenas durante o disparo do Zeus
+            string tempDir = Path.Combine(Path.GetTempPath(), "CoreWMS_XmlCache");
+            Directory.CreateDirectory(tempDir);
+            string xmlFileName = doc.Type.IsEvent() ? $"{doc.AccessKey}-procEvento.xml" : $"{doc.AccessKey}-procNFe.xml";
+            caminhoXmlTemporario = Path.Combine(tempDir, xmlFileName);
+            await File.WriteAllTextAsync(caminhoXmlTemporario, doc.RawXml, Encoding.UTF8, ct);
+
+            // Template HTML do E-mail
+            string mensagemHtml = $@"
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset=""utf-8""/>
+  <style>
+    body {{ font-family: Arial, sans-serif; color: #1e293b; background-color: #f8fafc; margin: 0; padding: 20px; }}
+    .card {{ background-color: #ffffff; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+    .header {{ font-size: 18px; font-weight: bold; color: #0f172a; margin-bottom: 12px; }}
+    .text {{ font-size: 14px; line-height: 1.5; color: #334155; margin-bottom: 16px; }}
+    .btn {{ display: inline-block; background-color: #ea580c; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; margin: 16px 0; }}
+    .key-box {{ background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 13px; font-weight: bold; word-break: break-all; color: #0f172a; margin-bottom: 20px; text-align: center; }}
+    .footer {{ font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; }}
+  </style>
+</head>
+<body>
+  <div class=""card"">
+    <div class=""header"">{nomeRemetente}</div>
+    <div class=""text"">
+      Olá,<br/><br/>
+      Informamos que a sua Nota Fiscal Eletrônica referente a <strong>{identificadorDocumento}</strong> foi autorizada com sucesso.
+    </div>
+
+    <div class=""key-box"">
+      {doc.AccessKey}
+    </div>
+
+    <div style=""text-align: center;"">
+      <a href=""{danfePublicUrl}"" target=""_blank"" class=""btn"">
+        Visualizar e Imprimir DANFE Online
+      </a>
+    </div>
+
+    <div class=""text"" style=""margin-top: 18px; font-size: 13px;"">
+      • O arquivo XML autorizado encontra-se anexado a esta mensagem.<br/>
+      • A DANFE pode ser visualizada ou impressa em PDF a qualquer momento pelo link acima.
+    </div>
+
+    <div class=""footer"">
+      Esta é uma mensagem automática enviada pelo sistema CoreWMS Fiscal.
+    </div>
+  </div>
+</body>
+</html>";
 
             var configEmail = new ConfiguracaoEmail(
-                email: "faturacao@a-sua-empresa.com",
-                senha: "senha-app-ou-smtp",
+                email: _config["Email:SmtpUser"] ?? "faturacao@a-sua-empresa.com",
+                senha: _config["Email:SmtpPassword"] ?? "senha-app-ou-smtp",
                 assunto: $"Nota Fiscal Eletrônica - {identificadorDocumento}",
-                mensagem: $"Olá!\n\nEm anexo, enviamos o seu documento fiscal (XML e PDF) referente a: {identificadorDocumento}.\nChave de Acesso: {doc.AccessKey}\n\nObrigado!",
-                servidorSmtp: "smtp.a-sua-empresa.com",
-                porta: 587,
+                mensagem: mensagemHtml,
+                servidorSmtp: _config["Email:SmtpHost"] ?? "smtp.a-sua-empresa.com",
+                porta: int.TryParse(_config["Email:SmtpPort"], out int port) ? port : 587,
                 ssl: true,
-                mensagemHtml: false,
+                mensagemHtml: true,
                 timeout: 30000,
                 assincrono: false
             )
@@ -100,33 +146,32 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
 
             var emailBuilder = new EmailBuilder(configEmail);
             emailBuilder.AdicionarDestinatario(request.DestinationEmail);
-            emailBuilder.AdicionarAnexo(caminhoPdf);
             emailBuilder.AdicionarAnexo(caminhoXmlTemporario);
 
-            _logger.LogInformation("[EMAIL] A disparar a mensagem via SMTP...");
+            _logger.LogInformation("[EMAIL SMTP] Disparando e-mail para {Email}...", request.DestinationEmail);
             emailBuilder.Enviar();
 
-            _logger.LogInformation("[EMAIL] SUCESSO! E-mail enviado para {Email}", request.DestinationEmail);
-            return Results.Ok(new { Message = "E-mail enviado com sucesso com PDF e XML em anexo!" });
+            _logger.LogInformation("[EMAIL SMTP] Sucesso! E-mail enviado para {Email}", request.DestinationEmail);
+            return Results.Ok(new { Message = "E-mail com XML e link da DANFE enviado com sucesso!" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[EMAIL - ERRO] Falha no envio via SMTP: {Message}", ex.Message);
+            _logger.LogError(ex, "[EMAIL SMTP - ERRO] Falha no envio: {Message}", ex.Message);
             return Results.Problem(statusCode: 500, title: "Erro ao enviar E-mail", detail: ex.Message);
         }
         finally
         {
             if (!string.IsNullOrEmpty(caminhoXmlTemporario) && File.Exists(caminhoXmlTemporario))
             {
-                try { File.Delete(caminhoXmlTemporario); } catch { /* Ignora falha na limpeza */ }
+                try { File.Delete(caminhoXmlTemporario); } catch { }
             }
         }
     }
 }
 
-public static class SendNfeEmailEndpoint
+public static class SendNfeEmailEndpoints
 {
-    public static void MapSendNfeEmailEndpoint(this IEndpointRouteBuilder app)
+    public static void MapSendNfeEmailEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/fiscal/nfe/{documentId:guid}/email", async (Guid documentId, [FromQuery] string destinationEmail, IMediator mediator) =>
             await mediator.Send(new SendNfeEmailCommand(documentId, destinationEmail)))

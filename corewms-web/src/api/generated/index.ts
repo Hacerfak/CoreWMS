@@ -11,6 +11,7 @@ export * from './outbound/outbound';
 export * from './packaging-types/packaging-types';
 export * from './printing/printing';
 export * from './products/products';
+export * from './public-fiscal/public-fiscal';
 export * from './quality/quality';
 export * from './roles/roles';
 export * from './topology/topology';
