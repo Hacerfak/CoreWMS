@@ -15,7 +15,8 @@ public class OutboundOrder : AuditableEntity
     public Guid CustomerId { get; private set; }
     public Customer Customer { get; private set; } = null!;
 
-    // Identificação do Pedido e Documentos Fiscais de Venda/ERP
+    // Identificação do Pedido e Documentos Fiscais de Venda
+    public string? RequestedBy { get; private set; }
     public string OrderNumber { get; private set; } = string.Empty;
     public string? InvoiceNumber { get; private set; }
     public string? InvoiceSerie { get; private set; }
@@ -100,7 +101,8 @@ public class OutboundOrder : AuditableEntity
         int freightModality,
         string? additionalNotes,
         DateTime issueDate,
-        DateTime expectedShipDate)
+        DateTime expectedShipDate,
+        string? requestedBy = null)
     {
         CompanyId = companyId;
         CustomerId = customerId;
@@ -139,6 +141,7 @@ public class OutboundOrder : AuditableEntity
         IssueDate = issueDate.ToUniversalTime();
         ExpectedShipDate = expectedShipDate.ToUniversalTime();
         Status = OutboundOrderStatus.Pending;
+        RequestedBy = requestedBy?.Trim();
     }
 
     public void SetInvoiceDetails(string invoiceNumber, string invoiceSerie, string accessKey)
@@ -243,6 +246,12 @@ public class OutboundOrder : AuditableEntity
     public void ClearItems()
     {
         _items.Clear();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetRequestedBy(string? userName)
+    {
+        RequestedBy = userName?.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 }

@@ -275,6 +275,7 @@ export default function OutboundOrderDetailsPage() {
                         <p className="text-xs text-slate-500 mt-0.5">
                             Depositante: <strong className="text-slate-700">{order?.customerName}</strong>
                             {order?.invoiceNumber && ` | NF-e: ${order.invoiceNumber}/${order.invoiceSerie || '1'}`}
+                            {order?.requestedBy && ` | Solicitante: ${order.requestedBy}`}
                         </p>
                     </div>
                 </div>

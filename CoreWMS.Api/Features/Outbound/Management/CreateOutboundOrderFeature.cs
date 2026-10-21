@@ -5,6 +5,7 @@ using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
 
@@ -55,16 +56,30 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public CreateOutboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant)
+    public CreateOutboundOrderHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _tenant = tenant;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<IResult> Handle(CreateOutboundOrderCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+
+        // 1. Obtém o nome do usuário logado (seja equipe interna ou parceiro externo)
+        var user = _httpContextAccessor.HttpContext?.User;
+        var userName = user?.FindFirst("Name")?.Value
+            ?? user?.Identity?.Name
+            ?? user?.FindFirst(ClaimTypes.Name)?.Value
+            ?? user?.FindFirst(ClaimTypes.Email)?.Value
+            ?? user?.FindFirst("Email")?.Value
+            ?? "Usuário do Sistema";
 
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(request.CustomerId))
             return Results.Forbid();
@@ -149,7 +164,8 @@ public class CreateOutboundOrderHandler : IRequestHandler<CreateOutboundOrderCom
             request.FreightModality,
             request.AdditionalNotes,
             issueDate: DateTime.UtcNow,
-            request.ExpectedShipDate
+            request.ExpectedShipDate,
+            requestedBy: userName
         );
 
         _db.OutboundOrders.Add(order);

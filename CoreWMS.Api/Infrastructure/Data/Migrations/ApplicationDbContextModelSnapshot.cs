@@ -1639,6 +1639,9 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<string>("RawXml")
                         .HasColumnType("text");
 
+                    b.Property<string>("RequestedBy")
+                        .HasColumnType("text");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 

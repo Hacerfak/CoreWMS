@@ -7,6 +7,7 @@ using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CoreWMS.Api.Features.Outbound.Import;
 
@@ -17,18 +18,29 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
     private static readonly XNamespace Ns = "http://www.portalfiscal.inf.br/nfe";
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly INfeParserService _parser;
 
-    public ImportOutboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant, INfeParserService parser)
+    public ImportOutboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant, IHttpContextAccessor httpContextAccessor, INfeParserService parser)
     {
         _db = db;
         _tenant = tenant;
+        _httpContextAccessor = httpContextAccessor;
         _parser = parser;
     }
 
     public async Task<IResult> Handle(ImportOutboundOrderCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+
+        // 1. Obtém o nome do usuário logado (seja equipe interna ou parceiro externo)
+        var user = _httpContextAccessor.HttpContext?.User;
+        var userName = user?.FindFirst("Name")?.Value
+            ?? user?.Identity?.Name
+            ?? user?.FindFirst(ClaimTypes.Name)?.Value
+            ?? user?.FindFirst(ClaimTypes.Email)?.Value
+            ?? user?.FindFirst("Email")?.Value
+            ?? "Usuário do Sistema";
 
         string xmlContent;
         try { xmlContent = Encoding.UTF8.GetString(request.FileBytes); }
@@ -104,7 +116,8 @@ public class ImportOutboundOrderHandler : IRequestHandler<ImportOutboundOrderCom
             parsedData.FreightModality,
             additionalNotes,
             parsedData.IssueDate,
-            expectedShipDate: parsedData.IssueDate
+            expectedShipDate: parsedData.IssueDate,
+            requestedBy: userName
         );
 
         var existingProducts = await _db.Products

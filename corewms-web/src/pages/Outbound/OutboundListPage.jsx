@@ -236,6 +236,7 @@ export default function OutboundListPage() {
                                 <TableHead className="w-[220px]">Pedido / Emissão</TableHead>
                                 <TableHead>Depositante</TableHead>
                                 <TableHead>Destinatário Final</TableHead>
+                                <TableHead>Solicitante</TableHead>
                                 <TableHead>Cidade / UF</TableHead>
                                 <TableHead className="text-center">Itens</TableHead>
                                 <TableHead>Status</TableHead>
@@ -244,9 +245,9 @@ export default function OutboundListPage() {
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
-                                <TableRow><TableCell colSpan={7} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-orange-600 mx-auto" /></TableCell></TableRow>
                             ) : orders.length === 0 ? (
-                                <TableRow><TableCell colSpan={7} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={8} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
                             ) : orders.map((order) => {
                                 // Permite estornar se estiver Shipped E não tiver documentos fiscais ativos (ou não tiver nenhum)
                                 const canRevert = order.status === 'Shipped' && !order.hasActiveFiscalDocuments;
@@ -278,6 +279,11 @@ export default function OutboundListPage() {
                                         <TableCell>
                                             <span className="text-sm font-semibold text-slate-900 truncate max-w-[180px] block" title={order.destinationName}>
                                                 {order.destinationName}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="text-xs text-slate-600 truncate max-w-[140px] block" title={order.requestedBy || 'Sistema'}>
+                                                {order.requestedBy || 'Sistema'}
                                             </span>
                                         </TableCell>
                                         <TableCell className="text-xs text-slate-600 font-mono">

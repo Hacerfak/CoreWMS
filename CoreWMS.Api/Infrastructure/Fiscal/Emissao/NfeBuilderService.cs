@@ -666,6 +666,11 @@ public class NfeBuilderService
         // MONTAGEM DAS OBSERVAÇÕES COMPLEMENTARES GERAIS (infCpl) SEM REPETIÇÃO
         var finalNotesParts = new List<string>();
 
+        if (!string.IsNullOrWhiteSpace(ctx.Order?.RequestedBy))
+        {
+            finalNotesParts.Add($"Solicitante: {ctx.Order.RequestedBy.Trim()}.");
+        }
+
         if (!string.IsNullOrWhiteSpace(ctx.AdditionalNotes))
         {
             finalNotesParts.Add(ctx.AdditionalNotes.Trim());

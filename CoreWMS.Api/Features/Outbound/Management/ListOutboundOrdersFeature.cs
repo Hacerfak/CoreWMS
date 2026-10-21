@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace CoreWMS.Api.Features.Outbound.Management;
 
 public record OutboundOrderSummaryDto(
+    string? RequestedBy,
     Guid Id,
     Guid CustomerId,
     string CustomerName,
@@ -86,7 +87,8 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
                 o.IssueDate,
                 o.ExpectedShipDate,
                 Status = o.Status.ToString(),
-                ItemsCount = o.Items.Count
+                ItemsCount = o.Items.Count,
+                o.RequestedBy
             }).ToListAsync(ct);
 
         var orderIds = rawOrders.Select(o => o.Id).ToList();
@@ -112,6 +114,7 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
             var hasActive = fiscalLookup.TryGetValue(o.Id, out var f2) && f2.HasActive;
 
             return new OutboundOrderSummaryDto(
+                o.RequestedBy,
                 o.Id,
                 o.CustomerId,
                 o.CustomerName,
