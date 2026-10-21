@@ -12,66 +12,92 @@ namespace CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 
 public static class DanfeHtmlGenerator
 {
-    private static readonly CultureInfo PtBrCulture = new("pt-BR");
+  private static readonly CultureInfo PtBrCulture = new("pt-BR");
 
-    public static string Generate(string rawXml, string? logoBase64 = null)
+  public static string Generate(string rawXml, string? logoBase64 = null)
+  {
+    nfeProc? nfeProc;
+    try
     {
-        nfeProc? nfeProc;
-        try
-        {
-            nfeProc = FuncoesXml.XmlStringParaClasse<nfeProc>(rawXml);
-        }
-        catch
-        {
-            var nfe = FuncoesXml.XmlStringParaClasse<NFe.Classes.NFe>(rawXml)
-                ?? throw new InvalidOperationException("Não foi possível interpretar o XML da NF-e.");
-            nfeProc = new nfeProc { NFe = nfe };
-        }
-
-        return Generate(nfeProc, logoBase64);
+      nfeProc = FuncoesXml.XmlStringParaClasse<nfeProc>(rawXml);
+    }
+    catch
+    {
+      var nfe = FuncoesXml.XmlStringParaClasse<NFe.Classes.NFe>(rawXml)
+          ?? throw new InvalidOperationException("Não foi possível interpretar o XML da NF-e.");
+      nfeProc = new nfeProc { NFe = nfe };
     }
 
-    public static string Generate(nfeProc nfeProc, string? logoBase64 = null)
+    return Generate(nfeProc, logoBase64);
+  }
+
+  public static string Generate(nfeProc nfeProc, string? logoBase64 = null)
+  {
+    var nfe = nfeProc.NFe;
+    var inf = nfe.infNFe;
+    var ide = inf.ide;
+    var emit = inf.emit;
+    var dest = inf.dest;
+    var total = inf.total?.ICMSTot;
+    var transp = inf.transp;
+    var infAdic = inf.infAdic;
+    var cobr = inf.cobr;
+    var fatura = cobr?.fat;
+    var duplicatas = cobr?.dup;
+    var prot = nfeProc.protNFe?.infProt;
+    string chaveAcesso = inf.Id?.Replace("NFe", "").Trim() ?? "";
+    bool isHomologacao = ide.tpAmb == DFe.Classes.Flags.TipoAmbiente.Homologacao;
+
+    // Horário de impressão no rodapé no fuso de Brasília (UTC-3)
+    var dataImpressao = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3));
+
+    // Regra de Paginação: No máximo 12 itens na Folha 1 (segurança para infAdProd extenso)
+    // e até 22 itens nas folhas de continuação
+    var allItems = inf.det ?? new List<det>();
+    var pages = new List<List<det>>();
+
+    if (allItems.Count <= 12)
     {
-        var nfe = nfeProc.NFe;
-        var inf = nfe.infNFe;
-        var ide = inf.ide;
-        var emit = inf.emit;
-        var dest = inf.dest;
-        var total = inf.total?.ICMSTot;
-        var transp = inf.transp;
-        var infAdic = inf.infAdic;
-        var prot = nfeProc.protNFe?.infProt;
-        string chaveAcesso = inf.Id?.Replace("NFe", "").Trim() ?? "";
+      pages.Add(allItems);
+    }
+    else
+    {
+      pages.Add(allItems.Take(12).ToList());
+      var remaining = allItems.Skip(12).ToList();
+      int itemsPerNextPage = 22;
+      for (int i = 0; i < remaining.Count; i += itemsPerNextPage)
+      {
+        pages.Add(remaining.Skip(i).Take(itemsPerNextPage).ToList());
+      }
+    }
 
-        // Paginação: Máximo de 17 itens na primeira página
-        var allItems = inf.det ?? new List<det>();
-        var pages = new List<List<det>>();
+    int totalPages = pages.Count;
+    var barcodeSvg = GerarCodigo128Svg(chaveAcesso);
 
-        if (allItems.Count <= 17)
-        {
-            pages.Add(allItems);
-        }
-        else
-        {
-            pages.Add(allItems.Take(17).ToList());
-            var remaining = allItems.Skip(17).ToList();
-            int itemsPerNextPage = 25;
-            for (int i = 0; i < remaining.Count; i += itemsPerNextPage)
-            {
-                pages.Add(remaining.Skip(i).Take(itemsPerNextPage).ToList());
-            }
-        }
+    // Limpeza de quebras literais nas observações fiscais
+    var infCplLimpo = (infAdic?.infCpl ?? "").Replace("\\n", "\n").Trim();
+    var infFiscoLimpo = (infAdic?.infAdFisco ?? "").Replace("\\n", "\n").Trim();
 
-        int totalPages = pages.Count;
-        var barcodeSvg = GerarCodigo128Svg(chaveAcesso);
+    // Dados do Responsável Técnico da emissão (tag infRespTec)
+    var respTec = inf.infRespTec;
+    string respTecInfo;
+    if (respTec != null && !string.IsNullOrWhiteSpace(respTec.CNPJ))
+    {
+      var foneFmt = FormatFone(respTec.fone);
+      respTecInfo = $"Resp. Técnico: {respTec.xContato} | CNPJ: {FormatCnpjCpf(respTec.CNPJ)}{(string.IsNullOrWhiteSpace(respTec.email) ? "" : $" | E-mail: {respTec.email}")}{(string.IsNullOrWhiteSpace(foneFmt) ? "" : $" | Fone: {foneFmt}")}";
+    }
+    else
+    {
+      respTecInfo = "Resp. Técnico: CoreWMS - Eder Gross Cichelero | CNPJ: 64.615.275/0001-12 | E-mail: suporte@corewms.com.br | Fone: (54) 99222-1877";
+    }
 
-        // Limpeza de quebras literais nas observações
-        var infCplLimpo = (infAdic?.infCpl ?? "").Replace("\\n", "\n").Trim();
-        var infFiscoLimpo = (infAdic?.infAdFisco ?? "").Replace("\\n", "\n").Trim();
+    // Verifica se há cobrança/faturas para exibir ou suprimir (MOC 3.3.2)
+    bool temFatura = fatura != null && (!string.IsNullOrWhiteSpace(fatura.nFat) || fatura.vLiq > 0);
+    bool temDuplicatas = duplicatas != null && duplicatas.Any();
+    bool exibirQuadroCobranca = temFatura || temDuplicatas;
 
-        var sb = new StringBuilder();
-        sb.Append($@"<!DOCTYPE html>
+    var sb = new StringBuilder();
+    sb.Append($@"<!DOCTYPE html>
 <html lang=""pt-BR"">
 <head>
 <meta charset=""utf-8""/>
@@ -137,10 +163,11 @@ public static class DanfeHtmlGenerator
     cursor: pointer;
   }}
 
-  /* Folha A4 Conforme MOC (202mm x 289mm útil) */
+  /* Folha A4 Conforme o MOC (202mm x 287mm útil estruturada em Flexbox vertical) */
   .danfe-sheet {{
     width: 202mm;
-    min-height: 289mm;
+    min-height: 287mm;
+    height: 287mm;
     margin: 58px auto 20px auto;
     background: #ffffff;
     padding: 0;
@@ -148,6 +175,9 @@ public static class DanfeHtmlGenerator
     position: relative;
     page-break-after: always;
     break-after: page;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }}
   .danfe-sheet:last-child {{
     page-break-after: auto;
@@ -160,17 +190,41 @@ public static class DanfeHtmlGenerator
     .no-print-bar {{ display: none !important; }}
     .danfe-sheet {{
       width: 100%;
-      min-height: 0;
+      min-height: 287mm;
+      height: 287mm;
       margin: 0;
       padding: 0;
       box-shadow: none;
       page-break-after: always;
       break-after: page;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }}
     .danfe-sheet:last-child {{
       page-break-after: auto;
       break-after: auto;
     }}
+  }}
+
+  .danfe-top {{ flex: 0 0 auto; }}
+  .danfe-middle {{ flex: 0 0 auto; }}
+  .danfe-bottom {{ flex: 0 0 auto; margin-top: auto; }}
+
+  /* Marca d'Água para Homologação (MOC 3.10.1) */
+  .watermark {{
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-35deg);
+    font-size: 44pt;
+    font-weight: bold;
+    color: rgba(0, 0, 0, 0.07) !important;
+    white-space: nowrap;
+    text-transform: uppercase;
+    pointer-events: none;
+    z-index: 999;
+    letter-spacing: 3px;
   }}
 
   /* Tabelas de Caixas / Grades */
@@ -224,7 +278,120 @@ public static class DanfeHtmlGenerator
   .text-right {{ text-align: right; }}
   .text-left {{ text-align: left; }}
 
-  /* TABELA DOS PRODUTOS / SERVIÇOS */
+  /* CANHOTO REGULAMENTAR (MOC 7.0 - ITEM 3.8.1) */
+  table.danfe-canhoto {{
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin-bottom: 0;
+    border: 1px solid #000000;
+  }}
+  table.danfe-canhoto td {{
+    padding: 0;
+    vertical-align: top;
+    color: #000000 !important;
+  }}
+  td.canhoto-corpo {{
+    width: 78.15%; /* 16,10 cm de 20,60 cm */
+    border-right: 1px solid #000000;
+  }}
+  .canhoto-texto-recebimento {{
+    height: 8.5mm; /* 0,85 cm */
+    padding: 2px 4px;
+    font-size: 5.5pt;
+    line-height: 1.15;
+    color: #000000 !important;
+    border-bottom: 1px solid #000000;
+  }}
+  table.canhoto-campos-sub {{
+    width: 100%;
+    height: 8.5mm; /* 0,85 cm */
+    border-collapse: collapse;
+    table-layout: fixed;
+  }}
+  td.campo-data {{
+    width: 25.46%; /* 4,10 cm de 16,10 cm */
+    padding: 2px 4px;
+    border-right: 1px solid #000000;
+  }}
+  td.campo-assinatura {{
+    width: 74.54%; /* 12,10 cm de 16,10 cm */
+    padding: 2px 4px;
+  }}
+  .canhoto-lbl {{
+    display: block;
+    font-size: 5pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #000000 !important;
+    line-height: 1;
+  }}
+  .canhoto-espaco-preenchimento {{
+    height: 4.5mm;
+  }}
+  td.canhoto-identificacao {{
+    width: 21.85%; /* 4,50 cm de 20,60 cm */
+    height: 17mm;  /* 1,70 cm */
+    text-align: center;
+    vertical-align: middle;
+    padding: 0;
+  }}
+  .canhoto-nfe-centralizado {{
+    height: 17mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }}
+  .nfe-titulo {{
+    font-size: 11pt;
+    font-weight: bold;
+    line-height: 1;
+    color: #000000 !important;
+  }}
+  .nfe-numero {{
+    font-size: 8.5pt;
+    font-weight: bold;
+    margin-top: 2px;
+    color: #000000 !important;
+  }}
+  .nfe-serie {{
+    font-size: 7.5pt;
+    font-weight: bold;
+    color: #000000 !important;
+  }}
+  .canhoto-picote {{
+    width: 100%;
+    border-top: 1px dashed #000000;
+    margin-top: 1.5mm;
+    margin-bottom: 2mm;
+  }}
+
+  /* QUADRO FATURA / DUPLICATAS (Com Card de Fatura Y07) */
+  .duplicatas-wrapper {{
+    border: 1px solid #000000;
+    padding: 2px;
+    margin-bottom: 2px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+  }}
+  .fatura-card {{
+    border: 1px solid #000000;
+    background-color: #f2f2f2;
+    padding: 2px 4px;
+    width: 145px;
+    flex-shrink: 0;
+  }}
+  .dup-card {{
+    border: 1px solid #000000;
+    padding: 2px 4px;
+    width: 115px;
+    flex-shrink: 0;
+  }}
+
+  /* TABELA DOS PRODUTOS / SERVIÇOS (MOC 3.1.7 E 3.8.1) */
   table.tbl-itens {{
     width: 100%;
     border-collapse: collapse;
@@ -234,28 +401,48 @@ public static class DanfeHtmlGenerator
   table.tbl-itens th {{
     background-color: #f2f2f2 !important;
     border: 1px solid #000000;
-    padding: 2px 1px;
-    font-size: 5pt;
+    padding: 2px 0.5px;
+    font-size: 4.8pt;
     font-weight: bold;
     text-transform: uppercase;
     color: #000000 !important;
-    line-height: 1.1;
-    white-space: nowrap;
-    overflow: hidden;
+    line-height: 1.05;
+    vertical-align: middle;
+    text-align: center;
   }}
   table.tbl-itens td {{
     border: 1px solid #000000;
-    padding: 2px 2px;
+    padding: 2.5px 2px;
     vertical-align: top;
     font-size: 6.5pt;
     color: #000000 !important;
     line-height: 1.15;
   }}
-  table.tbl-itens tr.empty-row td {{
-    height: 14px;
-    padding: 0;
-    border-top: none;
-    border-bottom: 1px solid #000000;
+  /* Destaque divisório por sombreamento uniforme (MOC 3.1.7) */
+  tr.item-shaded td {{
+    background-color: #ededed !important;
+  }}
+
+  /* Quadro Dados Adicionais Expandido */
+  table.tbl-adicionais {{
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin-bottom: 0;
+  }}
+  table.tbl-adicionais td {{
+    border: 1px solid #000000;
+    height: 34mm;
+    min-height: 34mm;
+    padding: 3px 5px;
+    vertical-align: top;
+  }}
+  .inf-cpl-content, .fisco-content {{
+    font-size: 6.2pt;
+    line-height: 1.25;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #000000 !important;
   }}
 </style>
 </head>
@@ -268,85 +455,92 @@ public static class DanfeHtmlGenerator
   </div>
 </div>");
 
-        for (int pIdx = 0; pIdx < totalPages; pIdx++)
-        {
-            int folhaAtual = pIdx + 1;
-            var pageItems = pages[pIdx];
+    for (int pIdx = 0; pIdx < totalPages; pIdx++)
+    {
+      int folhaAtual = pIdx + 1;
+      var pageItems = pages[pIdx];
 
-            sb.Append(@"<div class=""danfe-sheet"">");
+      sb.Append(@"<div class=""danfe-sheet"">");
 
-            if (folhaAtual == 1)
-            {
-                // 1. CANHOTO (Exclusivo Folha 1)
-                sb.Append($@"
-<table class=""tbl-box"">
+      // Marca d'água de homologação (MOC 3.10.1)
+      if (isHomologacao)
+      {
+        sb.Append(@"<div class=""watermark"">SEM VALOR FISCAL</div>");
+      }
+
+      // ==========================================
+      // BLOCO SUPERIOR (FIXO)
+      // ==========================================
+      sb.Append(@"<div class=""danfe-top"">");
+
+      if (folhaAtual == 1)
+      {
+        // 1. CANHOTO (MOC 7.0 - ITEM 3.8.1 - 16,10 cm x 4,50 cm)
+        sb.Append($@"
+<table class=""danfe-canhoto"">
   <tr>
-    <td style=""width: 82%; padding: 2px;"">
-      <div style=""font-size: 5.5pt; font-weight: bold; margin-bottom: 3px;"">
-        RECEBEMOS DE {emit.xNome?.ToUpper()} OS PRODUTOS E/OU SERVIÇOS CONSTANTES DA NOTA FISCAL INDICADA AO LADO
+    <td class=""canhoto-corpo"">
+      <div class=""canhoto-texto-recebimento"">
+        RECEBEMOS DE <strong>{emit.xNome?.ToUpper()}</strong> OS PRODUTOS E/OU SERVIÇOS CONSTANTES DA NOTA FISCAL ELETRÔNICA INDICADA AO LADO
       </div>
-      <table style=""width: 100%; border-collapse: collapse;"">
+      <table class=""canhoto-campos-sub"">
         <tr>
-          <td style=""width: 120px; border: none; padding: 0;"">
-            <span class=""lbl"">DATA DE RECEBIMENTO</span>
-            <div style=""height: 16px;""></div>
+          <td class=""campo-data"">
+            <span class=""canhoto-lbl"">DATA DE RECEBIMENTO</span>
+            <div class=""canhoto-espaco-preenchimento""></div>
           </td>
-          <td style=""border: none; border-left: 1px solid #000; padding-left: 8px;"">
-            <span class=""lbl"">IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR</span>
-            <div style=""height: 16px;""></div>
+          <td class=""campo-assinatura"">
+            <span class=""canhoto-lbl"">IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR</span>
+            <div class=""canhoto-espaco-preenchimento""></div>
           </td>
         </tr>
       </table>
     </td>
-    <td class=""text-center"" style=""width: 18%; vertical-align: middle; padding: 2px;"">
-      <div style=""font-size: 11pt; font-weight: bold; line-height: 1;"">NF-e</div>
-      <div style=""font-size: 8.5pt; font-weight: bold; margin-top: 2px;"">Nº {ide.nNF:000\.000\.000}</div>
-      <div style=""font-size: 7.5pt; font-weight: bold;"">SÉRIE {ide.serie:000}</div>
+    <td class=""canhoto-identificacao"">
+      <div class=""canhoto-nfe-centralizado"">
+        <div class=""nfe-titulo"">NF-e</div>
+        <div class=""nfe-numero"">Nº {ide.nNF:000\.000\.000}</div>
+        <div class=""nfe-serie"">SÉRIE {ide.serie:000}</div>
+      </div>
     </td>
   </tr>
 </table>
-<div style=""border-top: 1px dashed #000000; margin: 2px 0 3px 0;""></div>");
-            }
+<div class=""canhoto-picote""></div>");
+      }
 
-            // AVISO DE HOMOLOGAÇÃO
-            if (ide.tpAmb == DFe.Classes.Flags.TipoAmbiente.Homologacao)
-            {
-                sb.Append(@"<div style=""border: 1px solid #000; background: #f2f2f2; text-align: center; font-weight: bold; font-size: 7.5pt; padding: 2px; margin-bottom: 2px;"">
-                  NF-E EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL
-                </div>");
-            }
-
-            // 2. CABEÇALHO DO EMITENTE / DANFE / CHAVE DE ACESSO
-            sb.Append($@"
+      // 2. CABEÇALHO DO EMITENTE / DANFE / CHAVE DE ACESSO
+      sb.Append($@"
 <table class=""tbl-box"">
   <tr>
-    <!-- EMITENTE -->
-    <td style=""width: 44%; padding: 3px;"">
-      <table style=""width: 100%; border-collapse: collapse;"">
+    <!-- EMITENTE (42% - CENTRALIZADO VERTICALMENTE) -->
+    <td style=""width: 42%; padding: 4px 6px; vertical-align: middle;"">
+      <table style=""width: 100%; height: 100%; border-collapse: collapse;"">
         <tr>");
-            if (!string.IsNullOrWhiteSpace(logoBase64))
-            {
-                string cleanLogo = logoBase64.Contains(",") ? logoBase64.Split(',')[1] : logoBase64;
-                sb.Append($@"<td style=""width: 70px; border: none; vertical-align: middle; padding-right: 6px;"">
-                  <img src=""data:image/png;base64,{cleanLogo}"" style=""max-width: 68px; max-height: 48px; object-fit: contain; display: block;"" />
+      if (!string.IsNullOrWhiteSpace(logoBase64))
+      {
+        string cleanLogo = logoBase64.Contains(",") ? logoBase64.Split(',')[1] : logoBase64;
+        sb.Append($@"<td style=""width: 85px; border: none; vertical-align: middle; text-align: center; padding-right: 8px;"">
+                  <img src=""data:image/png;base64,{cleanLogo}"" style=""max-width: 82px; max-height: 70px; object-fit: contain; display: block; margin: 0 auto;"" />
                 </td>");
-            }
-            sb.Append($@"
-          <td style=""border: none;"">
-            <span class=""lbl"">IDENTIFICAÇÃO DO EMITENTE</span>
-            <div style=""font-size: 8.5pt; font-weight: bold; line-height: 1.1;"">{emit.xNome}</div>
-            {(!string.IsNullOrWhiteSpace(emit.xFant) ? $"<div style=\"font-size: 7.5pt; font-weight: bold;\">{emit.xFant}</div>" : "")}
-            <div style=""font-size: 6.5pt; margin-top: 2px;"">{emit.enderEmit?.xLgr}, {emit.enderEmit?.nro} {emit.enderEmit?.xCpl ?? ""}</div>
-            <div style=""font-size: 6.5pt;"">{emit.enderEmit?.xBairro} - CEP: {FormatCep(emit.enderEmit?.CEP)}</div>
-            <div style=""font-size: 6.5pt;"">{emit.enderEmit?.xMun} - {emit.enderEmit?.UF}</div>
-            {(!string.IsNullOrWhiteSpace(emit.enderEmit?.fone?.ToString()) ? $"<div style=\"font-size: 6.5pt;\">TEL: {FormatFone(emit.enderEmit?.fone?.ToString())}</div>" : "")}
+      }
+      sb.Append($@"
+          <td style=""border: none; vertical-align: middle;"">
+            <span class=""lbl"" style=""margin-bottom: 2px;"">IDENTIFICAÇÃO DO EMITENTE</span>
+            <div style=""font-size: 9.5pt; font-weight: bold; line-height: 1.15; color: #000000;"">{emit.xNome}</div>
+            {(!string.IsNullOrWhiteSpace(emit.xFant) ? $"<div style=\"font-size: 8pt; font-weight: bold; margin-top: 1px;\">{emit.xFant}</div>" : "")}
+            <div style=""font-size: 6.8pt; line-height: 1.25; margin-top: 3px; color: #000000;"">
+              <div>{emit.enderEmit?.xLgr}, {emit.enderEmit?.nro} {emit.enderEmit?.xCpl ?? ""}</div>
+              <div>{emit.enderEmit?.xBairro} - CEP: {FormatCep(emit.enderEmit?.CEP)}</div>
+              <div>{emit.enderEmit?.xMun} - {emit.enderEmit?.UF}</div>
+              {(!string.IsNullOrWhiteSpace(emit.enderEmit?.fone?.ToString()) ? $"<div>TEL: {FormatFone(emit.enderEmit?.fone?.ToString())}</div>" : "")}
+            </div>
           </td>
         </tr>
       </table>
     </td>
 
-    <!-- DANFE -->
-    <td class=""text-center"" style=""width: 17%; padding: 2px; vertical-align: middle;"">
+    <!-- DANFE (14%) -->
+    <td class=""text-center"" style=""width: 14%; padding: 2px; vertical-align: middle;"">
       <div style=""font-size: 12pt; font-weight: bold; line-height: 1;"">DANFE</div>
       <div style=""font-size: 5pt; line-height: 1.1; margin: 2px 0;"">Documento Auxiliar da<br/>Nota Fiscal Eletrônica</div>
       <div style=""display: inline-block; border: 1px solid #000; padding: 1px 6px; font-weight: bold; font-size: 7.5pt; margin: 1px 0;"">
@@ -357,14 +551,14 @@ public static class DanfeHtmlGenerator
       <div style=""font-size: 6.5pt; font-weight: bold; margin-top: 1px;"">FOLHA {folhaAtual:D2}/{totalPages:D2}</div>
     </td>
 
-    <!-- CÓDIGO DE BARRAS (100% DA LARGURA) -->
-    <td style=""width: 39%; padding: 0;"">
-      <div style=""width: 100%; height: 34px; padding: 1px;"">
+    <!-- CÓDIGO DE BARRAS & CHAVE DE ACESSO (44% - Largura total sem quebra) -->
+    <td style=""width: 44%; padding: 0;"">
+      <div style=""width: 100%; height: 38px; padding: 1px;"">
         {barcodeSvg}
       </div>
-      <div style=""border-top: 1px solid #000; padding: 2px;"">
+      <div style=""border-top: 1px solid #000; padding: 2px 1px;"">
         <span class=""lbl"">CHAVE DE ACESSO</span>
-        <div class=""text-center"" style=""font-size: 7.2pt; font-weight: bold; white-space: nowrap; font-family: 'Courier New', monospace; letter-spacing: 0.2px;"">
+        <div class=""text-center"" style=""font-size: 6.8pt; font-weight: bold; white-space: nowrap; font-family: Arial, sans-serif; letter-spacing: -0.15px; line-height: 1.1;"">
           {FormatChaveAcesso(chaveAcesso)}
         </div>
       </div>
@@ -376,7 +570,7 @@ public static class DanfeHtmlGenerator
   </tr>
 </table>
 
-<!-- NATUREZA DA OPERAÇÃO / PROTOCOLO -->
+<!-- NATUREZA DA OPERAÇÃO / PROTOCOLO (DIRETO DO XML) -->
 <table class=""tbl-box border-top-none"">
   <tr>
     <td style=""width: 60%;"">
@@ -385,7 +579,7 @@ public static class DanfeHtmlGenerator
     </td>
     <td style=""width: 40%;"">
       <span class=""lbl"">PROTOCOLO DE AUTORIZAÇÃO DE USO</span>
-      <span class=""val text-center"">{prot?.nProt ?? "-"} - {prot?.dhRecbto:dd/MM/yyyy HH:mm:ss}</span>
+      <span class=""val text-center"">{(prot != null ? $"{prot.nProt} - {prot.dhRecbto:dd/MM/yyyy HH:mm:ss}" : "-")}</span>
     </td>
   </tr>
 </table>
@@ -408,11 +602,11 @@ public static class DanfeHtmlGenerator
   </tr>
 </table>");
 
-            // SEÇÕES DA FOLHA 1
-            if (folhaAtual == 1)
-            {
-                // 3. DESTINATÁRIO / REMETENTE
-                sb.Append($@"
+      // SEÇÕES DA FOLHA 1 (Destinatário, Cobrança, Impostos e Transporte)
+      if (folhaAtual == 1)
+      {
+        // 3. DESTINATÁRIO / REMETENTE
+        sb.Append($@"
 <div class=""section-title"">DESTINATÁRIO / REMETENTE</div>
 <table class=""tbl-box"">
   <tr>
@@ -477,35 +671,44 @@ public static class DanfeHtmlGenerator
   </tr>
 </table>");
 
-                // FATURA / DUPLICATAS (Formatado em cartões de largura fixa)
-                var duplicatas = inf.cobr?.dup;
-                if (duplicatas != null && duplicatas.Any())
-                {
-                    sb.Append(@"
+        // FATURA / DUPLICATAS (Com Card de Fatura Y07 e Supressão Inteligente - MOC 3.1.6 e 3.3.2)
+        if (exibirQuadroCobranca)
+        {
+          sb.Append(@"
 <div class=""section-title"">FATURA / DUPLICATAS</div>
-<table class=""tbl-box""><tr>");
-                    int dIdx = 0;
-                    foreach (var dup in duplicatas)
-                    {
-                        if (dIdx > 0 && dIdx % 7 == 0) sb.Append("</tr><tr>");
-                        sb.Append($@"
-<td style=""width: 14.28%; border: 1px solid #000; padding: 2px 3px;"">
+<div class=""duplicatas-wrapper"">");
+
+          // Card da Fatura (Grupo Y07)
+          if (temFatura && fatura != null)
+          {
+            sb.Append($@"
+<div class=""fatura-card"">
+  <span class=""lbl"">DADOS DA FATURA</span>
+  <span class=""val val-sm"">Nº: <strong>{fatura.nFat ?? "-"}</strong></span>
+  <span class=""val val-sm"">V. ORIG: R$ {FormatMoney(fatura.vOrig)}</span>
+  <span class=""val val-sm"">V. LÍQ: <strong>R$ {FormatMoney(fatura.vLiq)}</strong></span>
+</div>");
+          }
+
+          // Cards das Duplicatas
+          if (temDuplicatas && duplicatas != null)
+          {
+            foreach (var dup in duplicatas)
+            {
+              sb.Append($@"
+<div class=""dup-card"">
   <span class=""lbl"">DÚP: {dup.nDup}</span>
   <span class=""val val-sm"">VENC: {dup.dVenc:dd/MM/yyyy}</span>
   <span class=""val text-right"" style=""font-size: 7pt;"">R$ {FormatMoney(dup.vDup)}</span>
-</td>");
-                        dIdx++;
-                    }
-                    while (dIdx % 7 != 0)
-                    {
-                        sb.Append(@"<td style=""width: 14.28%; border: none;""></td>");
-                        dIdx++;
-                    }
-                    sb.Append("</tr></table>");
-                }
+</div>");
+            }
+          }
 
-                // 4. CÁLCULO DO IMPOSTO
-                sb.Append($@"
+          sb.Append("</div>");
+        }
+
+        // 4. CÁLCULO DO IMPOSTO
+        sb.Append($@"
 <div class=""section-title"">CÁLCULO DO IMPOSTO</div>
 <table class=""tbl-box"">
   <tr>
@@ -613,8 +816,8 @@ public static class DanfeHtmlGenerator
   </tr>
 </table>");
 
-                var vol = transp?.vol?.FirstOrDefault();
-                sb.Append($@"
+        var vol = transp?.vol?.FirstOrDefault();
+        sb.Append($@"
 <table class=""tbl-box border-top-none"">
   <tr>
     <td style=""width: 12%;"">
@@ -643,123 +846,135 @@ public static class DanfeHtmlGenerator
     </td>
   </tr>
 </table>");
-            }
+      }
 
-            // 6. DADOS DOS PRODUTOS / SERVIÇOS
-            sb.Append($@"
-<div class=""section-title"">DADOS DOS PRODUTOS / SERVIÇOS {(folhaAtual > 1 ? "(CONTINUAÇÃO)" : "")}</div>
-<table class=""tbl-itens"">
-  <thead>
+      sb.Append("</div>"); // fecha danfe-top
+
+      // ==========================================
+      // BLOCO CENTRAL: TABELA DOS PRODUTOS
+      // ==========================================
+      sb.Append($@"
+<div class=""danfe-middle"">
+  <div class=""section-title"">DADOS DOS PRODUTOS / SERVIÇOS {(folhaAtual > 1 ? "(CONTINUAÇÃO)" : "")}</div>
+  <table class=""tbl-itens"">
+    <thead>
+      <tr>
+        <th style=""width: 7.5%;"">CÓDIGO</th>
+        <th style=""width: 29.5%; text-align: left; padding-left: 3px;"">DESCRIÇÃO DO PRODUTO / SERVIÇO</th>
+        <th style=""width: 6.5%;"">NCM/SH</th>
+        <th style=""width: 3.5%;"">CST</th>
+        <th style=""width: 3.5%;"">CFOP</th>
+        <th style=""width: 3.0%;"">UN</th>
+        <th style=""width: 7.5%; text-align: right; padding-right: 2px;"">QUANT.</th>
+        <th style=""width: 6.5%; text-align: right; padding-right: 2px;"">V. UNIT.</th>
+        <th style=""width: 7.5%; text-align: right; padding-right: 2px;"">V. TOTAL</th>
+        <th style=""width: 6.0%; text-align: right; padding-right: 2px;"">BC ICMS</th>
+        <th style=""width: 5.5%; text-align: right; padding-right: 2px;"">V. ICMS</th>
+        <th style=""width: 4.5%; text-align: right; padding-right: 2px;"">V. IPI</th>
+        <th style=""width: 4.5%;"">ALÍQ.<br/>ICMS</th>
+        <th style=""width: 4.5%;"">ALÍQ.<br/>IPI</th>
+      </tr>
+    </thead>
+    <tbody>");
+
+      for (int i = 0; i < pageItems.Count; i++)
+      {
+        var det = pageItems[i];
+        var prod = det.prod;
+        var icmsData = ExtrairIcms(det.imposto?.ICMS);
+        var ipiData = ExtrairIpi(det.imposto?.IPI);
+
+        // Alternância por sombreamento para destaque divisório (MOC 3.1.7)
+        string rowClass = (i % 2 == 1) ? "class=\"item-shaded\"" : "";
+
+        sb.Append($@"
+      <tr {rowClass}>
+        <td class=""text-center"">{prod.cProd}</td>
+        <td>
+          <div style=""font-size: 6.8pt; font-weight: bold;"">{prod.xProd}</div>
+          {(!string.IsNullOrWhiteSpace(det.infAdProd) ? $"<div style=\"font-size: 5.8pt; margin-top: 1px;\">{det.infAdProd}</div>" : "")}
+        </td>
+        <td class=""text-center"">{prod.NCM}</td>
+        <td class=""text-center""><strong>{icmsData.Cst}</strong></td>
+        <td class=""text-center""><strong>{prod.CFOP}</strong></td>
+        <td class=""text-center"">{prod.uCom}</td>
+        <td class=""text-right"">{FormatQuantity(prod.qCom)}</td>
+        <td class=""text-right"">{FormatMoney(prod.vUnCom)}</td>
+        <td class=""text-right""><strong>{FormatMoney(prod.vProd)}</strong></td>
+        <td class=""text-right"">{FormatMoney(icmsData.BaseCalculo)}</td>
+        <td class=""text-right"">{FormatMoney(icmsData.Valor)}</td>
+        <td class=""text-right"">{FormatMoney(ipiData.Valor)}</td>
+        <td class=""text-center"">{(icmsData.Aliquota > 0 ? $"{icmsData.Aliquota:N0}%" : "-")}</td>
+        <td class=""text-center"">{(ipiData.Aliquota > 0 ? $"{ipiData.Aliquota:N0}%" : "-")}</td>
+      </tr>");
+      }
+
+      if (folhaAtual < totalPages)
+      {
+        sb.Append(@"<tr><td colspan=""14"" class=""text-center"" style=""font-style: italic; font-size: 6pt; padding: 4px;"">CONTINUA NA FOLHA SEGUINTE...</td></tr>");
+      }
+
+      sb.Append(@"
+    </tbody>
+  </table>
+</div>"); // fecha danfe-middle
+
+      // ==========================================
+      // BLOCO INFERIOR: DADOS ADICIONAIS + RODAPÉ
+      // (Empurrado para a base da folha via flexbox)
+      // ==========================================
+      sb.Append(@"<div class=""danfe-bottom"">");
+
+      // 7. DADOS ADICIONAIS (Apenas na Última Folha - MOC 3.8.1: 12,95 cm x 7,62 cm)
+      if (folhaAtual == totalPages)
+      {
+        sb.Append($@"
+  <div class=""section-title"">DADOS ADICIONAIS</div>
+  <table class=""tbl-adicionais"">
     <tr>
-      <th style=""width: 9%;"" class=""text-center"">CÓDIGO</th>
-      <th style=""width: 33.5%;"" class=""text-left"">DESCRIÇÃO DO PRODUTO / SERVIÇO</th>
-      <th style=""width: 7%;"" class=""text-center"">NCM/SH</th>
-      <th style=""width: 3.5%;"" class=""text-center"">CST</th>
-      <th style=""width: 3.5%;"" class=""text-center"">CFOP</th>
-      <th style=""width: 3%;"" class=""text-center"">UN</th>
-      <th style=""width: 7%;"" class=""text-right"">QUANT.</th>
-      <th style=""width: 6.5%;"" class=""text-right"">V. UNIT.</th>
-      <th style=""width: 7.5%;"" class=""text-right"">V. TOTAL</th>
-      <th style=""width: 6%;"" class=""text-right"">BC ICMS</th>
-      <th style=""width: 5%;"" class=""text-right"">V. ICMS</th>
-      <th style=""width: 4.5%;"" class=""text-right"">V. IPI</th>
-      <th style=""width: 3%;"" class=""text-center"">AL.ICMS</th>
-      <th style=""width: 3%;"" class=""text-center"">AL.IPI</th>
-    </tr>
-  </thead>
-  <tbody>");
-
-            foreach (var det in pageItems)
-            {
-                var prod = det.prod;
-                var icmsData = ExtrairIcms(det.imposto?.ICMS);
-                var ipiData = ExtrairIpi(det.imposto?.IPI);
-
-                sb.Append($@"
-    <tr>
-      <td class=""text-center"">{prod.cProd}</td>
-      <td>
-        <div style=""font-size: 6.8pt; font-weight: bold;"">{prod.xProd}</div>
-        {(!string.IsNullOrWhiteSpace(det.infAdProd) ? $"<div style=\"font-size: 5.8pt; margin-top: 1px;\">{det.infAdProd}</div>" : "")}
+      <td style=""width: 63%;"">
+        <span class=""lbl"">INFORMAÇÕES COMPLEMENTARES</span>
+        <div class=""inf-cpl-content"">{infCplLimpo}</div>
       </td>
-      <td class=""text-center"">{prod.NCM}</td>
-      <td class=""text-center""><strong>{icmsData.Cst}</strong></td>
-      <td class=""text-center""><strong>{prod.CFOP}</strong></td>
-      <td class=""text-center"">{prod.uCom}</td>
-      <td class=""text-right"">{FormatQuantity(prod.qCom)}</td>
-      <td class=""text-right"">{FormatMoney(prod.vUnCom)}</td>
-      <td class=""text-right""><strong>{FormatMoney(prod.vProd)}</strong></td>
-      <td class=""text-right"">{FormatMoney(icmsData.BaseCalculo)}</td>
-      <td class=""text-right"">{FormatMoney(icmsData.Valor)}</td>
-      <td class=""text-right"">{FormatMoney(ipiData.Valor)}</td>
-      <td class=""text-center"">{(icmsData.Aliquota > 0 ? $"{icmsData.Aliquota:N0}%" : "-")}</td>
-      <td class=""text-center"">{(ipiData.Aliquota > 0 ? $"{ipiData.Aliquota:N0}%" : "-")}</td>
-    </tr>");
-            }
+      <td style=""width: 37%;"">
+        <span class=""lbl"">RESERVADO AO FISCO</span>
+        <div class=""fisco-content"">{infFiscoLimpo}</div>
+      </td>
+    </tr>
+  </table>");
+      }
 
-            // Preenchimento de linhas vazias na folha 1 para manter o grid estruturado sem buraco branco
-            if (folhaAtual == 1 && pageItems.Count < 14)
-            {
-                int rowsToFill = Math.Min(12, 14 - pageItems.Count);
-                for (int r = 0; r < rowsToFill; r++)
-                {
-                    sb.Append(@"<tr class=""empty-row"">
-                      <td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
-                    </tr>");
-                }
-            }
+      // RODAPÉ: DATA/HORA DE IMPRESSÃO (UTC-3) E RESPONSÁVEL TÉCNICO (SEM REDUNDÂNCIA DA FOLHA)
+      sb.Append($@"
+  <table style=""width: 100%; border-collapse: collapse; margin-top: 3px;"">
+    <tr>
+      <td style=""border: none; font-size: 5pt; color: #000000; padding: 0; text-align: left;"">
+        Impresso em {dataImpressao:dd/MM/yyyy HH:mm:ss}
+      </td>
+      <td style=""border: none; font-size: 5pt; color: #000000; padding: 0; text-align: right;"">
+        {respTecInfo}
+      </td>
+    </tr>
+  </table>
+</div>"); // fecha danfe-bottom
 
-            if (folhaAtual < totalPages)
-            {
-                sb.Append(@"<tr><td colspan=""14"" class=""text-center"" style=""font-style: italic; font-size: 6pt; padding: 4px;"">CONTINUA NA FOLHA SEGUINTE...</td></tr>");
-            }
+      sb.Append(@"</div>"); // fecha danfe-sheet
+    }
 
-            sb.Append("</tbody></table>");
-
-            // 7. DADOS ADICIONAIS (Apenas na Última Folha)
-            if (folhaAtual == totalPages)
-            {
-                sb.Append($@"
-<div class=""section-title"">DADOS ADICIONAIS</div>
-<table class=""tbl-box"">
-  <tr>
-    <td style=""width: 65%; min-height: 52px; padding: 3px;"">
-      <span class=""lbl"">INFORMAÇÕES COMPLEMENTARES</span>
-      <div style=""font-size: 6.2pt; line-height: 1.2; white-space: pre-wrap;"">{infCplLimpo}</div>
-    </td>
-    <td style=""width: 35%; min-height: 52px; padding: 3px;"">
-      <span class=""lbl"">RESERVADO AO FISCO</span>
-      <div style=""font-size: 6.2pt; line-height: 1.2; white-space: pre-wrap;"">{infFiscoLimpo}</div>
-    </td>
-  </tr>
-</table>");
-            }
-
-            // RODAPÉ DA FOLHA
-            sb.Append($@"
-<table style=""width: 100%; border-collapse: collapse; margin-top: 3px;"">
-  <tr>
-    <td style=""border: none; font-size: 5pt; color: #000000; padding: 0;"">Impresso em {DateTime.Now:dd/MM/yyyy HH:mm:ss} | CoreWMS Fiscal</td>
-    <td style=""border: none; font-size: 5pt; text-align: right; color: #000000; padding: 0;"">Folha {folhaAtual:D2} de {totalPages:D2}</td>
-  </tr>
-</table>
-</div>");
-        }
-
-        sb.Append(@"
+    sb.Append(@"
 </body>
 </html>");
 
-        return sb.ToString();
-    }
+    return sb.ToString();
+  }
 
-    private static string GerarCodigo128Svg(string chave)
+  private static string GerarCodigo128Svg(string chave)
+  {
+    var digits = Regex.Replace(chave ?? "", @"\D", "");
+    if (digits.Length != 44) digits = digits.PadLeft(44, '0');
+
+    var patterns = new string[]
     {
-        var digits = Regex.Replace(chave ?? "", @"\D", "");
-        if (digits.Length != 44) digits = digits.PadLeft(44, '0');
-
-        var patterns = new string[]
-        {
             "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213",
             "221312","231212","112232","122132","122231","113222","123122","123221","223211","221132",
             "221231","213212","223112","312131","311222","321122","321221","312212","322112","322211",
@@ -771,129 +986,131 @@ public static class DanfeHtmlGenerator
             "214112","214211","411212","421112","421211","212141","214121","412121","111143","111341",
             "131141","114113","114311","411113","411311","113141","114131","311141","411131","211412",
             "211214","211232","211322","211412","211214","211232","2331112"
-        };
-
-        var codeList = new List<int> { 105 };
-        int checksum = 105;
-        int weight = 1;
-
-        for (int i = 0; i < digits.Length; i += 2)
-        {
-            int val = int.Parse(digits.Substring(i, 2));
-            codeList.Add(val);
-            checksum += val * weight;
-            weight++;
-        }
-
-        checksum %= 103;
-        codeList.Add(checksum);
-        codeList.Add(106);
-
-        int totalWidth = 0;
-        foreach (var code in codeList)
-        {
-            var pat = patterns[code];
-            foreach (char ch in pat) totalWidth += (ch - '0');
-        }
-
-        var sbSvg = new StringBuilder();
-        sbSvg.Append($@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 {totalWidth} 50"" preserveAspectRatio=""none"" style=""width: 100%; height: 100%; display: block;"">");
-        sbSvg.Append(@"<rect width=""100%"" height=""100%"" fill=""#ffffff""/>");
-
-        int x = 0;
-        foreach (var code in codeList)
-        {
-            var pat = patterns[code];
-            bool isBar = true;
-            foreach (char ch in pat)
-            {
-                int w = ch - '0';
-                if (isBar)
-                {
-                    sbSvg.Append($@"<rect x=""{x}"" y=""0"" width=""{w}"" height=""50"" fill=""#000000""/>");
-                }
-                x += w;
-                isBar = !isBar;
-            }
-        }
-        sbSvg.Append("</svg>");
-        return sbSvg.ToString();
-    }
-
-    private static string FormatChaveAcesso(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key) || key.Length != 44) return key;
-        return Regex.Replace(key, ".{4}", "$0 ").Trim();
-    }
-
-    private static string FormatCnpjCpf(string? doc)
-    {
-        if (string.IsNullOrWhiteSpace(doc)) return "-";
-        var clean = Regex.Replace(doc, @"\D", "");
-        if (clean.Length == 14)
-            return $"{clean[..2]}.{clean.Substring(2, 3)}.{clean.Substring(5, 3)}/{clean.Substring(8, 4)}-{clean.Substring(12, 2)}";
-        if (clean.Length == 11)
-            return $"{clean[..3]}.{clean.Substring(3, 3)}.{clean.Substring(6, 3)}-{clean.Substring(9, 2)}";
-        return doc;
-    }
-
-    private static string FormatCep(string? cep)
-    {
-        if (string.IsNullOrWhiteSpace(cep)) return "-";
-        var clean = Regex.Replace(cep, @"\D", "");
-        return clean.Length == 8 ? $"{clean[..5]}-{clean.Substring(5, 3)}" : cep;
-    }
-
-    private static string FormatFone(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return "";
-        var digits = Regex.Replace(value, @"\D", "");
-        if (digits.Length == 10) return Convert.ToUInt64(digits).ToString(@"\(00\) 0000\-0000");
-        if (digits.Length == 11) return Convert.ToUInt64(digits).ToString(@"\(00\) 00000\-0000");
-        return value;
-    }
-
-    private static string FormatMoney(decimal? val) => (val ?? 0m).ToString("N2", PtBrCulture);
-    private static string FormatQuantity(decimal? val) => (val ?? 0m).ToString("N4", PtBrCulture);
-    private static string FormatWeight(decimal? val) => (val ?? 0m).ToString("N3", PtBrCulture);
-
-    private static string FormatFrete(ModalidadeFrete? mod) => mod switch
-    {
-        ModalidadeFrete.mfContaEmitenteOumfContaRemetente => "0 - Remetente (CIF)",
-        ModalidadeFrete.mfContaDestinatario => "1 - Destinatário (FOB)",
-        ModalidadeFrete.mfContaTerceiros => "2 - Terceiros",
-        ModalidadeFrete.mfProprioContaRemente => "3 - Próprio Remetente",
-        ModalidadeFrete.mfProprioContaDestinatario => "4 - Próprio Destinatário",
-        _ => "9 - Sem Frete"
     };
 
-    private static (string Cst, decimal BaseCalculo, decimal Aliquota, decimal Valor) ExtrairIcms(NFe.Classes.Informacoes.Detalhe.Tributacao.Estadual.ICMS? icms)
+    var codeList = new List<int> { 105 }; // Start C
+    int checksum = 105;
+    int weight = 1;
+
+    for (int i = 0; i < digits.Length; i += 2)
     {
-        if (icms?.TipoICMS == null) return ("-", 0, 0, 0);
-        var t = icms.TipoICMS;
-
-        if (t is ICMS00 i00) return (i00.CST.ToString().Replace("Cst", ""), i00.vBC, i00.pICMS, i00.vICMS);
-        if (t is ICMS10 i10) return (i10.CST.ToString().Replace("Cst", ""), i10.vBC, i10.pICMS, i10.vICMS);
-        if (t is ICMS20 i20) return (i20.CST.ToString().Replace("Cst", ""), i20.vBC, i20.pICMS, i20.vICMS);
-        if (t is ICMS40 i40) return (i40.CST.ToString().Replace("Cst", ""), 0, 0, 0);
-        if (t is ICMS51 i51) return (i51.CST.ToString().Replace("Cst", ""), i51.vBC ?? 0, i51.pICMS ?? 0, i51.vICMS ?? 0);
-        if (t is ICMS60) return ("60", 0, 0, 0);
-        if (t is ICMS70 i70) return (i70.CST.ToString().Replace("Cst", ""), i70.vBC, i70.pICMS, i70.vICMS);
-        if (t is ICMS90 i90) return (i90.CST.ToString().Replace("Cst", ""), i90.vBC ?? 0, i90.pICMS ?? 0, i90.vICMS ?? 0);
-        if (t is ICMSSN101 s101) return ("101", 0, s101.pCredSN, s101.vCredICMSSN);
-        if (t is ICMSSN102 s102) return (((int)s102.CSOSN).ToString(), 0, 0, 0);
-        if (t is ICMSSN500) return ("500", 0, 0, 0);
-        if (t is ICMSSN900 s900) return ("900", s900.vBC ?? 0, s900.pICMS ?? 0, s900.vICMS ?? 0);
-
-        return ("-", 0, 0, 0);
+      int val = int.Parse(digits.Substring(i, 2));
+      codeList.Add(val);
+      checksum += val * weight;
+      weight++;
     }
 
-    private static (decimal Aliquota, decimal Valor) ExtrairIpi(NFe.Classes.Informacoes.Detalhe.Tributacao.Federal.IPI? ipi)
+    checksum %= 103;
+    codeList.Add(checksum);
+    codeList.Add(106); // Stop
+
+    // Margem clara regulamentar: 10 módulos à esquerda e 10 à direita = 297 módulos no total (MOC 7.0 Item 2)
+    const int quietZone = 10;
+    int totalWidth = quietZone * 2;
+    foreach (var code in codeList)
     {
-        if (ipi?.TipoIPI is IPITrib trib)
+      var pat = patterns[code];
+      foreach (char ch in pat) totalWidth += (ch - '0');
+    }
+
+    var sbSvg = new StringBuilder();
+    sbSvg.Append($@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 {totalWidth} 50"" preserveAspectRatio=""none"" style=""width: 100%; height: 100%; display: block;"" shape-rendering=""crispEdges"">");
+    sbSvg.Append(@"<rect width=""100%"" height=""100%"" fill=""#ffffff""/>");
+
+    int x = quietZone;
+    foreach (var code in codeList)
+    {
+      var pat = patterns[code];
+      bool isBar = true;
+      foreach (char ch in pat)
+      {
+        int w = ch - '0';
+        if (isBar)
         {
-            return (trib.pIPI ?? 0, trib.vIPI ?? 0);
+          sbSvg.Append($@"<rect x=""{x}"" y=""0"" width=""{w}"" height=""50"" fill=""#000000""/>");
         }
-        return (0, 0);
+        x += w;
+        isBar = !isBar;
+      }
     }
+    sbSvg.Append("</svg>");
+    return sbSvg.ToString();
+  }
+
+  private static string FormatChaveAcesso(string key)
+  {
+    if (string.IsNullOrWhiteSpace(key) || key.Length != 44) return key;
+    return Regex.Replace(key, ".{4}", "$0 ").Trim();
+  }
+
+  private static string FormatCnpjCpf(string? doc)
+  {
+    if (string.IsNullOrWhiteSpace(doc)) return "-";
+    var clean = Regex.Replace(doc, @"\D", "");
+    if (clean.Length == 14)
+      return $"{clean[..2]}.{clean.Substring(2, 3)}.{clean.Substring(5, 3)}/{clean.Substring(8, 4)}-{clean.Substring(12, 2)}";
+    if (clean.Length == 11)
+      return $"{clean[..3]}.{clean.Substring(3, 3)}.{clean.Substring(6, 3)}-{clean.Substring(9, 2)}";
+    return doc;
+  }
+
+  private static string FormatCep(string? cep)
+  {
+    if (string.IsNullOrWhiteSpace(cep)) return "-";
+    var clean = Regex.Replace(cep, @"\D", "");
+    return clean.Length == 8 ? $"{clean[..5]}-{clean.Substring(5, 3)}" : cep;
+  }
+
+  private static string FormatFone(string? value)
+  {
+    if (string.IsNullOrWhiteSpace(value)) return "";
+    var digits = Regex.Replace(value, @"\D", "");
+    if (digits.Length == 10) return Convert.ToUInt64(digits).ToString(@"\(00\) 0000\-0000");
+    if (digits.Length == 11) return Convert.ToUInt64(digits).ToString(@"\(00\) 00000\-0000");
+    return value;
+  }
+
+  private static string FormatMoney(decimal? val) => (val ?? 0m).ToString("N2", PtBrCulture);
+  private static string FormatQuantity(decimal? val) => (val ?? 0m).ToString("N4", PtBrCulture);
+  private static string FormatWeight(decimal? val) => (val ?? 0m).ToString("N3", PtBrCulture);
+
+  private static string FormatFrete(ModalidadeFrete? mod) => mod switch
+  {
+    ModalidadeFrete.mfContaEmitenteOumfContaRemetente => "0 - Remetente (CIF)",
+    ModalidadeFrete.mfContaDestinatario => "1 - Destinatário (FOB)",
+    ModalidadeFrete.mfContaTerceiros => "2 - Terceiros",
+    ModalidadeFrete.mfProprioContaRemente => "3 - Próprio Remetente",
+    ModalidadeFrete.mfProprioContaDestinatario => "4 - Próprio Destinatário",
+    _ => "9 - Sem Frete"
+  };
+
+  private static (string Cst, decimal BaseCalculo, decimal Aliquota, decimal Valor) ExtrairIcms(NFe.Classes.Informacoes.Detalhe.Tributacao.Estadual.ICMS? icms)
+  {
+    if (icms?.TipoICMS == null) return ("-", 0, 0, 0);
+    var t = icms.TipoICMS;
+
+    if (t is ICMS00 i00) return (i00.CST.ToString().Replace("Cst", ""), i00.vBC, i00.pICMS, i00.vICMS);
+    if (t is ICMS10 i10) return (i10.CST.ToString().Replace("Cst", ""), i10.vBC, i10.pICMS, i10.vICMS);
+    if (t is ICMS20 i20) return (i20.CST.ToString().Replace("Cst", ""), i20.vBC, i20.pICMS, i20.vICMS);
+    if (t is ICMS40 i40) return (i40.CST.ToString().Replace("Cst", ""), 0, 0, 0);
+    if (t is ICMS51 i51) return (i51.CST.ToString().Replace("Cst", ""), i51.vBC ?? 0, i51.pICMS ?? 0, i51.vICMS ?? 0);
+    if (t is ICMS60) return ("60", 0, 0, 0);
+    if (t is ICMS70 i70) return (i70.CST.ToString().Replace("Cst", ""), i70.vBC, i70.pICMS, i70.vICMS);
+    if (t is ICMS90 i90) return (i90.CST.ToString().Replace("Cst", ""), i90.vBC ?? 0, i90.pICMS ?? 0, i90.vICMS ?? 0);
+    if (t is ICMSSN101 s101) return ("101", 0, s101.pCredSN, s101.vCredICMSSN);
+    if (t is ICMSSN102 s102) return (((int)s102.CSOSN).ToString(), 0, 0, 0);
+    if (t is ICMSSN500) return ("500", 0, 0, 0);
+    if (t is ICMSSN900 s900) return ("900", s900.vBC ?? 0, s900.pICMS ?? 0, s900.vICMS ?? 0);
+
+    return ("-", 0, 0, 0);
+  }
+
+  private static (decimal Aliquota, decimal Valor) ExtrairIpi(NFe.Classes.Informacoes.Detalhe.Tributacao.Federal.IPI? ipi)
+  {
+    if (ipi?.TipoIPI is IPITrib trib)
+    {
+      return (trib.pIPI ?? 0, trib.vIPI ?? 0);
+    }
+    return (0, 0);
+  }
 }

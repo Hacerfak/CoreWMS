@@ -5,6 +5,7 @@ using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using DFe.Classes.Flags;
+using DFe.Utils;
 using Microsoft.EntityFrameworkCore;
 using NFe.Classes.Informacoes;
 using NFe.Classes.Informacoes.Cobranca;
@@ -33,7 +34,8 @@ public record StandaloneNfeItemInput(
     DateTime? ExpirationDate = null,
     string? XPed = null,
     int? NItemPed = null,
-    string? InboundInvoiceNumber = null
+    string? InboundInvoiceNumber = null,
+    string? OriginalInboundInfAdProd = null
 );
 
 public record NfeDuplicataInput(
@@ -89,7 +91,7 @@ public record NfeBuildRequest(
     Guid FiscalRuleId,
     Guid? CompanyId = null,
     Guid? OutboundOrderId = null,
-    Guid? InboundOrderIdFilter = null, // Suporte ao parâmetro ReturnInvoicePerReferencedInvoice
+    Guid? InboundOrderIdFilter = null,
     StandaloneNfeInput? ManualInput = null,
     NfePaymentInput? Payment = null,
     int? CustomIndFinal = null,
@@ -196,7 +198,6 @@ public class NfeBuilderService
 
         if (order != null)
         {
-            // Busca alocações físicas separadas com a HU
             var allocationsQuery = _db.OutboundAllocations
                 .AsNoTracking()
                 .Include(a => a.HandlingUnit)
@@ -216,7 +217,38 @@ public class NfeBuilderService
                 .Where(io => receiptDocIds.Contains(io.Id))
                 .ToDictionaryAsync(io => io.Id, ct);
 
-            // Se o filtro de 1 NF por NF de entrada estiver ativo, filtra as alocações daquela NF de entrada
+            // Cache do infAdProd dos itens do XML de entrada para herança
+            var inboundItemNotesCache = new Dictionary<string, string>(); // Chave: $"{inboundOrderId}_{sku}"
+            foreach (var inb in inboundOrders.Values)
+            {
+                if (!string.IsNullOrWhiteSpace(inb.RawXml))
+                {
+                    try
+                    {
+                        var inbProc = FuncoesXml.XmlStringParaClasse<NFe.Classes.nfeProc>(inb.RawXml);
+                        var inbNfe = inbProc?.NFe ?? FuncoesXml.XmlStringParaClasse<NFe.Classes.NFe>(inb.RawXml);
+                        if (inbNfe?.infNFe?.det != null)
+                        {
+                            foreach (var d in inbNfe.infNFe.det)
+                            {
+                                if (!string.IsNullOrWhiteSpace(d.infAdProd))
+                                {
+                                    var skuKey = $"{inb.Id}_{d.prod.cProd?.Trim()}";
+                                    if (!inboundItemNotesCache.ContainsKey(skuKey))
+                                    {
+                                        inboundItemNotesCache[skuKey] = d.infAdProd.Trim();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Se houver falha de parse do XML bruto de entrada, segue sem travar a emissão
+                    }
+                }
+            }
+
             if (request.InboundOrderIdFilter.HasValue && request.InboundOrderIdFilter.Value != Guid.Empty)
             {
                 pickedAllocations = pickedAllocations
@@ -224,7 +256,6 @@ public class NfeBuilderService
                     .ToList();
             }
 
-            // Chaves de Acesso referenciadas (<NFref>)
             originAccessKeys = pickedAllocations
                 .Where(a => a.HandlingUnit?.ReceiptDocumentId != null && inboundOrders.ContainsKey(a.HandlingUnit.ReceiptDocumentId.Value))
                 .Select(a => inboundOrders[a.HandlingUnit!.ReceiptDocumentId!.Value].AccessKey)
@@ -234,8 +265,6 @@ public class NfeBuilderService
 
             int lineCounter = 1;
 
-            // REGRA: NUNCA AGRUPAR OS MESMOS SKUS DE NF-Es DE ENTRADA DIFERENTES!
-            // Agrupamos as alocações por: Item do Pedido + NF de Entrada (ReceiptDocumentId)
             var allocationsByItemAndInbound = pickedAllocations
                 .GroupBy(a => new
                 {
@@ -246,7 +275,6 @@ public class NfeBuilderService
 
             if (!allocationsByItemAndInbound.Any())
             {
-                // Fallback caso a ordem ainda não tenha passado pelo coletor (ex: testes pré-coleta com itens embalados)
                 foreach (var item in order.Items.Where(i => i.PackedQuantity > 0))
                 {
                     canonicalItems.Add(new NfeCanonicalItem(
@@ -258,6 +286,7 @@ public class NfeBuilderService
                         XPed: order.OrderNumber,
                         NItemPed: item.LineNumber,
                         InboundInvoiceNumber: null,
+                        OriginalInboundInfAdProd: null,
                         Batches: new List<NfeBatchTraceDto>()
                     ));
                 }
@@ -271,8 +300,9 @@ public class NfeBuilderService
 
                     decimal groupQuantity = group.Sum(a => a.Quantity);
 
-                    // Identifica número da NF-e de Entrada / Remessa
                     string? inboundInvoiceNumber = null;
+                    string? originalInboundInfAdProd = null;
+
                     if (group.Key.ReceiptDocumentId.HasValue && inboundOrders.TryGetValue(group.Key.ReceiptDocumentId.Value, out var inb))
                     {
                         inboundInvoiceNumber = !string.IsNullOrWhiteSpace(inb.InvoiceNumber)
@@ -280,9 +310,14 @@ public class NfeBuilderService
                             : (!string.IsNullOrWhiteSpace(inb.AccessKey) && inb.AccessKey.Length >= 34
                                 ? inb.AccessKey.Substring(25, 9).TrimStart('0')
                                 : inb.InvoiceNumber);
+
+                        var skuLookupKey = $"{inb.Id}_{orderItem.Product.Sku?.Trim()}";
+                        if (inboundItemNotesCache.TryGetValue(skuLookupKey, out var inheritedNote))
+                        {
+                            originalInboundInfAdProd = inheritedNote;
+                        }
                     }
 
-                    // Lotes contidos neste grupo de NF de entrada
                     var batchList = group
                         .Where(a => !string.IsNullOrWhiteSpace(a.HandlingUnit?.Batch))
                         .GroupBy(a => new
@@ -308,6 +343,7 @@ public class NfeBuilderService
                         XPed: order.OrderNumber,
                         NItemPed: orderItem.LineNumber,
                         InboundInvoiceNumber: inboundInvoiceNumber,
+                        OriginalInboundInfAdProd: originalInboundInfAdProd,
                         Batches: batchList
                     ));
                 }
@@ -347,6 +383,7 @@ public class NfeBuilderService
                     XPed: item.XPed,
                     NItemPed: item.NItemPed,
                     InboundInvoiceNumber: item.InboundInvoiceNumber,
+                    OriginalInboundInfAdProd: item.OriginalInboundInfAdProd,
                     Batches: batchList
                 ));
             }
@@ -502,14 +539,12 @@ public class NfeBuilderService
         nfe.infNFe.dest = BuildDestinatario(ctx.Destinatario, ctx.Company.Environment);
         nfe.infNFe.transp = BuildTransporte(ctx.Transporte);
 
-        if (!string.IsNullOrWhiteSpace(ctx.AdditionalNotes))
-        {
-            nfe.infNFe.infAdic = new NFe.Classes.Informacoes.Observacoes.infAdic { infCpl = ctx.AdditionalNotes };
-        }
-
         nfe.infNFe.det = new List<det>();
         int nItem = 1;
         var companyCrt = ObterCrtEmpresa(ctx.Company.Crt);
+
+        // Conjunto de observações fiscais únicas coletadas das regras/exceções (sem repetição)
+        var distinctRuleNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in ctx.Items)
         {
@@ -568,13 +603,19 @@ public class NfeBuilderService
             var rastroList = new List<rastro>();
             var itemComplementNotes = new List<string>();
 
-            // 1. INCLUSÃO DO NÚMERO DA NF-E DE REMESSA NO ITEM
+            // 1. REPLICA INFORMAÇÕES COMPLEMENTARES ORIGINAIS DA ENTRADA
+            if (!string.IsNullOrWhiteSpace(item.OriginalInboundInfAdProd))
+            {
+                itemComplementNotes.Add(item.OriginalInboundInfAdProd.Trim());
+            }
+
+            // 2. INCLUSÃO DO NÚMERO DA NF-E DE REMESSA NO ITEM
             if (!string.IsNullOrWhiteSpace(item.InboundInvoiceNumber))
             {
                 itemComplementNotes.Add($"NF-e: {item.InboundInvoiceNumber.Trim()}");
             }
 
-            // 2. LOTES
+            // 3. LOTES
             foreach (var b in item.Batches)
             {
                 bool hasFullDates = b.ManufactureDate.HasValue && b.ExpirationDate.HasValue;
@@ -607,7 +648,7 @@ public class NfeBuilderService
                 imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)
             };
 
-            // Injeta dados complementares do item (NF de Remessa + Lotes parciais)
+            // Injeta dados complementares do item com herança + lote + remessa
             if (itemComplementNotes.Any())
             {
                 det.infAdProd = string.Join(" | ", itemComplementNotes);
@@ -615,13 +656,33 @@ public class NfeBuilderService
 
             nfe.infNFe.det.Add(det);
 
+            // Coleta a observação da regra sem duplicar por item
             if (!string.IsNullOrWhiteSpace(taxParams.AdditionalNotes))
             {
-                nfe.infNFe.infAdic ??= new NFe.Classes.Informacoes.Observacoes.infAdic();
-                nfe.infNFe.infAdic.infCpl = string.IsNullOrEmpty(nfe.infNFe.infAdic.infCpl)
-                    ? taxParams.AdditionalNotes
-                    : nfe.infNFe.infAdic.infCpl + " " + taxParams.AdditionalNotes;
+                distinctRuleNotes.Add(taxParams.AdditionalNotes.Trim());
             }
+        }
+
+        // MONTAGEM DAS OBSERVAÇÕES COMPLEMENTARES GERAIS (infCpl) SEM REPETIÇÃO
+        var finalNotesParts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(ctx.AdditionalNotes))
+        {
+            finalNotesParts.Add(ctx.AdditionalNotes.Trim());
+        }
+
+        foreach (var ruleNote in distinctRuleNotes)
+        {
+            if (string.IsNullOrWhiteSpace(ctx.AdditionalNotes) || !ctx.AdditionalNotes.Contains(ruleNote, StringComparison.OrdinalIgnoreCase))
+            {
+                finalNotesParts.Add(ruleNote);
+            }
+        }
+
+        if (finalNotesParts.Any())
+        {
+            nfe.infNFe.infAdic ??= new NFe.Classes.Informacoes.Observacoes.infAdic();
+            nfe.infNFe.infAdic.infCpl = string.Join(" ", finalNotesParts).Trim();
         }
 
         CalcularTotaisNfe(nfe);
@@ -650,7 +711,7 @@ public class NfeBuilderService
             mod = ModeloDocumento.NFe,
             serie = ctx.Identificacao.Serie,
             nNF = ctx.Identificacao.Number,
-            dhEmi = DateTimeOffset.Now,
+            dhEmi = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)),
             tpNF = TipoNFe.tnSaida,
             idDest = ctx.Identificacao.IsInterstate ? DestinoOperacao.doInterestadual : DestinoOperacao.doInterna,
             cMunFG = ctx.Company.CityCode > 0 ? ctx.Company.CityCode : 4305108,
@@ -662,7 +723,7 @@ public class NfeBuilderService
             indPres = (PresencaComprador)ctx.Identificacao.IndPres,
             indIntermed = IndicadorIntermediador.iiSemIntermediador,
             procEmi = ProcessoEmissao.peAplicativoContribuinte,
-            verProc = "CoreWMS Fiscal 2.0"
+            verProc = "CoreWMS 1.0"
         };
 
         if (ctx.Company.Environment == 1 && ctx.Identificacao.OriginAccessKeys.Any())
@@ -1394,6 +1455,7 @@ public class NfeBuilderService
         string? XPed,
         int? NItemPed,
         string? InboundInvoiceNumber,
+        string? OriginalInboundInfAdProd,
         List<NfeBatchTraceDto> Batches
     );
 
