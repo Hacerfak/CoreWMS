@@ -43,6 +43,7 @@ import CreateOrEditRuleExceptionPage from '@/pages/Fiscal/CreateOrEditRuleExcept
 import CompanyFiscalDocumentsPage from '@/pages/Fiscal/CompanyFiscalDocumentsPage';
 import CompanyFiscalDocumentDetailsPage from '@/pages/Fiscal/CompanyFiscalDocumentDetailsPage';
 import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
+import PublicDanfePage from '@/pages/Fiscal/PublicDanfePage';
 
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
@@ -68,6 +69,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+
+        <Route path="/public/danfe/:accessKey" element={<PublicDanfePage />} />
+
         <Route element={<PublicRoute />}>
           <Route path="/login" element={<Login />} />
         </Route>

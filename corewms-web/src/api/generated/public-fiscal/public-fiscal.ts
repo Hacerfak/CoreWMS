@@ -45,14 +45,14 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getPublicDanfeAccessKey = (
+export const getApiPublicDanfeAccessKey = (
     accessKey: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/public/danfe/${accessKey}`, method: 'GET', signal
+      {url: `/api/public/danfe/${accessKey}`, method: 'GET', signal
     },
       options);
     }
@@ -60,66 +60,66 @@ export const getPublicDanfeAccessKey = (
 
 
 
-export const getGetPublicDanfeAccessKeyQueryKey = (accessKey: string,) => {
+export const getGetApiPublicDanfeAccessKeyQueryKey = (accessKey: string,) => {
     return [
-    `/public/danfe/${accessKey}`
+    `/api/public/danfe/${accessKey}`
     ] as const;
     }
 
 
-export const getGetPublicDanfeAccessKeyQueryOptions = <TData = Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError = unknown>(accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiPublicDanfeAccessKeyQueryOptions = <TData = Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError = unknown>(accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetPublicDanfeAccessKeyQueryKey(accessKey);
+  const queryKey =  queryOptions?.queryKey ?? getGetApiPublicDanfeAccessKeyQueryKey(accessKey);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>> = ({ signal }) => getPublicDanfeAccessKey(accessKey, requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>> = ({ signal }) => getApiPublicDanfeAccessKey(accessKey, requestOptions, signal);
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: accessKey !== null && accessKey !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: accessKey !== null && accessKey !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetPublicDanfeAccessKeyQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>>
-export type GetPublicDanfeAccessKeyQueryError = unknown
+export type GetApiPublicDanfeAccessKeyQueryResult = NonNullable<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>>
+export type GetApiPublicDanfeAccessKeyQueryError = unknown
 
 
-export function useGetPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError = unknown>(
- accessKey: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError, TData>> & Pick<
+export function useGetApiPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError = unknown>(
+ accessKey: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getPublicDanfeAccessKey>>,
+          Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>,
           TError,
-          Awaited<ReturnType<typeof getPublicDanfeAccessKey>>
+          Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError = unknown>(
- accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError, TData>> & Pick<
+export function useGetApiPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError = unknown>(
+ accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getPublicDanfeAccessKey>>,
+          Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>,
           TError,
-          Awaited<ReturnType<typeof getPublicDanfeAccessKey>>
+          Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError = unknown>(
- accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError = unknown>(
+ accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError = unknown>(
- accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError = unknown>(
+ accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetPublicDanfeAccessKeyQueryOptions(accessKey,options)
+  const queryOptions = getGetApiPublicDanfeAccessKeyQueryOptions(accessKey,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
