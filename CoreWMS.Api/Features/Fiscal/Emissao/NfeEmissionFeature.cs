@@ -233,12 +233,6 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
                 if (request.CustomTpImp.HasValue)
                     nfe.infNFe.ide.tpImp = (TipoImpressao)request.CustomTpImp.Value;
 
-                if (!string.IsNullOrWhiteSpace(request.CustomAdditionalNotes))
-                {
-                    nfe.infNFe.infAdic ??= new NFe.Classes.Informacoes.Observacoes.infAdic();
-                    nfe.infNFe.infAdic.infCpl = request.CustomAdditionalNotes.Trim();
-                }
-
                 nfe.Assina(cfgServico);
                 nfe.Valida(cfgServico);
 

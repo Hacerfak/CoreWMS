@@ -83,12 +83,11 @@ public static class DanfeHtmlGenerator
     string respTecInfo;
     if (respTec != null && !string.IsNullOrWhiteSpace(respTec.CNPJ))
     {
-      var foneFmt = FormatFone(respTec.fone);
-      respTecInfo = $"Resp. Técnico: {respTec.xContato} | CNPJ: {FormatCnpjCpf(respTec.CNPJ)}{(string.IsNullOrWhiteSpace(respTec.email) ? "" : $" | E-mail: {respTec.email}")}{(string.IsNullOrWhiteSpace(foneFmt) ? "" : $" | Fone: {foneFmt}")}";
+      respTecInfo = $"Powered by {respTec.xContato}";
     }
     else
     {
-      respTecInfo = "Resp. Técnico: CoreWMS - Eder Gross Cichelero | CNPJ: 64.615.275/0001-12 | E-mail: suporte@corewms.com.br | Fone: (54) 99222-1877";
+      respTecInfo = "Powered by CoreWMS - Eder Gross Cichelero";
     }
 
     // Verifica se há cobrança/faturas para exibir ou suprimir (MOC 3.3.2)
@@ -286,7 +285,8 @@ public static class DanfeHtmlGenerator
     margin-bottom: 0;
     border: 1px solid #000000;
   }}
-  table.danfe-canhoto td {{
+  table.danfe-canhoto > tr > td,
+  table.danfe-canhoto > tbody > tr > td {{
     padding: 0;
     vertical-align: top;
     color: #000000 !important;
@@ -297,11 +297,12 @@ public static class DanfeHtmlGenerator
   }}
   .canhoto-texto-recebimento {{
     height: 8.5mm; /* 0,85 cm */
-    padding: 2px 4px;
+    padding: 2.5px 4px;
     font-size: 5.5pt;
     line-height: 1.15;
     color: #000000 !important;
     border-bottom: 1px solid #000000;
+    box-sizing: border-box;
   }}
   table.canhoto-campos-sub {{
     width: 100%;
@@ -309,14 +310,22 @@ public static class DanfeHtmlGenerator
     border-collapse: collapse;
     table-layout: fixed;
   }}
-  td.campo-data {{
+  table.canhoto-campos-sub td.campo-data {{
     width: 25.46%; /* 4,10 cm de 16,10 cm */
-    padding: 2px 4px;
+    padding: 2.5px 4px !important;
+    font-size: 5.5pt;
+    line-height: 1.15;
     border-right: 1px solid #000000;
+    vertical-align: top;
+    box-sizing: border-box;
   }}
-  td.campo-assinatura {{
+  table.canhoto-campos-sub td.campo-assinatura {{
     width: 74.54%; /* 12,10 cm de 16,10 cm */
-    padding: 2px 4px;
+    padding: 2.5px 4px !important;
+    font-size: 5.5pt;
+    line-height: 1.15;
+    vertical-align: top;
+    box-sizing: border-box;
   }}
   .canhoto-lbl {{
     display: block;
@@ -324,7 +333,8 @@ public static class DanfeHtmlGenerator
     font-weight: bold;
     text-transform: uppercase;
     color: #000000 !important;
-    line-height: 1;
+    line-height: 1.15;
+    margin-bottom: 2px;
   }}
   .canhoto-espaco-preenchimento {{
     height: 4.5mm;

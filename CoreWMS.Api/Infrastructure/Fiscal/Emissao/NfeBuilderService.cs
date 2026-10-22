@@ -469,12 +469,7 @@ public class NfeBuilderService
             : "VOLUMES";
 
         int nNf = company.NfeNextNumber;
-        if (order != null && !string.IsNullOrWhiteSpace(order.InvoiceNumber) && int.TryParse(order.InvoiceNumber, out var parsedNf) && parsedNf > 0)
-            nNf = parsedNf;
-
         int serie = company.NfeSerie;
-        if (order != null && !string.IsNullOrWhiteSpace(order.InvoiceSerie) && int.TryParse(order.InvoiceSerie, out var parsedSerie) && parsedSerie > 0)
-            serie = parsedSerie;
 
         var notes = request.CustomAdditionalNotes ?? manual?.AdditionalNotes ?? order?.AdditionalNotes;
 
@@ -545,6 +540,12 @@ public class NfeBuilderService
 
         // Conjunto de observações fiscais únicas coletadas das regras/exceções (sem repetição)
         var distinctRuleNotes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. INCLUI INCONDICIONALMENTE A OBSERVAÇÃO PADRÃO DA NATUREZA DE OPERAÇÃO
+        if (!string.IsNullOrWhiteSpace(ctx.Rule.AdditionalNotes))
+        {
+            distinctRuleNotes.Add(ctx.Rule.AdditionalNotes.Trim());
+        }
 
         foreach (var item in ctx.Items)
         {
@@ -648,7 +649,6 @@ public class NfeBuilderService
                 imposto = BuildImpostos(taxParams, valorTotalItem, companyCrt, origem)
             };
 
-            // Injeta dados complementares do item com herança + lote + remessa
             if (itemComplementNotes.Any())
             {
                 det.infAdProd = string.Join(" | ", itemComplementNotes);
@@ -656,32 +656,35 @@ public class NfeBuilderService
 
             nfe.infNFe.det.Add(det);
 
-            // Coleta a observação da regra sem duplicar por item
+            // Coleta a observação da exceção específica sem duplicar
             if (!string.IsNullOrWhiteSpace(taxParams.AdditionalNotes))
             {
                 distinctRuleNotes.Add(taxParams.AdditionalNotes.Trim());
             }
         }
 
-        // MONTAGEM DAS OBSERVAÇÕES COMPLEMENTARES GERAIS (infCpl) SEM REPETIÇÃO
+        // MONTAGEM DAS OBSERVAÇÕES COMPLEMENTARES GERAIS (infCpl)
         var finalNotesParts = new List<string>();
 
+        // 1. Solicitante da Ordem
         if (!string.IsNullOrWhiteSpace(ctx.Order?.RequestedBy))
         {
-            finalNotesParts.Add($"Solicitante: {ctx.Order.RequestedBy.Trim()}.");
+            finalNotesParts.Add($"Solicitante da Ordem: {ctx.Order.RequestedBy.Trim()}.");
         }
 
-        if (!string.IsNullOrWhiteSpace(ctx.AdditionalNotes))
-        {
-            finalNotesParts.Add(ctx.AdditionalNotes.Trim());
-        }
-
+        // 2. Observações da Natureza de Operação e Exceções Fiscais
         foreach (var ruleNote in distinctRuleNotes)
         {
             if (string.IsNullOrWhiteSpace(ctx.AdditionalNotes) || !ctx.AdditionalNotes.Contains(ruleNote, StringComparison.OrdinalIgnoreCase))
             {
                 finalNotesParts.Add(ruleNote);
             }
+        }
+
+        // 3. Observações adicionais do pedido ou informadas na tela de revisão
+        if (!string.IsNullOrWhiteSpace(ctx.AdditionalNotes))
+        {
+            finalNotesParts.Add(ctx.AdditionalNotes.Trim());
         }
 
         if (finalNotesParts.Any())
@@ -1359,6 +1362,10 @@ public class NfeBuilderService
                 (e.SpecificOrigin.HasValue ? 1 : 0))
             .FirstOrDefault();
 
+        string? additionalNotes = !string.IsNullOrWhiteSpace(matchedException?.AdditionalNotes)
+            ? matchedException.AdditionalNotes
+            : baseRule.AdditionalNotes;
+
         return new ResolvedTaxParams
         {
             CfopStateInternal = matchedException?.CfopStateInternal ?? baseRule.CfopStateInternal,
@@ -1385,7 +1392,7 @@ public class NfeBuilderService
             CstCbs = matchedException?.CstCbs ?? baseRule.CstCbs,
             AliqCbs = matchedException?.AliqCbs ?? baseRule.AliqCbs,
             ClassificacaoTributaria = matchedException?.ClassificacaoTributaria ?? baseRule.ClassificacaoTributaria,
-            AdditionalNotes = matchedException?.AdditionalNotes ?? baseRule.AdditionalNotes
+            AdditionalNotes = additionalNotes
         };
     }
 

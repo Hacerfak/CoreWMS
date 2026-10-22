@@ -97,7 +97,7 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
         var fiscalDocs = await _db.CompanyFiscalDocuments
             .AsNoTracking()
             .Where(f => f.OutboundOrderId.HasValue && orderIds.Contains(f.OutboundOrderId.Value))
-            .Select(f => new { f.OutboundOrderId, f.Status })
+            .Select(f => new { f.OutboundOrderId, f.Status, f.Type })
             .ToListAsync(ct);
 
         var fiscalLookup = fiscalDocs
@@ -105,7 +105,8 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
             .ToDictionary(g => g.Key, g => new
             {
                 HasDocs = g.Any(),
-                HasActive = g.Any(d => d.Status != FiscalDocumentStatus.Canceled)
+                // Considera ativo apenas se houver notas fiscais (tipos 1 a 6) com status Authorized
+                HasActive = g.Any(d => (int)d.Type >= 1 && (int)d.Type <= 6 && d.Status == FiscalDocumentStatus.Authorized)
             });
 
         var items = rawOrders.Select(o =>

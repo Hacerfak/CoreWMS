@@ -52,15 +52,18 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
-        // Validação Fiscal: Bloqueia se houver documentos fiscais ativos/pendentes
-        var hasActiveFiscalDocs = await _db.CompanyFiscalDocuments
-            .AnyAsync(d => d.OutboundOrderId == order.Id && d.Status != FiscalDocumentStatus.Canceled, ct);
+        // Validação Fiscal: Bloqueia SOMENTE se houver notas fiscais (normais/originais) autorizadas.
+        // Eventos de cancelamento ou CC-e autorizados não impedem o cancelamento da ordem.
+        var hasAuthorizedInvoices = await _db.CompanyFiscalDocuments
+            .AnyAsync(d => d.OutboundOrderId == order.Id
+                        && (int)d.Type >= 1 && (int)d.Type <= 6
+                        && d.Status == FiscalDocumentStatus.Authorized, ct);
 
-        if (hasActiveFiscalDocs)
+        if (hasAuthorizedInvoices)
         {
             return Results.BadRequest(new
             {
-                Message = "Não é possível cancelar o pedido pois existem documentos fiscais autorizados ou pendentes vinculados. Cancele as notas fiscais na SEFAZ primeiro."
+                Message = "Não é possível cancelar o pedido pois existem notas fiscais autorizadas vinculadas. Cancele as notas fiscais na SEFAZ primeiro."
             });
         }
 
