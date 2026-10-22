@@ -110,4 +110,13 @@ public class OutboundOrderItem : AuditableEntity
         UnitValue = Math.Round(unitValue, 4);
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void ResetQuantities()
+    {
+        AllocatedQuantity = 0m;
+        PickedQuantity = 0m;
+        PackedQuantity = 0m;
+        Status = OutboundOrderItemStatus.Pending;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

@@ -1,6 +1,9 @@
 using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Inventory.Entities;
+using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Outbound.Enums;
+using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -37,6 +40,7 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
         var order = await _db.OutboundOrders
             .Include(o => o.Items)
             .Include(o => o.Volumes)
+            .Include(o => o.DockLocation)
             .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.Id, ct);
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
@@ -52,8 +56,7 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
-        // Validação Fiscal: Bloqueia SOMENTE se houver notas fiscais (normais/originais) autorizadas.
-        // Eventos de cancelamento ou CC-e autorizados não impedem o cancelamento da ordem.
+        // Validação Fiscal: Bloqueia SOMENTE se houver notas fiscais autorizadas
         var hasAuthorizedInvoices = await _db.CompanyFiscalDocuments
             .AnyAsync(d => d.OutboundOrderId == order.Id
                         && (int)d.Type >= 1 && (int)d.Type <= 6
@@ -67,10 +70,20 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
-        // 2. Estorna as Alocações (Tarefas de Picking) e libera saldo reservado
+        // 2. Estorna as Alocações e libera saldo reservado via domínio
         var allocations = await _db.OutboundAllocations
+            .Include(a => a.HandlingUnit)
             .Where(a => a.OutboundOrderId == order.Id)
             .ToListAsync(ct);
+
+        var targetLocationId = order.DockLocationId;
+        if (!targetLocationId.HasValue)
+        {
+            targetLocationId = await _db.Set<Location>()
+                .Where(l => l.IsActive)
+                .Select(l => (Guid?)l.Id)
+                .FirstOrDefaultAsync(ct);
+        }
 
         foreach (var alloc in allocations)
         {
@@ -81,7 +94,14 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
             if (balance != null)
             {
+                // Move de TotalAllocated para TotalAvailable via método de domínio
                 balance.UnallocateForPicking(alloc.Quantity);
+            }
+
+            // Se por qualquer razão a HU ainda constar como Consumed, reativa via método de domínio
+            if (alloc.HandlingUnit != null && alloc.HandlingUnit.Status == HuStatus.Consumed)
+            {
+                alloc.HandlingUnit.RestoreConsumed(alloc.Quantity, targetLocationId);
             }
         }
 
@@ -100,16 +120,8 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
         if (billingItems.Any()) _db.BillingItems.RemoveRange(billingItems);
 
-        // 5. Reseta os Itens e define status como Canceled
-        foreach (var item in order.Items)
-        {
-            item.GetType().GetProperty("AllocatedQuantity")?.SetValue(item, 0m);
-            item.GetType().GetProperty("PickedQuantity")?.SetValue(item, 0m);
-            item.GetType().GetProperty("PackedQuantity")?.SetValue(item, 0m);
-            item.GetType().GetProperty("Status")?.SetValue(item, OutboundOrderItemStatus.Pending);
-        }
-
-        order.UpdateStatus(OutboundOrderStatus.Canceled);
+        // 5. Cancela a ordem e reseta os itens via método de domínio
+        order.Cancel();
 
         try
         {
@@ -120,7 +132,7 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             return Results.Conflict(new { Message = "Conflito ao cancelar o pedido. Tente novamente." });
         }
 
-        return Results.Ok(new { Message = "Pedido cancelado e todas as reservas foram estornadas com sucesso." });
+        return Results.Ok(new { Message = "Pedido cancelado, HUs físicas reativadas e todas as reservas estornadas com sucesso." });
     }
 }
 

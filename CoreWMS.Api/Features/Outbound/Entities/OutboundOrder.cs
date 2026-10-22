@@ -254,4 +254,21 @@ public class OutboundOrder : AuditableEntity
         RequestedBy = userName?.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void Cancel()
+    {
+        if (Status == OutboundOrderStatus.Canceled)
+            throw new InvalidOperationException("O pedido já está cancelado.");
+
+        if (Status == OutboundOrderStatus.Shipped)
+            throw new InvalidOperationException("Não é possível cancelar diretamente um pedido expedido (Shipped). Execute o 'Estorno de Expedição' primeiro para restaurar o estoque.");
+
+        foreach (var item in _items)
+        {
+            item.ResetQuantities();
+        }
+
+        Status = OutboundOrderStatus.Canceled;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

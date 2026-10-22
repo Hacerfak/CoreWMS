@@ -4,6 +4,7 @@ using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Outbound.Enums;
+using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Billing;
@@ -38,9 +39,10 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Localiza o pedido com itens e alocações
+        // 1. Localiza o pedido com itens e doca
         var order = await _db.OutboundOrders
             .Include(o => o.Items)
+            .Include(o => o.DockLocation)
             .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.OrderId, ct);
 
         if (order == null)
@@ -51,17 +53,17 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             return Results.BadRequest(new { Message = "Apenas pedidos com status 'Expedido' (Shipped) podem ter a expedição estornada." });
         }
 
-        // 2. Trava de Segurança Fiscal: Não permite estornar se houver NF-e autorizada ou pendente
+        // 2. Trava de Segurança Fiscal: Não permite estornar se houver NF-e autorizada
         var hasActiveNfe = await _db.CompanyFiscalDocuments
             .AnyAsync(d => d.OutboundOrderId == order.Id
                         && (int)d.Type >= 1 && (int)d.Type <= 6
-                        && d.Status != FiscalDocumentStatus.Canceled, ct);
+                        && d.Status == FiscalDocumentStatus.Authorized, ct);
 
         if (hasActiveNfe)
         {
             return Results.BadRequest(new
             {
-                Message = "Não é possível estornar a expedição enquanto houver documento fiscal ativo ou pendente vinculado à ordem. Cancele a NF-e na SEFAZ primeiro."
+                Message = "Não é possível estornar a expedição enquanto houver documento fiscal autorizado vinculado à ordem. Cancele a NF-e na SEFAZ primeiro."
             });
         }
 
@@ -76,49 +78,41 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             return Results.BadRequest(new { Message = "Nenhuma alocação confirmada encontrada para estorno neste pedido." });
         }
 
+        var targetLocationId = order.DockLocationId;
+        if (!targetLocationId.HasValue)
+        {
+            targetLocationId = await _db.Set<Location>()
+                .Where(l => l.IsActive)
+                .Select(l => (Guid?)l.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+
         foreach (var alloc in allocations)
         {
             var hu = alloc.HandlingUnit;
+            if (hu == null) continue;
 
-            // A) Restaura o saldo físico da Handling Unit (HU)
-            var newHuQty = hu.CurrentQuantity + alloc.Quantity;
-            var restoreMethod = hu.GetType().GetMethod("Restore") ?? hu.GetType().GetMethod("Produce");
-            if (restoreMethod != null)
-            {
-                restoreMethod.Invoke(hu, new object[] { alloc.Quantity });
-            }
-            else
-            {
-                hu.GetType().GetProperty("CurrentQuantity")?.SetValue(hu, newHuQty);
-            }
+            // A) Restaura saldo, endereço e status via método de domínio
+            hu.RestoreConsumed(alloc.Quantity, targetLocationId);
 
-            // B) Devolve o saldo ao estoque consolidado (InventoryBalance) como Alocado
+            // B) Devolve o saldo ao estoque consolidado como Alocado via método de domínio
             var balance = await _db.InventoryBalances
                 .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == hu.ProductId && b.CustomerId == order.CustomerId, ct);
 
             if (balance != null)
             {
-                var newAllocated = balance.TotalAllocated + alloc.Quantity;
-                var restoreBalanceMethod = balance.GetType().GetMethod("RestoreShipped");
-                if (restoreBalanceMethod != null)
-                {
-                    restoreBalanceMethod.Invoke(balance, new object[] { alloc.Quantity });
-                }
-                else
-                {
-                    balance.GetType().GetProperty("TotalAllocated")?.SetValue(balance, newAllocated);
-                }
+                balance.RestoreShipped(alloc.Quantity);
             }
 
-            // C) Lançamento positivo de estorno no Kardex
+            // C) Lançamento de compensação no Kardex
             await _kardex.WriteAsync(new InventoryTransaction(
                 companyId,
                 order.CustomerId,
                 hu.ProductId,
                 hu.Id,
-                order.DockLocationId,
+                targetLocationId ?? order.DockLocationId,
                 TransactionType.Outbound_FullPallet,
-                alloc.Quantity, // Quantidade POSITIVA para compensar a saída anterior
+                alloc.Quantity,
                 hu.CurrentQuantity,
                 order.Id,
                 $"ESTORNO EXPEDIÇÃO - PEDIDO #{order.OrderNumber} (NF-E CANCELADA)"
@@ -128,7 +122,7 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
         // 4. Retorna a ordem para 'ReadyToShip'
         order.UpdateStatus(OutboundOrderStatus.ReadyToShip);
 
-        // 5. EXCLUSÃO DOS ITENS OPERACIONAIS DE SAÍDA (Handling Out e Stretch em ciclos abertos)
+        // 5. Exclusão dos itens operacionais de saída em ciclos abertos
         var billingItems = await _db.BillingItems
             .Where(b => (b.DocumentId == order.Id || b.Description.Contains(order.OrderNumber))
                      && _db.BillingCycles.Any(c => c.Id == b.BillingCycleId && c.Status == BillingStatus.Draft))
@@ -148,7 +142,7 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             return Results.Conflict(new { Message = "Conflito de concorrência ao estornar a expedição." });
         }
 
-        // 6. RECÁLCULO EM SEGUNDO PLANO DAS DIÁRIAS (Recompondo o estoque que voltou a constar em armazém)
+        // 6. Recálculo das diárias de armazenagem
         if (_billingChannel != null)
         {
             await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
@@ -162,7 +156,7 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
 
         return Results.Ok(new
         {
-            Message = $"Expedição do Pedido #{order.OrderNumber} estornada com sucesso! O estoque foi restaurado e os lançamentos de faturamento foram atualizados.",
+            Message = $"Expedição do Pedido #{order.OrderNumber} estornada com sucesso! O estoque físico das HUs e os saldos foram restaurados.",
             OrderStatus = order.Status.ToString()
         });
     }

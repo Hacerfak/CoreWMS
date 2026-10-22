@@ -90,6 +90,26 @@ public class HandlingUnit : AuditableEntity
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
+    public void RestoreConsumed(decimal quantityToRestore, Guid? restoreLocationId = null)
+    {
+        if (quantityToRestore <= 0)
+            throw new ArgumentException("A quantidade a ser restaurada deve ser maior que zero.", nameof(quantityToRestore));
+
+        CurrentQuantity += quantityToRestore;
+
+        if (Status == HuStatus.Consumed || !CurrentLocationId.HasValue || CurrentLocationId == Guid.Empty)
+        {
+            Status = HuStatus.Stored;
+            if (restoreLocationId.HasValue && restoreLocationId.Value != Guid.Empty)
+            {
+                CurrentLocationId = restoreLocationId.Value;
+            }
+        }
+
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
     public void UpdateTraceability(string? batch, DateTime? mfgDate, DateTime? expDate, string? serialNumber)
     {
         Batch = batch?.ToUpper().Trim();
@@ -98,6 +118,6 @@ public class HandlingUnit : AuditableEntity
         SerialNumber = serialNumber?.ToUpper().Trim();
 
         UpdatedAt = DateTime.UtcNow;
-        Version = FastGuid.NewPostgreSqlGuid(); // Dispara a trava de concorrência
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 }

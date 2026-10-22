@@ -176,6 +176,16 @@ public class InventoryBalance : AuditableEntity
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
+    public void RestoreShipped(decimal quantity)
+    {
+        if (quantity <= 0)
+            throw new ArgumentException("A quantidade a ser restaurada deve ser maior que zero.", nameof(quantity));
+
+        TotalAllocated += quantity;
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
     public void Quarantine(decimal quantity)
     {
         if (quantity > TotalAvailable)
