@@ -8,17 +8,25 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
 
-public record CancelOutboundOrderCommand(Guid Id) : IRequest<IResult>;
+public record CancelOutboundOrderRequest(string Reason);
+
+public record CancelOutboundOrderCommand(Guid Id, string Reason) : IRequest<IResult>;
 
 public class CancelOutboundOrderCommandValidator : AbstractValidator<CancelOutboundOrderCommand>
 {
     public CancelOutboundOrderCommandValidator()
     {
         RuleFor(x => x.Id).NotEmpty();
+        RuleFor(x => x.Reason)
+            .NotEmpty().WithMessage("O motivo do cancelamento é obrigatório.")
+            .MinimumLength(15).WithMessage("O motivo do cancelamento deve conter no mínimo 15 caracteres.")
+            .MaximumLength(500).WithMessage("O motivo do cancelamento deve conter no máximo 500 caracteres.");
     }
 }
 
@@ -26,11 +34,16 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
+    private readonly IHttpContextAccessor _http;
 
-    public CancelOutboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant)
+    public CancelOutboundOrderHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IHttpContextAccessor http)
     {
         _db = db;
         _tenant = tenant;
+        _http = http;
     }
 
     public async Task<IResult> Handle(CancelOutboundOrderCommand request, CancellationToken ct)
@@ -56,7 +69,6 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
-        // Validação Fiscal: Bloqueia SOMENTE se houver notas fiscais autorizadas
         var hasAuthorizedInvoices = await _db.CompanyFiscalDocuments
             .AnyAsync(d => d.OutboundOrderId == order.Id
                         && (int)d.Type >= 1 && (int)d.Type <= 6
@@ -70,7 +82,6 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
-        // 2. Estorna as Alocações e libera saldo reservado via domínio
         var allocations = await _db.OutboundAllocations
             .Include(a => a.HandlingUnit)
             .Where(a => a.OutboundOrderId == order.Id)
@@ -94,11 +105,9 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
             if (balance != null)
             {
-                // Move de TotalAllocated para TotalAvailable via método de domínio
                 balance.UnallocateForPicking(alloc.Quantity);
             }
 
-            // Se por qualquer razão a HU ainda constar como Consumed, reativa via método de domínio
             if (alloc.HandlingUnit != null && alloc.HandlingUnit.Status == HuStatus.Consumed)
             {
                 alloc.HandlingUnit.RestoreConsumed(alloc.Quantity, targetLocationId);
@@ -107,21 +116,26 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
         if (allocations.Any()) _db.OutboundAllocations.RemoveRange(allocations);
 
-        // 3. Remove Volumes criados
         if (order.Volumes.Any())
         {
             _db.Set<Entities.OutboundVolume>().RemoveRange(order.Volumes);
         }
 
-        // 4. Limpa itens de cobrança associados
         var billingItems = await _db.BillingItems
             .Where(b => b.Description.Contains(order.OrderNumber))
             .ToListAsync(ct);
 
         if (billingItems.Any()) _db.BillingItems.RemoveRange(billingItems);
 
-        // 5. Cancela a ordem e reseta os itens via método de domínio
-        order.Cancel();
+        // Identifica o operador que solicitou o cancelamento
+        var user = _http.HttpContext?.User;
+        var userName = user?.FindFirst("Name")?.Value
+            ?? user?.Identity?.Name
+            ?? user?.FindFirst(ClaimTypes.Name)?.Value
+            ?? "Operador";
+
+        var formattedReason = $"{request.Reason.Trim()} (por {userName})";
+        order.Cancel(formattedReason);
 
         try
         {
@@ -140,7 +154,14 @@ public static class CancelOutboundOrderEndpoints
 {
     public static void MapCancelOutboundOrderEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapDelete("/api/outbound/orders/{id:guid}/cancel", async (Guid id, IMediator mediator) => await mediator.Send(new CancelOutboundOrderCommand(id)))
+        app.MapPost("/api/outbound/orders/{id:guid}/cancel", async (Guid id, [FromBody] CancelOutboundOrderRequest req, IMediator mediator) =>
+            await mediator.Send(new CancelOutboundOrderCommand(id, req.Reason)))
+           .WithTags("Outbound")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Outbound.Manage);
+
+        app.MapDelete("/api/outbound/orders/{id:guid}/cancel", async (Guid id, [FromBody] CancelOutboundOrderRequest req, IMediator mediator) =>
+            await mediator.Send(new CancelOutboundOrderCommand(id, req.Reason)))
            .WithTags("Outbound")
            .RequireAuthorization()
            .RequirePermission(Permissions.Outbound.Manage);

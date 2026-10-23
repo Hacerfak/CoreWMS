@@ -24,6 +24,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CancelOutboundOrderRequest,
   CreateOutboundOrderCommand,
   FinalizeOrderPackingCommand,
   GetApiOutboundOrdersOrderIdFiscalPreviewParams,
@@ -209,14 +210,79 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiOutboundPickingScanMutationOptions(options), queryClient);
     }
-    export const deleteApiOutboundOrdersIdCancel = (
+    export const postApiOutboundOrdersIdCancel = (
     id: string,
+    cancelOutboundOrderRequest: CancelOutboundOrderRequest,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/outbound/orders/${id}/cancel`, method: 'DELETE', signal
+      {url: `/api/outbound/orders/${id}/cancel`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: cancelOutboundOrderRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundOrdersIdCancelMutationKey = () => ['postApiOutboundOrdersIdCancel'] as const;
+
+export const getPostApiOutboundOrdersIdCancelMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdCancel>>, TError,PostApiOutboundOrdersIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdCancel>>, TError,PostApiOutboundOrdersIdCancelMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundOrdersIdCancelMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundOrdersIdCancel>>, PostApiOutboundOrdersIdCancelMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  postApiOutboundOrdersIdCancel(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundOrdersIdCancelMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundOrdersIdCancel>>>
+    export type PostApiOutboundOrdersIdCancelMutationBody = CancelOutboundOrderRequest
+    export type PostApiOutboundOrdersIdCancelMutationError = unknown
+    export type PostApiOutboundOrdersIdCancelMutationVariables = {id: string;data: CancelOutboundOrderRequest}
+
+    export const usePostApiOutboundOrdersIdCancel = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundOrdersIdCancel>>, TError,PostApiOutboundOrdersIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundOrdersIdCancel>>,
+        TError,
+        PostApiOutboundOrdersIdCancelMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundOrdersIdCancelMutationOptions(options), queryClient);
+    }
+    export const deleteApiOutboundOrdersIdCancel = (
+    id: string,
+    cancelOutboundOrderRequest: CancelOutboundOrderRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/orders/${id}/cancel`, method: 'DELETE',
+      headers: {'Content-Type': 'application/json', },
+      data: cancelOutboundOrderRequest, signal
     },
       options);
     }
@@ -241,9 +307,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>, DeleteApiOutboundOrdersIdCancelMutationVariables> = (props) => {
-          const {id} = props ?? {};
+          const {id,data} = props ?? {};
 
-          return  deleteApiOutboundOrdersIdCancel(id,requestOptions)
+          return  deleteApiOutboundOrdersIdCancel(id,data,requestOptions)
         }
 
 
@@ -254,9 +320,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type DeleteApiOutboundOrdersIdCancelMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>>
-
+    export type DeleteApiOutboundOrdersIdCancelMutationBody = CancelOutboundOrderRequest
     export type DeleteApiOutboundOrdersIdCancelMutationError = unknown
-    export type DeleteApiOutboundOrdersIdCancelMutationVariables = {id: string}
+    export type DeleteApiOutboundOrdersIdCancelMutationVariables = {id: string;data: CancelOutboundOrderRequest}
 
     export const useDeleteApiOutboundOrdersIdCancel = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiOutboundOrdersIdCancel>>, TError,DeleteApiOutboundOrdersIdCancelMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}

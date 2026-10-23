@@ -28,6 +28,7 @@ export default function OutboundListPage() {
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [orderToCancel, setOrderToCancel] = useState(null);
+    const [cancelReason, setCancelReason] = useState('');
     const [orderToDelete, setOrderToDelete] = useState(null);
     const [orderToRevert, setOrderToRevert] = useState(null);
 
@@ -130,16 +131,20 @@ export default function OutboundListPage() {
     };
 
     const handleCancelOrder = async () => {
-        if (!orderToCancel) return;
+        if (!orderToCancel || cancelReason.trim().length < 15) {
+            return toast.warning('O motivo do cancelamento deve conter no mínimo 15 caracteres.');
+        }
         try {
             setIsLoading(true);
             const res = await customInstance({
                 url: `/api/outbound/orders/${orderToCancel.id}/cancel`,
-                method: 'DELETE'
+                method: 'POST',
+                data: { reason: cancelReason.trim() }
             });
             const data = res?.data || res;
             toast.success(data?.message || 'Pedido de saída cancelado com sucesso.');
             setOrderToCancel(null);
+            setCancelReason('');
             loadOrders();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao cancelar pedido.');
@@ -483,19 +488,65 @@ export default function OutboundListPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* DIÁLOGO CANCELAMENTO */}
-            <AlertDialog open={!!orderToCancel} onOpenChange={(open) => !open && setOrderToCancel(null)}>
-                <AlertDialogContent className="bg-white">
+            {/* DIÁLOGO CANCELAMENTO COM MOTIVO OBRIGATÓRIO */}
+            <AlertDialog
+                open={!!orderToCancel}
+                onOpenChange={(open) => {
+                    if (!open && !isLoading) {
+                        setOrderToCancel(null);
+                        setCancelReason('');
+                    }
+                }}
+            >
+                <AlertDialogContent className="bg-white sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Cancelar Pedido de Saída?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Deseja cancelar o pedido <strong className="text-slate-800">#{orderToCancel?.orderNumber}</strong>? Todas as reservas de stock e alocações de coletor serão canceladas.
+                        <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+                            <Ban className="h-5 w-5 text-amber-600" /> Cancelar Pedido de Saída?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-500 space-y-2">
+                            <span>
+                                Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{orderToCancel?.orderNumber}</strong>? Todas as reservas de estoque e alocações de coletor serão canceladas.
+                            </span>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+
+                    <div className="space-y-1.5 py-2">
+                        <label className="text-xs font-bold text-slate-700 uppercase">
+                            Motivo do Cancelamento <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                            rows={3}
+                            placeholder="Ex: Cancelado a pedido do cliente via chamado #1234 devido a duplicidade..."
+                            value={cancelReason}
+                            onChange={(e) => setCancelReason(e.target.value)}
+                            disabled={isLoading}
+                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
+                        />
+                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span>Mínimo 15 caracteres</span>
+                            <span className={cancelReason.trim().length >= 15 ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
+                                {cancelReason.trim().length}/15
+                            </span>
+                        </div>
+                    </div>
+
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isLoading}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleCancelOrder} disabled={isLoading} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
-                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                        <AlertDialogCancel
+                            disabled={isLoading}
+                            onClick={() => {
+                                setOrderToCancel(null);
+                                setCancelReason('');
+                            }}
+                        >
+                            Voltar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleCancelOrder}
+                            disabled={isLoading || cancelReason.trim().length < 15}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
+                        >
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Cancelamento
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

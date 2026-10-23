@@ -255,7 +255,7 @@ public class OutboundOrder : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void Cancel()
+    public void Cancel(string reason, DateTime? localTimestamp = null)
     {
         if (Status == OutboundOrderStatus.Canceled)
             throw new InvalidOperationException("O pedido já está cancelado.");
@@ -263,12 +263,49 @@ public class OutboundOrder : AuditableEntity
         if (Status == OutboundOrderStatus.Shipped)
             throw new InvalidOperationException("Não é possível cancelar diretamente um pedido expedido (Shipped). Execute o 'Estorno de Expedição' primeiro para restaurar o estoque.");
 
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 15)
+            throw new ArgumentException("O motivo do cancelamento deve conter no mínimo 15 caracteres.", nameof(reason));
+
         foreach (var item in _items)
         {
             item.ResetQuantities();
         }
 
         Status = OutboundOrderStatus.Canceled;
+
+        // Converte o instante para o fuso operacional (Brasília) para o texto legível ficar correto
+        var displayTime = localTimestamp ?? ToOperationalTime(DateTime.UtcNow);
+        var cancelLog = $"[CANCELADO em {displayTime:dd/MM/yyyy HH:mm}]: {reason.Trim()}";
+
+        AdditionalNotes = string.IsNullOrWhiteSpace(AdditionalNotes)
+            ? cancelLog
+            : $"{AdditionalNotes}\n{cancelLog}";
+
+        // O campo técnico do banco continua rigorosamente em UTC puro
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static DateTime ToOperationalTime(DateTime utcDateTime)
+    {
+        try
+        {
+            // Padrão Linux / Docker (IANA)
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+            return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
+        }
+        catch
+        {
+            try
+            {
+                // Padrão Windows
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
+                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
+            }
+            catch
+            {
+                // Fallback seguro UTC-3
+                return utcDateTime.AddHours(-3);
+            }
+        }
     }
 }

@@ -36,6 +36,7 @@ export default function OutboundOrderDetailsPage() {
     // Ações do cabeçalho
     const [isRevertingShipment, setIsRevertingShipment] = useState(false);
     const [isCancelingOrder, setIsCancelingOrder] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
     const [isDeletingOrder, setIsDeletingOrder] = useState(false);
 
     // Diálogos de Confirmação (shadcn/ui)
@@ -175,15 +176,20 @@ export default function OutboundOrderDetailsPage() {
 
     // Cancelamento do Pedido
     const handleCancelOrder = async () => {
+        if (cancelReason.trim().length < 15) {
+            return toast.warning('O motivo do cancelamento deve conter no mínimo 15 caracteres.');
+        }
         try {
             setIsCancelingOrder(true);
             const res = await customInstance({
                 url: `/api/outbound/orders/${orderId}/cancel`,
-                method: 'DELETE'
+                method: 'POST',
+                data: { reason: cancelReason.trim() }
             });
             const data = res?.data || res;
             toast.success(data?.message || 'Pedido de saída cancelado com sucesso.');
             setIsCancelOrderDialogOpen(false);
+            setCancelReason('');
             loadOrderDetails();
         } catch (error) {
             toast.error(error.response?.data?.message || error.message || 'Erro ao cancelar pedido.');
@@ -818,21 +824,64 @@ export default function OutboundOrderDetailsPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO DO PEDIDO */}
-            <AlertDialog open={isCancelOrderDialogOpen} onOpenChange={setIsCancelOrderDialogOpen}>
-                <AlertDialogContent className="bg-white">
+            {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO DO PEDIDO COM JUSTIFICATIVA */}
+            <AlertDialog
+                open={isCancelOrderDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open && !isCancelingOrder) {
+                        setIsCancelOrderDialogOpen(false);
+                        setCancelReason('');
+                    }
+                }}
+            >
+                <AlertDialogContent className="bg-white sm:max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Cancelar Pedido de Saída?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Deseja cancelar o pedido <strong className="text-slate-800">#{order?.orderNumber}</strong>?
-                            <br /><br />
-                            Todas as reservas de estoque, alocações de coletor e volumes gerados serão cancelados e liberados de volta ao armazém.
+                        <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+                            <Ban className="h-5 w-5 text-amber-600" /> Cancelar Pedido de Saída?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-500">
+                            Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{order?.orderNumber}</strong>?
+                            Todas as reservas de estoque, alocações de coletor e volumes gerados serão liberados de volta ao armazém.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
+
+                    <div className="space-y-1.5 py-2">
+                        <label className="text-xs font-bold text-slate-700 uppercase">
+                            Motivo do Cancelamento <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                            rows={3}
+                            placeholder="Ex: Cancelamento solicitado pelo comprador devido a alteração de endereço..."
+                            value={cancelReason}
+                            onChange={(e) => setCancelReason(e.target.value)}
+                            disabled={isCancelingOrder}
+                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
+                        />
+                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                            <span>Mínimo 15 caracteres</span>
+                            <span className={cancelReason.trim().length >= 15 ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
+                                {cancelReason.trim().length}/15
+                            </span>
+                        </div>
+                    </div>
+
                     <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isCancelingOrder}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleCancelOrder} disabled={isCancelingOrder} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
-                            {isCancelingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                        <AlertDialogCancel
+                            disabled={isCancelingOrder}
+                            onClick={() => {
+                                setIsCancelOrderDialogOpen(false);
+                                setCancelReason('');
+                            }}
+                        >
+                            Voltar
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleCancelOrder}
+                            disabled={isCancelingOrder || cancelReason.trim().length < 15}
+                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
+                        >
+                            {isCancelingOrder ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Cancelamento
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
