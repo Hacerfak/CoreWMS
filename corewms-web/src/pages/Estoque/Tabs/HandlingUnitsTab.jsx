@@ -15,9 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import {
     Search, Loader2, Download, Layers, MapPin, ShieldAlert,
-    AlertTriangle, Printer, CheckCircle2, Calendar, FileText,
+    AlertTriangle, Printer, CheckCircle2, FileText,
     Undo2, X, SlidersHorizontal, Columns, ChevronDown, ChevronUp, RotateCcw
 } from 'lucide-react';
 
@@ -222,8 +223,9 @@ export default function HandlingUnitsTab() {
     const [selectedLocation, setSelectedLocation] = useState('ALL');
     const [qualityFilter, setQualityFilter] = useState('ALL');
     const [statusFilter, setStatusFilter] = useState('ALL');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+
+    // Período com DateRangePicker (from / to)
+    const [dateRange, setDateRange] = useState(undefined);
 
     // Estado dos Parâmetros Aplicados na API
     const [appliedFilters, setAppliedFilters] = useState({});
@@ -260,17 +262,6 @@ export default function HandlingUnitsTab() {
 
     const allTopologyLocations = useMemo(() => [...storageLocations, ...qualityLocations], [storageLocations, qualityLocations]);
 
-    // Trata datas para cobertura completa de 24h (00:00:00 até 23:59:59)
-    const formattedStartDate = useMemo(() => {
-        if (!startDate) return undefined;
-        return new Date(`${startDate}T00:00:00.000`).toISOString();
-    }, [startDate]);
-
-    const formattedEndDate = useMemo(() => {
-        if (!endDate) return undefined;
-        return new Date(`${endDate}T23:59:59.999`).toISOString();
-    }, [endDate]);
-
     // Contador de Filtros Avançados Ativos
     const activeAdvancedCount = useMemo(() => {
         let count = 0;
@@ -279,14 +270,27 @@ export default function HandlingUnitsTab() {
         if (selectedLocation !== 'ALL') count++;
         if (qualityFilter !== 'ALL') count++;
         if (statusFilter !== 'ALL') count++;
-        if (startDate || endDate) count++;
+        if (dateRange?.from) count++;
         return count;
-    }, [searchBatch, searchNfe, selectedLocation, qualityFilter, statusFilter, startDate, endDate]);
+    }, [searchBatch, searchNfe, selectedLocation, qualityFilter, statusFilter, dateRange]);
 
-    // Executa a busca enviando a query diretamente para o Backend
+    // Executa a busca enviando a query com timestamp de 24h completo (00:00:00.000 a 23:59:59.999)
     const handleSearchSubmit = (e) => {
         if (e) e.preventDefault();
         setPage(1);
+
+        let startString = undefined;
+        let endString = undefined;
+
+        if (dateRange?.from) {
+            const fromDate = new Date(dateRange.from);
+            fromDate.setHours(0, 0, 0, 0);
+            startString = fromDate.toISOString();
+
+            const toDate = new Date(dateRange.to || dateRange.from);
+            toDate.setHours(23, 59, 59, 999);
+            endString = toDate.toISOString();
+        }
 
         setAppliedFilters({
             ...(searchLpn.trim() && { Lpn: searchLpn.trim() }),
@@ -297,8 +301,8 @@ export default function HandlingUnitsTab() {
             ...(selectedLocation !== 'ALL' && { LocationId: selectedLocation }),
             ...(statusFilter !== 'ALL' && { Status: Number(statusFilter) }),
             ...(qualityFilter !== 'ALL' && { QualityStatus: Number(qualityFilter) }),
-            ...(formattedStartDate && { StartDate: formattedStartDate }),
-            ...(formattedEndDate && { EndDate: formattedEndDate })
+            ...(startString && { StartDate: startString }),
+            ...(endString && { EndDate: endString })
         });
     };
 
@@ -311,8 +315,7 @@ export default function HandlingUnitsTab() {
         setSelectedLocation('ALL');
         setQualityFilter('ALL');
         setStatusFilter('ALL');
-        setStartDate('');
-        setEndDate('');
+        setDateRange(undefined);
         setPage(1);
         setAppliedFilters({});
     };
@@ -522,9 +525,8 @@ export default function HandlingUnitsTab() {
                     </div>
                 </div>
 
-                {/* FILTROS BÁSICOS (PADRÃO COM RÓTULOS EXPLÍCITOS) */}
+                {/* FILTROS BÁSICOS */}
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1 items-end">
-                    {/* FILTRO 1: LPN */}
                     <div className="sm:col-span-3 space-y-1">
                         <Label className="text-[11px] font-bold text-slate-700 uppercase">Código LPN / HU</Label>
                         <div className="relative">
@@ -538,7 +540,6 @@ export default function HandlingUnitsTab() {
                         </div>
                     </div>
 
-                    {/* FILTRO 2: SKU / PRODUTO */}
                     <div className="sm:col-span-4 space-y-1">
                         <Label className="text-[11px] font-bold text-slate-700 uppercase">SKU / Descrição do Produto</Label>
                         <Input
@@ -549,7 +550,6 @@ export default function HandlingUnitsTab() {
                         />
                     </div>
 
-                    {/* FILTRO 3: DEPOSITANTE (SELETOR PESQUISÁVEL) */}
                     <div className="sm:col-span-3 space-y-1">
                         <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
                         <SearchableCustomerSelect
@@ -560,10 +560,9 @@ export default function HandlingUnitsTab() {
                         />
                     </div>
 
-                    {/* BOTÕES DE PESQUISAR E LIMPAR */}
                     <div className="sm:col-span-2 flex items-center gap-1.5">
-                        <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 flex-1 shadow-2xs">
-                            <Search size={14} className="mr-1.5" /> Pesquisar
+                        <Button type="submit" disabled={isFetching} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 flex-1 shadow-2xs">
+                            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Search size={14} className="mr-1.5" /> Pesquisar</>}
                         </Button>
                         <Button
                             type="button"
@@ -581,9 +580,9 @@ export default function HandlingUnitsTab() {
                 {/* PAINEL EXPANDÍVEL DE FILTROS AVANÇADOS */}
                 {showAdvancedFilters && (
                     <div className="pt-3 border-t border-slate-200/80 animate-in fade-in duration-200 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-3 items-end">
                             {/* LOTE FÍSICO */}
-                            <div className="space-y-1">
+                            <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Lote Físico</Label>
                                 <Input
                                     placeholder="Digite o lote..."
@@ -594,7 +593,7 @@ export default function HandlingUnitsTab() {
                             </div>
 
                             {/* NF-E / CHAVE */}
-                            <div className="space-y-1">
+                            <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">NF-e / Chave de Acesso</Label>
                                 <div className="relative">
                                     <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -607,8 +606,8 @@ export default function HandlingUnitsTab() {
                                 </div>
                             </div>
 
-                            {/* ENDEREÇO COMPLETO (POSIÇÃO UNIFICADA) */}
-                            <div className="space-y-1">
+                            {/* ENDEREÇO COMPLETO */}
+                            <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Endereço / Posição</Label>
                                 <SearchableLocationSelect
                                     value={selectedLocation}
@@ -619,7 +618,7 @@ export default function HandlingUnitsTab() {
                             </div>
 
                             {/* QUALIDADE */}
-                            <div className="space-y-1">
+                            <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Qualidade</Label>
                                 <Select value={qualityFilter} onValueChange={setQualityFilter}>
                                     <SelectTrigger className="bg-white h-9 text-xs border-slate-200"><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -633,7 +632,7 @@ export default function HandlingUnitsTab() {
                             </div>
 
                             {/* STATUS HU */}
-                            <div className="space-y-1">
+                            <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Status HU</Label>
                                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                                     <SelectTrigger className="bg-white h-9 text-xs border-slate-200"><SelectValue placeholder="Selecione..." /></SelectTrigger>
@@ -646,25 +645,10 @@ export default function HandlingUnitsTab() {
                                 </Select>
                             </div>
 
-                            {/* PERÍODO DE ENTRADA (00:00 ÀS 23:59) */}
-                            <div className="space-y-1">
+                            {/* PERÍODO DE ENTRADA VIA DATE RANGE PICKER (00:00 ÀS 23:59) */}
+                            <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Período Entrada</Label>
-                                <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 h-9">
-                                    <Calendar size={14} className="text-slate-400 shrink-0" />
-                                    <Input
-                                        type="date"
-                                        value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        className="border-none shadow-none text-xs h-7 p-0 w-24 bg-transparent font-mono"
-                                    />
-                                    <span className="text-slate-300 text-xs">até</span>
-                                    <Input
-                                        type="date"
-                                        value={endDate}
-                                        onChange={(e) => setEndDate(e.target.value)}
-                                        className="border-none shadow-none text-xs h-7 p-0 w-24 bg-transparent font-mono"
-                                    />
-                                </div>
+                                <DateRangePicker date={dateRange} setDate={setDateRange} className="w-full" />
                             </div>
                         </div>
                     </div>
@@ -715,7 +699,6 @@ export default function HandlingUnitsTab() {
                                         <Checkbox checked={isSelected} onCheckedChange={() => toggleSelectHu(h)} />
                                     </TableCell>
 
-                                    {/* LPN / UNIDADE DA EMBALAGEM EXIBIDA ABAIXO DO CÓDIGO DA HU */}
                                     {visibleColumns.lpn && (
                                         <TableCell>
                                             <div className="flex items-center gap-2.5">
@@ -730,7 +713,6 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
-                                    {/* SKU / DEPOSITANTE */}
                                     {visibleColumns.sku && (
                                         <TableCell>
                                             <div className="flex flex-col">
@@ -740,14 +722,12 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
-                                    {/* DATA ENTRADA */}
                                     {visibleColumns.createdAt && (
                                         <TableCell className="text-xs font-mono text-slate-600">
                                             {h.createdAt ? new Date(h.createdAt).toLocaleString('pt-BR') : '-'}
                                         </TableCell>
                                     )}
 
-                                    {/* NF-E / SÉRIIE */}
                                     {visibleColumns.nfe && (
                                         <TableCell>
                                             {h.nfeNumber ? (
@@ -761,7 +741,6 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
-                                    {/* ENDEREÇO */}
                                     {visibleColumns.location && (
                                         <TableCell>
                                             {h.locationPath ? (
@@ -774,7 +753,6 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
-                                    {/* LOTE E VALIDADE */}
                                     {visibleColumns.batch && (
                                         <TableCell className="text-xs font-mono text-slate-600">
                                             <div>Lote: {h.batch || '-'}</div>
@@ -782,21 +760,18 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
-                                    {/* QTD ATUAL USANDO A UNIDADE DE MEDIDA FISCAL DO PRODUTO */}
                                     {visibleColumns.quantity && (
                                         <TableCell className="text-right font-mono font-bold text-slate-900 text-xs">
                                             {h.currentQuantity?.toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-500">{h.unit || 'UN'}</span>
                                         </TableCell>
                                     )}
 
-                                    {/* VALOR UNITÁRIO */}
                                     {visibleColumns.unitValue && (
                                         <TableCell className="text-right font-mono text-xs text-slate-700">
                                             {unitVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                         </TableCell>
                                     )}
 
-                                    {/* VALOR TOTAL DA HU */}
                                     {visibleColumns.totalValue && (
                                         <TableCell className="text-right font-mono font-bold text-xs text-slate-900 bg-slate-50/50">
                                             {totalVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
@@ -806,7 +781,6 @@ export default function HandlingUnitsTab() {
                                     {visibleColumns.quality && <TableCell>{renderQualityBadge(h.qualityStatus)}</TableCell>}
                                     {visibleColumns.status && <TableCell>{renderHuStatusBadge(h.status)}</TableCell>}
 
-                                    {/* AÇÕES INDIVIDUAIS */}
                                     <TableCell className="text-right space-x-1">
                                         {!isQualityRestricted && (
                                             <Button
