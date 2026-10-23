@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { UploadCloud, FileCode2, Loader2, X, KeyRound, ArrowRight, Layers } from 'lucide-react';
+import { UploadCloud, FileCode2, Loader2, X, KeyRound, ArrowRight, Layers, CheckCircle2 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
 import { toast } from 'sonner';
+
+// Normaliza e aplica a máscara oficial da SEFAZ em blocos de 4 dígitos
+const formatAccessKey = (value) => {
+    const digits = (value || '').replace(/\D/g, '').slice(0, 44);
+    return digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+};
 
 export default function ImportXmlModal({ open, onOpenChange }) {
     const queryClient = useQueryClient();
@@ -14,12 +20,15 @@ export default function ImportXmlModal({ open, onOpenChange }) {
     const [files, setFiles] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
 
-    // Estado de Importação por Chave de Acesso
+    // Estado de Importação por Chave de Acesso (com máscara visual)
     const [accessKey, setAccessKey] = useState('');
 
     // Estado de Processamento em Lotes (Batching)
     const [isProcessingBatch, setIsProcessingBatch] = useState(false);
     const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, totalFiles: 0, processedFiles: 0 });
+
+    // Chave pura contendo apenas os dígitos (sem espaços ou pontuação)
+    const cleanKey = useMemo(() => accessKey.replace(/\D/g, ''), [accessKey]);
 
     const resetAndClose = () => {
         setFiles([]);
@@ -42,17 +51,20 @@ export default function ImportXmlModal({ open, onOpenChange }) {
     const handleFileSelect = (e) => {
         const selectedFiles = Array.from(e.target.files).filter(f => f.name.endsWith('.xml'));
         setFiles(prev => [...prev, ...selectedFiles]);
-        e.target.value = ''; // Permite selecionar o mesmo arquivo novamente se tiver sido removido
+        e.target.value = '';
     };
 
     const removeFile = (index) => {
         setFiles(prev => prev.filter((_, i) => i !== index));
     };
 
+    const handleAccessKeyChange = (e) => {
+        setAccessKey(formatAccessKey(e.target.value));
+    };
+
     const handleImport = async () => {
         if (isProcessingBatch) return;
 
-        const cleanKey = accessKey.trim();
         const hasKey = cleanKey.length === 44;
         const hasFiles = files.length > 0;
 
@@ -61,7 +73,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
         }
 
         if (cleanKey.length > 0 && !hasKey) {
-            return toast.warning('A Chave de Acesso deve possuir exatamente 44 dígitos numéricos.');
+            return toast.warning(`A Chave de Acesso deve possuir exatamente 44 dígitos numéricos (informados: ${cleanKey.length}).`);
         }
 
         setIsProcessingBatch(true);
@@ -69,7 +81,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
         let totalImportedCount = 0;
         const allErrors = [];
 
-        // 1. Processa Chave de Acesso SEFAZ (se preenchida)
+        // 1. Processa Chave de Acesso SEFAZ enviando a chave 100% limpa (44 dígitos numéricos)
         if (hasKey) {
             try {
                 const res = await customInstance({
@@ -130,7 +142,6 @@ export default function ImportXmlModal({ open, onOpenChange }) {
             }
         }
 
-        // Invalida e atualiza as listagens se houver ao menos um sucesso
         if (keySuccess || totalImportedCount > 0) {
             if (totalImportedCount > 0) {
                 toast.success(`Importação em lote concluída! ${totalImportedCount} de ${files.length} ordem(ns) criada(s).`);
@@ -140,7 +151,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
         }
 
         if (allErrors.length > 0) {
-            toast.warning(`Atenção:`, {
+            toast.warning('Atenção:', {
                 description: allErrors.slice(0, 1)
             });
         }
@@ -148,8 +159,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
         resetAndClose();
     };
 
-    const cleanKeyLength = accessKey.trim().length;
-    const canSubmit = !isProcessingBatch && (cleanKeyLength === 44 || files.length > 0);
+    const canSubmit = !isProcessingBatch && (cleanKey.length === 44 || files.length > 0);
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!isProcessingBatch) onOpenChange(v); }}>
@@ -167,22 +177,52 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                 {/* CORPO CENTRAL SCROLLÁVEL */}
                 <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
 
-                    {/* SEÇÃO 1: CHAVE DE ACESSO */}
+                    {/* SEÇÃO 1: CHAVE DE ACESSO COM MÁSCARA AUTOMÁTICA */}
                     <div className="p-3.5 bg-blue-50/60 border border-blue-200 rounded-xl space-y-2">
-                        <label className="text-xs font-bold text-blue-900 uppercase flex items-center gap-1.5">
-                            <KeyRound size={14} className="text-blue-600" /> Consulta Por Chave de Acesso SEFAZ
+                        <label className="text-xs font-bold text-blue-900 uppercase flex items-center justify-between">
+                            <span className="flex items-center gap-1.5">
+                                <KeyRound size={14} className="text-blue-600" /> Consulta Por Chave de Acesso SEFAZ
+                            </span>
+                            {cleanKey.length === 44 && (
+                                <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                                    <CheckCircle2 size={13} /> Chave Completa
+                                </span>
+                            )}
                         </label>
-                        <Input
-                            type="text"
-                            maxLength={44}
-                            placeholder="Digite ou bipe os 44 dígitos da Chave de Acesso..."
-                            value={accessKey}
-                            onChange={(e) => setAccessKey(e.target.value.replace(/\D/g, ''))}
-                            disabled={isProcessingBatch}
-                            className="bg-white font-mono text-xs h-10 border-blue-300 focus-visible:ring-blue-500"
-                        />
+
+                        <div className="relative">
+                            <Input
+                                type="text"
+                                maxLength={54} // 44 dígitos + 10 espaços da máscara
+                                placeholder="4326 1054 9036 8800 0149 5500 1000 0002 5812 5773 9199"
+                                value={accessKey}
+                                onChange={handleAccessKeyChange}
+                                disabled={isProcessingBatch}
+                                className={`bg-white font-mono text-xs h-10 pr-8 focus-visible:ring-blue-500 ${cleanKey.length === 44 ? 'border-emerald-400 font-bold text-slate-900' : 'border-blue-300'
+                                    }`}
+                            />
+                            {accessKey && !isProcessingBatch && (
+                                <button
+                                    type="button"
+                                    onClick={() => setAccessKey('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                    title="Limpar chave"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
                         <span className="text-[10px] text-slate-500 block">
-                            {cleanKeyLength > 0 ? `${cleanKeyLength}/44 dígitos` : 'Download automático do XML com registro de Ciência da Operação.'}
+                            {cleanKey.length > 0 ? (
+                                cleanKey.length === 44 ? (
+                                    <span className="text-emerald-700 font-medium">Pronta para consulta direta na SEFAZ</span>
+                                ) : (
+                                    <span>{cleanKey.length} de 44 dígitos informados</span>
+                                )
+                            ) : (
+                                'Aceita chaves digitadas, coladas ou bipadas (com ou sem espaços).'
+                            )}
                         </span>
                     </div>
 
@@ -200,7 +240,8 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                             onDragOver={handleDragOver}
                             onDragLeave={handleDragLeave}
                             onDrop={handleDrop}
-                            className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${isDragging ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'}`}
+                            className={`flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${isDragging ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
+                                }`}
                         >
                             <div className="flex flex-col items-center justify-center pt-3 pb-3 pointer-events-none">
                                 <UploadCloud className={`w-7 h-7 mb-1 ${isDragging ? 'text-emerald-500' : 'text-slate-400'}`} />
@@ -211,7 +252,6 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                             <input type="file" accept=".xml" multiple className="hidden" onChange={handleFileSelect} disabled={isProcessingBatch} />
                         </label>
 
-                        {/* LISTA DE ARQUIVOS COM SCROLL INTERNO LIMITADO */}
                         {files.length > 0 && (
                             <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1 border border-slate-200 rounded-lg p-2 bg-slate-50/50">
                                 <div className="flex items-center justify-between pb-1 px-1 border-b border-slate-200 text-[11px] font-semibold text-slate-500">
@@ -280,9 +320,9 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                         ) : (
                             <ArrowRight className="h-4 w-4 mr-1.5" />
                         )}
-                        {cleanKeyLength === 44 && files.length > 0
+                        {cleanKey.length === 44 && files.length > 0
                             ? `Importar Chave + ${files.length} XML(s)`
-                            : cleanKeyLength === 44
+                            : cleanKey.length === 44
                                 ? 'Consultar Chave SEFAZ'
                                 : `Importar ${files.length} XML(s)`
                         }

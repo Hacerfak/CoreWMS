@@ -10,33 +10,57 @@ import {
 import { useGetApiProductsId } from '@/api/generated/products/products';
 import { useGetApiBillingServices } from '@/api/generated/billing/billing';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     ArrowLeft, Loader2, PackageCheck, Plus, Trash2, CheckCircle2,
-    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer, ShieldAlert, PauseCircle, Warehouse
+    Receipt, AlertTriangle, FileWarning, Upload, ShoppingCart, Box, Printer,
+    ShieldAlert, PauseCircle, Warehouse
 } from 'lucide-react';
 import { toast } from 'sonner';
 import PrintHuModal from './PrintHuModal';
+
+// Formata data civil (YYYY-MM-DD ou Date) para DD/MM/AAAA
+const formatCivilDatePtBr = (dateVal) => {
+    if (!dateVal) return '-';
+    if (dateVal instanceof Date) {
+        return dateVal.toLocaleDateString('pt-BR');
+    }
+    const clean = String(dateVal).split('T')[0];
+    const parts = clean.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return clean;
+};
+
+// Converte Date ou string para YYYY-MM-DDT00:00:00.000Z
+const toUtcMidnightIso = (dateVal) => {
+    if (!dateVal) return null;
+    const d = dateVal instanceof Date ? dateVal : new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}T00:00:00.000Z`;
+};
 
 export default function ConferenciaItemPage() {
     const { orderId, itemId } = useParams();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
-
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-    // 1. Dados da Ordem de Recebimento
+    // 1. Dados da Ordem
     const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
     const item = order?.items?.find(i => i.id === itemId);
-
     const baseUnit = item?.unit || 'UN';
 
-    // 2. Consulta do Depositante para verificar exigência de "Conferência Cega"
+    // 2. Consulta do Depositante (Conferência Cega)
     const { data: customersResponse } = useGetApiCustomers(
         { PageSize: 500 },
         { query: { enabled: Boolean(order?.customerId) } }
@@ -50,7 +74,7 @@ export default function ConferenciaItemPage() {
         query: { enabled: Boolean(item?.productId) }
     });
 
-    // 4. Embalagens específicas deste produto
+    // 4. Embalagens específicas do produto
     const { data: availablePackagings = [], isLoading: isLoadingPackagings } = useQuery({
         queryKey: ['product-packagings', item?.productId],
         queryFn: async () => {
@@ -63,55 +87,53 @@ export default function ConferenciaItemPage() {
         enabled: Boolean(item?.productId)
     });
 
-    // 5. Serviços de Cobrança de Recebimento
+    // 5. Serviços de Cobrança
     const { data: billingServicesResponse } = useGetApiBillingServices();
     const billingServices = Array.isArray(billingServicesResponse) ? billingServicesResponse : (billingServicesResponse?.items || []);
 
-    // Regras de Rastreabilidade extraídas do produto
     const tracksBatch = Boolean(productDetail?.tracksBatch);
     const strictBatch = Boolean(productDetail?.strictBatch);
-
     const tracksExpiration = Boolean(productDetail?.tracksExpiration);
     const strictExpiration = Boolean(productDetail?.strictExpiration);
-
     const tracksManufacture = Boolean(productDetail?.tracksManufacture);
     const strictManufacture = Boolean(productDetail?.strictManufacture);
-
     const tracksSerial = Boolean(productDetail?.tracksSerial);
     const strictSerial = Boolean(productDetail?.strictSerial);
 
-    // Estados do Formulário
     const [selectedBillingServiceId, setSelectedBillingServiceId] = useState('');
 
-    // volumeCount inicializado como campo aberto/vazio
     const [volumeConfig, setVolumeConfig] = useState({
         packagingTypeId: '',
         volumeCount: '',
         quantityPerVolume: 0,
         batch: '',
-        manufactureDate: '',
-        expirationDate: '',
+        manufactureDate: undefined,
+        expirationDate: undefined,
         serialNumber: '',
         qualityStatus: '',
         notes: '',
         images: []
     });
 
-    // Carrinho de Lotes
     const [stagedVolumes, setStagedVolumes] = useState([]);
     const [generatedHusResult, setGeneratedHusResult] = useState(null);
 
-    // Pré-preenchimento automático com base no XML e regras do produto
+    // Pré-preenchimento condicional estrito: apenas se o produto controlar a flag
     useEffect(() => {
         if (item) {
             setVolumeConfig(prev => ({
                 ...prev,
                 batch: tracksBatch ? (item.expectedBatch || prev.batch || '') : '',
-                expirationDate: (tracksExpiration && item.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : (tracksExpiration ? prev.expirationDate : ''),
-                manufactureDate: (tracksManufacture && item.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : (tracksManufacture ? prev.manufactureDate : '')
+                expirationDate: (tracksExpiration && item.expectedExpirationDate)
+                    ? new Date(item.expectedExpirationDate)
+                    : (tracksExpiration ? prev.expirationDate : undefined),
+                manufactureDate: (tracksManufacture && item.expectedManufactureDate)
+                    ? new Date(item.expectedManufactureDate)
+                    : (tracksManufacture ? prev.manufactureDate : undefined),
+                serialNumber: tracksSerial ? prev.serialNumber : ''
             }));
         }
-    }, [item, tracksBatch, tracksExpiration, tracksManufacture]);
+    }, [item, tracksBatch, tracksExpiration, tracksManufacture, tracksSerial]);
 
     const handlePackagingChange = (typeId) => {
         const selectedPack = availablePackagings.find(p => p.packagingTypeId === typeId);
@@ -122,27 +144,24 @@ export default function ConferenciaItemPage() {
         }));
     };
 
-    // Pausar e libertar o item para outro operador
     const { mutate: releaseItem, isPending: isReleasing } = usePostApiInboundReceiveOrderItemIdRelease({
         mutation: {
             onSuccess: () => {
-                toast.success('Recebimento pausado e libertado com sucesso.');
+                toast.success('Recebimento pausado e liberado com sucesso.');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
                 navigate(`/inbound/operacao/${orderId}`);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao pausar/libertar item.')
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao pausar/liberar item.')
         }
     });
 
-    // Checkout final dos lotes conferidos
     const { mutate: checkoutLotes, isPending: isSubmitting } = usePostApiInboundReceiveCheckout({
         mutation: {
             onSuccess: (res) => {
                 toast.success('Checkout realizado e HUs geradas na Doca com sucesso!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-                queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
-
+                queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
                 if (res?.husGenerated) {
                     setGeneratedHusResult(res.husGenerated);
                 } else {
@@ -187,7 +206,7 @@ export default function ConferenciaItemPage() {
 
         const parsedVolumeCount = Number(volumeConfig.volumeCount);
         if (!volumeConfig.volumeCount || isNaN(parsedVolumeCount) || parsedVolumeCount <= 0) {
-            return toast.warning('Indique uma quantidade de volumes válida (número maior que zero).');
+            return toast.warning('Indique uma quantidade de volumes válida (maior que zero).');
         }
         if (Number(volumeConfig.quantityPerVolume) <= 0) {
             return toast.warning('Indique uma quantidade de peças por volume válida.');
@@ -196,29 +215,43 @@ export default function ConferenciaItemPage() {
             return toast.warning('Nenhuma Doca vinculada a este item da ordem.');
         }
 
-        if (tracksBatch && strictBatch && !volumeConfig.batch?.trim()) {
+        // Resolução estrita: só considera lote/datas se o produto controlar a respectiva rastreabilidade
+        const batchValue = tracksBatch ? (volumeConfig.batch?.trim() || item?.expectedBatch || '') : '';
+        const mfgDateValue = tracksManufacture
+            ? (volumeConfig.manufactureDate || (item?.expectedManufactureDate ? new Date(item.expectedManufactureDate) : undefined))
+            : undefined;
+        const expDateValue = tracksExpiration
+            ? (volumeConfig.expirationDate || (item?.expectedExpirationDate ? new Date(item.expectedExpirationDate) : undefined))
+            : undefined;
+        const serialValue = tracksSerial ? volumeConfig.serialNumber?.trim() : '';
+
+        // Validações obrigatórias
+        if (tracksBatch && strictBatch && !batchValue) {
             return toast.warning('O lote é obrigatório para este produto.');
         }
-        if (tracksExpiration && strictExpiration && !volumeConfig.expirationDate) {
-            return toast.warning('A data de validade é obrigatória para este produto.');
-        }
-        if (tracksManufacture && strictManufacture && !volumeConfig.manufactureDate) {
+        if (tracksManufacture && strictManufacture && !mfgDateValue) {
             return toast.warning('A data de fabricação é obrigatória para este produto.');
         }
-        if (tracksSerial && strictSerial && !volumeConfig.serialNumber?.trim()) {
+        if (tracksExpiration && strictExpiration && !expDateValue) {
+            return toast.warning('A data de validade é obrigatória para este produto.');
+        }
+        if (tracksSerial && strictSerial && !serialValue) {
             return toast.warning('O número de série é obrigatório para este produto.');
+        }
+        if (mfgDateValue && expDateValue && expDateValue < mfgDateValue) {
+            return toast.warning('A data de validade não pode ser anterior à data de fabricação.');
         }
 
         const selectedPack = availablePackagings.find(p => p.packagingTypeId === volumeConfig.packagingTypeId);
 
         const newStagedItem = {
             ...volumeConfig,
+            batch: batchValue,
+            manufactureDate: mfgDateValue,
+            expirationDate: expDateValue,
+            serialNumber: serialValue,
             volumeCount: parsedVolumeCount,
             targetLocationId: item.dockLocationId,
-            batch: tracksBatch ? volumeConfig.batch?.trim() : '',
-            expirationDate: tracksExpiration ? volumeConfig.expirationDate : '',
-            manufactureDate: tracksManufacture ? volumeConfig.manufactureDate : '',
-            serialNumber: tracksSerial ? volumeConfig.serialNumber?.trim() : '',
             billingServiceId: selectedBillingServiceId,
             tempId: Date.now() + Math.random(),
             packagingCode: selectedPack?.code || 'EMB',
@@ -237,8 +270,8 @@ export default function ConferenciaItemPage() {
             quantityPerVolume: 0,
             qualityStatus: '',
             batch: tracksBatch ? (item?.expectedBatch || '') : '',
-            expirationDate: (tracksExpiration && item?.expectedExpirationDate) ? item.expectedExpirationDate.split('T')[0] : '',
-            manufactureDate: (tracksManufacture && item?.expectedManufactureDate) ? item.expectedManufactureDate.split('T')[0] : '',
+            expirationDate: (tracksExpiration && item?.expectedExpirationDate) ? new Date(item.expectedExpirationDate) : undefined,
+            manufactureDate: (tracksManufacture && item?.expectedManufactureDate) ? new Date(item.expectedManufactureDate) : undefined,
             serialNumber: '',
             notes: '',
             images: []
@@ -264,10 +297,10 @@ export default function ConferenciaItemPage() {
                     packagingTypeId: v.packagingTypeId,
                     volumeCount: v.volumeCount,
                     quantityPerVolume: v.quantityPerVolume,
-                    batch: tracksBatch && v.batch ? v.batch : null,
-                    manufactureDate: tracksManufacture && v.manufactureDate ? new Date(v.manufactureDate).toISOString() : null,
-                    expirationDate: tracksExpiration && v.expirationDate ? new Date(v.expirationDate).toISOString() : null,
-                    serialNumber: tracksSerial && v.serialNumber ? v.serialNumber : null,
+                    batch: v.batch || null,
+                    manufactureDate: toUtcMidnightIso(v.manufactureDate),
+                    expirationDate: toUtcMidnightIso(v.expirationDate),
+                    serialNumber: v.serialNumber?.trim() || null,
                     targetLocationId: item.dockLocationId,
                     qualityStatus: Number(v.qualityStatus),
                     qualityNotes: v.notes?.trim() || null,
@@ -372,14 +405,14 @@ export default function ConferenciaItemPage() {
                     </div>
                     <div>
                         <h2 className="text-2xl font-bold text-slate-900">Recebimento Concluído na Doca!</h2>
-                        <p className="text-sm text-slate-500 mt-1">HUs geradas e guardadas na Doca de Recebimento.</p>
+                        <p className="text-sm text-slate-500 mt-1">HUs geradas e armazenadas na Doca com rastreabilidade completa.</p>
                     </div>
 
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-left max-h-48 overflow-y-auto font-mono text-xs space-y-1">
                         {generatedHusResult.map((hu, idx) => (
                             <div key={idx} className="flex justify-between items-center py-1 border-b border-slate-100 last:border-none">
                                 <span className="font-bold text-slate-800">{typeof hu === 'string' ? hu : hu.lpn}</span>
-                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registado na Doca</Badge>
+                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">LPN Registrado na Doca</Badge>
                             </div>
                         ))}
                     </div>
@@ -396,9 +429,7 @@ export default function ConferenciaItemPage() {
             ) : (
                 /* FORMULÁRIO DE CONFERÊNCIA */
                 <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
-
                     <div className="col-span-7 bg-white border border-slate-200/80 rounded-xl shadow-xs p-6 overflow-y-auto flex flex-col space-y-6">
-
                         {/* 1. SERVIÇO DE FATURAMENTO */}
                         <div className="space-y-2 border-b border-slate-100 pb-4">
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
@@ -406,7 +437,7 @@ export default function ConferenciaItemPage() {
                             </Label>
                             <Select value={selectedBillingServiceId} onValueChange={setSelectedBillingServiceId}>
                                 <SelectTrigger className={`bg-slate-50 h-10 ${!selectedBillingServiceId ? 'border-amber-300' : 'border-slate-200'}`}>
-                                    <SelectValue placeholder="Selecione obrigatoriamente a tarifa/serviço..." />
+                                    <SelectValue placeholder="Selecione a tarifa operacional de entrada..." />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {billingServices.map(s => (
@@ -423,14 +454,13 @@ export default function ConferenciaItemPage() {
                                 <Box className="text-blue-600" size={16} /> 2. Dados do Volume & Quantidades <span className="text-rose-500 font-bold">*</span>
                             </Label>
 
-                            {/* SELETOR DE EMBALAGENS ESPECÍFICAS DO PRODUTO */}
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold text-slate-700 flex items-center">
                                     Embalagem do Volume <span className="text-rose-500 font-bold ml-0.5">*</span>
                                 </Label>
                                 <Select value={volumeConfig.packagingTypeId} onValueChange={handlePackagingChange}>
                                     <SelectTrigger className={`bg-slate-50 h-10 ${!volumeConfig.packagingTypeId ? 'border-amber-300' : 'border-slate-200'}`}>
-                                        <SelectValue placeholder={isLoadingPackagings ? "A carregar embalagens..." : "Escolha a embalagem..."} />
+                                        <SelectValue placeholder={isLoadingPackagings ? "Carregando embalagens..." : "Escolha a embalagem..."} />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {availablePackagings.map(pt => (
@@ -442,7 +472,6 @@ export default function ConferenciaItemPage() {
                                 </Select>
                             </div>
 
-                            {/* PAINEL DE QUANTIDADES */}
                             <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
@@ -462,7 +491,6 @@ export default function ConferenciaItemPage() {
                                             className="bg-white border-blue-300 focus:ring-2 focus:ring-blue-600 font-mono text-base font-bold h-11 text-center text-slate-900 shadow-xs"
                                         />
                                     </div>
-
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-bold text-blue-950 flex items-center">
                                             Qtd de Peças por Volume <span className="text-rose-500 font-bold ml-0.5">*</span>
@@ -477,7 +505,6 @@ export default function ConferenciaItemPage() {
                                         />
                                     </div>
                                 </div>
-
                                 <div className="flex items-center justify-between pt-1 border-t border-blue-200/60 text-xs">
                                     <span className="text-blue-800 font-medium">Subtotal de Peças deste Lote:</span>
                                     <Badge className="bg-blue-600 text-white font-mono font-bold text-xs px-2.5 py-0.5">
@@ -486,7 +513,7 @@ export default function ConferenciaItemPage() {
                                 </div>
                             </div>
 
-                            {/* RASTREABILIDADE */}
+                            {/* RASTREABILIDADE COM DATEPICKER OFICIAL */}
                             {(tracksBatch || tracksExpiration || tracksManufacture || tracksSerial) && (
                                 <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                                     {tracksBatch && (
@@ -498,8 +525,8 @@ export default function ConferenciaItemPage() {
                                             <Input
                                                 value={volumeConfig.batch}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, batch: e.target.value }))}
-                                                placeholder="Lote do XML/Físico"
-                                                className={`h-8 text-xs font-mono bg-white ${strictBatch && !volumeConfig.batch ? 'border-amber-300' : ''}`}
+                                                placeholder={item?.expectedBatch ? `NF: ${item.expectedBatch}` : "Lote do volume"}
+                                                className={`h-9 text-xs font-mono bg-white ${strictBatch && !volumeConfig.batch ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
@@ -510,11 +537,11 @@ export default function ConferenciaItemPage() {
                                                 <span>Data Validade {strictExpiration && <span className="text-rose-500 font-bold">*</span>}</span>
                                                 {strictExpiration && <span className="text-[9px] text-rose-600 font-normal">(Obrigatório)</span>}
                                             </Label>
-                                            <Input
-                                                type="date"
-                                                value={volumeConfig.expirationDate}
-                                                onChange={(e) => setVolumeConfig(p => ({ ...p, expirationDate: e.target.value }))}
-                                                className={`h-8 text-xs bg-white font-mono ${strictExpiration && !volumeConfig.expirationDate ? 'border-amber-300' : ''}`}
+                                            <DatePicker
+                                                date={volumeConfig.expirationDate}
+                                                setDate={(d) => setVolumeConfig(p => ({ ...p, expirationDate: d }))}
+                                                placeholder={item?.expectedExpirationDate ? `NF: ${formatCivilDatePtBr(item.expectedExpirationDate)}` : "Selecionar validade..."}
+                                                className={`h-9 ${strictExpiration && !volumeConfig.expirationDate ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
@@ -525,11 +552,11 @@ export default function ConferenciaItemPage() {
                                                 <span>Data Fabricação {strictManufacture && <span className="text-rose-500 font-bold">*</span>}</span>
                                                 {strictManufacture && <span className="text-[9px] text-rose-600 font-normal">(Obrigatório)</span>}
                                             </Label>
-                                            <Input
-                                                type="date"
-                                                value={volumeConfig.manufactureDate}
-                                                onChange={(e) => setVolumeConfig(p => ({ ...p, manufactureDate: e.target.value }))}
-                                                className={`h-8 text-xs bg-white font-mono ${strictManufacture && !volumeConfig.manufactureDate ? 'border-amber-300' : ''}`}
+                                            <DatePicker
+                                                date={volumeConfig.manufactureDate}
+                                                setDate={(d) => setVolumeConfig(p => ({ ...p, manufactureDate: d }))}
+                                                placeholder={item?.expectedManufactureDate ? `NF: ${formatCivilDatePtBr(item.expectedManufactureDate)}` : "Selecionar fabricação..."}
+                                                className={`h-9 ${strictManufacture && !volumeConfig.manufactureDate ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
@@ -544,7 +571,7 @@ export default function ConferenciaItemPage() {
                                                 value={volumeConfig.serialNumber}
                                                 onChange={(e) => setVolumeConfig(p => ({ ...p, serialNumber: e.target.value }))}
                                                 placeholder="Serial Unitário"
-                                                className={`h-8 text-xs font-mono bg-white ${strictSerial && !volumeConfig.serialNumber ? 'border-amber-300' : ''}`}
+                                                className={`h-9 text-xs font-mono bg-white ${strictSerial && !volumeConfig.serialNumber ? 'border-amber-300' : ''}`}
                                             />
                                         </div>
                                     )}
@@ -557,7 +584,6 @@ export default function ConferenciaItemPage() {
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                                 <ShieldAlert className="text-blue-600" size={16} /> 3. Qualidade do Lote Recebido <span className="text-rose-500 font-bold">*</span>
                             </Label>
-
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold text-slate-700 flex items-center">
                                     Status de Qualidade <span className="text-rose-500 font-bold ml-0.5">*</span>
@@ -581,9 +607,8 @@ export default function ConferenciaItemPage() {
                                         {volumeConfig.qualityStatus === '2' && <ShieldAlert size={16} />}
                                         {volumeConfig.qualityStatus === '3' && <AlertTriangle size={16} />}
                                         {volumeConfig.qualityStatus === '4' && <FileWarning size={16} />}
-                                        {volumeConfig.qualityStatus === '2' ? 'Registo de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registo de Avaria Física' : 'Registo de Divergência / Falta'}
+                                        {volumeConfig.qualityStatus === '2' ? 'Registro de Retenção em Quarentena' : volumeConfig.qualityStatus === '3' ? 'Registro de Avaria Física' : 'Registro de Divergência / Falta'}
                                     </div>
-
                                     <div className="space-y-1">
                                         <Label className="text-xs flex items-center">
                                             Motivo da Ocorrência <span className="text-rose-500 font-bold ml-0.5">*</span>
@@ -595,9 +620,8 @@ export default function ConferenciaItemPage() {
                                             className="bg-white text-xs h-9"
                                         />
                                     </div>
-
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs">Anexar Imagens / Comprovativos</Label>
+                                        <Label className="text-xs">Anexar Imagens / Comprovantes</Label>
                                         <div className="flex items-center gap-3">
                                             <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-amber-300 bg-white text-xs text-amber-800 cursor-pointer hover:bg-amber-100/50">
                                                 <Upload size={14} /> Selecionar Fotos
@@ -605,7 +629,6 @@ export default function ConferenciaItemPage() {
                                             </label>
                                             <span className="text-[10px] text-slate-500">{volumeConfig.images.length} imagem(ns) anexada(s)</span>
                                         </div>
-
                                         {volumeConfig.images.length > 0 && (
                                             <div className="flex gap-2 flex-wrap pt-2">
                                                 {volumeConfig.images.map((img, idx) => (
@@ -630,7 +653,7 @@ export default function ConferenciaItemPage() {
                             <Button
                                 type="button"
                                 onClick={handleAddVolumeToCart}
-                                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm h-11"
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm h-11 font-semibold"
                             >
                                 <Plus className="w-4 h-4 mr-2" /> Adicionar Lote ao Carrinho de Conferência
                             </Button>
@@ -656,7 +679,6 @@ export default function ConferenciaItemPage() {
                             ) : (
                                 stagedVolumes.map((cartItem) => {
                                     const qualityInfo = getQualityBadgeInfo(cartItem.qualityStatus);
-
                                     return (
                                         <div key={cartItem.tempId} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 relative">
                                             <button
@@ -665,19 +687,20 @@ export default function ConferenciaItemPage() {
                                             >
                                                 <Trash2 size={14} />
                                             </button>
-
                                             <div className="flex items-center gap-2">
                                                 <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-mono text-[10px]">{cartItem.packagingCode}</Badge>
                                                 <span className="font-bold text-slate-900 text-xs font-mono">{cartItem.volumeCount} Vol x {cartItem.quantityPerVolume} {baseUnit}</span>
                                             </div>
-
                                             <div className="text-[10px] text-slate-500 space-y-1 font-mono pt-1 border-t border-slate-100">
                                                 <p>Destino: <strong className="text-slate-800 font-bold">{cartItem.locationPath}</strong></p>
                                                 {cartItem.batch && <p>Lote: <strong className="text-slate-800">{cartItem.batch}</strong></p>}
-                                                {cartItem.expirationDate && <p>Validade: <strong className="text-slate-800">{cartItem.expirationDate}</strong></p>}
-                                                {cartItem.manufactureDate && <p>Fabricação: <strong className="text-slate-800">{cartItem.manufactureDate}</strong></p>}
+                                                {cartItem.expirationDate && (
+                                                    <p>Validade: <strong className="text-slate-800">{formatCivilDatePtBr(cartItem.expirationDate)}</strong></p>
+                                                )}
+                                                {cartItem.manufactureDate && (
+                                                    <p>Fabricação: <strong className="text-slate-800">{formatCivilDatePtBr(cartItem.manufactureDate)}</strong></p>
+                                                )}
                                                 {cartItem.serialNumber && <p>Série: <strong className="text-slate-800">{cartItem.serialNumber}</strong></p>}
-
                                                 <div className="pt-1">
                                                     <Badge variant="outline" className={`text-[9px] font-sans font-semibold ${qualityInfo.style}`}>
                                                         {qualityInfo.label}
@@ -695,13 +718,12 @@ export default function ConferenciaItemPage() {
                                 <span>Total a Gravar na Doca:</span>
                                 <span className="font-mono text-emerald-700 font-bold text-sm">{totalCartUnits} {baseUnit}</span>
                             </div>
-
                             <Button
                                 onClick={handleFinalCheckout}
                                 disabled={stagedVolumes.length === 0 || isSubmitting}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-sm"
                             >
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Registar Checkout na Doca</>}
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><PackageCheck className="w-4 h-4 mr-2" /> Gravar Checkout na Doca</>}
                             </Button>
                         </div>
                     </div>

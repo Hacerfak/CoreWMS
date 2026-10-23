@@ -10,7 +10,10 @@ public record CustomerSlaCacheModel(bool RequiresBlindInbound, bool RequiresBlin
 
 public record ProductMasterDataCacheModel(
     Guid ProductId, Guid CustomerId, string Sku,
-    bool StrictBatch, bool StrictExpiration, bool StrictManufacture, bool StrictSerial,
+    bool TracksBatch, bool StrictBatch,
+    bool TracksExpiration, bool StrictExpiration,
+    bool TracksManufacture, bool StrictManufacture,
+    bool TracksSerial, bool StrictSerial,
     PickingStrategy PickingStrategy, CustomerSlaCacheModel CustomerSla,
     Dictionary<string, PackagingCacheModel> PackagingsByBarcode
 );
@@ -53,14 +56,22 @@ public class MasterDataCacheService : IMasterDataCacheService
                     p.Id,
                     p.CustomerId,
                     p.Sku,
+                    p.TracksBatch,
                     p.StrictBatch,
+                    p.TracksExpiration,
                     p.StrictExpiration,
+                    p.TracksManufacture,
                     p.StrictManufacture,
+                    p.TracksSerial,
                     p.StrictSerial,
                     p.PickingStrategy,
+                    CustomerTracksBatch = p.Customer.TracksBatch,
                     CustomerStrictBatch = p.Customer.StrictBatch,
+                    CustomerTracksExp = p.Customer.TracksExpiration,
                     CustomerStrictExp = p.Customer.StrictExpiration,
+                    CustomerTracksMfg = p.Customer.TracksManufacture,
                     CustomerStrictMfg = p.Customer.StrictManufacture,
+                    CustomerTracksSerial = p.Customer.TracksSerial,
                     CustomerStrictSerial = p.Customer.StrictSerial,
                     p.Customer.RequiresBlindInbound,
                     p.Customer.RequiresBlindOutbound,
@@ -96,11 +107,16 @@ public class MasterDataCacheService : IMasterDataCacheService
                 );
             }
 
+            // Realiza o OR lógico (Tanto a regra do produto quanto a do cliente prevalecem se verdadeiras)
             return new ProductMasterDataCacheModel(
                 data.Id, data.CustomerId, data.Sku,
+                data.TracksBatch || data.CustomerTracksBatch,
                 data.StrictBatch || data.CustomerStrictBatch,
+                data.TracksExpiration || data.CustomerTracksExp,
                 data.StrictExpiration || data.CustomerStrictExp,
+                data.TracksManufacture || data.CustomerTracksMfg,
                 data.StrictManufacture || data.CustomerStrictMfg,
+                data.TracksSerial || data.CustomerTracksSerial,
                 data.StrictSerial || data.CustomerStrictSerial,
                 data.PickingStrategy,
                 new CustomerSlaCacheModel(data.RequiresBlindInbound, data.RequiresBlindOutbound),

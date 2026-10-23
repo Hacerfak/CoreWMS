@@ -154,11 +154,14 @@ public class NfeParserService : INfeParserService
             var rastro = prod.Element(Ns + "rastro");
             if (rastro != null)
             {
-                batch = rastro.Element(Ns + "nLote")?.Value;
-                if (DateTime.TryParse(rastro.Element(Ns + "dFab")?.Value, out var mfg))
-                    mfgDate = mfg.ToUniversalTime();
-                if (DateTime.TryParse(rastro.Element(Ns + "dVal")?.Value, out var exp))
-                    expDate = exp.ToUniversalTime();
+                batch = rastro.Element(Ns + "nLote")?.Value?.Trim();
+
+                // Converte AAAA-MM-DD diretamente para UTC sem distorção de fuso
+                if (DateTime.TryParse(rastro.Element(Ns + "dFab")?.Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var mfg))
+                    mfgDate = DateTime.SpecifyKind(mfg.Date, DateTimeKind.Utc);
+
+                if (DateTime.TryParse(rastro.Element(Ns + "dVal")?.Value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var exp))
+                    expDate = DateTime.SpecifyKind(exp.Date, DateTimeKind.Utc);
             }
 
             var quantity = ParseDecimal(prod.Element(Ns + "qCom")?.Value);

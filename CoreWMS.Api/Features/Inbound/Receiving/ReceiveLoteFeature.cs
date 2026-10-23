@@ -89,16 +89,13 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         if (rules == null)
             return Results.BadRequest(new { Message = "Regras do produto não encontradas no Master Data." });
 
-        // Fallback de Pesos Unitários
         decimal baseUnitNet = orderItem.UnitNetWeight;
         decimal baseUnitGross = orderItem.UnitGrossWeight;
 
         if (baseUnitNet <= 0 && orderItem.Product != null)
             baseUnitNet = orderItem.Product.NetWeight;
-
         if (baseUnitGross <= 0 && orderItem.Product != null)
             baseUnitGross = orderItem.Product.GrossWeight > 0 ? orderItem.Product.GrossWeight : orderItem.Product.NetWeight;
-
         if (baseUnitGross <= 0 && baseUnitNet > 0)
             baseUnitGross = baseUnitNet;
 
@@ -111,14 +108,58 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         foreach (var vol in request.Volumes)
         {
-            if (rules.StrictBatch && string.IsNullOrWhiteSpace(vol.Batch))
+            // 1. Resolução do LOTE com base nas regras do produto
+            string? effectiveBatch = null;
+            if (rules.TracksBatch)
+            {
+                effectiveBatch = !string.IsNullOrWhiteSpace(vol.Batch)
+                    ? vol.Batch.Trim().ToUpper()
+                    : (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) ? orderItem.ExpectedBatch.Trim().ToUpper() : null);
+            }
+
+            // 2. Resolução da DATA DE FABRICAÇÃO com base nas regras do produto
+            DateTime? effectiveMfgDate = null;
+            if (rules.TracksManufacture)
+            {
+                var rawMfg = vol.ManufactureDate ?? orderItem.ExpectedManufactureDate;
+                if (rawMfg.HasValue)
+                {
+                    effectiveMfgDate = DateTime.SpecifyKind(rawMfg.Value.Date, DateTimeKind.Utc);
+                }
+            }
+
+            // 3. Resolução da DATA DE VALIDADE com base nas regras do produto
+            DateTime? effectiveExpDate = null;
+            if (rules.TracksExpiration)
+            {
+                var rawExp = vol.ExpirationDate ?? orderItem.ExpectedExpirationDate;
+                if (rawExp.HasValue)
+                {
+                    effectiveExpDate = DateTime.SpecifyKind(rawExp.Value.Date, DateTimeKind.Utc);
+                }
+            }
+
+            // Validações de rastreabilidade do produto
+            if (rules.StrictBatch && string.IsNullOrWhiteSpace(effectiveBatch))
                 throw new InvalidOperationException($"O produto {rules.Sku} exige lote.");
 
-            if (rules.StrictExpiration && !vol.ExpirationDate.HasValue)
+            if (rules.StrictManufacture && !effectiveMfgDate.HasValue)
+                throw new InvalidOperationException($"O produto {rules.Sku} exige data de fabricação.");
+
+            if (rules.StrictExpiration && !effectiveExpDate.HasValue)
                 throw new InvalidOperationException($"O produto {rules.Sku} exige data de validade.");
 
-            if (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) && vol.Batch != orderItem.ExpectedBatch && vol.QualityStatus == QualityStatus.Available)
-                throw new InvalidOperationException($"Divergência Fiscal: Lote ({vol.Batch}) difere da nota fiscal ({orderItem.ExpectedBatch}).");
+            if (effectiveMfgDate.HasValue && effectiveExpDate.HasValue && effectiveExpDate.Value < effectiveMfgDate.Value)
+                throw new InvalidOperationException($"A data de validade ({effectiveExpDate:dd/MM/yyyy}) não pode ser anterior à data de fabricação ({effectiveMfgDate:dd/MM/yyyy}).");
+
+            if (rules.TracksBatch &&
+                !string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) &&
+                !string.IsNullOrWhiteSpace(effectiveBatch) &&
+                effectiveBatch != orderItem.ExpectedBatch &&
+                vol.QualityStatus == QualityStatus.Available)
+            {
+                throw new InvalidOperationException($"Divergência Fiscal: Lote ({effectiveBatch}) difere do lote informado na nota fiscal ({orderItem.ExpectedBatch}).");
+            }
 
             var packaging = orderItem.Product?.Packagings?.FirstOrDefault(p => p.PackagingTypeId == vol.PackagingTypeId);
             decimal huUnitNet = baseUnitNet;
@@ -155,10 +196,10 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                     orderItem.ProductId.Value,
                     vol.PackagingTypeId,
                     orderItem.InboundOrderId,
-                    vol.Batch,
-                    vol.ManufactureDate,
-                    vol.ExpirationDate,
-                    vol.SerialNumber,
+                    effectiveBatch,
+                    effectiveMfgDate,
+                    effectiveExpDate,
+                    rules.TracksSerial ? vol.SerialNumber?.Trim().ToUpper() : null,
                     vol.QuantityPerVolume,
                     orderItem.ExpectedUnitValue,
                     huUnitNet,
@@ -170,19 +211,16 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 if (vol.QualityStatus != QualityStatus.Available)
                 {
                     hu.ChangeQuality(vol.QualityStatus);
-
                     Guid reasonId = vol.QualityReasonId ?? await GetDefaultQualityReasonIdAsync(companyId, ct);
                     string qualityNotes = !string.IsNullOrWhiteSpace(vol.QualityNotes)
                         ? vol.QualityNotes
                         : $"Retenção registrada na conferência da NF-e {orderItem.InboundOrder.AccessKey} ({vol.QualityStatus})";
 
                     var qualityEvent = new QualityEvent(companyId, hu.Id, vol.TargetLocationId, reasonId, qualityNotes);
-
                     foreach (var (fileName, filePath, size) in processedImages)
                     {
                         qualityEvent.AddImage(fileName, filePath, size);
                     }
-
                     _db.QualityEvents.Add(qualityEvent);
                 }
 
@@ -206,7 +244,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             orderItem.InboundOrder.UpdateStatus(InboundOrderStatus.Completed);
         }
 
-        // 1. Garante que o Número da Nota e Série estejam salvos na InboundOrder
         if (string.IsNullOrWhiteSpace(orderItem.InboundOrder.InvoiceNumber) && orderItem.InboundOrder.AccessKey?.Length == 44)
         {
             if (long.TryParse(orderItem.InboundOrder.AccessKey.Substring(25, 9), out var nNf))
@@ -219,7 +256,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         var docNumber = orderItem.InboundOrder.InvoiceNumber ??
             (orderItem.InboundOrder.AccessKey!.Length == 44 ? long.Parse(orderItem.InboundOrder.AccessKey.Substring(25, 9)).ToString() : orderItem.InboundOrder.AccessKey[..8]);
 
-        // 2. Faturamento do Serviço Operacional de Entrada (Handling In via SQL dinâmico)
         if (request.BillingServiceId.HasValue && orderItem.InboundOrder.CustomerId.HasValue)
         {
             var customerId = orderItem.InboundOrder.CustomerId.Value;
@@ -247,9 +283,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
             if (tariff != null && !string.IsNullOrWhiteSpace(tariff.BillingService.SqlTemplate))
             {
-                // Salva as HUs antes de rodar a consulta SQL do motor para torná-las visíveis
                 await _db.SaveChangesAsync(ct);
-
                 var calculatedBillingItem = await _billingEngine.ExecuteOperationalEventAsync(
                     activeCycle,
                     tariff.BillingService,
@@ -284,7 +318,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             }
         }
 
-        // 3. Persiste o recebimento físico
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -294,7 +327,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
         }
 
-        // 4. DISPARO EM SEGUNDO PLANO: Atualiza as diárias cumulativas do dia sem travar a requisição do operador
         if (orderItem.InboundOrder.CustomerId.HasValue)
         {
             var custId = orderItem.InboundOrder.CustomerId.Value;
@@ -312,7 +344,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             }
             else
             {
-                // Fallback em background sem bloquear o encerramento do HTTP
                 _ = Task.Run(async () =>
                 {
                     try

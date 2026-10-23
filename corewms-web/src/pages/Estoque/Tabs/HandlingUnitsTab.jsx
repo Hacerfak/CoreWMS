@@ -26,6 +26,20 @@ import { downloadBackendCsv } from '@/lib/exportCsv';
 import RegisterHoldModal from '@/pages/Qualidade/RegisterHoldModal';
 import PrintHuModal from '@/pages/Inbound/PrintHuModal';
 
+// Formata datas civis puras (Validade/Fabricação) sem recuo de fuso horário
+const formatCivilDate = (dateVal) => {
+    if (!dateVal) return '-';
+    if (typeof dateVal === 'string') {
+        const clean = dateVal.split('T')[0];
+        const parts = clean.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+    }
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? '-' : d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 // Definição das Colunas Customizáveis
 const COLUMN_DEFINITIONS = [
     { id: 'lpn', label: 'LPN / Unidade' },
@@ -433,10 +447,8 @@ export default function HandlingUnitsTab() {
         <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex flex-col overflow-hidden h-full">
             {/* FORMULÁRIO DE FILTROS FIXO */}
             <form onSubmit={handleSearchSubmit} className="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-4">
-                {/* LINHA SUPERIOR: BARRA DE AÇÕES & CUSTOMIZADOR DE COLUNAS */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                        {/* TOGGLE FILTROS AVANÇADOS */}
                         <Button
                             type="button"
                             variant={showAdvancedFilters ? "secondary" : "outline"}
@@ -453,7 +465,6 @@ export default function HandlingUnitsTab() {
                             {showAdvancedFilters ? <ChevronUp size={14} className="ml-1 text-slate-400" /> : <ChevronDown size={14} className="ml-1 text-slate-400" />}
                         </Button>
 
-                        {/* SELETOR DE COLUNAS CUSTOMIZÁVEIS DA TABELA */}
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button type="button" variant="outline" className="text-xs font-semibold h-9 bg-white border-slate-200">
@@ -478,7 +489,6 @@ export default function HandlingUnitsTab() {
                         </Popover>
                     </div>
 
-                    {/* BOTÕES DE AÇÃO EM LOTE E EXPORTAÇÃO */}
                     <div className="flex items-center gap-2 flex-wrap">
                         <Button
                             type="button"
@@ -581,7 +591,6 @@ export default function HandlingUnitsTab() {
                 {showAdvancedFilters && (
                     <div className="pt-3 border-t border-slate-200/80 animate-in fade-in duration-200 space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-3 items-end">
-                            {/* LOTE FÍSICO */}
                             <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Lote Físico</Label>
                                 <Input
@@ -592,7 +601,6 @@ export default function HandlingUnitsTab() {
                                 />
                             </div>
 
-                            {/* NF-E / CHAVE */}
                             <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">NF-e / Chave de Acesso</Label>
                                 <div className="relative">
@@ -606,7 +614,6 @@ export default function HandlingUnitsTab() {
                                 </div>
                             </div>
 
-                            {/* ENDEREÇO COMPLETO */}
                             <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Endereço / Posição</Label>
                                 <SearchableLocationSelect
@@ -617,7 +624,6 @@ export default function HandlingUnitsTab() {
                                 />
                             </div>
 
-                            {/* QUALIDADE */}
                             <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Qualidade</Label>
                                 <Select value={qualityFilter} onValueChange={setQualityFilter}>
@@ -631,7 +637,6 @@ export default function HandlingUnitsTab() {
                                 </Select>
                             </div>
 
-                            {/* STATUS HU */}
                             <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Status HU</Label>
                                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -645,7 +650,6 @@ export default function HandlingUnitsTab() {
                                 </Select>
                             </div>
 
-                            {/* PERÍODO DE ENTRADA VIA DATE RANGE PICKER (00:00 ÀS 23:59) */}
                             <div className="lg:col-span-2 space-y-1">
                                 <Label className="text-[11px] font-bold text-slate-700 uppercase">Período Entrada</Label>
                                 <DateRangePicker date={dateRange} setDate={setDateRange} className="w-full" />
@@ -722,6 +726,7 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
+                                    {/* DATA ENTRADA TÉCNICA (com horário local) */}
                                     {visibleColumns.createdAt && (
                                         <TableCell className="text-xs font-mono text-slate-600">
                                             {h.createdAt ? new Date(h.createdAt).toLocaleString('pt-BR') : '-'}
@@ -753,10 +758,11 @@ export default function HandlingUnitsTab() {
                                         </TableCell>
                                     )}
 
+                                    {/* LOTE E VALIDADE CIVIL (SEM RECUPERAR DIA PELO FUSO) */}
                                     {visibleColumns.batch && (
                                         <TableCell className="text-xs font-mono text-slate-600">
                                             <div>Lote: {h.batch || '-'}</div>
-                                            <div>Val: {h.expirationDate ? new Date(h.expirationDate).toLocaleDateString('pt-BR') : '-'}</div>
+                                            <div>Val: {formatCivilDate(h.expirationDate)}</div>
                                         </TableCell>
                                     )}
 
@@ -787,7 +793,7 @@ export default function HandlingUnitsTab() {
                                                 size="sm"
                                                 variant="ghost"
                                                 title="Registrar Avaria / Bloqueio"
-                                                onClick={() => setHusToHold([h])}
+                                                onClick={() => setHusToHold([hu])}
                                                 className="text-amber-600 hover:bg-amber-50"
                                             >
                                                 <AlertTriangle size={14} />
@@ -798,7 +804,7 @@ export default function HandlingUnitsTab() {
                                             size="sm"
                                             variant="ghost"
                                             title="Mover Posição"
-                                            onClick={() => handleOpenMoveModal([h])}
+                                            onClick={() => handleOpenMoveModal([hu])}
                                             className="text-blue-600 hover:bg-blue-50"
                                         >
                                             <MapPin size={14} />
@@ -809,7 +815,7 @@ export default function HandlingUnitsTab() {
                                             variant="ghost"
                                             title="Reimprimir Etiqueta"
                                             onClick={() => {
-                                                setSelectedHus([h]);
+                                                setSelectedHus([hu]);
                                                 setIsPrintModalOpen(true);
                                             }}
                                             className="text-slate-600 hover:text-blue-600 hover:bg-blue-50"
@@ -821,7 +827,7 @@ export default function HandlingUnitsTab() {
                                             size="sm"
                                             variant="ghost"
                                             title="Estornar Entrada"
-                                            onClick={() => setHusToRollback([h])}
+                                            onClick={() => setHusToRollback([hu])}
                                             className="text-rose-600 hover:bg-rose-50"
                                         >
                                             <Undo2 size={14} />

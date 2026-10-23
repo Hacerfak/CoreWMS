@@ -29,7 +29,9 @@ public class ProcessDailyBillingCycleHandler : IRequestHandler<ProcessDailyBilli
     public async Task<IResult> Handle(ProcessDailyBillingCycleCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
-        var dateToProcess = request.ExecutionDate ?? DateTime.UtcNow.Date;
+        var dateToProcess = request.ExecutionDate.HasValue
+        ? BillingEngineService.ToOperationalDate(request.ExecutionDate.Value)
+        : BillingEngineService.GetOperationalToday();
         var refMonth = dateToProcess.ToString("MM/yyyy");
 
         // 1. Obtém todos os ciclos abertos (Draft) para a competência em processamento

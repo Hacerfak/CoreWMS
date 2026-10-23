@@ -81,7 +81,10 @@ public class ExportKardexHandler : IRequestHandler<ExportKardexQuery, IResult>
 
         if (request.StartDate.HasValue)
         {
-            var startUtc = DateTime.SpecifyKind(request.StartDate.Value.Date, DateTimeKind.Utc);
+            var startDate = request.StartDate.Value;
+            var startUtc = startDate.Kind == DateTimeKind.Utc && startDate.TimeOfDay > TimeSpan.Zero
+                ? startDate
+                : DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
             query = query.Where(q => q.Transaction.CreatedAt >= startUtc);
         }
 
@@ -91,7 +94,6 @@ public class ExportKardexHandler : IRequestHandler<ExportKardexQuery, IResult>
             var endUtc = endDate.Kind == DateTimeKind.Utc && endDate.TimeOfDay > TimeSpan.Zero
                 ? endDate
                 : DateTime.SpecifyKind(endDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
-
             query = query.Where(q => q.Transaction.CreatedAt <= endUtc);
         }
 

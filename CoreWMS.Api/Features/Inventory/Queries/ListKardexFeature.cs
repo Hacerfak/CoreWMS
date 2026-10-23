@@ -90,7 +90,10 @@ public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
         // 2. Filtro de Datas com Cobertura de 24h (00:00:00 às 23:59:59)
         if (request.StartDate.HasValue)
         {
-            var startUtc = DateTime.SpecifyKind(request.StartDate.Value.Date, DateTimeKind.Utc);
+            var startDate = request.StartDate.Value;
+            var startUtc = startDate.Kind == DateTimeKind.Utc && startDate.TimeOfDay > TimeSpan.Zero
+                ? startDate
+                : DateTime.SpecifyKind(startDate.Date, DateTimeKind.Utc);
             baseQuery = baseQuery.Where(q => q.Transaction.CreatedAt >= startUtc);
         }
 
@@ -100,7 +103,6 @@ public class ListKardexHandler : IRequestHandler<ListKardexQuery, IResult>
             var endUtc = endDate.Kind == DateTimeKind.Utc && endDate.TimeOfDay > TimeSpan.Zero
                 ? endDate
                 : DateTime.SpecifyKind(endDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
-
             baseQuery = baseQuery.Where(q => q.Transaction.CreatedAt <= endUtc);
         }
 
