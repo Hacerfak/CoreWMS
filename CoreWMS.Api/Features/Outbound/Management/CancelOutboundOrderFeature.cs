@@ -15,7 +15,6 @@ using System.Security.Claims;
 namespace CoreWMS.Api.Features.Outbound.Management;
 
 public record CancelOutboundOrderRequest(string Reason);
-
 public record CancelOutboundOrderCommand(Guid Id, string Reason) : IRequest<IResult>;
 
 public class CancelOutboundOrderCommandValidator : AbstractValidator<CancelOutboundOrderCommand>
@@ -36,10 +35,7 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
     private readonly ITenantProvider _tenant;
     private readonly IHttpContextAccessor _http;
 
-    public CancelOutboundOrderHandler(
-        ApplicationDbContext db,
-        ITenantProvider tenant,
-        IHttpContextAccessor http)
+    public CancelOutboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant, IHttpContextAccessor http)
     {
         _db = db;
         _tenant = tenant;
@@ -82,6 +78,7 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
+        // 1. Estorna alocações e devolve saldo reservado
         var allocations = await _db.OutboundAllocations
             .Include(a => a.HandlingUnit)
             .Where(a => a.OutboundOrderId == order.Id)
@@ -116,24 +113,33 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
         if (allocations.Any()) _db.OutboundAllocations.RemoveRange(allocations);
 
-        if (order.Volumes.Any())
-        {
-            _db.Set<Entities.OutboundVolume>().RemoveRange(order.Volumes);
-        }
-
-        var billingItems = await _db.BillingItems
-            .Where(b => b.Description.Contains(order.OrderNumber))
+        // 2. Remove logs de conferência (Checking)
+        var checkLogs = await _db.OutboundCheckLogs
+            .Where(c => c.OutboundOrderId == order.Id)
             .ToListAsync(ct);
+        if (checkLogs.Any()) _db.OutboundCheckLogs.RemoveRange(checkLogs);
 
+        // 3. Remove volumes de expedição (auto-packing e fracionados)
+        var volumes = await _db.OutboundVolumes
+            .Where(v => v.OutboundOrderId == order.Id)
+            .ToListAsync(ct);
+        if (volumes.Any()) _db.OutboundVolumes.RemoveRange(volumes);
+
+        // 4. Remove apontamentos de embalagem (Packing Momento 1)
+        var itemPacks = await _db.OutboundItemPacks
+            .Where(p => p.OutboundOrderId == order.Id)
+            .ToListAsync(ct);
+        if (itemPacks.Any()) _db.OutboundItemPacks.RemoveRange(itemPacks);
+
+        // 5. Remove itens de cobrança associados em ciclos abertos
+        var billingItems = await _db.BillingItems
+            .Where(b => b.DocumentId == order.Id || b.Description.Contains(order.OrderNumber))
+            .ToListAsync(ct);
         if (billingItems.Any()) _db.BillingItems.RemoveRange(billingItems);
 
-        // Identifica o operador que solicitou o cancelamento
+        // 6. Cancela a ordem no domínio (zera Allocated, Picked, Packed, Checked nos itens)
         var user = _http.HttpContext?.User;
-        var userName = user?.FindFirst("Name")?.Value
-            ?? user?.Identity?.Name
-            ?? user?.FindFirst(ClaimTypes.Name)?.Value
-            ?? "Operador";
-
+        var userName = user?.FindFirst("Name")?.Value ?? user?.Identity?.Name ?? "Operador";
         var formattedReason = $"{request.Reason.Trim()} (por {userName})";
         order.Cancel(formattedReason);
 
@@ -146,7 +152,7 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             return Results.Conflict(new { Message = "Conflito ao cancelar o pedido. Tente novamente." });
         }
 
-        return Results.Ok(new { Message = "Pedido cancelado, HUs físicas reativadas e todas as reservas estornadas com sucesso." });
+        return Results.Ok(new { Message = "Pedido cancelado, HUs físicas reativadas, conferência e reservas estornadas com sucesso." });
     }
 }
 

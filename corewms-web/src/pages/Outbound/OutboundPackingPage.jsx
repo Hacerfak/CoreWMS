@@ -40,7 +40,7 @@ export default function OutboundPackingPage() {
         { packagingTypeId: '', volumeCount: '', quantityPerVolume: 0 }
     ]);
 
-    // --- ESTADOS DO MOMENTO 2 (FECHAMENTO DE TRANSPORTE) ---
+    // --- ESTADOS DO MOMENTO 2 (FECHO DE TRANSPORTE) ---
     const [selectedDockId, setSelectedDockId] = useState('');
     const [usedStretch, setUsedStretch] = useState(false);
     const [shippingVolumes, setShippingVolumes] = useState([
@@ -48,7 +48,7 @@ export default function OutboundPackingPage() {
     ]);
     const [isFinalizing, setIsFinalizing] = useState(false);
 
-    // Carregamento inicial da ordem, docas, embalagens e serviços de faturamento
+    // Carregamento inicial da ordem, docas, embalagens e serviços de faturação
     const loadOrderData = async () => {
         try {
             setIsLoading(true);
@@ -93,7 +93,7 @@ export default function OutboundPackingPage() {
                 setSelectedItemId(firstPending ? firstPending.id : orderData.items[0].id);
             }
         } catch {
-            toast.error('Erro ao carregar dados do pedido para packing.');
+            toast.error('Erro ao carregar os dados do pedido para packing.');
         } finally {
             setIsLoading(false);
         }
@@ -108,7 +108,7 @@ export default function OutboundPackingPage() {
         return order?.items?.find(i => i.id === selectedItemId);
     }, [order, selectedItemId]);
 
-    // Carrega as embalagens cadastradas no SKU do produto e os apontamentos existentes
+    // Carrega as embalagens registadas no SKU do produto e os apontamentos existentes
     useEffect(() => {
         if (!selectedItem?.productId || !orderId) return;
 
@@ -123,7 +123,7 @@ export default function OutboundPackingPage() {
                 const availablePacks = Array.isArray(packsRes) ? packsRes : [];
                 setItemPackagings(availablePacks);
 
-                // Consulta se este item já possui apontamentos salvos
+                // Consulta se este item já possui apontamentos gravados
                 const currentStatus = await customInstance({
                     url: `/api/outbound/packing/orders/${orderId}/items/${selectedItem.id}`,
                     method: 'GET'
@@ -157,7 +157,7 @@ export default function OutboundPackingPage() {
                     ]);
                 }
             } catch {
-                toast.error('Erro ao carregar embalagens do produto.');
+                toast.error('Erro ao carregar as embalagens do produto.');
             } finally {
                 setIsLoadingItemPacks(false);
             }
@@ -223,7 +223,7 @@ export default function OutboundPackingPage() {
         });
     };
 
-    // Confirmação do Momento 1 para o SKU selecionado
+    // Gravação do Momento 1 para o SKU selecionado
     const handleSaveItemPacking = async () => {
         if (!selectedItem) return;
 
@@ -233,7 +233,7 @@ export default function OutboundPackingPage() {
 
         if (currentPointedTotal !== selectedItem.pickedQuantity) {
             return toast.warning(
-                `A soma apontada (${currentPointedTotal} ${selectedItem.unit}) difere do separado (${selectedItem.pickedQuantity} ${selectedItem.unit}). O saldo precisa fechar em 100%.`
+                `A soma apontada (${currentPointedTotal} ${selectedItem.unit}) difere do separado (${selectedItem.pickedQuantity} ${selectedItem.unit}). O saldo precisa de fechar a 100%.`
             );
         }
 
@@ -258,7 +258,6 @@ export default function OutboundPackingPage() {
 
             toast.success(`Apontamento de ${selectedItem.skuCode} concluído!`);
 
-            // Recarrega o pedido para atualizar o status dos itens
             const updatedOrderRes = await customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' });
             const updatedOrder = updatedOrderRes?.data || updatedOrderRes;
             setOrder(updatedOrder);
@@ -275,7 +274,7 @@ export default function OutboundPackingPage() {
         }
     };
 
-    // --- FUNÇÕES DO MOMENTO 2 (FECHAMENTO DE TRANSPORTE) ---
+    // --- FUNÇÕES DO MOMENTO 2 (FECHO DE TRANSPORTE) ---
     const handleAddShippingVolumeRow = () => {
         const defaultPack = globalPackagingTypes[0];
         setShippingVolumes(prev => [
@@ -341,8 +340,8 @@ export default function OutboundPackingPage() {
                 data: payload
             });
 
-            toast.success(res?.message || 'Packing finalizado e tarifação gravada no faturamento com sucesso!');
-            navigate(`/outbound`);
+            toast.success(res?.message || 'Packing finalizado com sucesso! Redirecionando para a listagem...');
+            navigate('/outbound');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao finalizar packing.');
         } finally {
@@ -354,7 +353,29 @@ export default function OutboundPackingPage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
-                <p className="text-xs text-slate-500 font-medium">Carregando estativa de packing operacional...</p>
+                <p className="text-xs text-slate-500 font-medium">A carregar estativa de packing operacional...</p>
+            </div>
+        );
+    }
+
+    // Se a ordem já foi concluída no packing e já está em conferência, expedida ou cancelada
+    const isPastPackingStage = ['Checking', 'ReadyToShip', 'Shipped', 'Canceled'].includes(order?.status);
+
+    if (isPastPackingStage) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4 bg-white border border-slate-200 rounded-2xl p-8 text-center max-w-lg mx-auto shadow-xs">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <CheckCircle2 size={28} />
+                </div>
+                <div className="space-y-1">
+                    <h2 className="text-lg font-bold text-slate-900">Packing Desta Ordem Já Finalizado</h2>
+                    <p className="text-xs text-slate-500">
+                        O pedido #{order?.orderNumber} encontra-se atualmente no estado <strong>{order?.status}</strong>.
+                    </p>
+                </div>
+                <Button onClick={() => navigate('/outbound')} className="bg-slate-900 text-white font-medium text-xs h-9">
+                    <ArrowLeft size={14} className="mr-1.5" /> Voltar à Listagem de Pedidos
+                </Button>
             </div>
         );
     }
@@ -370,7 +391,7 @@ export default function OutboundPackingPage() {
                     <div>
                         <div className="flex items-center gap-2">
                             <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                                <Package className="text-orange-600" size={22} /> Packing & Expedição (2 Momentos)
+                                <Package className="text-orange-600" size={22} /> Packing (Embalagem de Fracionados)
                             </h1>
                             <Badge className="bg-orange-100 text-orange-800 border-orange-200 text-xs font-mono">
                                 Pedido #{order?.orderNumber}
@@ -459,7 +480,7 @@ export default function OutboundPackingPage() {
 
                                             <div className="flex items-center gap-4 text-xs font-mono">
                                                 <div className="text-right">
-                                                    <span className="text-[10px] text-slate-400 block uppercase">Separado / Conferido</span>
+                                                    <span className="text-[10px] text-slate-400 block uppercase">Separado / Embalado</span>
                                                     <span className="font-bold text-slate-800">{item.pickedQuantity} {item.unit}</span>
                                                     <span className="text-emerald-700 font-bold ml-1.5">({item.packedQuantity} OK)</span>
                                                 </div>
@@ -496,13 +517,13 @@ export default function OutboundPackingPage() {
                                         <Sparkles size={14} className="text-orange-600" /> Apontamento Físico de Embalagens do SKU:
                                     </p>
                                     <p>
-                                        Informe os volumes físicos preparados (ex: Paletes ou Caixas). A soma das peças deve totalizar exatamente <strong>{selectedItem.pickedQuantity} {selectedItem.unit}</strong>.
+                                        Indique os volumes físicos preparados (ex: Caixas ou Paletes). A soma das peças deve totalizar exatamente <strong>{selectedItem.pickedQuantity} {selectedItem.unit}</strong>.
                                     </p>
                                 </div>
 
                                 {isLoadingItemPacks ? (
                                     <div className="py-8 text-center text-slate-500 text-xs flex justify-center items-center gap-2">
-                                        <Loader2 className="animate-spin h-4 w-4 text-orange-600" /> Carregando embalagens do SKU...
+                                        <Loader2 className="animate-spin h-4 w-4 text-orange-600" /> A carregar as embalagens do SKU...
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
@@ -642,10 +663,10 @@ export default function OutboundPackingPage() {
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
                                 <span className="flex items-center gap-2">
                                     <Truck size={16} className={allItemsPacked ? 'text-emerald-600' : 'text-slate-400'} />
-                                    2. Fechamento de Carga & Transporte (SEFAZ)
+                                    2. Fecho de Volumes de Transporte (SEFAZ)
                                 </span>
                                 {allItemsPacked ? (
-                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Liberado para Embarque</Badge>
+                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Pronto para Fecho</Badge>
                                 ) : (
                                     <Badge variant="outline" className="text-slate-500 bg-white">Bloqueado</Badge>
                                 )}
@@ -660,7 +681,7 @@ export default function OutboundPackingPage() {
                                     </div>
                                     <p>
                                         Conclua o apontamento de todos os SKUs na coluna ao lado ({packedItemsCount}/{order?.items?.length || 0} finalizados).
-                                        Assim que todos estiverem verdes (100% Concluído), o fechamento de transporte e faturamento de saída será liberado.
+                                        Assim que todos estiverem concluídos a 100%, a geração dos volumes finais de transporte será liberada.
                                     </p>
                                 </div>
                             ) : (
@@ -779,12 +800,12 @@ export default function OutboundPackingPage() {
                                         <label htmlFor="stretch" className="text-xs text-slate-700 font-medium cursor-pointer leading-tight">
                                             Aplicação de Filme Stretch nos Paletes
                                             <span className="text-[10px] text-slate-500 block font-normal mt-0.5">
-                                                (Registra a tarifação do Insumo no ciclo de faturamento deste mês via query SQL)
+                                                (Regista a tarifação do Insumo no ciclo de faturação deste mês via query SQL)
                                             </span>
                                         </label>
                                     </div>
 
-                                    {/* BOTÃO FINALIZAR */}
+                                    {/* BOTÃO FINALIZAR (REDIRECIONA PARA A LISTAGEM) */}
                                     <Button
                                         type="submit"
                                         disabled={isFinalizing || !selectedDockId}
@@ -792,11 +813,11 @@ export default function OutboundPackingPage() {
                                     >
                                         {isFinalizing ? (
                                             <>
-                                                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Finalizando Packing & Faturamento...
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" /> A Finalizar Packing...
                                             </>
                                         ) : (
                                             <>
-                                                <ShieldCheck className="h-4 w-4 mr-2" /> Concluir Packing & Liberar para Doca 🚀
+                                                <ShieldCheck className="h-4 w-4 mr-2" /> Concluir Packing e Voltar à Listagem 🚀
                                             </>
                                         )}
                                     </Button>

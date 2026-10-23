@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
-    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles, Building2, Save, Info, Warehouse
+    ArrowLeft, ArrowRight, Loader2, Truck, UserCheck, Sparkles,
+    Save, Search, ChevronDown, CheckCircle2, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,6 +38,103 @@ const outboundOrderHeaderSchema = z.object({
     freightModality: z.coerce.number().default(9),
     additionalNotes: z.string().optional().nullable()
 });
+
+// Componente Moderno de Seleção Pesquisável de Depositante
+function SearchableCustomerSelect({ value, onChange, customers, disabled = false, error = false, placeholder = "Selecione o Depositante..." }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const containerRef = useRef(null);
+
+    const selectedCustomer = customers.find(c => c.id === value);
+
+    const filteredCustomers = useMemo(() => {
+        if (!searchTerm) return customers.slice(0, 30);
+        const term = searchTerm.toLowerCase();
+        const termDigits = searchTerm.replace(/\D/g, '');
+        return customers.filter(c =>
+            c.corporateName?.toLowerCase().includes(term) ||
+            (termDigits && c.cnpj?.replace(/\D/g, '').includes(termDigits))
+        ).slice(0, 30);
+    }, [customers, searchTerm]);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div ref={containerRef} className="relative w-full">
+            <button
+                type="button"
+                disabled={disabled}
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left transition-all focus:outline-none focus:ring-1 focus:ring-orange-500 ${error ? 'border-rose-500' : value ? 'border-orange-400 font-semibold text-slate-900' : 'border-slate-200 text-slate-500'
+                    } ${disabled ? 'bg-slate-50 cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-slate-300'}`}
+            >
+                <span className="truncate">{selectedCustomer ? selectedCustomer.corporateName : placeholder}</span>
+                <div className="flex items-center gap-1 shrink-0 ml-1">
+                    {value && !disabled && (
+                        <X
+                            size={13}
+                            className="text-slate-400 hover:text-rose-600 transition-colors"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onChange('');
+                            }}
+                        />
+                    )}
+                    <ChevronDown size={14} className="text-slate-400" />
+                </div>
+            </button>
+
+            {isOpen && !disabled && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-2">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <input
+                            type="text"
+                            autoFocus
+                            placeholder="Buscar por nome ou CNPJ..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-orange-500"
+                        />
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                        {filteredCustomers.length === 0 ? (
+                            <div className="p-2 text-center text-xs text-slate-400 italic">Nenhum depositante encontrado</div>
+                        ) : (
+                            filteredCustomers.map(cust => (
+                                <div
+                                    key={cust.id}
+                                    onClick={() => {
+                                        onChange(cust.id);
+                                        setIsOpen(false);
+                                        setSearchTerm('');
+                                    }}
+                                    className={`px-2.5 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between transition-colors ${value === cust.id ? 'bg-orange-50 text-orange-800 font-bold' : 'hover:bg-slate-100 text-slate-700'
+                                        }`}
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="truncate">{cust.corporateName}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">CNPJ: {cust.cnpj}</span>
+                                    </div>
+                                    {value === cust.id && <CheckCircle2 size={13} className="text-orange-600" />}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 export default function CreateOutboundOrderPage() {
     const { id: orderId } = useParams();
@@ -72,14 +171,11 @@ export default function CreateOutboundOrderPage() {
     });
 
     const selectedCustomerId = watch('customerId');
+    const expectedShipDate = watch('expectedShipDate');
     const carrierCnpjCpf = watch('carrierCnpjCpf');
     const carrierState = watch('carrierState');
     const freightModality = watch('freightModality');
     const isSemFrete = Number(freightModality) === 9;
-
-    const selectedCustomer = useMemo(() => {
-        return customers.find(c => c.id === selectedCustomerId);
-    }, [customers, selectedCustomerId]);
 
     useEffect(() => {
         customInstance({ url: '/api/customers/summary', method: 'GET' })
@@ -250,100 +346,90 @@ export default function CreateOutboundOrderPage() {
                         <UserCheck className="text-orange-600" size={18} /> 1. Origem & Identificação
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
+                    {/* Linha Superior: Depositante (6 cols), Data Prevista (3 cols) e Nº do Pedido (3 cols) */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        <div className="space-y-1.5 md:col-span-6">
                             <Label className="text-slate-800 font-semibold text-xs">Depositante (Dono do Estoque) *</Label>
-                            <Select
+                            <SearchableCustomerSelect
                                 disabled={isEditMode}
                                 value={selectedCustomerId}
-                                onValueChange={(val) => setValue('customerId', val, { shouldValidate: true })}
-                            >
-                                <SelectTrigger className={errors.customerId ? 'border-rose-500 text-xs' : 'text-xs bg-white'}>
-                                    <SelectValue placeholder="Selecione o depositante..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {customers.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                                onChange={(val) => setValue('customerId', val, { shouldValidate: true })}
+                                customers={customers}
+                                error={!!errors.customerId}
+                                placeholder="Selecione o depositante..."
+                            />
                             {errors.customerId && <p className="text-xs text-rose-500">{errors.customerId.message}</p>}
                         </div>
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 md:col-span-3">
                             <Label className="text-slate-800 font-semibold text-xs">Data Prevista de Envio *</Label>
-                            <Input type="date" {...register('expectedShipDate')} className={errors.expectedShipDate ? 'border-rose-500 text-xs' : 'text-xs bg-white'} />
+                            <DatePicker
+                                date={expectedShipDate}
+                                setDate={(d) => setValue('expectedShipDate', d ? d.toISOString().split('T')[0] : '', { shouldValidate: true })}
+                                placeholder="DD/MM/AAAA"
+                            />
                             {errors.expectedShipDate && <p className="text-xs text-rose-500">{errors.expectedShipDate.message}</p>}
+                        </div>
+
+                        <div className="space-y-1.5 md:col-span-3">
+                            <Label className="text-xs">Nº do Pedido / Solicitação</Label>
+                            <Input
+                                {...register('orderNumber')}
+                                placeholder="Opcional (ex: RET-1001)"
+                                className="font-mono text-xs bg-white h-9"
+                            />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs">Nº do Pedido / Solicitação</Label>
-                            <Input {...register('orderNumber')} placeholder="Opcional (ex: RET-1001)" className="font-mono text-xs bg-white" />
-                        </div>
-
-                        <div className="space-y-1.5">
+                    {/* Linha Intermediária: Dados da NF-e e Chave de Acesso Expandida (7 cols) */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 border-t border-slate-100 pt-3">
+                        <div className="space-y-1.5 md:col-span-3">
                             <Label className="text-xs">Nº NF-e Ref. (Opcional)</Label>
-                            <Input {...register('invoiceNumber')} placeholder="Ex: 1250" className="font-mono text-xs bg-white" />
+                            <Input
+                                {...register('invoiceNumber')}
+                                placeholder="Ex: 1250"
+                                className="font-mono text-xs bg-white h-9"
+                            />
                         </div>
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 md:col-span-2">
                             <Label className="text-xs">Série NF-e</Label>
-                            <Input {...register('invoiceSerie')} placeholder="Ex: 1" className="font-mono text-xs bg-white" />
+                            <Input
+                                {...register('invoiceSerie')}
+                                placeholder="Ex: 1"
+                                className="font-mono text-xs bg-white h-9"
+                            />
                         </div>
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 md:col-span-7">
                             <Label className="text-xs">Chave de Acesso Referenciada</Label>
                             <Input
                                 maxLength={44}
                                 {...register('accessKey')}
-                                placeholder="44 dígitos..."
-                                className="font-mono text-xs bg-white"
+                                placeholder="44 dígitos da chave de acesso da NF-e referenciada..."
+                                className="font-mono text-xs bg-white h-9 tracking-wider"
                             />
                         </div>
                     </div>
-                </div>
 
-                {/* BLOCO 2: DESTINATÁRIO */}
-                <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                    <div className="flex items-center justify-between border-b pb-3">
-                        <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                            <Building2 className="text-orange-600" size={18} /> 2. Destinatário Final & Regra Fiscal (Armazém Geral)
-                        </h3>
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200 font-mono text-[11px]">
-                            CFOP 5906 / 6906 - Retorno de Armazém
-                        </Badge>
-                    </div>
-
-                    <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-                        <div className="flex items-start gap-3">
-                            <div className="p-2 rounded-lg bg-blue-100 text-blue-700 mt-0.5 shrink-0">
-                                <Warehouse size={18} />
-                            </div>
-                            <div className="space-y-1 text-xs">
-                                <span className="font-bold text-slate-900 block text-sm">
-                                    Destinatário Vinculado: {selectedCustomer ? selectedCustomer.corporateName : 'Depositante Selecionado na Origem'}
-                                </span>
-                                <p className="text-slate-600 leading-relaxed">
-                                    Ordens manuais destinam-se exclusivamente à <strong>devolução física ou retorno de custódia</strong> das mercadorias para o próprio depositante. Os dados cadastrais, endereço e Inscrição Estadual para a emissão da NF-e serão preenchidos automaticamente com base no cadastro oficial do depositante.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-2 border-t border-slate-200/70 text-[11px] text-amber-800 bg-amber-50/60 p-2.5 rounded-lg border border-amber-200/60">
-                            <Info size={14} className="shrink-0 text-amber-600" />
-                            <span>
-                                <strong>Precisa realizar uma Venda por Conta e Ordem (CFOP 5923 para terceiro)?</strong> Utilize o botão <strong>"Importar XML NF-e"</strong> na listagem de expedição para garantir a integridade dos valores e da NF-e de venda do depositante.
-                            </span>
-                        </div>
+                    {/* Observações da Ordem: Mais Alta e com Expansão Vertical */}
+                    <div className="space-y-1.5 border-t border-slate-100 pt-3">
+                        <Label className="text-xs font-semibold text-slate-800">
+                            Observações Adicionais da Ordem / Instruções (infCpl)
+                        </Label>
+                        <textarea
+                            rows={3}
+                            {...register('additionalNotes')}
+                            placeholder="Ex: Entregar apenas no período da manhã. Ref. Pedido de Compra #1234..."
+                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-y min-h-[76px] font-sans transition-all"
+                        />
                     </div>
                 </div>
 
-                {/* BLOCO 3: TRANSPORTADORA, VEÍCULO & FRETE */}
+                {/* BLOCO 2: TRANSPORTADORA, VEÍCULO & FRETE (Seção 2 de Regra Fiscal suprimida para ordens manuais) */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
                     <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
-                        <Truck className="text-orange-600" size={18} /> 3. Transportadora, Veículo & Frete
+                        <Truck className="text-orange-600" size={18} /> 2. Transportadora, Veículo & Frete
                     </h3>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -394,25 +480,25 @@ export default function CreateOutboundOrderPage() {
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Inscrição Estadual Transportadora</Label>
-                                    <Input {...register('carrierStateRegistration')} placeholder="IE..." className="font-mono text-xs bg-white" />
+                                    <Input {...register('carrierStateRegistration')} placeholder="IE..." className="font-mono text-xs bg-white h-9" />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5 md:col-span-2">
                                     <Label className="text-xs">Nome / Razão Social Transportadora</Label>
-                                    <Input {...register('carrierName')} placeholder="Razão social da transportadora" className="text-xs bg-white" />
+                                    <Input {...register('carrierName')} placeholder="Razão social da transportadora" className="text-xs bg-white h-9" />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Placa do Veículo</Label>
-                                    <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs bg-white" />
+                                    <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs bg-white h-9" />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">UF da Placa</Label>
                                     <Select value={watch('vehiclePlateState')} onValueChange={(val) => setValue('vehiclePlateState', val)}>
-                                        <SelectTrigger className="text-xs bg-white"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
                                         </SelectContent>
@@ -423,18 +509,18 @@ export default function CreateOutboundOrderPage() {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5 md:col-span-2">
                                     <Label className="text-xs">Endereço da Transportadora (xEnder)</Label>
-                                    <Input {...register('carrierAddress')} placeholder="Rua, Número, Bairro..." className="text-xs bg-white" />
+                                    <Input {...register('carrierAddress')} placeholder="Rua, Número, Bairro..." className="text-xs bg-white h-9" />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Município (xMun)</Label>
-                                    <Input {...register('carrierCity')} placeholder="Cidade da transportadora" className="text-xs bg-white" />
+                                    <Input {...register('carrierCity')} placeholder="Cidade da transportadora" className="text-xs bg-white h-9" />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
                                     <Select value={watch('carrierState')} onValueChange={(val) => setValue('carrierState', val)}>
-                                        <SelectTrigger className="text-xs bg-white font-mono font-bold"><SelectValue placeholder="UF" /></SelectTrigger>
+                                        <SelectTrigger className="text-xs bg-white font-mono font-bold h-9"><SelectValue placeholder="UF" /></SelectTrigger>
                                         <SelectContent>
                                             {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
                                         </SelectContent>
@@ -443,11 +529,6 @@ export default function CreateOutboundOrderPage() {
                             </div>
                         </div>
                     )}
-
-                    <div className="space-y-1.5 border-t border-slate-100 pt-3">
-                        <Label className="text-xs">Observações Adicionais / Instruções de Entrega (infCpl)</Label>
-                        <Input {...register('additionalNotes')} placeholder="Ex: Entregar apenas no período da manhã..." className="text-xs bg-white" />
-                    </div>
                 </div>
             </form>
         </div>

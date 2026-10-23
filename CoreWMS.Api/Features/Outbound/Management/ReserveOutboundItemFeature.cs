@@ -94,7 +94,8 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
 
         foreach (var hu in hus)
         {
-            var allocation = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, hu.CurrentQuantity);
+            // Sempre será Volume Fechado
+            var allocation = new OutboundAllocation(order.Id, orderItem.Id, hu.Id, hu.CurrentQuantity, isFractional: false);
             allocation.BindToOrderItem(orderItem);
             _db.OutboundAllocations.Add(allocation);
             orderItem.AddAllocatedQuantity(hu.CurrentQuantity);
@@ -201,9 +202,10 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
         foreach (var item in sortedHus)
         {
             if (remainingToReserve <= 0) break;
-
             var qtyToTake = Math.Min(remainingToReserve, item.FreeQty);
-            var alloc = new OutboundAllocation(order.Id, Guid.Empty, item.Hu.Id, qtyToTake);
+
+            // Sempre será Fracionado pela intenção da aba
+            var alloc = new OutboundAllocation(order.Id, Guid.Empty, item.Hu.Id, qtyToTake, isFractional: true);
             reservedAllocations.Add((alloc, item.Hu.UnitValue));
             remainingToReserve -= qtyToTake;
         }

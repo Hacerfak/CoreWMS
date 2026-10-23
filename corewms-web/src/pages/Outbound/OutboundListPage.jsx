@@ -182,6 +182,8 @@ export default function OutboundListPage() {
                 return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-medium">Em Separação</Badge>;
             case 'Packing':
                 return <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-medium">Aguardando Packing</Badge>;
+            case 'Checking':
+                return <Badge className="bg-teal-100 text-teal-800 border-teal-200 font-medium">Em Conferência</Badge>;
             case 'ReadyToShip':
                 return <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-medium">Pronto p/ Expedir</Badge>;
             case 'Shipped':
@@ -200,7 +202,7 @@ export default function OutboundListPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Outbound (Expedição)</h1>
-                    <p className="text-sm text-slate-500 mt-1">Gestão de ordens de saída, alocação de stock, separação e expedição.</p>
+                    <p className="text-sm text-slate-500 mt-1">Gestão de ordens de saída, alocação de stock, separação, conferência e expedição.</p>
                 </div>
                 <div className="flex gap-2">
                     <Button
@@ -258,6 +260,7 @@ export default function OutboundListPage() {
                                 <SelectItem value="Allocated">Alocado</SelectItem>
                                 <SelectItem value="Picking">Em Separação</SelectItem>
                                 <SelectItem value="Packing">Aguardando Packing</SelectItem>
+                                <SelectItem value="Checking">Em Conferência</SelectItem>
                                 <SelectItem value="ReadyToShip">Pronto p/ Expedir</SelectItem>
                                 <SelectItem value="Shipped">Expedido</SelectItem>
                                 <SelectItem value="Canceled">Cancelado</SelectItem>
@@ -348,6 +351,7 @@ export default function OutboundListPage() {
                                             {renderStatusBadge(order.status)}
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
+                                            {/* Edição do cabeçalho */}
                                             {['Pending', 'Allocating', 'Allocated'].includes(order.status) && (
                                                 <Button
                                                     size="sm"
@@ -387,6 +391,20 @@ export default function OutboundListPage() {
                                                     className="bg-orange-600 hover:bg-orange-700 text-white shadow-2xs font-medium"
                                                 >
                                                     <PackageCheck className="h-3.5 w-3.5 mr-1" /> Packing
+                                                </Button>
+                                            )}
+
+                                            {/* Conferência:
+                                                - Sempre disponível quando a ordem atinge 'Checking'
+                                                - Durante 'Picking', disponível apenas se for 100% volumes fechados (sem fracionamento) */}
+                                            {(order.status === 'Checking' || (order.status === 'Picking' && !order.hasFractional)) && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => navigate(`/outbound/conferencia/${order.id}`)}
+                                                    className="bg-teal-600 hover:bg-teal-700 text-white shadow-2xs font-medium"
+                                                    title="Conferência de Saída"
+                                                >
+                                                    <PackageCheck className="h-3.5 w-3.5 mr-1" /> Conferir
                                                 </Button>
                                             )}
 

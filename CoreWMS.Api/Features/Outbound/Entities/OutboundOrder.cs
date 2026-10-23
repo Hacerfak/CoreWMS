@@ -15,7 +15,6 @@ public class OutboundOrder : AuditableEntity
     public Guid CustomerId { get; private set; }
     public Customer Customer { get; private set; } = null!;
 
-    // Identificação do Pedido e Documentos Fiscais de Venda
     public string? RequestedBy { get; private set; }
     public string OrderNumber { get; private set; } = string.Empty;
     public string? InvoiceNumber { get; private set; }
@@ -23,41 +22,35 @@ public class OutboundOrder : AuditableEntity
     public string? AccessKey { get; private set; }
     public string? RawXml { get; private set; }
 
-    // Tipo de Operação
     public bool IsReturnToCustomer { get; private set; }
 
-    // Dados do Destinatário Final (Completos para validação SEFAZ)
     public string? DestinationCnpjCpf { get; private set; }
     public string? DestinationName { get; private set; }
-    public string? DestinationStateRegistration { get; private set; } // IE Destinatário
-    public int DestinationIeIndicator { get; private set; } = 9;       // 1=Contribuinte, 2=Isento, 9=Não Contribuinte
+    public string? DestinationStateRegistration { get; private set; }
+    public int DestinationIeIndicator { get; private set; } = 9;
     public string? DestinationStreet { get; private set; }
     public string? DestinationNumber { get; private set; }
     public string? DestinationComplement { get; private set; }
     public string? DestinationNeighborhood { get; private set; }
-    public int DestinationCityCode { get; private set; }               // Código IBGE Município
+    public int DestinationCityCode { get; private set; }
     public string? DestinationCity { get; private set; }
     public string? DestinationState { get; private set; }
     public string? DestinationZipCode { get; private set; }
 
-    // Dados da Transportadora e Veículo
     public string? CarrierCnpjCpf { get; private set; }
     public string? CarrierName { get; private set; }
     public string? CarrierStateRegistration { get; private set; }
-    public string? CarrierAddress { get; private set; } // <xEnder>
-    public string? CarrierCity { get; private set; }    // <xMun>
-    public string? CarrierState { get; private set; }   // <UF>
+    public string? CarrierAddress { get; private set; }
+    public string? CarrierCity { get; private set; }
+    public string? CarrierState { get; private set; }
     public string? VehiclePlate { get; private set; }
     public string? VehiclePlateState { get; private set; }
-    public int FreightModality { get; private set; } = 9;              // 0=CIF, 1=FOB, 2=Terceiros, 9=Sem Frete
+    public int FreightModality { get; private set; } = 9;
 
-    // Observações Fiscais e Operacionais
     public string? AdditionalNotes { get; private set; }
-
     public DateTime IssueDate { get; private set; }
     public DateTime ExpectedShipDate { get; private set; }
 
-    // Localização na Doca
     public Guid? DockLocationId { get; private set; }
     public Location? DockLocation { get; private set; }
 
@@ -107,7 +100,7 @@ public class OutboundOrder : AuditableEntity
         CompanyId = companyId;
         CustomerId = customerId;
         OrderNumber = string.IsNullOrWhiteSpace(orderNumber)
-            ? $"{DateTime.UtcNow:yyMMdd}-{FastGuid.NewPostgreSqlGuid().ToString()[..6].ToUpper()}"
+            ? $"{DateTime.UtcNow:yyMMdd}-{FastGuid.NewGuid().ToString()[..6].ToUpper()}"
             : orderNumber.Trim();
         InvoiceNumber = invoiceNumber?.Trim();
         InvoiceSerie = invoiceSerie?.Trim();
@@ -126,14 +119,12 @@ public class OutboundOrder : AuditableEntity
         DestinationCity = destCity?.Trim();
         DestinationState = destState?.Trim();
         DestinationZipCode = destZipCode?.Trim();
-
         CarrierCnpjCpf = carrierCnpjCpf?.Trim();
         CarrierName = carrierName?.Trim();
         CarrierStateRegistration = carrierIe?.Trim();
         CarrierAddress = carrierAddress?.Trim();
         CarrierCity = carrierCity?.Trim();
         CarrierState = carrierState?.Trim()?.ToUpper();
-
         VehiclePlate = vehiclePlate?.Trim().ToUpper();
         VehiclePlateState = vehiclePlateState?.Trim().ToUpper();
         FreightModality = freightModality;
@@ -206,14 +197,12 @@ public class OutboundOrder : AuditableEntity
         DestinationCity = destCity?.Trim();
         DestinationState = destState?.Trim();
         DestinationZipCode = destZipCode?.Trim();
-
         CarrierCnpjCpf = carrierCnpjCpf?.Trim();
         CarrierName = carrierName?.Trim();
         CarrierStateRegistration = carrierIe?.Trim();
         CarrierAddress = carrierAddress?.Trim();
         CarrierCity = carrierCity?.Trim();
         CarrierState = carrierState?.Trim()?.ToUpper();
-
         VehiclePlate = vehiclePlate?.Trim().ToUpper();
         VehiclePlateState = vehiclePlateState?.Trim().ToUpper();
         FreightModality = freightModality;
@@ -221,19 +210,69 @@ public class OutboundOrder : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void UpdateStatus(OutboundOrderStatus newStatus)
+    public void SetDockLocation(Guid dockLocationId)
     {
-        Status = newStatus;
+        DockLocationId = dockLocationId;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void StageAtDock(Guid dockLocationId)
     {
-        if (Items.Any(i => i.Status != OutboundOrderItemStatus.Packed))
-            throw new InvalidOperationException("Não é possível enviar o pedido para a doca pois existem itens não empacotados.");
+        if (Items.Any(i => i.PackedQuantity < i.ExpectedQuantity))
+            throw new InvalidOperationException("Não é possível enviar o pedido para a doca pois existem itens ainda não empacotados.");
 
         DockLocationId = dockLocationId;
-        Status = OutboundOrderStatus.ReadyToShip;
+        RefreshStatusAfterProgress();
+    }
+
+    // Máquina de estados que reavalia a ordem após qualquer evento operacional
+    public void RefreshStatusAfterProgress()
+    {
+        if (Status == OutboundOrderStatus.Canceled || Status == OutboundOrderStatus.Shipped)
+            return;
+
+        if (_items.Count == 0)
+        {
+            Status = OutboundOrderStatus.Pending;
+            UpdatedAt = DateTime.UtcNow;
+            return;
+        }
+
+        bool allPicked = _items.All(i => i.PickedQuantity >= i.ExpectedQuantity);
+        bool allPacked = _items.All(i => i.PackedQuantity >= i.ExpectedQuantity);
+        bool allChecked = _items.All(i => i.CheckedQuantity >= i.ExpectedQuantity);
+
+        if (allPicked && allPacked && allChecked)
+        {
+            Status = OutboundOrderStatus.ReadyToShip;
+        }
+        else if (allPicked && allPacked)
+        {
+            Status = OutboundOrderStatus.Checking;
+        }
+        else if (allPicked)
+        {
+            Status = OutboundOrderStatus.Packing;
+        }
+        else if (_items.Any(i => i.PickedQuantity > 0))
+        {
+            Status = OutboundOrderStatus.Picking;
+        }
+        else if (_items.All(i => i.AllocatedQuantity >= i.ExpectedQuantity))
+        {
+            Status = OutboundOrderStatus.Allocated;
+        }
+        else
+        {
+            Status = OutboundOrderStatus.Pending;
+        }
+
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateStatus(OutboundOrderStatus newStatus)
+    {
+        Status = newStatus;
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -273,15 +312,12 @@ public class OutboundOrder : AuditableEntity
 
         Status = OutboundOrderStatus.Canceled;
 
-        // Converte o instante para o fuso operacional (Brasília) para o texto legível ficar correto
         var displayTime = localTimestamp ?? ToOperationalTime(DateTime.UtcNow);
         var cancelLog = $"[CANCELADO em {displayTime:dd/MM/yyyy HH:mm}]: {reason.Trim()}";
-
         AdditionalNotes = string.IsNullOrWhiteSpace(AdditionalNotes)
             ? cancelLog
             : $"{AdditionalNotes}\n{cancelLog}";
 
-        // O campo técnico do banco continua rigorosamente em UTC puro
         UpdatedAt = DateTime.UtcNow;
     }
 
@@ -289,7 +325,6 @@ public class OutboundOrder : AuditableEntity
     {
         try
         {
-            // Padrão Linux / Docker (IANA)
             var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
             return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
         }
@@ -297,13 +332,11 @@ public class OutboundOrder : AuditableEntity
         {
             try
             {
-                // Padrão Windows
                 var tz = TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
                 return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
             }
             catch
             {
-                // Fallback seguro UTC-3
                 return utcDateTime.AddHours(-3);
             }
         }

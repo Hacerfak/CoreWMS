@@ -25,6 +25,7 @@ import type {
 
 import type {
   CancelOutboundOrderRequest,
+  CheckOutboundItemCommand,
   CreateOutboundOrderCommand,
   FinalizeOrderPackingCommand,
   GetApiOutboundOrdersOrderIdFiscalPreviewParams,
@@ -1243,7 +1244,93 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiOutboundOrdersImportXmlMutationOptions(options), queryClient);
     }
-    export const postApiOutboundOrdersIdAllocate = (
+    export const getApiOutboundCheckingOrderIdTasks = (
+    orderId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/checking/${orderId}/tasks`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiOutboundCheckingOrderIdTasksQueryKey = (orderId: string,) => {
+    return [
+    `/api/outbound/checking/${orderId}/tasks`
+    ] as const;
+    }
+
+
+export const getGetApiOutboundCheckingOrderIdTasksQueryOptions = <TData = Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError = unknown>(orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiOutboundCheckingOrderIdTasksQueryKey(orderId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>> = ({ signal }) => getApiOutboundCheckingOrderIdTasks(orderId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: orderId !== null && orderId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiOutboundCheckingOrderIdTasksQueryResult = NonNullable<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>>
+export type GetApiOutboundCheckingOrderIdTasksQueryError = unknown
+
+
+export function useGetApiOutboundCheckingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundCheckingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>,
+          TError,
+          Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiOutboundCheckingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiOutboundCheckingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError = unknown>(
+ orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiOutboundCheckingOrderIdTasksQueryOptions(orderId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiOutboundOrdersIdAllocate = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -1520,3 +1607,183 @@ export function useGetApiOutboundPackingOrdersOrderIdItemsOrderItemId<TData = Aw
 
 
 
+export const postApiOutboundCheckingScan = (
+    checkOutboundItemCommand: CheckOutboundItemCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/checking/scan`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: checkOutboundItemCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundCheckingScanMutationKey = () => ['postApiOutboundCheckingScan'] as const;
+
+export const getPostApiOutboundCheckingScanMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingScan>>, TError,PostApiOutboundCheckingScanMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingScan>>, TError,PostApiOutboundCheckingScanMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundCheckingScanMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundCheckingScan>>, PostApiOutboundCheckingScanMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiOutboundCheckingScan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundCheckingScanMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundCheckingScan>>>
+    export type PostApiOutboundCheckingScanMutationBody = CheckOutboundItemCommand
+    export type PostApiOutboundCheckingScanMutationError = unknown
+    export type PostApiOutboundCheckingScanMutationVariables = {data: CheckOutboundItemCommand}
+
+    export const usePostApiOutboundCheckingScan = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingScan>>, TError,PostApiOutboundCheckingScanMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundCheckingScan>>,
+        TError,
+        PostApiOutboundCheckingScanMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundCheckingScanMutationOptions(options), queryClient);
+    }
+    export const postApiOutboundCheckingOrdersOrderIdUndoCheckLogId = (
+    orderId: string,
+    checkLogId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/checking/orders/${orderId}/undo/${checkLogId}`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationKey = () => ['postApiOutboundCheckingOrdersOrderIdUndoCheckLogId'] as const;
+
+export const getPostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdUndoCheckLogId>>, TError,PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdUndoCheckLogId>>, TError,PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdUndoCheckLogId>>, PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationVariables> = (props) => {
+          const {orderId,checkLogId} = props ?? {};
+
+          return  postApiOutboundCheckingOrdersOrderIdUndoCheckLogId(orderId,checkLogId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdUndoCheckLogId>>>
+
+    export type PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationError = unknown
+    export type PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationVariables = {orderId: string;checkLogId: string}
+
+    export const usePostApiOutboundCheckingOrdersOrderIdUndoCheckLogId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdUndoCheckLogId>>, TError,PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdUndoCheckLogId>>,
+        TError,
+        PostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundCheckingOrdersOrderIdUndoCheckLogIdMutationOptions(options), queryClient);
+    }
+    export const postApiOutboundCheckingOrdersOrderIdReset = (
+    orderId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/checking/orders/${orderId}/reset`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundCheckingOrdersOrderIdResetMutationKey = () => ['postApiOutboundCheckingOrdersOrderIdReset'] as const;
+
+export const getPostApiOutboundCheckingOrdersOrderIdResetMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdReset>>, TError,PostApiOutboundCheckingOrdersOrderIdResetMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdReset>>, TError,PostApiOutboundCheckingOrdersOrderIdResetMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundCheckingOrdersOrderIdResetMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdReset>>, PostApiOutboundCheckingOrdersOrderIdResetMutationVariables> = (props) => {
+          const {orderId} = props ?? {};
+
+          return  postApiOutboundCheckingOrdersOrderIdReset(orderId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundCheckingOrdersOrderIdResetMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdReset>>>
+
+    export type PostApiOutboundCheckingOrdersOrderIdResetMutationError = unknown
+    export type PostApiOutboundCheckingOrdersOrderIdResetMutationVariables = {orderId: string}
+
+    export const usePostApiOutboundCheckingOrdersOrderIdReset = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdReset>>, TError,PostApiOutboundCheckingOrdersOrderIdResetMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundCheckingOrdersOrderIdReset>>,
+        TError,
+        PostApiOutboundCheckingOrdersOrderIdResetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundCheckingOrdersOrderIdResetMutationOptions(options), queryClient);
+    }

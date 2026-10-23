@@ -16,6 +16,7 @@ export * from './cancelNfeCommand';
 export * from './cancelOutboundNfeCommand';
 export * from './cancelOutboundOrderRequest';
 export * from './changeQualityCommand';
+export * from './checkOutboundItemCommand';
 export * from './companyLoginDto';
 export * from './createAgentCommand';
 export * from './createBillingServiceCommand';

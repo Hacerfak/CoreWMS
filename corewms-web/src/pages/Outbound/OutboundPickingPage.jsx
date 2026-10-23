@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
     ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2, ArrowRight,
-    Check, Calendar, Tag, ChevronDown, ChevronRight, PackageCheck, AlertCircle, Sparkles
+    Check, Calendar, Tag, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -94,12 +94,6 @@ export default function OutboundPickingPage() {
     const suggestedHus = useMemo(() => {
         if (!activeItem?.allocations) return [];
         return activeItem.allocations.filter(a => !a.isPicked);
-    }, [activeItem]);
-
-    // HUs já coletadas do SKU ativo
-    const pickedHus = useMemo(() => {
-        if (!activeItem?.allocations) return [];
-        return activeItem.allocations.filter(a => a.isPicked);
     }, [activeItem]);
 
     // Atualiza campo de quantidade sugerida ao trocar de SKU
@@ -212,26 +206,21 @@ export default function OutboundPickingPage() {
                         <strong className="text-slate-800">{completedItems.length}</strong> de <strong className="text-slate-800">{orderData?.items?.length || 0}</strong> concluídos
                     </div>
 
-                    {isOrderComplete ? (
-                        <Button
-                            onClick={() => navigate(`/outbound/packing/${orderId}`)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 shadow-xs"
-                        >
-                            <PackageCheck size={16} className="mr-2" /> Ir para a Mesa de Packing
-                        </Button>
-                    ) : (
-                        <Button
-                            onClick={() => navigate('/outbound')}
-                            variant="outline"
-                            className="bg-white text-slate-700 h-10 text-xs font-semibold"
-                        >
-                            Salvar e Sair
-                        </Button>
-                    )}
+                    <Button
+                        onClick={() => navigate('/outbound')}
+                        className={isOrderComplete ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 shadow-xs" : "bg-white text-slate-700 border-slate-200 h-10 text-xs font-semibold"}
+                        variant={isOrderComplete ? "default" : "outline"}
+                    >
+                        {isOrderComplete ? (
+                            <><CheckCircle2 size={16} className="mr-2" /> Concluir e Voltar</>
+                        ) : (
+                            'Salvar e Sair'
+                        )}
+                    </Button>
                 </div>
             </div>
 
-            {/* SEPARADOR DE PEDIDO 100% CONCLUÍDO */}
+            {/* BANNER DE SEPARAÇÃO 100% CONCLUÍDA (SEM DIRECIONAR PARA O PACKING) */}
             {isOrderComplete && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3 shadow-2xs">
                     <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
@@ -239,14 +228,14 @@ export default function OutboundPickingPage() {
                     </div>
                     <h2 className="text-lg font-bold text-slate-900">Todos os SKUs deste pedido foram 100% separados!</h2>
                     <p className="text-xs text-slate-600 max-w-md mx-auto">
-                        Todas as HUs foram coletadas. Você pode prosseguir diretamente para a conferência de embalagens e expedição na mesa de Packing.
+                        Todas as HUs e produtos foram coletados com sucesso no armazém.
                     </p>
                     <div className="pt-2">
                         <Button
-                            onClick={() => navigate(`/outbound/packing/${orderId}`)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6"
+                            onClick={() => navigate('/outbound')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shadow-xs"
                         >
-                            Avançar para o Packing (Embalagem) <ArrowRight size={16} className="ml-2" />
+                            <ArrowLeft size={16} className="mr-2" /> Voltar para a Listagem de Pedidos
                         </Button>
                     </div>
                 </div>

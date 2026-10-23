@@ -15,7 +15,12 @@ public record OutboundAllocatedHuDetailDto(
     string? Batch,
     DateTime? ExpirationDate,
     decimal Quantity,
-    bool IsPicked
+    bool IsPicked,
+    string? PickedByName,
+    DateTime? PickedAt,
+    bool IsChecked,
+    string? CheckedByName,
+    DateTime? CheckedAt
 );
 
 public record OutboundOrderItemDetailDto(
@@ -29,8 +34,9 @@ public record OutboundOrderItemDetailDto(
     decimal AllocatedQuantity,
     decimal PickedQuantity,
     decimal PackedQuantity,
+    decimal CheckedQuantity, // <-- Adicionado
     decimal UnitValue,
-    decimal InboundUnitValue, // <-- Exposto no DTO
+    decimal InboundUnitValue,
     string Status,
     List<OutboundAllocatedHuDetailDto> Allocations
 );
@@ -41,7 +47,13 @@ public record OutboundOrderVolumeDetailDto(
     string PackagingTypeCode,
     string PackagingTypeDescription,
     decimal GrossWeight,
-    bool UsedStretchFilm
+    bool UsedStretchFilm,
+    bool IsAutoPacked,
+    string? PackedByName,
+    DateTime? PackedAt,
+    bool IsChecked,
+    string? CheckedByName,
+    DateTime? CheckedAt
 );
 
 public record OutboundFiscalDocumentDto(
@@ -145,7 +157,12 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                     a.HandlingUnit.Batch,
                     a.HandlingUnit.ExpirationDate,
                     a.Quantity,
-                    a.IsPicked
+                    a.IsPicked,
+                    a.PickedByName,
+                    a.PickedAt,
+                    a.IsChecked,
+                    a.CheckedByName,
+                    a.CheckedAt
                 )).ToList();
 
             return new OutboundOrderItemDetailDto(
@@ -159,6 +176,7 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 item.AllocatedQuantity,
                 item.PickedQuantity,
                 item.PackedQuantity,
+                item.CheckedQuantity,
                 item.UnitValue,
                 item.InboundUnitValue, // <-- Mapeado
                 item.Status.ToString(),
@@ -172,7 +190,13 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             v.PackagingType != null ? v.PackagingType.Code : "VOL",
             v.PackagingType != null ? v.PackagingType.Description : "Volume de Envio",
             v.GrossWeight,
-            v.UsedStretchFilm
+            v.UsedStretchFilm,
+            v.IsAutoPacked,
+            v.PackedByName,
+            v.PackedAt,
+            v.IsChecked,
+            v.CheckedByName,
+            v.CheckedAt
         )).ToList();
 
         var fiscalDocDtos = await _db.CompanyFiscalDocuments

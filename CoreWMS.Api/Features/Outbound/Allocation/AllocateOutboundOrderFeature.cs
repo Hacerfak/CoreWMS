@@ -78,11 +78,16 @@ public class AllocateOutboundOrderHandler : IRequestHandler<AllocateOutboundOrde
             foreach (var huData in availableHus)
             {
                 if (qtyNeeded <= 0) break;
+
                 var huAvailableQty = huData.Hu.CurrentQuantity - huData.AllocatedAlready;
                 if (huAvailableQty <= 0) continue;
 
                 var qtyToTake = Math.Min(qtyNeeded, huAvailableQty);
-                var allocation = new OutboundAllocation(order.Id, item.Id, huData.Hu.Id, qtyToTake);
+
+                // Lógica explícita de identificação
+                bool isFractional = qtyToTake < huData.Hu.CurrentQuantity;
+
+                var allocation = new OutboundAllocation(order.Id, item.Id, huData.Hu.Id, qtyToTake, isFractional);
 
                 _db.OutboundAllocations.Add(allocation);
                 item.AddAllocatedQuantity(qtyToTake);

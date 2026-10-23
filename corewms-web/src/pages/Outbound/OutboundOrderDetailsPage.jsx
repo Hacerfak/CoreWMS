@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
 
@@ -18,7 +18,9 @@ import {
     AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import {
-    ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText, UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil, ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2
+    ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText,
+    UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil,
+    ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
@@ -86,6 +88,14 @@ export default function OutboundOrderDetailsPage() {
         setExpandedItemIds(prev => ({ ...prev, [itemId]: !prev[itemId] }));
     };
 
+    const hasFractional = useMemo(() => {
+        return order?.items?.some(i => i.allocations?.some(a => a.isFractional));
+    }, [order]);
+
+    // A conferência só pode ocorrer em paralelo se for 100% volumes fechados.
+    // Se houver fracionamento, só abre após atingir o estado 'Checking' (pós-packing).
+    const canGoToChecking = order?.status === 'Checking' || (order?.status === 'Picking' && !hasFractional);
+
     const handleDownloadPdf = async (doc) => {
         try {
             setDownloadingDocId(doc.id);
@@ -106,7 +116,7 @@ export default function OutboundOrderDetailsPage() {
             window.URL.revokeObjectURL(url);
             toast.success('Download do PDF iniciado!');
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao baixar o PDF.');
+            toast.error(error.response?.data?.message || 'Erro ao descarregar o PDF.');
         } finally {
             setDownloadingDocId(null);
         }
@@ -114,7 +124,7 @@ export default function OutboundOrderDetailsPage() {
 
     const handleDownloadXml = async (doc) => {
         try {
-            toast.success('Preparando download do XML...');
+            toast.success('A preparar download do XML...');
             const response = await customInstance({
                 url: `/api/fiscal/nfe/${doc.id}/xml`,
                 method: 'GET',
@@ -131,11 +141,11 @@ export default function OutboundOrderDetailsPage() {
             link.remove();
             window.URL.revokeObjectURL(url);
         } catch {
-            toast.error('Erro ao baixar o arquivo XML.');
+            toast.error('Erro ao descarregar o ficheiro XML.');
         }
     };
 
-    // Exclusão de Nota Fiscal Pendente ou Rejeitada (com AlertDialog)
+    // Exclusão de Nota Fiscal Pendente ou Rejeitada
     const handleConfirmDeleteDoc = async () => {
         if (!docToDelete) return;
         try {
@@ -154,7 +164,7 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Estorno da Expedição (com AlertDialog)
+    // Estorno da Expedição
     const handleConfirmRevertShipment = async () => {
         try {
             setIsRevertingShipment(true);
@@ -174,7 +184,7 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Cancelamento do Pedido
+    // Cancelamento do Pedido com Motivo Obrigatório
     const handleCancelOrder = async () => {
         if (cancelReason.trim().length < 15) {
             return toast.warning('O motivo do cancelamento deve conter no mínimo 15 caracteres.');
@@ -237,6 +247,8 @@ export default function OutboundOrderDetailsPage() {
                 return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Em Separação</Badge>;
             case 'Packing':
                 return <Badge className="bg-amber-100 text-amber-900 border-amber-300">Aguardando Packing</Badge>;
+            case 'Checking':
+                return <Badge className="bg-teal-100 text-teal-800 border-teal-200 font-medium">Em Conferência</Badge>;
             case 'ReadyToShip':
                 return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Pronto p/ Expedir</Badge>;
             case 'Shipped':
@@ -303,11 +315,20 @@ export default function OutboundOrderDetailsPage() {
                             <Box size={15} className="mr-1.5" /> Ir para Coletor
                         </Button>
                     )}
+
                     {order?.status === 'Packing' && (
                         <Button onClick={() => navigate(`/outbound/packing/${order.id}`)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
                             <PackageCheck size={15} className="mr-1.5" /> Ir para Packing
                         </Button>
                     )}
+
+                    {/* BOTÃO CONFERÊNCIA DE SAÍDA */}
+                    {canGoToChecking && (
+                        <Button onClick={() => navigate(`/outbound/conferencia/${order.id}`)} className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-9 shadow-2xs">
+                            <PackageCheck size={15} className="mr-1.5" /> Ir para Conferência
+                        </Button>
+                    )}
+
                     {order?.status === 'ReadyToShip' && (
                         <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
                             <CheckCircle2 size={15} className="mr-1.5" /> Revisar e Expedir
@@ -342,7 +363,7 @@ export default function OutboundOrderDetailsPage() {
                             variant="outline"
                             onClick={() => setIsCancelOrderDialogOpen(true)}
                             className="border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 font-medium h-9"
-                            title="Cancelar o pedido de saída e liberar as reservas de estoque"
+                            title="Cancelar o pedido de saída e libertar as reservas de stock"
                         >
                             <Ban size={15} className="mr-1.5 text-rose-600" /> Cancelar Pedido
                         </Button>
@@ -353,7 +374,7 @@ export default function OutboundOrderDetailsPage() {
                             variant="outline"
                             onClick={() => setIsDeleteOrderDialogOpen(true)}
                             className="border-rose-300 text-rose-800 bg-rose-100 hover:bg-rose-200 font-bold h-9"
-                            title="Excluir definitivamente o registro da ordem cancelada"
+                            title="Excluir definitivamente o registo da ordem cancelada"
                         >
                             <Trash2 size={15} className="mr-1.5 text-rose-700" /> Excluir Ordem
                         </Button>
@@ -364,7 +385,7 @@ export default function OutboundOrderDetailsPage() {
             {/* CONTEÚDO PRINCIPAL */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                    {/* ITENS E HUS */}
+                    {/* ITENS E HUS COM TRÍADE OPERACIONAL */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
@@ -374,7 +395,8 @@ export default function OutboundOrderDetailsPage() {
                         </CardHeader>
                         <CardContent className="p-4 space-y-4">
                             {order?.items?.map((item) => {
-                                const percent = item.expectedQuantity > 0 ? Math.min(100, (item.pickedQuantity / item.expectedQuantity) * 100) : 0;
+                                const pickPercent = item.expectedQuantity > 0 ? Math.min(100, (item.pickedQuantity / item.expectedQuantity) * 100) : 0;
+                                const checkPercent = item.expectedQuantity > 0 ? Math.min(100, ((item.checkedQuantity || 0) / item.expectedQuantity) * 100) : 0;
                                 const isExpanded = !!expandedItemIds[item.id];
                                 const pickedAllocations = item.allocations?.filter(a => a.isPicked) || [];
                                 const unpickedAllocations = item.allocations?.filter(a => !a.isPicked) || [];
@@ -398,11 +420,18 @@ export default function OutboundOrderDetailsPage() {
 
                                             <div className="flex items-center gap-4 text-xs font-mono">
                                                 <div>
-                                                    <span className="text-slate-400 text-[10px] block">PREVISTO / SEPARADO</span>
+                                                    <span className="text-slate-400 text-[10px] block">PREV. / SEP. / CONF.</span>
                                                     <span className="font-bold text-slate-900">{item.expectedQuantity} {item.unit}</span>
-                                                    <span className="text-purple-700 font-bold ml-1">({item.pickedQuantity} SEPARADO)</span>
+                                                    <span className="text-purple-700 font-bold ml-1">({item.pickedQuantity} SEP)</span>
+                                                    <span className="text-teal-700 font-extrabold ml-1">({item.checkedQuantity || 0} CONF)</span>
                                                 </div>
-                                                <Badge className={item.pickedQuantity >= item.expectedQuantity ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}>
+                                                <Badge className={
+                                                    item.checkedQuantity >= item.expectedQuantity
+                                                        ? 'bg-emerald-100 text-emerald-800'
+                                                        : item.pickedQuantity >= item.expectedQuantity
+                                                            ? 'bg-teal-100 text-teal-800'
+                                                            : 'bg-amber-100 text-amber-800'
+                                                }>
                                                     {item.status}
                                                 </Badge>
                                             </div>
@@ -410,26 +439,61 @@ export default function OutboundOrderDetailsPage() {
 
                                         {isExpanded && (
                                             <div className="p-3 bg-slate-50 space-y-3 text-xs">
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
-                                                        <span>Progresso de Separação</span>
-                                                        <span>{percent.toFixed(0)}%</span>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+                                                            <span>Separação</span>
+                                                            <span className="text-purple-700 font-bold">{pickPercent.toFixed(0)}%</span>
+                                                        </div>
+                                                        <Progress value={pickPercent} className="h-1.5 [&>div]:bg-purple-600" />
                                                     </div>
-                                                    <Progress value={percent} className="h-1.5" />
+                                                    <div className="space-y-1">
+                                                        <div className="flex justify-between text-[10px] text-slate-500 font-semibold">
+                                                            <span>Conferência</span>
+                                                            <span className="text-teal-700 font-bold">{checkPercent.toFixed(0)}%</span>
+                                                        </div>
+                                                        <Progress value={checkPercent} className="h-1.5 [&>div]:bg-teal-600" />
+                                                    </div>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                                                    <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+                                                    <div className="bg-white p-2.5 rounded-lg border border-slate-200 space-y-2">
                                                         <span className="font-bold text-slate-800 text-[10px] uppercase block tracking-wider text-emerald-700">
-                                                            ✓ HUs Separadas ({pickedAllocations.length})
+                                                            ✓ HUs Separadas & Rastreabilidade ({pickedAllocations.length})
                                                         </span>
                                                         {pickedAllocations.length === 0 ? (
                                                             <span className="text-[11px] text-slate-400 italic">Nenhum LPN coletado.</span>
                                                         ) : (
                                                             pickedAllocations.map(a => (
-                                                                <div key={a.allocationId} className="flex justify-between items-center text-[11px] font-mono bg-slate-50 p-1.5 rounded border">
-                                                                    <span>LPN: <strong>{a.lpn}</strong> ({a.locationPath})</span>
-                                                                    <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">{a.quantity} {item.unit}</Badge>
+                                                                <div key={a.allocationId} className="flex justify-between items-center text-[11px] font-mono bg-slate-50 p-2 rounded-lg border space-y-1">
+                                                                    <div>
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <span className="font-bold text-slate-900">LPN: {a.lpn}</span>
+                                                                            <span className="text-slate-400 text-[10px]">({a.locationPath})</span>
+                                                                            {a.isFractional ? (
+                                                                                <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-700 border-purple-200">
+                                                                                    Fracionado
+                                                                                </Badge>
+                                                                            ) : (
+                                                                                <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">
+                                                                                    Fechado
+                                                                                </Badge>
+                                                                            )}
+                                                                        </div>
+                                                                        <span className="text-[10px] text-slate-500 block">
+                                                                            Sep: <strong className="text-purple-900">{a.pickedByName || 'Coletor'}</strong> | Conf: <strong className={a.isChecked ? "text-teal-700" : "text-slate-400"}>{a.checkedByName || 'Pendente'}</strong>
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                                        <Badge className="bg-slate-100 text-slate-800 text-[10px]">{a.quantity} {item.unit}</Badge>
+                                                                        {a.isChecked ? (
+                                                                            <Badge className="bg-teal-100 text-teal-800 border-teal-200 text-[10px] gap-1">
+                                                                                <CheckCircle2 size={10} /> Conferido
+                                                                            </Badge>
+                                                                        ) : (
+                                                                            <Badge variant="outline" className="text-slate-400 text-[10px]">Pendente</Badge>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             ))
                                                         )}
@@ -459,25 +523,27 @@ export default function OutboundOrderDetailsPage() {
                         </CardContent>
                     </Card>
 
-                    {/* VOLUMES PACKING */}
+                    {/* VOLUMES PACKING COM IDENTIFICAÇÃO DE AUTO-PACKING E CONFERÊNCIA */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
-                                <span className="flex items-center gap-2"><Box size={16} className="text-orange-600" /> Volumes Finais Gerados (Packing)</span>
+                                <span className="flex items-center gap-2"><Box size={16} className="text-orange-600" /> Volumes Finais Gerados (Packing & Auto-Packing)</span>
                                 <Badge variant="secondary" className="font-mono">{order?.volumes?.length || 0} Volume(s)</Badge>
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4">
                             {!order?.volumes || order.volumes.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic">Nenhum volume gerado na conferência ainda.</p>
+                                <p className="text-xs text-slate-400 italic">Nenhum volume gerado ainda.</p>
                             ) : (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden">
                                     <Table>
                                         <TableHeader className="bg-slate-50">
                                             <TableRow>
                                                 <TableHead>Volume LPN</TableHead>
-                                                <TableHead>Tipo Embalagem</TableHead>
-                                                <TableHead>Filme Stretch</TableHead>
+                                                <TableHead>Tipo / Embalagem</TableHead>
+                                                <TableHead>Origem Packing</TableHead>
+                                                <TableHead>Embalado por</TableHead>
+                                                <TableHead>Conferência</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -489,9 +555,29 @@ export default function OutboundOrderDetailsPage() {
                                                         {vol.packagingTypeDescription}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Badge className={vol.usedStretchFilm ? 'bg-blue-100 text-blue-800 text-[10px]' : 'bg-slate-100 text-slate-600 text-[10px]'}>
-                                                            {vol.usedStretchFilm ? 'Sim (Aplicado)' : 'Não'}
-                                                        </Badge>
+                                                        {vol.isAutoPacked ? (
+                                                            <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] gap-1">
+                                                                <Sparkles size={10} /> Auto-Packing (Fechado)
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="text-slate-600 bg-slate-50 text-[10px]">
+                                                                Manual (Fracionado)
+                                                            </Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-xs font-mono text-slate-700">
+                                                        {vol.packedByName || 'Sistema'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {vol.isChecked ? (
+                                                            <Badge className="bg-teal-100 text-teal-800 border-teal-200 text-[10px] gap-1">
+                                                                <CheckCircle2 size={11} /> {vol.checkedByName || 'OK'}
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="text-slate-400 bg-slate-50 text-[10px]">
+                                                                Pendente
+                                                            </Badge>
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -574,7 +660,6 @@ export default function OutboundOrderDetailsPage() {
                                                         </TableCell>
                                                         <TableCell className="text-right">
                                                             <div className="flex justify-end gap-1">
-                                                                {/* AÇÕES DE NOTA AUTORIZADA */}
                                                                 {isAuthorized && (
                                                                     <>
                                                                         <Button
@@ -634,7 +719,6 @@ export default function OutboundOrderDetailsPage() {
                                                                     </>
                                                                 )}
 
-                                                                {/* BOTÃO EXCLUIR NOTA PENDENTE / REJEITADA */}
                                                                 {isPendingOrRejected && (
                                                                     <Button
                                                                         size="sm"
@@ -740,7 +824,7 @@ export default function OutboundOrderDetailsPage() {
 
                             <div className="pt-1 border-t border-slate-100">
                                 <span className="text-slate-400 block text-[10px] uppercase font-semibold">Doca de Embarque</span>
-                                <span className="font-mono font-bold text-slate-900">{order?.dockLocationName || 'Aguardando Packing'}</span>
+                                <span className="font-mono font-bold text-slate-900">{order?.dockLocationName || 'Aguardando Definição'}</span>
                             </div>
                         </CardContent>
                     </Card>
@@ -760,7 +844,7 @@ export default function OutboundOrderDetailsPage() {
                 </div>
             </div>
 
-            {/* MODAL DE CONFIRMAÇÃO DE ESTORNO DA EXPEDIÇÃO (SHADCN/UI) */}
+            {/* MODAL DE CONFIRMAÇÃO DE ESTORNO DA EXPEDIÇÃO */}
             <AlertDialog open={isRevertOrderDialogOpen} onOpenChange={setIsRevertOrderDialogOpen}>
                 <AlertDialogContent className="bg-white sm:max-w-md">
                     <AlertDialogHeader>
@@ -796,7 +880,7 @@ export default function OutboundOrderDetailsPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE DOCUMENTO PENDENTE/REJEITADO (SHADCN/UI) */}
+            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE DOCUMENTO PENDENTE/REJEITADO */}
             <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>

@@ -1458,11 +1458,31 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CheckedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("CheckedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("HandlingUnitId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("IsChecked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsFractional")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsPicked")
                         .HasColumnType("boolean");
@@ -1471,6 +1491,16 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("OutboundOrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PickedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PickedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("PickedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<decimal>("Quantity")
@@ -1489,6 +1519,61 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.HasIndex("OutboundOrderItemId");
 
                     b.ToTable("OutboundAllocations");
+                });
+
+            modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundCheckLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CheckedByName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("CheckedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CodeType")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("HandlingUnitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OutboundOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OutboundOrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OutboundVolumeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.Property<string>("ScannedCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutboundOrderItemId");
+
+                    b.HasIndex("OutboundOrderId", "CreatedAt");
+
+                    b.HasIndex("OutboundOrderId", "ScannedCode");
+
+                    b.ToTable("OutboundCheckLogs");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundItemPack", b =>
@@ -1676,6 +1761,10 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasPrecision(28, 10)
                         .HasColumnType("numeric(28,10)");
 
+                    b.Property<decimal>("CheckedQuantity")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1738,6 +1827,16 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CheckedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("CheckedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1745,10 +1844,30 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)");
 
+                    b.Property<bool>("IsAutoPacked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsChecked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<Guid>("OutboundOrderId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("PackagingTypeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PackedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PackedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("PackedByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -2683,6 +2802,25 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("HandlingUnit");
+
+                    b.Navigation("OutboundOrder");
+
+                    b.Navigation("OutboundOrderItem");
+                });
+
+            modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundCheckLog", b =>
+                {
+                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", "OutboundOrder")
+                        .WithMany()
+                        .HasForeignKey("OutboundOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrderItem", "OutboundOrderItem")
+                        .WithMany()
+                        .HasForeignKey("OutboundOrderItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("OutboundOrder");
 

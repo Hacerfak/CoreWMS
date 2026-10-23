@@ -36,6 +36,7 @@ import CreateOutboundOrderPage from '@/pages/Outbound/CreateOutboundOrderPage';
 import OutboundItemsPanelPage from '@/pages/Outbound/OutboundItemsPanelPage';
 import OutboundPickingPage from '@/pages/Outbound/OutboundPickingPage';
 import OutboundPackingPage from '@/pages/Outbound/OutboundPackingPage';
+import OutboundCheckingPage from '@/pages/Outbound/OutboundCheckingPage';
 import OutboundFiscalReviewPage from '@/pages/Outbound/OutboundFiscalReviewPage';
 import AlocacaoInteligentePage from '@/pages/Inbound/AlocacaoInteligentePage';
 import FiscalOperationRulesPage from '@/pages/Fiscal/FiscalOperationRulesPage';
@@ -46,7 +47,7 @@ import CompanyFiscalDocumentDetailsPage from '@/pages/Fiscal/CompanyFiscalDocume
 import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
 import PublicDanfePage from '@/pages/Fiscal/PublicDanfePage';
 
-// Componente para sincronização automática do título da aba
+// Componente para sincronização automática do título do separador
 function PageTitleHandler() {
   const location = useLocation();
 
@@ -88,6 +89,7 @@ function PageTitleHandler() {
     else if (path.startsWith('/outbound/detalhes/')) title = 'Detalhes da Expedição';
     else if (path.startsWith('/outbound/picking/')) title = 'Separação (Picking)';
     else if (path.startsWith('/outbound/packing/')) title = 'Conferência Packing';
+    else if (path.startsWith('/outbound/conferencia/')) title = 'Conferência de Saída';
     else if (path.startsWith('/outbound/revisao-fiscal/')) title = 'Revisão e Expedição';
     else if (path.startsWith('/fiscal/regras/nova')) title = 'Nova Regra Fiscal';
     else if (path.startsWith('/fiscal/regras/')) title = 'Editar Regra Fiscal';
@@ -225,6 +227,7 @@ export default function App() {
                 <Route path="/outbound/detalhes/:id" element={<OutboundOrderDetailsPage />} />
                 <Route path="/outbound/picking/:id" element={<OutboundPickingPage />} />
                 <Route path="/outbound/packing/:id" element={<OutboundPackingPage />} />
+                <Route path="/outbound/conferencia/:id" element={<OutboundCheckingPage />} />
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="outbound:manage" />}>

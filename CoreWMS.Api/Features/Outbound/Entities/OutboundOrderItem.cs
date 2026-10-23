@@ -16,25 +16,23 @@ public class OutboundOrderItem : AuditableEntity
     public int LineNumber { get; private set; }
     public string SkuCode { get; private set; } = string.Empty;
 
-    // Baldes de Progresso (Alta precisão 28,10)
-    public decimal ExpectedQuantity { get; private set; } // O que o cliente pediu
-    public decimal AllocatedQuantity { get; private set; } // O que o WMS reservou do Saldo (InventoryBalance)
-    public decimal PickedQuantity { get; private set; } // O que o operador já tirou da prateleira (Coletor)
-    public decimal PackedQuantity { get; private set; } // O que já foi colocado num palete de envio (Shipping HU)
+    public decimal ExpectedQuantity { get; private set; }
+    public decimal AllocatedQuantity { get; private set; }
+    public decimal PickedQuantity { get; private set; }
+    public decimal PackedQuantity { get; private set; }
+    public decimal CheckedQuantity { get; private set; }
 
     public decimal UnitValue { get; private set; }
     public decimal InboundUnitValue { get; private set; }
 
     public OutboundOrderItemStatus Status { get; private set; }
-
-    // Concorrência Otimista (Dois operadores tentando faturar o mesmo item)
     public Guid Version { get; private set; } = FastGuid.NewPostgreSqlGuid();
 
     protected OutboundOrderItem() { }
 
     public OutboundOrderItem(Guid outboundOrderId, Guid productId, int lineNumber, string skuCode, decimal expectedQuantity, decimal unitValue)
     {
-        Id = FastGuid.NewPostgreSqlGuid(); // Garante ID válido antes de persistir relacionamentos
+        Id = FastGuid.NewPostgreSqlGuid();
         OutboundOrderId = outboundOrderId;
         ProductId = productId;
         LineNumber = lineNumber;
@@ -45,6 +43,7 @@ public class OutboundOrderItem : AuditableEntity
         AllocatedQuantity = 0;
         PickedQuantity = 0;
         PackedQuantity = 0;
+        CheckedQuantity = 0;
         Status = OutboundOrderItemStatus.Pending;
     }
 
@@ -63,9 +62,7 @@ public class OutboundOrderItem : AuditableEntity
         if (AllocatedQuantity + quantity > ExpectedQuantity) throw new InvalidOperationException("Não é possível alocar mais do que o solicitado.");
 
         AllocatedQuantity += quantity;
-
-        if (AllocatedQuantity == ExpectedQuantity)
-            Status = OutboundOrderItemStatus.Allocated;
+        if (AllocatedQuantity == ExpectedQuantity) Status = OutboundOrderItemStatus.Allocated;
 
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
@@ -74,7 +71,7 @@ public class OutboundOrderItem : AuditableEntity
     public void AddPickedQuantity(decimal quantity)
     {
         if (quantity <= 0) throw new ArgumentException("Quantidade deve ser maior que zero.");
-        if (PickedQuantity + quantity > AllocatedQuantity) throw new InvalidOperationException("Não é possível separar mais do que foi alocado pelo sistema.");
+        if (PickedQuantity + quantity > AllocatedQuantity) throw new InvalidOperationException("Não é possível separar mais do que foi alocado.");
 
         PickedQuantity += quantity;
         Status = PickedQuantity == AllocatedQuantity ? OutboundOrderItemStatus.Picked : OutboundOrderItemStatus.Picking;
@@ -86,12 +83,40 @@ public class OutboundOrderItem : AuditableEntity
     public void AddPackedQuantity(decimal quantity)
     {
         if (quantity <= 0) throw new ArgumentException("Quantidade deve ser maior que zero.");
-        if (PackedQuantity + quantity > PickedQuantity) throw new InvalidOperationException("Não é possível empacotar mais do que foi fisicamente separado.");
+        if (PackedQuantity + quantity > PickedQuantity) throw new InvalidOperationException("Não é possível empacotar mais do que foi separado.");
 
         PackedQuantity += quantity;
-
-        if (PackedQuantity == ExpectedQuantity)
+        if (PackedQuantity >= ExpectedQuantity && CheckedQuantity < ExpectedQuantity)
             Status = OutboundOrderItemStatus.Packed;
+
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void AddCheckedQuantity(decimal quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("Quantidade a conferir deve ser maior que zero.");
+        if (CheckedQuantity + quantity > PickedQuantity)
+            throw new InvalidOperationException($"Não é possível conferir ({CheckedQuantity + quantity}) acima do total já separado ({PickedQuantity}).");
+
+        CheckedQuantity += quantity;
+        if (CheckedQuantity >= ExpectedQuantity)
+            Status = OutboundOrderItemStatus.Checked;
+
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void ReduceCheckedQuantity(decimal quantity)
+    {
+        if (quantity <= 0) throw new ArgumentException("Quantidade deve ser maior que zero.");
+        CheckedQuantity -= quantity;
+        if (CheckedQuantity < 0) CheckedQuantity = 0;
+
+        if (CheckedQuantity < ExpectedQuantity)
+        {
+            Status = PackedQuantity >= ExpectedQuantity ? OutboundOrderItemStatus.Packed : OutboundOrderItemStatus.Picked;
+        }
 
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
@@ -116,7 +141,9 @@ public class OutboundOrderItem : AuditableEntity
         AllocatedQuantity = 0m;
         PickedQuantity = 0m;
         PackedQuantity = 0m;
+        CheckedQuantity = 0m;
         Status = OutboundOrderItemStatus.Pending;
         UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
     }
 }

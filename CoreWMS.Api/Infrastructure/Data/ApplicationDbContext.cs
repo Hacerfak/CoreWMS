@@ -76,6 +76,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<OutboundItemPack> OutboundItemPacks => Set<OutboundItemPack>();
     public DbSet<OutboundVolume> OutboundVolumes => Set<OutboundVolume>();
     public DbSet<OutboundAllocation> OutboundAllocations => Set<OutboundAllocation>();
+    public DbSet<OutboundCheckLog> OutboundCheckLogs => Set<OutboundCheckLog>();
     public DbSet<FiscalOperationRule> FiscalOperationRules => Set<FiscalOperationRule>();
     public DbSet<FiscalOperationRuleException> FiscalOperationRuleExceptions => Set<FiscalOperationRuleException>();
     public DbSet<CompanyFiscalDocument> CompanyFiscalDocuments => Set<CompanyFiscalDocument>();
@@ -593,6 +594,7 @@ public class ApplicationDbContext : DbContext
             b.Property(x => x.AllocatedQuantity).HasPrecision(28, 10);
             b.Property(x => x.PickedQuantity).HasPrecision(28, 10);
             b.Property(x => x.PackedQuantity).HasPrecision(28, 10);
+            b.Property(x => x.CheckedQuantity).HasPrecision(28, 10);
             b.Property(x => x.UnitValue).HasPrecision(28, 10);
             b.Property(x => x.InboundUnitValue).HasPrecision(28, 10);
 
@@ -633,6 +635,10 @@ public class ApplicationDbContext : DbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.VolumeLpn).HasMaxLength(100).IsRequired();
             b.Property(x => x.GrossWeight).HasPrecision(18, 3);
+            b.Property(x => x.PackedByName).HasMaxLength(150);
+            b.Property(x => x.CheckedByName).HasMaxLength(150);
+            b.Property(x => x.IsAutoPacked).IsRequired().HasDefaultValue(false);
+            b.Property(x => x.IsChecked).IsRequired().HasDefaultValue(false);
 
             b.HasOne(x => x.PackagingType)
                 .WithMany()
@@ -646,10 +652,35 @@ public class ApplicationDbContext : DbContext
         {
             b.HasKey(x => x.Id);
             b.Property(x => x.Quantity).HasPrecision(28, 10);
+            b.Property(x => x.IsFractional).IsRequired().HasDefaultValue(false);
 
             b.HasOne(x => x.OutboundOrder).WithMany().HasForeignKey(x => x.OutboundOrderId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.OutboundOrderItem).WithMany().HasForeignKey(x => x.OutboundOrderItemId).OnDelete(DeleteBehavior.Cascade);
             b.HasOne(x => x.HandlingUnit).WithMany().HasForeignKey(x => x.HandlingUnitId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.PickedByName).HasMaxLength(150);
+            b.Property(x => x.CheckedByName).HasMaxLength(150);
+            b.Property(x => x.IsChecked).IsRequired().HasDefaultValue(false);
+        });
+
+        builder.Entity<OutboundCheckLog>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ScannedCode).IsRequired().HasMaxLength(100);
+            b.Property(x => x.CheckedByName).IsRequired().HasMaxLength(150);
+            b.Property(x => x.Quantity).HasPrecision(28, 10);
+
+            b.HasOne(x => x.OutboundOrder)
+                .WithMany()
+                .HasForeignKey(x => x.OutboundOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.OutboundOrderItem)
+                .WithMany()
+                .HasForeignKey(x => x.OutboundOrderItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasIndex(x => new { x.OutboundOrderId, x.CreatedAt });
+            b.HasIndex(x => new { x.OutboundOrderId, x.ScannedCode });
         });
 
         // ==========================================
