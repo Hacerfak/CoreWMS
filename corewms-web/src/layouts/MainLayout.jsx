@@ -130,6 +130,14 @@ export default function MainLayout() {
                         );
                     })}
                 </div>
+                {/* Rodapé da Marca na Barra Lateral */}
+                <div className="p-3.5 border-t border-slate-200/70 flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="font-semibold text-slate-600 font-sans">CoreWMS</span>
+                    <span className="flex items-center gap-1.5 text-emerald-600 font-semibold font-mono">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        v{import.meta.env.VITE_APP_VERSION}
+                    </span>
+                </div>
             </aside>
 
             <main className="flex-1 flex flex-col min-w-0 bg-white">

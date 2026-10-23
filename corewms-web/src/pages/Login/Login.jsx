@@ -43,10 +43,8 @@ export default function Login() {
                 const empresasList = loginData.companies || [];
                 const isMasterUser = loginData.role === 'ADMIN';
 
-                // 1. Armazena os tokens
                 setTokens(token, refreshToken);
 
-                // 2. Armazena os dados do utilizador e a lista de empresas
                 setUserData({
                     user: {
                         id: loginData.userId,
@@ -81,7 +79,7 @@ export default function Login() {
     const isLoadingState = isPending || isRedirecting;
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50 flex flex-col items-center justify-center p-6 relative">
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-slate-200/40 flex flex-col items-center justify-center p-6 relative">
             {isLoadingState && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white animate-in fade-in duration-300">
                     <div className="bg-slate-900/90 border border-slate-700/80 p-8 rounded-2xl shadow-2xl flex flex-col items-center max-w-sm text-center space-y-4">
@@ -91,20 +89,29 @@ export default function Login() {
                         </div>
                         <div className="space-y-1">
                             <h3 className="text-lg font-semibold tracking-tight text-white">Autenticando...</h3>
-                            <p className="text-xs text-slate-400">Sincronizando credenciais e ambiente logístico.</p>
+                            <p className="text-xs text-slate-400">Sincronizando credenciais e ambiente.</p>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="flex items-center gap-2.5 text-blue-600 mb-8">
-                <Warehouse size={32} strokeWidth={2.5} />
-                <span className="text-2xl font-bold tracking-tight text-slate-900">CoreWMS</span>
+            {/* Cabeçalho da Unidade: Logotipo da Ampla Armazenagem + Selo "Powered by CoreWMS" */}
+            <div className="flex flex-col items-center mb-6 text-center animate-in fade-in slide-in-from-top-2 duration-500">
+                <img
+                    src="/logo-ampla.png"
+                    alt="Ampla Armazenagem"
+                    className="h-28 max-w-[280px] w-auto object-contain mb-3 drop-shadow-xs"
+                />
+
+                <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200/90 px-3.5 py-1 rounded-full shadow-2xs text-xs font-medium text-slate-500">
+                    <span>Powered by</span>
+                    <span className="font-bold text-slate-900 flex items-center gap-1 tracking-tight">CoreWMS</span>
+                </div>
             </div>
 
-            <Card className="w-full max-w-md shadow-2xl shadow-slate-200/50 border-slate-200/60 bg-white/80 backdrop-blur-sm relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
-                <CardHeader className="space-y-1 text-center pb-6 pt-8 px-8">
+            <Card className="w-full max-w-md shadow-2xl shadow-slate-300/40 border-slate-200/70 bg-white/95 backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600"></div>
+                <CardHeader className="space-y-1 text-center pb-5 pt-7 px-8">
                     <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight">Acessar Plataforma</CardTitle>
                     <CardDescription className="text-slate-500 text-sm">
                         Entre com suas credenciais para gerenciar a operação
@@ -126,7 +133,7 @@ export default function Login() {
                                 <Input
                                     id="email" type="email" placeholder="nome@empresa.com"
                                     {...register('email')}
-                                    className={`pl-9 bg-slate-50 focus-visible:ring-blue-600 ${errors.email ? 'border-rose-500' : ''}`}
+                                    className={`pl-9 bg-slate-50/80 focus-visible:ring-blue-600 ${errors.email ? 'border-rose-500' : ''}`}
                                     disabled={isLoadingState}
                                 />
                             </div>
@@ -140,14 +147,14 @@ export default function Login() {
                                 <Input
                                     id="password" type="password" placeholder="••••••••"
                                     {...register('password')}
-                                    className={`pl-9 bg-slate-50 focus-visible:ring-blue-600 ${errors.password ? 'border-rose-500' : ''}`}
+                                    className={`pl-9 bg-slate-50/80 focus-visible:ring-blue-600 ${errors.password ? 'border-rose-500' : ''}`}
                                     disabled={isLoadingState}
                                 />
                             </div>
                             {errors.password && <span className="text-xs text-rose-500">{errors.password.message}</span>}
                         </div>
 
-                        <Button type="submit" disabled={isLoadingState} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md mt-2 h-10">
+                        <Button type="submit" disabled={isLoadingState} className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md mt-2 h-10 font-semibold">
                             {isLoadingState ? (
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             ) : (
@@ -157,6 +164,10 @@ export default function Login() {
                     </form>
                 </CardContent>
             </Card>
+
+            <p className="mt-6 text-center text-xs text-slate-400 font-medium">
+                CoreWMS &bull; Sistema Inteligente de Gestão de Armazéns
+            </p>
         </div>
     );
 }

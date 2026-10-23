@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHasPermission } from '@/hooks/useHasPermission';
 
@@ -45,6 +46,63 @@ import CompanyFiscalDocumentDetailsPage from '@/pages/Fiscal/CompanyFiscalDocume
 import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
 import PublicDanfePage from '@/pages/Fiscal/PublicDanfePage';
 
+// Componente para sincronização automática do título da aba
+function PageTitleHandler() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const path = location.pathname;
+    let title = 'Início';
+
+    if (path === '/login') title = 'Acesso';
+    else if (path === '/selecao-empresa') title = 'Seleção de Empresa';
+    else if (path === '/onboarding') title = 'Boas-vindas';
+    else if (path === '/dashboard') title = 'Dashboard';
+    else if (path.startsWith('/clientes')) title = 'Clientes';
+    else if (path.startsWith('/usuarios')) title = 'Usuários';
+    else if (path.startsWith('/perfis')) title = 'Perfis de Acesso';
+    else if (path.startsWith('/empresas')) title = 'Empresas';
+    else if (path.startsWith('/impressao')) title = 'Central de Impressão';
+    else if (path.startsWith('/auditoria')) title = 'Auditoria';
+    else if (path.startsWith('/topologia')) title = 'Topologia do Armazém';
+    else if (path.startsWith('/produtos')) title = 'Produtos e Embalagens';
+    else if (path === '/estoque') title = 'Estoque e Relatórios';
+    else if (path === '/inventario/gestao/novo') title = 'Novo Inventário';
+    else if (path.startsWith('/inventario/gestao/')) title = 'Detalhes do Inventário';
+    else if (path === '/inventario/gestao') title = 'Gestão de Inventário';
+    else if (path.startsWith('/inventario/operacao/')) title = 'Contagem de Inventário';
+    else if (path.startsWith('/inventario/operacao')) title = 'Operação de Inventário';
+    else if (path === '/inbound') title = 'Recebimento';
+    else if (path.startsWith('/inbound/revisao')) title = 'Revisão de Entrada';
+    else if (path.includes('/alocacao')) title = 'Alocação Inteligente';
+    else if (path.includes('/hus')) title = 'HUs do Recebimento';
+    else if (path.includes('/item/')) title = 'Conferência de Item';
+    else if (path.startsWith('/inbound/operacao/')) title = 'Conferência de Entrada';
+    else if (path.startsWith('/qualidade')) title = 'Controle de Qualidade';
+    else if (path.startsWith('/billing/tarifas-ciclos')) title = 'Tarifas e Ciclos';
+    else if (path.startsWith('/billing/ciclos/')) title = 'Extrato de Faturamento';
+    else if (path === '/outbound') title = 'Expedição';
+    else if (path.startsWith('/outbound/novo')) title = 'Nova Ordem de Saída';
+    else if (path.startsWith('/outbound/editar/')) title = 'Editar Ordem de Saída';
+    else if (path.includes('/itens')) title = 'Itens do Pedido';
+    else if (path.startsWith('/outbound/detalhes/')) title = 'Detalhes da Expedição';
+    else if (path.startsWith('/outbound/picking/')) title = 'Separação (Picking)';
+    else if (path.startsWith('/outbound/packing/')) title = 'Conferência Packing';
+    else if (path.startsWith('/outbound/revisao-fiscal/')) title = 'Revisão e Expedição';
+    else if (path.startsWith('/fiscal/regras/nova')) title = 'Nova Regra Fiscal';
+    else if (path.startsWith('/fiscal/regras/')) title = 'Editar Regra Fiscal';
+    else if (path === '/fiscal/regras') title = 'Regras Fiscais';
+    else if (path === '/fiscal/documentos/novo') title = 'Emissão Avulsa NF-e';
+    else if (path.startsWith('/fiscal/documentos/')) title = 'Detalhes do Documento Fiscal';
+    else if (path === '/fiscal/documentos') title = 'Documentos Fiscais';
+    else if (path.startsWith('/public/danfe/')) title = 'DANFE Online';
+
+    document.title = `${title} | CoreWMS`;
+  }, [location]);
+
+  return null;
+}
+
 const PrivateRoute = () => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated());
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
@@ -68,8 +126,8 @@ const PermissionGuard = ({ requiredPermission }) => {
 export default function App() {
   return (
     <BrowserRouter>
+      <PageTitleHandler />
       <Routes>
-
         <Route path="/public/danfe/:accessKey" element={<PublicDanfePage />} />
 
         <Route element={<PublicRoute />}>
@@ -122,12 +180,10 @@ export default function App() {
                 <Route path="/produtos" element={<ProdutosPage />} />
               </Route>
 
-              {/* Rotas de Estoque */}
               <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
                 <Route path="/estoque" element={<EstoquePage />} />
               </Route>
 
-              {/* ROTAS SEPARADAS DE INVENTÁRIO CÍCLICO */}
               <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
                 <Route path="/inventario/gestao" element={<InventarioGestaoPage />} />
                 <Route path="/inventario/gestao/novo" element={<NovoInventarioPage />} />
@@ -139,7 +195,6 @@ export default function App() {
                 <Route path="/inventario/operacao/:taskId" element={<ExecucaoContagemPage />} />
               </Route>
 
-              {/* ROTAS DO INBOUND */}
               <Route element={<PermissionGuard requiredPermission="inbound:view" />}>
                 <Route path="/inbound" element={<InboundList />} />
               </Route>
@@ -156,18 +211,15 @@ export default function App() {
                 <Route path="/inbound/operacao/:id/alocacao" element={<AlocacaoInteligentePage />} />
               </Route>
 
-              {/* Qualidade */}
               <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
                 <Route path="/qualidade" element={<QualidadePage />} />
               </Route>
 
-              {/* Billing */}
               <Route element={<PermissionGuard requiredPermission="billing:view" />}>
                 <Route path="/billing/tarifas-ciclos" element={<TarifasECiclosPage />} />
                 <Route path="/billing/ciclos/:id" element={<ExtratoFaturamentoPage />} />
               </Route>
 
-              {/* Rotas de Outbound */}
               <Route element={<PermissionGuard requiredPermission="outbound:view" />}>
                 <Route path="/outbound" element={<OutboundListPage />} />
                 <Route path="/outbound/detalhes/:id" element={<OutboundOrderDetailsPage />} />
