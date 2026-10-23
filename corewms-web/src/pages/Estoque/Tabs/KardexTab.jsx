@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import {
-    Search, Loader2, Download, Calendar, FileText,
+    Search, Loader2, Download, FileText,
     ArrowUpRight, ArrowDownLeft, RefreshCcw, SlidersHorizontal,
     ChevronDown, ChevronUp, RotateCcw, MapPin, CheckCircle2, X, Columns
 } from 'lucide-react';
@@ -29,7 +30,6 @@ const KARDEX_COLUMN_DEFINITIONS = [
     { id: 'sourceDocument', label: 'Documento Origem' },
 ];
 
-// Seletor Pesquisável de Depositantes Ativos
 function SearchableCustomerSelect({ value, onChange, customers, placeholder = "Selecione o Depositante..." }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -126,8 +126,9 @@ export default function KardexTab() {
     // 1. FILTROS BÁSICOS
     const [searchLpn, setSearchLpn] = useState('');
     const [searchSku, setSearchSku] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+
+    // DateRange unificado para o DatePicker
+    const [dateRange, setDateRange] = useState(undefined);
 
     // 2. FILTROS AVANÇADOS
     const [selectedCustomer, setSelectedCustomer] = useState('ALL');
@@ -142,16 +143,6 @@ export default function KardexTab() {
     const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
     const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
 
-    const formattedStartDate = useMemo(() => {
-        if (!startDate) return undefined;
-        return new Date(`${startDate}T00:00:00.000`).toISOString();
-    }, [startDate]);
-
-    const formattedEndDate = useMemo(() => {
-        if (!endDate) return undefined;
-        return new Date(`${endDate}T23:59:59.999`).toISOString();
-    }, [endDate]);
-
     const activeAdvancedCount = useMemo(() => {
         let count = 0;
         if (selectedCustomer !== 'ALL') count++;
@@ -164,22 +155,40 @@ export default function KardexTab() {
         if (e) e.preventDefault();
         setPage(1);
 
+        let startString = undefined;
+        let endString = undefined;
+
+        if (dateRange?.from) {
+            const fromDate = new Date(dateRange.from);
+            fromDate.setHours(0, 0, 0, 0);
+            startString = fromDate.toISOString();
+        }
+
+        if (dateRange?.to) {
+            const toDate = new Date(dateRange.to);
+            toDate.setHours(23, 59, 59, 999);
+            endString = toDate.toISOString();
+        } else if (dateRange?.from) {
+            const toDate = new Date(dateRange.from);
+            toDate.setHours(23, 59, 59, 999);
+            endString = toDate.toISOString();
+        }
+
         setAppliedFilters({
             ...(searchLpn.trim() && { Lpn: searchLpn.trim() }),
             ...(searchSku.trim() && { Sku: searchSku.trim() }),
             ...(selectedCustomer !== 'ALL' && { CustomerId: selectedCustomer }),
             ...(searchBatch.trim() && { Batch: searchBatch.trim() }),
             ...(searchNfe.trim() && { NfeNumber: searchNfe.trim() }),
-            ...(formattedStartDate && { StartDate: formattedStartDate }),
-            ...(formattedEndDate && { EndDate: formattedEndDate })
+            ...(startString && { StartDate: startString }),
+            ...(endString && { EndDate: endString })
         });
     };
 
     const handleClearFilters = () => {
         setSearchLpn('');
         setSearchSku('');
-        setStartDate('');
-        setEndDate('');
+        setDateRange(undefined);
         setSelectedCustomer('ALL');
         setSearchBatch('');
         setSearchNfe('');
@@ -252,7 +261,7 @@ export default function KardexTab() {
     return (
         <div className="flex flex-col space-y-4 h-full">
             {/* KPI TOTALIZADORES DAS CONSULTAS DE KARDEX */}
-            <div className="grid grid-cols-3 gap-4 shrink-0">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
                 <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center gap-3">
                     <div className="p-2.5 bg-emerald-50 text-emerald-700 rounded-lg shrink-0"><ArrowDownLeft size={20} /></div>
                     <div>
@@ -283,7 +292,7 @@ export default function KardexTab() {
             {/* BARRA DE FILTROS FIXA */}
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden">
                 <form onSubmit={handleSearchSubmit} className="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-4">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
                             <Button
                                 type="button"
@@ -309,7 +318,7 @@ export default function KardexTab() {
                                         Colunas
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-56 p-3 bg-white border border-slate-200 shadow-xl rounded-xl space-y-2">
+                                <PopoverContent className="w-56 p-3 bg-white border border-slate-200 shadow-xl rounded-xl space-y-2" align="start">
                                     <span className="text-xs font-bold text-slate-800 block border-b pb-1">Exibir Colunas</span>
                                     <div className="space-y-1.5 max-h-56 overflow-y-auto">
                                         {KARDEX_COLUMN_DEFINITIONS.map(col => (
@@ -331,9 +340,9 @@ export default function KardexTab() {
                         </Button>
                     </div>
 
-                    {/* FILTROS BÁSICOS (LPN, SKU E DATAS) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                        <div className="sm:col-span-3 space-y-1">
+                    {/* FILTROS BÁSICOS (LPN, SKU E DATE PICKER) */}
+                    <div className="flex flex-wrap gap-3 items-end">
+                        <div className="space-y-1 flex-1 min-w-[200px]">
                             <Label className="text-[11px] font-bold text-slate-700 uppercase">LPN / Código HU</Label>
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -346,7 +355,7 @@ export default function KardexTab() {
                             </div>
                         </div>
 
-                        <div className="sm:col-span-3 space-y-1">
+                        <div className="space-y-1 flex-1 min-w-[200px]">
                             <Label className="text-[11px] font-bold text-slate-700 uppercase">SKU / Produto</Label>
                             <Input
                                 placeholder="Digite o SKU..."
@@ -356,39 +365,24 @@ export default function KardexTab() {
                             />
                         </div>
 
-                        <div className="sm:col-span-4 space-y-1">
+                        {/* DATE PICKER SHADCN */}
+                        <div className="space-y-1 min-w-[260px]">
                             <Label className="text-[11px] font-bold text-slate-700 uppercase">Período da Movimentação</Label>
-                            <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 h-9">
-                                <Calendar size={14} className="text-slate-400 shrink-0" />
-                                <Input
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="border-none shadow-none text-xs h-7 p-0 w-28 bg-transparent font-mono"
-                                />
-                                <span className="text-slate-300 text-xs">até</span>
-                                <Input
-                                    type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="border-none shadow-none text-xs h-7 p-0 w-28 bg-transparent font-mono"
-                                />
-                            </div>
+                            <DateRangePicker date={dateRange} setDate={setDateRange} className="w-full" />
                         </div>
 
-                        <div className="sm:col-span-2 flex items-center gap-1.5">
-                            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 flex-1 shadow-2xs">
-                                <Search size={14} className="mr-1.5" /> Pesquisar
-                            </Button>
+                        <div className="flex items-center gap-2">
                             <Button
                                 type="button"
-                                variant="ghost"
-                                size="icon"
+                                variant="outline"
                                 onClick={handleClearFilters}
                                 title="Limpar Filtros"
-                                className="h-9 w-9 text-slate-400 hover:text-slate-700 hover:bg-slate-100 shrink-0"
+                                className="h-9 px-3 bg-white text-slate-500 hover:text-slate-700 border-slate-200"
                             >
                                 <RotateCcw size={14} />
+                            </Button>
+                            <Button type="submit" disabled={isFetching} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 min-w-[120px] shadow-2xs">
+                                {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <><Search size={14} className="mr-1.5" /> Pesquisar</>}
                             </Button>
                         </div>
                     </div>
@@ -460,14 +454,12 @@ export default function KardexTab() {
                                 const isPositive = t.quantityChange > 0;
                                 return (
                                     <TableRow key={t.id} className="hover:bg-slate-50/50 transition-colors">
-                                        {/* DATA / HORA */}
                                         {visibleColumns.createdAt && (
                                             <TableCell className="text-xs font-mono text-slate-600 whitespace-nowrap">
                                                 {t.createdAt ? new Date(t.createdAt).toLocaleString('pt-BR') : '-'}
                                             </TableCell>
                                         )}
 
-                                        {/* SKU / PRODUTO */}
                                         {visibleColumns.sku && (
                                             <TableCell>
                                                 <div className="flex flex-col">
@@ -477,14 +469,12 @@ export default function KardexTab() {
                                             </TableCell>
                                         )}
 
-                                        {/* DEPOSITANTE */}
                                         {visibleColumns.customer && (
                                             <TableCell className="text-xs text-slate-700 font-medium truncate max-w-[160px]" title={t.customerName}>
                                                 {t.customerName}
                                             </TableCell>
                                         )}
 
-                                        {/* LPN / HU SEPARADO */}
                                         {visibleColumns.lpn && (
                                             <TableCell>
                                                 {t.lpn ? (
@@ -495,7 +485,6 @@ export default function KardexTab() {
                                             </TableCell>
                                         )}
 
-                                        {/* LOTE E VALIDADE SEPARADOS */}
                                         {visibleColumns.batch && (
                                             <TableCell className="text-xs font-mono text-slate-600">
                                                 <div>Lote: {t.batch || '-'}</div>
@@ -503,24 +492,20 @@ export default function KardexTab() {
                                             </TableCell>
                                         )}
 
-                                        {/* TIPO DE EVENTO */}
                                         {visibleColumns.type && <TableCell>{renderEventTypeBadge(t.type)}</TableCell>}
 
-                                        {/* VARIAÇÃO QTD */}
                                         {visibleColumns.quantityChange && (
                                             <TableCell className={`text-right font-mono font-bold text-xs ${isPositive ? 'text-emerald-600' : t.quantityChange < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
                                                 {isPositive ? `+${t.quantityChange.toLocaleString('pt-BR')}` : t.quantityChange.toLocaleString('pt-BR')}
                                             </TableCell>
                                         )}
 
-                                        {/* SALDO PÓS-EVENTO */}
                                         {visibleColumns.balanceAfter && (
                                             <TableCell className="text-right font-mono font-bold text-xs text-slate-900 bg-slate-50/50">
                                                 {t.balanceAfter?.toLocaleString('pt-BR')}
                                             </TableCell>
                                         )}
 
-                                        {/* ENDEREÇO / POSIÇÃO */}
                                         {visibleColumns.location && (
                                             <TableCell>
                                                 {t.locationPath ? (
@@ -533,7 +518,6 @@ export default function KardexTab() {
                                             </TableCell>
                                         )}
 
-                                        {/* DOCUMENTO ORIGEM */}
                                         {visibleColumns.sourceDocument && (
                                             <TableCell className="text-xs text-slate-600 font-mono">
                                                 {t.sourceDocumentNumber || '-'}

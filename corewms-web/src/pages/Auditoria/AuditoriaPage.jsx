@@ -8,47 +8,36 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { ScrollText, Search, Loader2, FilterX, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const filterSchema = z.object({
     entityName: z.string().optional(),
     userId: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
 });
-
-// Helper para montar data YYYY-MM-DD usando o fuso local do navegador
-const getTodayLocal = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
 
 export default function AuditoriaPage() {
     const [page, setPage] = useState(1);
     const pageSize = 20;
 
-    const todayStr = getTodayLocal();
+    // Inicializa o seletor com a data de hoje (início e fim)
+    const [dateRange, setDateRange] = useState({
+        from: new Date(),
+        to: new Date()
+    });
 
-    // Já inicia o estado de filtros aplicados forçando os limites de hoje para a API buscar logo no início
-    const [appliedFilters, setAppliedFilters] = useState({
-        StartDate: new Date(`${todayStr}T00:00:00`).toISOString(),
-        EndDate: new Date(`${todayStr}T23:59:59.999`).toISOString()
+    const [appliedFilters, setAppliedFilters] = useState(() => {
+        const today = new Date();
+        const start = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+        const end = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+        return { StartDate: start, EndDate: end };
     });
 
     const [selectedLog, setSelectedLog] = useState(null);
 
-    // React Hook Form já inicia visualmente com a data de hoje preenchida
     const { register, handleSubmit, reset } = useForm({
         resolver: zodResolver(filterSchema),
-        defaultValues: {
-            entityName: '',
-            userId: '',
-            startDate: todayStr,
-            endDate: todayStr
-        }
+        defaultValues: { entityName: '', userId: '' }
     });
 
     const { data: apiResponse, isLoading, isFetching } = useGetApiAuditLogs({
@@ -63,20 +52,37 @@ export default function AuditoriaPage() {
     const onSubmitFilters = (data) => {
         setPage(1);
 
-        const startDateString = data.startDate ? new Date(`${data.startDate}T00:00:00`).toISOString() : undefined;
-        const endDateString = data.endDate ? new Date(`${data.endDate}T23:59:59.999`).toISOString() : undefined;
+        let startString = undefined;
+        let endString = undefined;
+
+        if (dateRange?.from) {
+            const fromDate = new Date(dateRange.from);
+            fromDate.setHours(0, 0, 0, 0);
+            startString = fromDate.toISOString();
+        }
+
+        if (dateRange?.to) {
+            const toDate = new Date(dateRange.to);
+            toDate.setHours(23, 59, 59, 999);
+            endString = toDate.toISOString();
+        } else if (dateRange?.from) {
+            // Se o usuário selecionou apenas um dia
+            const toDate = new Date(dateRange.from);
+            toDate.setHours(23, 59, 59, 999);
+            endString = toDate.toISOString();
+        }
 
         setAppliedFilters({
-            EntityName: data.entityName,
-            UserId: data.userId,
-            StartDate: startDateString,
-            EndDate: endDateString,
+            EntityName: data.entityName || undefined,
+            UserId: data.userId || undefined,
+            StartDate: startString,
+            EndDate: endString,
         });
     };
 
     const handleClearFilters = () => {
-        const resetData = { entityName: '', userId: '', startDate: '', endDate: '' };
-        reset(resetData);
+        reset({ entityName: '', userId: '' });
+        setDateRange(undefined);
         setPage(1);
         setAppliedFilters({});
     };
@@ -99,32 +105,30 @@ export default function AuditoriaPage() {
                 </div>
             </div>
 
-            <div className="bg-white border border-slate-200/60 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {/* BARRA DE FILTROS COM RHF */}
-                <form onSubmit={handleSubmit(onSubmitFilters)} className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-end gap-4">
-                    <div className="space-y-1.5 flex-1 min-w-[200px]">
+            <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {/* BARRA DE FILTROS COM DATE RANGE PICKER SHADCN */}
+                <form onSubmit={handleSubmit(onSubmitFilters)} className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-end gap-3">
+                    <div className="space-y-1.5 flex-1 min-w-[180px]">
                         <label className="text-xs font-semibold text-slate-500">Tabela/Entidade</label>
-                        <Input {...register('entityName')} placeholder="Ex: Customer" className="bg-white" />
+                        <Input placeholder="Ex: Customer" {...register('entityName')} className="bg-white h-9 text-xs" />
                     </div>
-                    <div className="space-y-1.5 flex-1 min-w-[200px]">
+                    <div className="space-y-1.5 flex-1 min-w-[180px]">
                         <label className="text-xs font-semibold text-slate-500">ID do Usuário</label>
-                        <Input {...register('userId')} placeholder="GUID do usuário..." className="bg-white" />
+                        <Input placeholder="GUID do usuário..." {...register('userId')} className="bg-white h-9 text-xs" />
                     </div>
-                    <div className="space-y-1.5 w-[150px]">
-                        <label className="text-xs font-semibold text-slate-500">Data Inicial</label>
-                        <Input type="date" {...register('startDate')} className="bg-white" />
-                    </div>
-                    <div className="space-y-1.5 w-[150px]">
-                        <label className="text-xs font-semibold text-slate-500">Data Final</label>
-                        <Input type="date" {...register('endDate')} className="bg-white" />
+
+                    {/* Seletor Oficial Shadcn */}
+                    <div className="space-y-1.5 min-w-[260px]">
+                        <label className="text-xs font-semibold text-slate-500">Período de Registro</label>
+                        <DateRangePicker date={dateRange} setDate={setDateRange} className="w-full" />
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <Button type="button" variant="outline" onClick={handleClearFilters} className="bg-white" title="Limpar Filtros">
+                        <Button type="button" variant="outline" onClick={handleClearFilters} className="bg-white h-9 px-3" title="Limpar Filtros">
                             <FilterX className="h-4 w-4" />
                         </Button>
-                        <Button type="submit" disabled={isFetching} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[120px]">
-                            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Search className="mr-2 h-4 w-4" /> Buscar</>}
+                        <Button type="submit" disabled={isFetching} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[110px] h-9 text-xs">
+                            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Search className="mr-2 h-3.5 w-3.5" /> Buscar</>}
                         </Button>
                     </div>
                 </form>
