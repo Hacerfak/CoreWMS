@@ -3,7 +3,9 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { toast } from 'sonner';
 
 export const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+    baseURL: import.meta.env.VITE_API_URL !== undefined
+        ? import.meta.env.VITE_API_URL
+        : 'http://localhost:5000',
     headers: { 'Content-Type': 'application/json' },
 });
 
