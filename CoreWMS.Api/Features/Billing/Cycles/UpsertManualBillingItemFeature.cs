@@ -56,12 +56,29 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         var service = await _db.BillingServices.FirstOrDefaultAsync(s => s.Id == request.BillingServiceId, ct);
         if (service == null) return Results.BadRequest(new { Message = "Serviço de faturamento inválido." });
 
+        // Determina a data civil da cobrança:
+        // 1. Se informada pelo usuário, usa a data selecionada.
+        // 2. Se omitida, calcula a data local da empresa (ex: America/Sao_Paulo) e não UTC direto.
+        DateTime effectiveDate;
+        if (request.ChargeDate.HasValue)
+        {
+            effectiveDate = request.ChargeDate.Value.Date;
+        }
+        else
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+            effectiveDate = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
+        }
+
+        // Salva a data civil sem distorções de fuso
+        var normalizedChargeDate = DateTime.SpecifyKind(effectiveDate, DateTimeKind.Utc);
+
         var item = new BillingItem(
             billingCycleId: cycle.Id,
             billingServiceId: request.BillingServiceId,
-            chargeDate: DateTime.UtcNow,
+            chargeDate: normalizedChargeDate,
             documentType: "Manual",
-            documentNumber: "Avulso",
+            documentNumber: string.IsNullOrWhiteSpace(request.DocumentNumber) ? "Avulso" : request.DocumentNumber.Trim(),
             documentId: null,
             description: request.Description,
             quantityTotal: request.QuantityTotal,
@@ -74,17 +91,5 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { item.Id, Message = "Lançamento efetuado com sucesso." });
-    }
-}
-
-public static class UpsertManualBillingItemEndpoints
-{
-    public static void MapUpsertManualBillingItemEndpoints(this IEndpointRouteBuilder app)
-    {
-        app.MapPost("/api/billing/cycles/{cycleId:guid}/items/manual", async (Guid cycleId, UpsertManualBillingItemCommand cmd, IMediator mediator) =>
-            await mediator.Send(cmd with { CycleId = cycleId }))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.Manage);
     }
 }

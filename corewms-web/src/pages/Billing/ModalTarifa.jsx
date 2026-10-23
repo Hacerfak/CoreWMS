@@ -8,19 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
 import { DollarSign, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-
-const getTodayLocalString = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 const tariffSchema = z.object({
     customerId: z.string().min(1, 'Selecione o depositante.'),
     billingServiceId: z.string().min(1, 'Selecione o serviço.'),
     unitValue: z.number().min(0, 'Informe um valor válido.'),
-    validFrom: z.string().min(1, 'Informe a data de início da vigência.')
+    validFrom: z.date({ required_error: 'Informe a data de início da vigência.' })
 });
 
 export default function ModalTarifa({ isOpen, onOpenChange, customers, services, reload }) {
@@ -28,13 +24,24 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
 
     const { handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(tariffSchema),
-        defaultValues: { customerId: '', billingServiceId: '', unitValue: 0, validFrom: getTodayLocalString() }
+        defaultValues: {
+            customerId: '',
+            billingServiceId: '',
+            unitValue: 0,
+            validFrom: new Date()
+        }
     });
 
     const onSave = async (data) => {
         try {
             setIsSubmitting(true);
-            const validFromUtc = `${data.validFrom.split('T')[0]}T00:00:00.000Z`;
+
+            // Normaliza a data civil escolhida para UTC às 00:00:00.000Z
+            const d = data.validFrom;
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            const validFromUtc = `${year}-${month}-${day}T00:00:00.000Z`;
 
             await customInstance({
                 url: '/api/billing/tariffs',
@@ -46,8 +53,9 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                     validFrom: validFromUtc
                 }
             });
+
             toast.success('Tarifa cadastrada com sucesso!');
-            reset({ customerId: '', billingServiceId: '', unitValue: 0, validFrom: getTodayLocalString() });
+            reset({ customerId: '', billingServiceId: '', unitValue: 0, validFrom: new Date() });
             onOpenChange(false);
             reload();
         } catch (error) {
@@ -73,7 +81,9 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Depositante *</Label>
                         <Select value={watch('customerId')} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
-                            <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Escolha o depositante..." /></SelectTrigger>
+                            <SelectTrigger className="bg-white text-xs h-9">
+                                <SelectValue placeholder="Escolha o depositante..." />
+                            </SelectTrigger>
                             <SelectContent>
                                 {customers.map(c => (
                                     <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
@@ -86,7 +96,9 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Serviço Logístico *</Label>
                         <Select value={watch('billingServiceId')} onValueChange={(v) => setValue('billingServiceId', v, { shouldValidate: true })}>
-                            <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Escolha o serviço..." /></SelectTrigger>
+                            <SelectTrigger className="bg-white text-xs h-9">
+                                <SelectValue placeholder="Escolha o serviço..." />
+                            </SelectTrigger>
                             <SelectContent>
                                 {services.map(s => (
                                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
@@ -111,11 +123,10 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
 
                         <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-700">Início da Vigência *</Label>
-                            <Input
-                                type="date"
-                                value={watch('validFrom')}
-                                onChange={(e) => setValue('validFrom', e.target.value, { shouldValidate: true })}
-                                className="bg-white text-xs font-mono h-9"
+                            <DatePicker
+                                date={watch('validFrom')}
+                                setDate={(d) => setValue('validFrom', d, { shouldValidate: true })}
+                                className="h-9"
                             />
                             {errors.validFrom && <p className="text-[10px] text-rose-500">{errors.validFrom.message}</p>}
                         </div>

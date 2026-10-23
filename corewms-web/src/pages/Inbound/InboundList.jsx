@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useGetApiInbound, useDeleteApiInboundIdCancel, useDeleteApiInboundId } from '@/api/generated/inbound/inbound';
@@ -8,7 +8,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Search, Loader2, ArrowDownToLine, Upload, Eye, Ban, PackageCheck, FileCode2, Play, Trash2, Layers, CheckCircle2, ShieldAlert, AlertTriangle, FileSearch } from 'lucide-react';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import {
+    Search, Loader2, ArrowDownToLine, Upload, Eye, Ban,
+    PackageCheck, FileCode2, Play, Trash2, Layers, CheckCircle2,
+    ShieldAlert, AlertTriangle, FileSearch, RotateCcw
+} from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
 
@@ -17,6 +22,7 @@ export default function InboundList() {
     const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
+    const [dateRange, setDateRange] = useState(undefined);
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 20;
 
@@ -24,17 +30,41 @@ export default function InboundList() {
     const [orderToCancel, setOrderToCancel] = useState(null);
     const [orderToDelete, setOrderToDelete] = useState(null);
 
+    // Converte a seleção de datas para o dia civil completo em formato UTC
+    const formattedStartDate = useMemo(() => {
+        if (!dateRange?.from) return undefined;
+        const fromDate = new Date(dateRange.from);
+        fromDate.setHours(0, 0, 0, 0);
+        return fromDate.toISOString();
+    }, [dateRange?.from]);
+
+    const formattedEndDate = useMemo(() => {
+        if (!dateRange?.from) return undefined;
+        const toDate = new Date(dateRange.to || dateRange.from);
+        toDate.setHours(23, 59, 59, 999);
+        return toDate.toISOString();
+    }, [dateRange]);
+
     const queryParams = {
-        Search: search,
+        Search: search.trim() || undefined,
         Page: page,
         PageSize: PAGE_SIZE,
-        ...(statusFilter !== 'ALL' && { Status: statusFilter })
+        ...(statusFilter !== 'ALL' && { Status: statusFilter }),
+        ...(formattedStartDate && { StartDate: formattedStartDate }),
+        ...(formattedEndDate && { EndDate: formattedEndDate })
     };
 
     const { data: apiResponse, isLoading, isFetching } = useGetApiInbound(queryParams);
     const inbounds = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+    const handleClearFilters = () => {
+        setSearch('');
+        setStatusFilter('ALL');
+        setDateRange(undefined);
+        setPage(1);
+    };
 
     // Cancelar Ordem
     const { mutate: cancelOrder, isPending: isCanceling } = useDeleteApiInboundIdCancel({
@@ -52,11 +82,11 @@ export default function InboundList() {
     const { mutate: deleteOrder, isPending: isDeleting } = useDeleteApiInboundId({
         mutation: {
             onSuccess: () => {
-                toast.success('Registro da NF-e removido com sucesso.');
+                toast.success('Registo da NF-e removido com sucesso.');
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
                 setOrderToDelete(null);
             },
-            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao excluir o registro.')
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao excluir o registo.')
         }
     });
 
@@ -76,12 +106,11 @@ export default function InboundList() {
         return <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-medium">Aguardando Recebimento</Badge>;
     };
 
-    // Renderiza o badge de Manifestação SEFAZ
     const renderSefazManifestBadge = (order) => {
         const type = order.lastSefazManifestType;
         switch (type) {
             case 210200:
-                return <Badge className="bg-emerald-50 text-emerald-800 border-emerald-300 font-mono text-[10px] gap-1"><CheckCircle2 size={11} /> Confirmed (210200)</Badge>;
+                return <Badge className="bg-emerald-50 text-emerald-800 border-emerald-300 font-mono text-[10px] gap-1"><CheckCircle2 size={11} /> Confirmada (210200)</Badge>;
             case 210210:
                 return <Badge className="bg-blue-50 text-blue-800 border-blue-300 font-mono text-[10px] gap-1"><FileSearch size={11} /> Ciência (210210)</Badge>;
             case 210220:
@@ -92,6 +121,8 @@ export default function InboundList() {
                 return <span className="text-xs text-slate-400 italic">Sem Manifestação</span>;
         }
     };
+
+    const hasActiveFilters = Boolean(search || statusFilter !== 'ALL' || dateRange);
 
     return (
         <div className="flex flex-col h-full space-y-6">
@@ -111,19 +142,21 @@ export default function InboundList() {
             </div>
 
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="p-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50 shrink-0">
-                    <div className="relative flex-1 max-w-md">
+                {/* BARRA DE FILTROS COM DATE RANGE PICKER INTEGRADO */}
+                <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3 bg-slate-50/50 shrink-0">
+                    <div className="relative flex-1 min-w-[220px] max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Buscar por Chave, Emitente ou CNPJ..."
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            className="pl-9 bg-white border-slate-200"
+                            className="pl-9 bg-white border-slate-200 h-9 text-xs"
                         />
                     </div>
-                    <div className="w-[220px]">
+
+                    <div className="w-[190px]">
                         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-                            <SelectTrigger className="bg-white">
+                            <SelectTrigger className="bg-white h-9 text-xs border-slate-200">
                                 <SelectValue placeholder="Filtrar por Status" />
                             </SelectTrigger>
                             <SelectContent>
@@ -135,6 +168,26 @@ export default function InboundList() {
                             </SelectContent>
                         </Select>
                     </div>
+
+                    <div className="min-w-[250px]">
+                        <DateRangePicker
+                            date={dateRange}
+                            setDate={(range) => { setDateRange(range); setPage(1); }}
+                            className="w-full"
+                        />
+                    </div>
+
+                    {hasActiveFilters && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleClearFilters}
+                            title="Limpar Filtros"
+                            className="h-9 px-3 bg-white text-slate-500 hover:text-slate-700 border-slate-200 text-xs shrink-0"
+                        >
+                            <RotateCcw size={14} className="mr-1.5" /> Limpar
+                        </Button>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-auto">
@@ -188,7 +241,6 @@ export default function InboundList() {
                                             {renderStatusBadge(order)}
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
-                                            {/* 1. Ordem em estado de REVISÃO */}
                                             {order.status === 'Pending' && order.hasPendingReview && (
                                                 <Button
                                                     size="sm"
@@ -199,7 +251,6 @@ export default function InboundList() {
                                                 </Button>
                                             )}
 
-                                            {/* 2. Ordem REVISADA -> Pronta para Iniciar Recebimento */}
                                             {order.status === 'Pending' && !order.hasPendingReview && (
                                                 <Button
                                                     size="sm"
@@ -210,7 +261,6 @@ export default function InboundList() {
                                                 </Button>
                                             )}
 
-                                            {/* 3. Ordem EM RECEBIMENTO */}
                                             {order.status === 'Receiving' && (
                                                 <Button
                                                     size="sm"
@@ -221,7 +271,6 @@ export default function InboundList() {
                                                 </Button>
                                             )}
 
-                                            {/* 4. Ordem FINALIZADA */}
                                             {order.status === 'Completed' && (
                                                 <div className="inline-flex gap-1">
                                                     <Button
@@ -245,7 +294,6 @@ export default function InboundList() {
                                                 </div>
                                             )}
 
-                                            {/* Botão Cancelar */}
                                             {order.status !== 'Completed' && order.status !== 'Canceled' && (
                                                 <Button
                                                     variant="ghost"
@@ -258,14 +306,13 @@ export default function InboundList() {
                                                 </Button>
                                             )}
 
-                                            {/* Botão Excluir */}
                                             {order.status === 'Canceled' && (
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => setOrderToDelete(order)}
                                                     className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                                    title="Excluir Registro da NF-e"
+                                                    title="Excluir Registo da NF-e"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
@@ -315,9 +362,9 @@ export default function InboundList() {
             <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir Registro da NF-e?</AlertDialogTitle>
+                        <AlertDialogTitle>Excluir Registo da NF-e?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Deseja excluir definitivamente o registro desta nota cancelada? Esta ação não afetará os cadastros de Clientes ou Produtos existentes.
+                            Deseja excluir definitivamente o registo desta nota cancelada? Esta ação não afetará os cadastros de Clientes ou Produtos existentes.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -6,18 +6,31 @@ import { customInstance } from '@/api/orval-mutator';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MonthPicker } from '@/components/ui/month-picker';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { Calendar, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const cycleSchema = z.object({
     customerId: z.string().min(1, 'Selecione o depositante.'),
-    referenceMonth: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/, 'Formato deve ser MM/YYYY (Ex: 10/2026)'),
-    startDate: z.string().min(1, 'Informe a data inicial.'),
-    endDate: z.string().min(1, 'Informe a data final.')
+    referenceMonth: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/, 'Formato deve ser MM/YYYY (Ex: 10/2026)')
 });
+
+// Calcula automaticamente o 1º e último dia de um mês no formato MM/YYYY
+const getDefaultRangeForMonth = (refMonth) => {
+    if (!refMonth || !refMonth.includes('/')) return undefined;
+    const [mStr, yStr] = refMonth.split('/');
+    const month = parseInt(mStr, 10) - 1;
+    const year = parseInt(yStr, 10);
+    if (isNaN(month) || isNaN(year)) return undefined;
+
+    return {
+        from: new Date(year, month, 1),
+        to: new Date(year, month + 1, 0)
+    };
+};
 
 export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,21 +38,51 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
     const today = new Date();
     const currentRefMonth = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
+    const [dateRange, setDateRange] = useState(() => getDefaultRangeForMonth(currentRefMonth));
+
     const { handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(cycleSchema),
         defaultValues: {
             customerId: '',
-            referenceMonth: currentRefMonth,
-            startDate: '',
-            endDate: ''
+            referenceMonth: currentRefMonth
         }
     });
 
+    const selectedRefMonth = watch('referenceMonth');
+
+    // Ao alterar o mês de competência, ajusta o período sugerido caso o usuário não tenha personalizado
+    const handleMonthChange = (newMonth) => {
+        setValue('referenceMonth', newMonth, { shouldValidate: true });
+        if (newMonth) {
+            setDateRange(getDefaultRangeForMonth(newMonth));
+        }
+    };
+
+    // Reseta os campos ao abrir o modal
+    useEffect(() => {
+        if (isOpen) {
+            setValue('referenceMonth', currentRefMonth);
+            setDateRange(getDefaultRangeForMonth(currentRefMonth));
+        }
+    }, [isOpen, setValue, currentRefMonth]);
+
     const onSave = async (data) => {
+        if (!dateRange?.from) {
+            toast.warning('Selecione o período contábil do ciclo.');
+            return;
+        }
+
         try {
             setIsSubmitting(true);
-            const startUtc = `${data.startDate.split('T')[0]}T00:00:00.000Z`;
-            const endUtc = `${data.endDate.split('T')[0]}T23:59:59.999Z`;
+
+            // Início do 1º dia às 00:00:00.000 e fim do último dia às 23:59:59.999
+            const fromDate = new Date(dateRange.from);
+            fromDate.setHours(0, 0, 0, 0);
+            const startUtc = fromDate.toISOString();
+
+            const toDate = new Date(dateRange.to || dateRange.from);
+            toDate.setHours(23, 59, 59, 999);
+            const endUtc = toDate.toISOString();
 
             await customInstance({
                 url: '/api/billing/cycles/generate',
@@ -55,10 +98,9 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
             toast.success('Ciclo de faturamento aberto com sucesso!');
             reset({
                 customerId: '',
-                referenceMonth: currentRefMonth,
-                startDate: '',
-                endDate: ''
+                referenceMonth: currentRefMonth
             });
+            setDateRange(getDefaultRangeForMonth(currentRefMonth));
             onOpenChange(false);
             reload();
         } catch (error) {
@@ -97,35 +139,25 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
                     </div>
 
                     <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-slate-700">Competência (MM/YYYY) *</Label>
-                        <Input
-                            placeholder="Ex: 10/2026"
-                            value={watch('referenceMonth')}
-                            onChange={(e) => setValue('referenceMonth', e.target.value, { shouldValidate: true })}
-                            className="bg-white font-mono text-xs h-9"
+                        <Label className="text-xs font-semibold text-slate-700">Mês de Competência Contábil *</Label>
+                        <MonthPicker
+                            value={selectedRefMonth}
+                            onChange={handleMonthChange}
+                            className="h-9"
                         />
                         {errors.referenceMonth && <p className="text-[10px] text-rose-500">{errors.referenceMonth.message}</p>}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-700">Data Inicial *</Label>
-                            <Input
-                                type="date"
-                                onChange={(e) => setValue('startDate', e.target.value, { shouldValidate: true })}
-                                className="bg-white text-xs h-9"
-                            />
-                            {errors.startDate && <p className="text-[10px] text-rose-500">{errors.startDate.message}</p>}
+                    <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                            <Label className="text-xs font-semibold text-slate-700">Período Contábil do Ciclo *</Label>
+                            <span className="text-[10px] text-slate-400">00:00 às 23:59</span>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-700">Data Final *</Label>
-                            <Input
-                                type="date"
-                                onChange={(e) => setValue('endDate', e.target.value, { shouldValidate: true })}
-                                className="bg-white text-xs h-9"
-                            />
-                            {errors.endDate && <p className="text-[10px] text-rose-500">{errors.endDate.message}</p>}
-                        </div>
+                        <DateRangePicker
+                            date={dateRange}
+                            setDate={setDateRange}
+                            className="w-full"
+                        />
                     </div>
 
                     <DialogFooter className="pt-3">

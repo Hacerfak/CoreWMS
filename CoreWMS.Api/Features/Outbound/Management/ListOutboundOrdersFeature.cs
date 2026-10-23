@@ -26,7 +26,14 @@ public record OutboundOrderSummaryDto(
     bool HasActiveFiscalDocuments
 );
 
-public record ListOutboundOrdersQuery(Guid? CustomerId, string? Search, string? Status, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record ListOutboundOrdersQuery(
+    Guid? CustomerId,
+    string? Search,
+    string? Status,
+    DateTime? StartDate = null,
+    DateTime? EndDate = null,
+    int Page = 1,
+    int PageSize = 20) : IRequest<IResult>;
 
 public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery, IResult>
 {
@@ -58,6 +65,12 @@ public class ListOutboundOrdersHandler : IRequestHandler<ListOutboundOrdersQuery
 
         if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<Enums.OutboundOrderStatus>(request.Status, true, out var statusEnum))
             q = q.Where(o => o.Status == statusEnum);
+
+        if (request.StartDate.HasValue)
+            q = q.Where(o => o.IssueDate >= request.StartDate.Value);
+
+        if (request.EndDate.HasValue)
+            q = q.Where(o => o.IssueDate <= request.EndDate.Value);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {

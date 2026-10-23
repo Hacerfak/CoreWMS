@@ -30,8 +30,7 @@ import type {
   GetApiBillingCyclesParams,
   GetApiBillingTariffsParams,
   ProcessDailyBillingCycleCommand,
-  UpdateBillingServiceCommand,
-  UpsertManualBillingItemCommand
+  UpdateBillingServiceCommand
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -1034,66 +1033,4 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiBillingCyclesProcessDailyMutationOptions(options), queryClient);
-    }
-    export const postApiBillingCyclesCycleIdItemsManual = (
-    cycleId: string,
-    upsertManualBillingItemCommand: UpsertManualBillingItemCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/billing/cycles/${cycleId}/items/manual`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: upsertManualBillingItemCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiBillingCyclesCycleIdItemsManualMutationKey = () => ['postApiBillingCyclesCycleIdItemsManual'] as const;
-
-export const getPostApiBillingCyclesCycleIdItemsManualMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCyclesCycleIdItemsManual>>, TError,PostApiBillingCyclesCycleIdItemsManualMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCyclesCycleIdItemsManual>>, TError,PostApiBillingCyclesCycleIdItemsManualMutationVariables, TContext> => {
-
-const mutationKey = getPostApiBillingCyclesCycleIdItemsManualMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingCyclesCycleIdItemsManual>>, PostApiBillingCyclesCycleIdItemsManualMutationVariables> = (props) => {
-          const {cycleId,data} = props ?? {};
-
-          return  postApiBillingCyclesCycleIdItemsManual(cycleId,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiBillingCyclesCycleIdItemsManualMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingCyclesCycleIdItemsManual>>>
-    export type PostApiBillingCyclesCycleIdItemsManualMutationBody = UpsertManualBillingItemCommand
-    export type PostApiBillingCyclesCycleIdItemsManualMutationError = unknown
-    export type PostApiBillingCyclesCycleIdItemsManualMutationVariables = {cycleId: string;data: UpsertManualBillingItemCommand}
-
-    export const usePostApiBillingCyclesCycleIdItemsManual = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingCyclesCycleIdItemsManual>>, TError,PostApiBillingCyclesCycleIdItemsManualMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiBillingCyclesCycleIdItemsManual>>,
-        TError,
-        PostApiBillingCyclesCycleIdItemsManualMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiBillingCyclesCycleIdItemsManualMutationOptions(options), queryClient);
     }

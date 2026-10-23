@@ -12,6 +12,54 @@ public class BillingEngineService
 {
     private readonly ApplicationDbContext _db;
 
+    private static readonly TimeZoneInfo OperationalTimeZone = GetOperationalTimeZone();
+
+    private static TimeZoneInfo GetOperationalTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+        }
+        catch
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time");
+            }
+            catch
+            {
+                return TimeZoneInfo.Local;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Obtém a data civil corrente no fuso horário operacional (com hora zerada e Kind=Utc).
+    /// </summary>
+    public static DateTime GetOperationalToday()
+    {
+        var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, OperationalTimeZone);
+        return DateTime.SpecifyKind(localNow.Date, DateTimeKind.Utc);
+    }
+
+    /// <summary>
+    /// Normaliza uma data para a respectiva data civil no fuso operacional, com hora 00:00:00 e Kind=Utc.
+    /// </summary>
+    public static DateTime ToOperationalDate(DateTime dateTime)
+    {
+        DateTime localDate;
+        if (dateTime.Kind == DateTimeKind.Utc)
+        {
+            localDate = TimeZoneInfo.ConvertTimeFromUtc(dateTime, OperationalTimeZone).Date;
+        }
+        else
+        {
+            localDate = dateTime.Date;
+        }
+
+        return DateTime.SpecifyKind(localDate, DateTimeKind.Utc);
+    }
+
     public BillingEngineService(ApplicationDbContext db)
     {
         _db = db;
@@ -34,11 +82,13 @@ public class BillingEngineService
                         !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate))
             .ToListAsync(ct);
 
-        var todayUtc = DateTime.UtcNow.Date;
-        var maxDate = cycle.EndDate < todayUtc ? cycle.EndDate.Date : todayUtc;
+        // Considera o dia civil da operação, evitando avançar para o dia seguinte a partir das 21h
+        var operationalToday = GetOperationalToday();
+        var cycleEndDate = ToOperationalDate(cycle.EndDate);
+        var maxDate = cycleEndDate < operationalToday ? cycleEndDate : operationalToday;
         int processedCount = 0;
 
-        for (var currentDate = cycle.StartDate.Date; currentDate <= maxDate; currentDate = currentDate.AddDays(1))
+        for (var currentDate = ToOperationalDate(cycle.StartDate); currentDate <= maxDate; currentDate = currentDate.AddDays(1))
         {
             var calculatedList = await ExecuteDailyServicesPerInboundOrderAsync(cycle, activeTariffs, currentDate);
             processedCount += calculatedList.Count;
@@ -57,8 +107,8 @@ public class BillingEngineService
         List<CustomerTariff> tariffs,
         DateTime referenceDate)
     {
-        var refDateUtc = DateTime.SpecifyKind(referenceDate.Date, DateTimeKind.Utc);
-        var refDateFimUtc = DateTime.SpecifyKind(referenceDate.Date.AddDays(1).AddTicks(-1), DateTimeKind.Utc);
+        var refDateUtc = ToOperationalDate(referenceDate);
+        var refDateFimUtc = refDateUtc.AddDays(1).AddTicks(-1);
 
         var processedItems = new List<BillingItem>();
 
@@ -178,7 +228,7 @@ public class BillingEngineService
         DateTime referenceDate,
         CancellationToken ct = default)
     {
-        var dateOnly = referenceDate.ToUniversalTime().Date;
+        var dateOnly = ToOperationalDate(referenceDate);
         var refMonth = dateOnly.ToString("MM/yyyy");
 
         var cycle = await _db.BillingCycles
@@ -226,6 +276,8 @@ public class BillingEngineService
     {
         if (string.IsNullOrWhiteSpace(service.SqlTemplate)) return null;
 
+        var operationalToday = GetOperationalToday();
+
         var parameters = new
         {
             ArmazemId = cycle.CompanyId,
@@ -233,7 +285,7 @@ public class BillingEngineService
             ServicoValor = tariff.UnitValue,
             OrdemId = orderId,
             OrderItemId = orderItemId ?? Guid.Empty,
-            DataReferencia = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc),
+            DataReferencia = operationalToday,
             CobrancaDataIni = cycle.StartDate,
             CobrancaDataFim = cycle.EndDate
         };
@@ -245,7 +297,7 @@ public class BillingEngineService
         return new BillingItem(
             billingCycleId: cycle.Id,
             billingServiceId: service.Id,
-            chargeDate: DateTime.UtcNow,
+            chargeDate: operationalToday,
             documentType: documentType,
             documentNumber: documentNumber,
             documentId: orderId,

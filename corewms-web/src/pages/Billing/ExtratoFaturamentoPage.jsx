@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
     ArrowLeft, Receipt, Calendar, Download, Lock, RefreshCw,
     Plus, Loader2, CheckCircle2, ChevronDown, ChevronRight, FileText,
@@ -67,7 +68,6 @@ const formatNumber = (val) => {
     return (isNaN(num) ? 0 : num).toLocaleString('pt-BR');
 };
 
-// Extrai o identificador legível da NF-e com segurança
 const extractNfeNumber = (item) => {
     if (!item) return 'Estoque Consolidado';
     if (item.documentNumber && !item.documentNumber.includes('/') && item.documentNumber !== 'Estoque Consolidado') {
@@ -88,7 +88,6 @@ const extractNfeNumber = (item) => {
     return item.documentNumber || 'Estoque Consolidado';
 };
 
-// Classifica o pilar de apuração de forma precisa
 const classifyService = (item) => {
     const desc = (item.description || item.serviceName || '').toLowerCase();
     const docType = (item.documentType || '').toLowerCase();
@@ -119,13 +118,14 @@ export default function ExtratoFaturamentoPage() {
     const [expandedItemId, setExpandedItemId] = useState(null);
     const [expandedNfeKey, setExpandedNfeKey] = useState(null);
 
-    // Alternador de Visão: 'services' (Serviços) | 'invoices' (Por NF-e de Entrada)
     const [viewMode, setViewMode] = useState('services');
 
-    // Modais
+    // Estado do Modal de Lançamento Manual Extra
     const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [description, setDescription] = useState('');
+    const [documentNumber, setDocumentNumber] = useState('');
+    const [chargeDate, setChargeDate] = useState(() => new Date());
     const [quantity, setQuantity] = useState(1);
     const [totalValue, setTotalValue] = useState(0);
     const [manualNotes, setManualNotes] = useState('');
@@ -155,7 +155,6 @@ export default function ExtratoFaturamentoPage() {
         if (cycleId) loadCycleDetails();
     }, [cycleId]);
 
-    // Download do PDF com tratamento seguro do Blob
     const handleExportPdf = async () => {
         if (!cycleId) return;
         try {
@@ -227,6 +226,16 @@ export default function ExtratoFaturamentoPage() {
 
         try {
             setIsSubmitting(true);
+
+            // Normaliza a data selecionada para UTC com a data civil escolhida
+            let formattedChargeDate = undefined;
+            if (chargeDate) {
+                const year = chargeDate.getFullYear();
+                const month = String(chargeDate.getMonth() + 1).padStart(2, '0');
+                const day = String(chargeDate.getDate()).padStart(2, '0');
+                formattedChargeDate = `${year}-${month}-${day}T00:00:00.000Z`;
+            }
+
             await customInstance({
                 url: `/api/billing/cycles/${cycleId}/items/manual`,
                 method: 'POST',
@@ -235,7 +244,9 @@ export default function ExtratoFaturamentoPage() {
                     description: description.trim(),
                     quantityTotal: Number(quantity),
                     serviceTotal: Number(totalValue),
-                    manualNotes: manualNotes.trim()
+                    manualNotes: manualNotes.trim() || null,
+                    chargeDate: formattedChargeDate,
+                    documentNumber: documentNumber.trim() || 'Avulso'
                 }
             });
 
@@ -243,6 +254,8 @@ export default function ExtratoFaturamentoPage() {
             setIsManualModalOpen(false);
             setSelectedServiceId('');
             setDescription('');
+            setDocumentNumber('');
+            setChargeDate(new Date());
             setQuantity(1);
             setTotalValue(0);
             setManualNotes('');
@@ -280,7 +293,6 @@ export default function ExtratoFaturamentoPage() {
         return false;
     };
 
-    // KPIs Analíticos Financeiros
     const metrics = useMemo(() => {
         if (!cycle?.items) return { dailyTotal: 0, eventsTotal: 0, manualTotal: 0 };
 
@@ -305,7 +317,6 @@ export default function ExtratoFaturamentoPage() {
         return { dailyTotal, eventsTotal, manualTotal };
     }, [cycle]);
 
-    // Visão Consolidada por NF-e de Entrada (Estilo Planilha 3PL Verallia)
     const groupedByInboundNfe = useMemo(() => {
         if (!cycle?.items) return [];
 
@@ -344,7 +355,6 @@ export default function ExtratoFaturamentoPage() {
             nfeMap[nfeKey].totalAmount += val;
             nfeMap[nfeKey].volumeTotal = Math.max(nfeMap[nfeKey].volumeTotal, vol);
 
-            // Obtém produtos discriminados caso presentes no JSON
             if (item.statementDataJson) {
                 try {
                     const parsed = JSON.parse(item.statementDataJson);
@@ -531,7 +541,7 @@ export default function ExtratoFaturamentoPage() {
                 </span>
             </div>
 
-            {/* VISÃO 1: POR SERVIÇOS (TABELA PRINCIPAL) */}
+            {/* VISÃO 1: POR SERVIÇOS */}
             {viewMode === 'services' && (
                 <Card className="border-slate-200/80 bg-white shadow-2xs overflow-hidden">
                     <CardHeader className="p-4 border-b bg-slate-50/60 flex flex-row items-center justify-between">
@@ -582,7 +592,6 @@ export default function ExtratoFaturamentoPage() {
                                         }
                                     }
 
-                                    // Remove repetições redundantes de datas ou NFs já exibidas no badge
                                     const cleanDescription = (item.description || item.serviceName || '')
                                         .replace(/\s*\(NF\s*#?\d+\)/gi, '')
                                         .replace(/\s*\(NF-e\s*Entrada\s*#?\d+\)/gi, '')
@@ -610,7 +619,7 @@ export default function ExtratoFaturamentoPage() {
                                                     {isManual ? (
                                                         <div className="space-y-0.5">
                                                             <Badge variant="outline" className="font-mono text-[10px] bg-amber-50 text-amber-800 border-amber-300">
-                                                                Lançamento Avulso
+                                                                {item.documentNumber || 'Lançamento Avulso'}
                                                             </Badge>
                                                             <span className="block text-[9px] text-amber-600 font-medium">Ajuste Manual</span>
                                                         </div>
@@ -664,7 +673,6 @@ export default function ExtratoFaturamentoPage() {
                                                 </TableCell>
                                             </TableRow>
 
-                                            {/* TABELA DE OCORRÊNCIAS EXPANDIDA POR NF-E */}
                                             {isExpanded && hasStatement && (
                                                 <TableRow className="bg-slate-50/80">
                                                     <TableCell colSpan={8} className="p-4">
@@ -738,7 +746,7 @@ export default function ExtratoFaturamentoPage() {
                 </Card>
             )}
 
-            {/* VISÃO 2: CONSOLIDADO POR NF-E DE ENTRADA (ESTILO VERALLIA) */}
+            {/* VISÃO 2: CONSOLIDADO POR NF-E DE ENTRADA */}
             {viewMode === 'invoices' && (
                 <div className="space-y-4">
                     {groupedByInboundNfe.length === 0 ? (
@@ -795,7 +803,6 @@ export default function ExtratoFaturamentoPage() {
                                     </CardHeader>
 
                                     <CardContent className="p-4 space-y-4">
-                                        {/* RESUMO DOS 3 PILARES DA NOTA */}
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs">
                                             <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/70 flex justify-between items-center">
                                                 <span className="text-slate-600 font-sans">Recebimento (Handling In):</span>
@@ -817,7 +824,6 @@ export default function ExtratoFaturamentoPage() {
                                             </div>
                                         </div>
 
-                                        {/* AUDITORIA DETALHADA DA NOTA EXPANDIDA */}
                                         {isExpandedNfe && nfeGroup.occurrences.length > 0 && (
                                             <div className="border border-slate-200 rounded-xl overflow-hidden animate-in fade-in duration-200">
                                                 <div className="bg-slate-100/70 px-3 py-2 border-b text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -893,6 +899,27 @@ export default function ExtratoFaturamentoPage() {
                             />
                         </div>
 
+                        {/* DATA DA COBRANÇA (DATEPICKER) E NÚMERO DO DOCUMENTO */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-700">Data do Serviço *</Label>
+                                <DatePicker
+                                    date={chargeDate}
+                                    setDate={(d) => setChargeDate(d || new Date())}
+                                    className="h-9"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-700">Documento / Ref</Label>
+                                <Input
+                                    placeholder="Ex: OS 1045 / Avulso"
+                                    value={documentNumber}
+                                    onChange={(e) => setDocumentNumber(e.target.value)}
+                                    className="bg-white text-xs h-9 font-mono"
+                                />
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
                                 <Label className="text-xs font-semibold text-slate-700">Quantidade Total *</Label>
@@ -938,7 +965,7 @@ export default function ExtratoFaturamentoPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE LANÇAMENTO */}
+            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
             <Dialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>

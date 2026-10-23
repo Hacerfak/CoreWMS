@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
 import { Input } from '@/components/ui/input';
@@ -7,8 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import {
-    Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban, PackageCheck, Plus, Play, Box, CheckCircle2, Trash2, Pencil, RotateCcw
+    Search, Loader2, ArrowUpFromLine, Upload, Eye, Ban,
+    PackageCheck, Plus, Play, Box, CheckCircle2, Trash2,
+    Pencil, RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportXmlModal from './ImportXmlModal';
@@ -19,6 +22,7 @@ export default function OutboundListPage() {
     const [search, setSearch] = useState('');
     const [customerFilter, setCustomerFilter] = useState('ALL');
     const [statusFilter, setStatusFilter] = useState('ALL');
+    const [dateRange, setDateRange] = useState(undefined);
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 20;
 
@@ -38,6 +42,21 @@ export default function OutboundListPage() {
             .catch(() => toast.error('Erro ao carregar depositantes.'));
     }, []);
 
+    // Converte as datas selecionadas para o dia civil completo em formato UTC
+    const formattedStartDate = useMemo(() => {
+        if (!dateRange?.from) return undefined;
+        const fromDate = new Date(dateRange.from);
+        fromDate.setHours(0, 0, 0, 0);
+        return fromDate.toISOString();
+    }, [dateRange?.from]);
+
+    const formattedEndDate = useMemo(() => {
+        if (!dateRange?.from) return undefined;
+        const toDate = new Date(dateRange.to || dateRange.from);
+        toDate.setHours(23, 59, 59, 999);
+        return toDate.toISOString();
+    }, [dateRange]);
+
     const loadOrders = async () => {
         try {
             setIsLoading(true);
@@ -47,6 +66,8 @@ export default function OutboundListPage() {
             if (customerFilter !== 'ALL') params.append('CustomerId', customerFilter);
             if (statusFilter !== 'ALL') params.append('Status', statusFilter);
             if (search.trim()) params.append('Search', search.trim());
+            if (formattedStartDate) params.append('StartDate', formattedStartDate);
+            if (formattedEndDate) params.append('EndDate', formattedEndDate);
 
             const res = await customInstance({
                 url: `/api/outbound/orders?${params.toString()}`,
@@ -65,7 +86,15 @@ export default function OutboundListPage() {
 
     useEffect(() => {
         loadOrders();
-    }, [page, customerFilter, statusFilter]);
+    }, [page, customerFilter, statusFilter, dateRange]);
+
+    const handleClearFilters = () => {
+        setSearch('');
+        setCustomerFilter('ALL');
+        setStatusFilter('ALL');
+        setDateRange(undefined);
+        setPage(1);
+    };
 
     const handleAllocateOrder = async (orderId) => {
         try {
@@ -74,10 +103,10 @@ export default function OutboundListPage() {
                 url: `/api/outbound/orders/${orderId}/allocate`,
                 method: 'POST'
             });
-            toast.success(res?.message || 'Estoque alocado com sucesso!');
+            toast.success(res?.message || 'Stock alocado com sucesso!');
             loadOrders();
         } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao alocar estoque.');
+            toast.error(error.response?.data?.message || 'Erro ao alocar stock.');
             setIsLoading(false);
         }
     };
@@ -91,7 +120,7 @@ export default function OutboundListPage() {
                 method: 'POST'
             });
             const data = res?.data || res;
-            toast.success(data?.message || 'Expedição estornada com sucesso! O estoque foi restaurado.');
+            toast.success(data?.message || 'Expedição estornada com sucesso! O stock foi restaurado.');
             setOrderToRevert(null);
             loadOrders();
         } catch (error) {
@@ -159,12 +188,14 @@ export default function OutboundListPage() {
         }
     };
 
+    const hasActiveFilters = Boolean(search || customerFilter !== 'ALL' || statusFilter !== 'ALL' || dateRange);
+
     return (
         <div className="flex flex-col h-full space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Outbound (Expedição)</h1>
-                    <p className="text-sm text-slate-500 mt-1">Gestão de ordens de saída, alocação de estoque, separação e expedição.</p>
+                    <p className="text-sm text-slate-500 mt-1">Gestão de ordens de saída, alocação de stock, separação e expedição.</p>
                 </div>
                 <div className="flex gap-2">
                     <Button
@@ -184,21 +215,22 @@ export default function OutboundListPage() {
             </div>
 
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="p-4 border-b border-slate-100 flex items-center gap-4 bg-slate-50/50 shrink-0">
-                    <div className="relative flex-1 max-w-md">
+                {/* BARRA DE FILTROS COM DATE RANGE PICKER INTEGRADO */}
+                <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-3 bg-slate-50/50 shrink-0">
+                    <div className="relative flex-1 min-w-[220px] max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Buscar por Pedido, Cliente ou Destinatário..."
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                             onKeyDown={(e) => e.key === 'Enter' && loadOrders()}
-                            className="pl-9 bg-white border-slate-200 text-xs"
+                            className="pl-9 bg-white border-slate-200 text-xs h-9"
                         />
                     </div>
 
-                    <div className="w-[200px]">
+                    <div className="w-[190px]">
                         <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v); setPage(1); }}>
-                            <SelectTrigger className="bg-white text-xs">
+                            <SelectTrigger className="bg-white text-xs h-9 border-slate-200">
                                 <SelectValue placeholder="Depositante" />
                             </SelectTrigger>
                             <SelectContent>
@@ -210,9 +242,9 @@ export default function OutboundListPage() {
                         </Select>
                     </div>
 
-                    <div className="w-[180px]">
+                    <div className="w-[170px]">
                         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-                            <SelectTrigger className="bg-white text-xs">
+                            <SelectTrigger className="bg-white text-xs h-9 border-slate-200">
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
                             <SelectContent>
@@ -227,6 +259,26 @@ export default function OutboundListPage() {
                             </SelectContent>
                         </Select>
                     </div>
+
+                    <div className="min-w-[250px]">
+                        <DateRangePicker
+                            date={dateRange}
+                            setDate={(range) => { setDateRange(range); setPage(1); }}
+                            className="w-full"
+                        />
+                    </div>
+
+                    {hasActiveFilters && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleClearFilters}
+                            title="Limpar Filtros"
+                            className="h-9 px-3 bg-white text-slate-500 hover:text-slate-700 border-slate-200 text-xs shrink-0"
+                        >
+                            <RotateCcw size={14} className="mr-1.5" /> Limpar
+                        </Button>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-auto">
@@ -249,13 +301,8 @@ export default function OutboundListPage() {
                             ) : orders.length === 0 ? (
                                 <TableRow><TableCell colSpan={8} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
                             ) : orders.map((order) => {
-                                // Permite estornar se estiver Shipped E não tiver documentos fiscais ativos (ou não tiver nenhum)
                                 const canRevert = order.status === 'Shipped' && !order.hasActiveFiscalDocuments;
-
-                                // Permite cancelar se não for Shipped/Canceled E não tiver documentos fiscais ativos
                                 const canCancel = order.status !== 'Shipped' && order.status !== 'Canceled' && !order.hasActiveFiscalDocuments;
-
-                                // Permite excluir SOMENTE se estiver Canceled E NÃO tiver nenhum documento fiscal em seu histórico
                                 const canDelete = order.status === 'Canceled' && !order.hasFiscalDocuments;
 
                                 return (
@@ -296,7 +343,6 @@ export default function OutboundListPage() {
                                             {renderStatusBadge(order.status)}
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
-                                            {/* Edição do cabeçalho */}
                                             {['Pending', 'Allocating', 'Allocated'].includes(order.status) && (
                                                 <Button
                                                     size="sm"
@@ -359,20 +405,18 @@ export default function OutboundListPage() {
                                                 <Eye className="h-3.5 w-3.5 text-slate-500" />
                                             </Button>
 
-                                            {/* ESTORNO DA EXPEDIÇÃO (Shipped sem notas ativas ou sem notas) */}
                                             {canRevert && (
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     onClick={() => setOrderToRevert(order)}
                                                     className="text-amber-600 hover:bg-amber-50 hover:text-amber-700"
-                                                    title="Estornar Expedição (Restaurar estoque e Kardex)"
+                                                    title="Estornar Expedição (Restaurar stock e Kardex)"
                                                 >
                                                     <RotateCcw className="h-4 w-4" />
                                                 </Button>
                                             )}
 
-                                            {/* CANCELAMENTO */}
                                             {canCancel && (
                                                 <Button
                                                     variant="ghost"
@@ -385,7 +429,6 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {/* EXCLUSÃO PERMANENTE (Canceled e sem histórico fiscal) */}
                                             {canDelete && (
                                                 <Button
                                                     variant="ghost"
@@ -408,7 +451,7 @@ export default function OutboundListPage() {
                 {totalCount > 0 && (
                     <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
                         <span className="text-xs text-slate-500 font-medium">
-                            Mostrando {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} pedidos
+                            A mostrar {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} pedidos
                         </span>
                         <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-7 text-xs bg-white">Anterior</Button>
@@ -428,7 +471,7 @@ export default function OutboundListPage() {
                         <AlertDialogDescription>
                             Deseja estornar a expedição do pedido <strong className="text-slate-800">#{orderToRevert?.orderNumber}</strong>?
                             <br /><br />
-                            Esta ação irá devolver os saldos consumidos para as Unidades Logísticas (HUs), registrar a compensação no Kardex e retornar a ordem para <strong>Pronto para Expedir (ReadyToShip)</strong>.
+                            Esta ação irá devolver os saldos consumidos para as Unidades Logísticas (HUs), registar a compensação no Kardex e retornar a ordem para <strong>Pronto para Expedir (ReadyToShip)</strong>.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -446,7 +489,7 @@ export default function OutboundListPage() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Cancelar Pedido de Saída?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Deseja cancelar o pedido <strong className="text-slate-800">#{orderToCancel?.orderNumber}</strong>? Todas as reservas de estoque e alocações de coletor serão canceladas.
+                            Deseja cancelar o pedido <strong className="text-slate-800">#{orderToCancel?.orderNumber}</strong>? Todas as reservas de stock e alocações de coletor serão canceladas.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -464,7 +507,7 @@ export default function OutboundListPage() {
                     <AlertDialogHeader>
                         <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Tem certeza que deseja excluir definitivamente a ordem <strong className="text-slate-800">#{orderToDelete?.orderNumber}</strong>? Esta ação removerá o registro do sistema de forma permanente.
+                            Tem a certeza de que deseja excluir definitivamente a ordem <strong className="text-slate-800">#{orderToDelete?.orderNumber}</strong>? Esta ação removerá o registo do sistema de forma permanente.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

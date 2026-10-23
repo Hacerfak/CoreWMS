@@ -181,7 +181,7 @@ public class SefazDistDFeService : ISefazDistDFeService
 
                 using var servicoNfe = new ServicosNFe(config);
 
-                int idLote = Convert.ToInt32(DateTime.Now.ToString("HHmmss"));
+                int idLote = Convert.ToInt32(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)).ToString("HHmmss"));
                 int seqEvento = 1;
 
                 var tipoEvento = codigoEvento switch

@@ -9,7 +9,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inbound.Management;
 
-public record ListInboundOrdersQuery(Guid? CustomerId, InboundOrderStatus? Status, string? Search, int Page = 1, int PageSize = 20) : IRequest<IResult>;
+public record ListInboundOrdersQuery(
+    Guid? CustomerId,
+    InboundOrderStatus? Status,
+    string? Search,
+    DateTime? StartDate = null,
+    DateTime? EndDate = null,
+    int Page = 1,
+    int PageSize = 20) : IRequest<IResult>;
 
 public class ListInboundOrdersQueryValidator : AbstractValidator<ListInboundOrdersQuery>
 {
@@ -48,6 +55,8 @@ public class ListInboundOrdersHandler : IRequestHandler<ListInboundOrdersQuery, 
 
         if (request.CustomerId.HasValue) q = q.Where(o => o.CustomerId == request.CustomerId);
         if (request.Status.HasValue) q = q.Where(o => o.Status == request.Status);
+        if (request.StartDate.HasValue) q = q.Where(o => o.IssueDate >= request.StartDate.Value);
+        if (request.EndDate.HasValue) q = q.Where(o => o.IssueDate <= request.EndDate.Value);
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
