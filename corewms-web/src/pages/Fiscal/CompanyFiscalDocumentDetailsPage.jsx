@@ -9,11 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, FileCode, Download, Ban, FileSignature, Loader2,
     Building2, UserCheck, Truck, CreditCard, Layers, Sparkles,
-    Copy, Check, Clock, ShieldCheck, Tag, FileText
+    Copy, Check, Clock, ShieldCheck, Tag, FileText, Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
 import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
+import SendNfeEmailModal from '@/pages/Fiscal/SendNfeEmailModal';
 
 const formatCurrency = (val) => {
     const num = Number(val);
@@ -56,9 +57,10 @@ export default function CompanyFiscalDocumentDetailsPage() {
     const [downloadingType, setDownloadingType] = useState(null);
     const [hasCopiedKey, setHasCopiedKey] = useState(false);
 
-    // Modais SEFAZ (Cancelamento & CC-e)
+    // Modais SEFAZ (Cancelamento, CC-e e Disparo de E-mail)
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 
     const loadDocumentDetails = async () => {
         try {
@@ -222,6 +224,19 @@ export default function CompanyFiscalDocumentDetailsPage() {
                         >
                             {downloadingType === 'pdf' ? <Loader2 size={13} className="animate-spin mr-1.5" /> : <Download size={13} className="mr-1.5 text-orange-600" />}
                             DANFE
+                        </Button>
+                    )}
+
+                    {/* DISPARO MANUAL DE E-MAIL */}
+                    {isAuthorized && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsEmailModalOpen(true)}
+                            className="bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 font-medium h-9 text-xs"
+                            title="Enviar NF-e por E-mail (XML e DANFE)"
+                        >
+                            <Mail size={13} className="mr-1.5 text-emerald-600" /> Enviar E-mail
                         </Button>
                     )}
 
@@ -783,6 +798,14 @@ export default function CompanyFiscalDocumentDetailsPage() {
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* MODAL DISPARO MANUAL DE E-MAIL */}
+            <SendNfeEmailModal
+                open={isEmailModalOpen}
+                onOpenChange={setIsEmailModalOpen}
+                document={doc}
+                defaultEmail={doc?.destinatarioEmail || doc?.customerEmail || ''}
+            />
 
             {/* MODAL DE CANCELAMENTO */}
             <CancelNfeModal

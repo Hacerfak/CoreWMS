@@ -18,11 +18,12 @@ import {
     AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import {
-    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2, Settings, ChevronLeft, ChevronRight
+    Search, Plus, FileCode, Download, Ban, FileSignature, Trash2, Eye, Loader2, Settings, ChevronLeft, ChevronRight, Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
 import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
+import SendNfeEmailModal from '@/pages/Fiscal/SendNfeEmailModal';
 
 export default function CompanyFiscalDocumentsPage() {
     const navigate = useNavigate();
@@ -43,12 +44,15 @@ export default function CompanyFiscalDocumentsPage() {
     // Downloads
     const [downloadingDocId, setDownloadingDocId] = useState(null);
 
-    // Modais Fiscais (Eventos SEFAZ)
+    // Modais Fiscais (Eventos SEFAZ e E-mail)
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [selectedDocForCancel, setSelectedDocForCancel] = useState(null);
 
     const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
     const [selectedDocForCorrection, setSelectedDocForCorrection] = useState(null);
+
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+    const [selectedDocForEmail, setSelectedDocForEmail] = useState(null);
 
     // Estado do AlertDialog de Exclusão (shadcn/ui)
     const [docToDelete, setDocToDelete] = useState(null);
@@ -89,52 +93,23 @@ export default function CompanyFiscalDocumentsPage() {
         loadDocuments();
     };
 
-    /* const handleDownloadPdf = async (docId, accessKey) => {
-        try {
-            setDownloadingDocId(docId);
-            const response = await customInstance({
-                url: `/api/fiscal/nfe/${docId}/pdf`,
-                method: 'GET',
-                responseType: 'blob'
-            });
-
-            const blob = new Blob([response], { type: 'application/pdf' });
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `${accessKey || docId}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            toast.success('Download do PDF concluído!');
-        } catch {
-            toast.error('Erro ao baixar PDF fiscal.');
-        } finally {
-            setDownloadingDocId(null);
-        }
-    }; */
-
     const handleDownloadPdf = async (docId) => {
-        // 1. Abre a nova aba imediatamente no clique para o navegador não bloquear como pop-up
         const printWindow = window.open('', '_blank');
         if (printWindow) {
             printWindow.document.write(`
-            <div style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; color: #475569; font-size: 14px;">
-                Carregando DANFE oficial...
-            </div>
-        `);
+                <div style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; color: #475569; font-size: 14px;">
+                    Carregando DANFE oficial...
+                </div>
+            `);
         }
 
         try {
-            // 2. Busca o HTML através do client HTTP com o token Bearer
             const html = await customInstance({
                 url: `/api/fiscal/nfe/${docId}/danfe-html`,
                 method: 'GET',
                 responseType: 'text'
             });
 
-            // 3. Injeta o HTML oficial da SEFAZ na nova aba
             if (printWindow) {
                 printWindow.document.open();
                 printWindow.document.write(html);
@@ -406,7 +381,7 @@ export default function CompanyFiscalDocumentsPage() {
                                                                 onClick={() => handleDownloadPdf(doc.id)}
                                                                 disabled={downloadingDocId === doc.id}
                                                                 className="h-8 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-medium px-2"
-                                                                title="Baixar DANFE em PDF"
+                                                                title="Visualizar / Imprimir DANFE"
                                                             >
                                                                 {downloadingDocId === doc.id ? (
                                                                     <Loader2 size={13} className="animate-spin" />
@@ -415,6 +390,17 @@ export default function CompanyFiscalDocumentsPage() {
                                                                         <Download size={13} className="mr-1" /> DANFE
                                                                     </>
                                                                 )}
+                                                            </Button>
+
+                                                            {/* AÇÃO MANUAL DE DISPARO DE E-MAIL */}
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => { setSelectedDocForEmail(doc); setIsEmailModalOpen(true); }}
+                                                                className="h-8 text-xs bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 font-medium px-2"
+                                                                title="Enviar NF-e por E-mail (XML e DANFE)"
+                                                            >
+                                                                <Mail size={13} className="text-emerald-600" />
                                                             </Button>
 
                                                             <Button
@@ -508,6 +494,14 @@ export default function CompanyFiscalDocumentsPage() {
                     </div>
                 </div>
             </Card>
+
+            {/* MODAL DISPARO MANUAL DE E-MAIL */}
+            <SendNfeEmailModal
+                open={isEmailModalOpen}
+                onOpenChange={setIsEmailModalOpen}
+                document={selectedDocForEmail}
+                defaultEmail={selectedDocForEmail?.customerEmail || selectedDocForEmail?.recipientEmail || ''}
+            />
 
             {/* MODAL CANCELAMENTO */}
             <CancelNfeModal

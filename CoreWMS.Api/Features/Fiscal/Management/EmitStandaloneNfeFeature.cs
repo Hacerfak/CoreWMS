@@ -1,5 +1,12 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using CoreWMS.Api.Features.Fiscal.Emissao;
 using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Identity.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
 using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
@@ -8,9 +15,13 @@ using DFe.Classes.Flags;
 using DFe.Utils;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using NFe.Classes.Informacoes.Pagamento;
+using Microsoft.Extensions.Logging;
 using NFe.Classes.Informacoes.Identificacao.Tipos;
+using NFe.Classes.Informacoes.Pagamento;
 using NFe.Classes.Servicos.Tipos;
 using NFe.Servicos;
 using NFe.Utils.NFe;
@@ -74,7 +85,9 @@ public record EmitStandaloneNfeCommand(
     string? VehiclePlate = null,
     string? VehiclePlateState = null,
     StandaloneNfePaymentCommand? Payment = null,
-    List<string>? ReferencedAccessKeys = null
+    List<string>? ReferencedAccessKeys = null,
+    string? DestinationEmail = null, // E-mail explícito para envio (opcional)
+    Guid? CustomerId = null         // Depositante proprietário da mercadoria (opcional)
 ) : IRequest<IResult>;
 
 public class EmitStandaloneNfeCommandValidator : AbstractValidator<EmitStandaloneNfeCommand>
@@ -109,17 +122,23 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
     private readonly ITenantProvider _tenant;
     private readonly IZeusConfigurator _zeusConfigurator;
     private readonly NfeBuilderService _builder;
+    private readonly IMediator _mediator;
+    private readonly ILogger<EmitStandaloneNfeHandler> _logger;
 
     public EmitStandaloneNfeHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
         IZeusConfigurator zeusConfigurator,
-        NfeBuilderService builder)
+        NfeBuilderService builder,
+        IMediator mediator,
+        ILogger<EmitStandaloneNfeHandler> logger)
     {
         _db = db;
         _tenant = tenant;
         _zeusConfigurator = zeusConfigurator;
         _builder = builder;
+        _mediator = mediator;
+        _logger = logger;
     }
 
     public async Task<IResult> Handle(EmitStandaloneNfeCommand request, CancellationToken ct)
@@ -134,6 +153,48 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
 
         if (company.CertificateBytes == null || company.CertificateBytes.Length == 0)
             return Results.BadRequest(new { Message = "Certificado Digital A1 não cadastrado para esta empresa." });
+
+        // 1. Resolução do E-mail do Depositante
+        string? targetCustomerEmail = request.DestinationEmail;
+
+        if (string.IsNullOrWhiteSpace(targetCustomerEmail))
+        {
+            Guid? customerId = request.CustomerId;
+
+            // Se o CustomerId não foi informado no comando, obtém pelo proprietário do produto
+            if (!customerId.HasValue && request.Items.Any())
+            {
+                var firstProdId = request.Items.First().ProductId;
+                var product = await _db.Products
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.Id == firstProdId && p.CompanyId == companyId, ct);
+
+                if (product != null)
+                {
+                    customerId = product.CustomerId;
+                }
+            }
+
+            if (customerId.HasValue)
+            {
+                var customer = await _db.Customers
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == customerId.Value && c.CompanyId == companyId, ct);
+
+                targetCustomerEmail = customer?.Email;
+            }
+
+            // Fallback: Verifica se o próprio destinatário da nota é um cliente/depositante cadastrado (por CNPJ ou CPF)
+            if (string.IsNullOrWhiteSpace(targetCustomerEmail) && !string.IsNullOrWhiteSpace(request.DestinationCnpjCpf))
+            {
+                var cleanDoc = new string(request.DestinationCnpjCpf.Where(char.IsDigit).ToArray());
+                var customerByDoc = await _db.Customers
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.CompanyId == companyId && c.Cnpj == cleanDoc, ct);
+
+                targetCustomerEmail = customerByDoc?.Email;
+            }
+        }
 
         NfePaymentInput? paymentInput = null;
         if (request.Payment != null)
@@ -260,7 +321,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
             xmlAssinado = nfe.ObterXmlString();
             chaveAcesso = nfe.infNFe.Id?.Replace("NFe", "").Trim() ?? "";
 
-            // Salva na entidade antes do envio para a SEFAZ
             fiscalDoc.SetTransmittedXml(chaveAcesso, xmlAssinado);
             await _db.SaveChangesAsync(ct);
         }
@@ -295,6 +355,22 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
         long nNf = nfe.infNFe.ide.nNF;
         company.UpdateNfeAndTransportDetails(company.NfeSerie, company.NfeNextNumber + 1, company.Rntrc);
         await _db.SaveChangesAsync(ct);
+
+        // ====================================================================
+        // DISPARO AUTOMÁTICO DE E-MAIL PARA O DEPOSITANTE (CUSTOMER)
+        // ====================================================================
+        try
+        {
+            if (company.EmailProvider != EmailProviderType.Disabled && !string.IsNullOrWhiteSpace(targetCustomerEmail))
+            {
+                _logger.LogInformation("[NF-E AVULSA AUTO] A disparar e-mail automático da NF-e {DocumentId} para o depositante ({Email})...", fiscalDoc.Id, targetCustomerEmail);
+                await _mediator.Send(new SendNfeEmailCommand(fiscalDoc.Id, targetCustomerEmail), ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[NF-E AVULSA AUTO - AVISO] Falha ao enviar e-mail automático para o documento {DocumentId}: {Message}", fiscalDoc.Id, ex.Message);
+        }
 
         return Results.Ok(new
         {

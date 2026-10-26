@@ -6,5 +6,5 @@
  */
 
 export type PostApiFiscalNfeDocumentIdEmailParams = {
-destinationEmail: string;
+destinationEmail?: string;
 };

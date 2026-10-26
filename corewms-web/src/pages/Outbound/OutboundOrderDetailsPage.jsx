@@ -20,11 +20,12 @@ import {
 import {
     ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText,
     UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil,
-    ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles
+    ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles, Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
 import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
+import SendNfeEmailModal from '@/pages/Fiscal/SendNfeEmailModal';
 
 export default function OutboundOrderDetailsPage() {
     const { id: orderId } = useParams();
@@ -54,6 +55,9 @@ export default function OutboundOrderDetailsPage() {
 
     const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
     const [selectedDocForCorrection, setSelectedDocForCorrection] = useState(null);
+
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+    const [selectedDocForEmail, setSelectedDocForEmail] = useState(null);
 
     const loadOrderDetails = async () => {
         try {
@@ -609,7 +613,7 @@ export default function OutboundOrderDetailsPage() {
                                                 <TableHead>Chave de Acesso</TableHead>
                                                 <TableHead>Protocolo SEFAZ</TableHead>
                                                 <TableHead>Status</TableHead>
-                                                <TableHead className="w-32 text-right"></TableHead>
+                                                <TableHead className="text-right">Ações</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -695,6 +699,20 @@ export default function OutboundOrderDetailsPage() {
 
                                                                         {isNfeOriginal && (
                                                                             <>
+                                                                                {/* DISPARO MANUAL DE E-MAIL */}
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    onClick={() => {
+                                                                                        setSelectedDocForEmail(doc);
+                                                                                        setIsEmailModalOpen(true);
+                                                                                    }}
+                                                                                    className="h-8 text-xs bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 font-medium px-2"
+                                                                                    title="Enviar NF-e por E-mail (XML e DANFE)"
+                                                                                >
+                                                                                    <Mail size={13} className="mr-1 text-emerald-600" /> E-mail
+                                                                                </Button>
+
                                                                                 <Button
                                                                                     size="sm"
                                                                                     variant="outline"
@@ -843,6 +861,14 @@ export default function OutboundOrderDetailsPage() {
                     )}
                 </div>
             </div>
+
+            {/* MODAL DISPARO MANUAL DE E-MAIL */}
+            <SendNfeEmailModal
+                open={isEmailModalOpen}
+                onOpenChange={setIsEmailModalOpen}
+                document={selectedDocForEmail}
+                defaultEmail={order?.customerEmail || order?.destinationEmail || ''}
+            />
 
             {/* MODAL DE CONFIRMAÇÃO DE ESTORNO DA EXPEDIÇÃO */}
             <AlertDialog open={isRevertOrderDialogOpen} onOpenChange={setIsRevertOrderDialogOpen}>

@@ -1,5 +1,6 @@
 using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Identity.Enums;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
@@ -11,6 +12,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using NFe.Classes.Informacoes.Identificacao.Tipos;
 using NFe.Classes.Servicos.Tipos;
 using NFe.Servicos;
@@ -43,19 +45,25 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
     private readonly NfeBuilderService _builder;
     private readonly IZeusConfigurator _zeusConfigurator;
     private readonly IMemoryCache _cache;
+    private readonly IMediator _mediator;
+    private readonly ILogger<EmitOutboundNfeHandler> _logger;
 
     public EmitOutboundNfeHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
         NfeBuilderService builder,
         IZeusConfigurator zeusConfigurator,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        IMediator mediator,
+        ILogger<EmitOutboundNfeHandler> logger)
     {
         _db = db;
         _tenant = tenant;
         _builder = builder;
         _zeusConfigurator = zeusConfigurator;
         _cache = cache;
+        _mediator = mediator;
+        _logger = logger;
     }
 
     public async Task<IResult> Handle(EmitOutboundNfeCommand request, CancellationToken ct)
@@ -131,7 +139,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             .ToListAsync(ct);
 
         // 5. Determinação da estratégia de emissão (1 NF consolidada vs 1 NF por NF de remessa)
-        bool emitPerReferencedInvoice = order.Customer?.ReturnInvoicePerReferencedInvoice == true && receiptDocIds.Count > 1; //[cite: 39]
+        bool emitPerReferencedInvoice = order.Customer?.ReturnInvoicePerReferencedInvoice == true && receiptDocIds.Count > 1;
         List<Guid?> inboundsToEmit;
 
         if (request.InboundOrderIdFilter.HasValue && request.InboundOrderIdFilter.Value != Guid.Empty)
@@ -191,7 +199,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             string? inboundInvoiceNumber = null;
             if (inboundId.HasValue && inboundOrders.TryGetValue(inboundId.Value, out var inbRef))
             {
-                inboundInvoiceNumber = inbRef.InvoiceNumber ?? inbRef.InvoiceNumber;
+                inboundInvoiceNumber = inbRef.InvoiceNumber;
             }
 
             NFe.Classes.NFe nfe;
@@ -293,6 +301,23 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
             company.UpdateNfeAndTransportDetails(company.NfeSerie, company.NfeNextNumber + 1, company.Rntrc);
 
             await _db.SaveChangesAsync(ct);
+
+            // ====================================================================
+            // DISPARO AUTOMÁTICO DE E-MAIL PARA O DEPOSITANTE (CUSTOMER)
+            // ====================================================================
+            try
+            {
+                if (company.EmailProvider != EmailProviderType.Disabled)
+                {
+                    _logger.LogInformation("[NF-E AUTO] Disparando e-mail automático da NF-e {DocumentId} para o depositante...", fiscalDoc.Id);
+                    // Chamada sem informar DestinationEmail: o SendNfeEmailHandler carrega automaticamente o e-mail do Customer
+                    await _mediator.Send(new SendNfeEmailCommand(fiscalDoc.Id), ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[NF-E AUTO - AVISO] Falha ao enviar e-mail automático para o documento {DocumentId}: {Message}", fiscalDoc.Id, ex.Message);
+            }
 
             authorizedInvoices.Add(new AuthorizedInvoiceResultDto(
                 fiscalDoc.Id,
