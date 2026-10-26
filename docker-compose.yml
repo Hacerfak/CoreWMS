@@ -40,6 +40,9 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__Postgres=Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
       - ConnectionStrings__MongoDb=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      - GoogleOAuth__ClientId=${GOOGLE_CLIENT_ID}
+      - GoogleOAuth__ClientSecret=${GOOGLE_CLIENT_SECRET}
+      - GoogleOAuth__RedirectUri=http://localhost:5000/api/companies/google-oauth/callback
     depends_on:
       - postgres
       - mongodb

@@ -1,4 +1,5 @@
 using System;
+using CoreWMS.Api.Features.Identity.Enums;
 
 namespace CoreWMS.Api.Features.Identity.Companies;
 
@@ -29,5 +30,17 @@ public record CompanyDto(
     string? LogoBase64,
     DateTime? CertificateExpiration,
     bool IsActive,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+
+    // Configurações de E-mail da Empresa
+    EmailProviderType EmailProvider,
+    string? EmailSenderName,
+    string? EmailSenderAddress,
+    string? SmtpHost,
+    int? SmtpPort,
+    string? SmtpUser,
+    bool SmtpEnableSsl,
+    bool HasSmtpPassword,
+    string? GoogleSenderEmail,
+    bool HasGoogleOAuthConnected
 );

@@ -1,16 +1,13 @@
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using Mapster;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Companies;
 
-// 1. Request
 public record ListAllCompaniesQuery() : IRequest<IResult>;
 
-// 2. Handler
 public class ListAllCompaniesHandler : IRequestHandler<ListAllCompaniesQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -20,14 +17,53 @@ public class ListAllCompaniesHandler : IRequestHandler<ListAllCompaniesQuery, IR
     {
         var companies = await _db.Companies
             .AsNoTracking()
-            .ProjectToType<CompanyDto>()
+            .Select(c => new CompanyDto(
+                c.Id,
+                c.Cnpj,
+                c.CorporateName,
+                c.TradeName,
+                c.StateRegistration,
+                c.MunicipalRegistration,
+                c.Iest,
+                c.Cnae,
+                c.Crt,
+                c.Environment,
+                c.NfeSerie,
+                c.NfeNextNumber,
+                c.Rntrc,
+                c.Email,
+                c.Phone,
+                c.ZipCode,
+                c.Street,
+                c.Number,
+                c.Complement,
+                c.Neighborhood,
+                c.CityName,
+                c.CityCode,
+                c.State,
+                c.LogoBase64,
+                c.CertificateExpiration,
+                c.IsActive,
+                c.CreatedAt,
+
+                // Provedor de e-mail e dados de conexão
+                c.EmailProvider,
+                c.EmailSenderName,
+                c.EmailSenderAddress,
+                c.SmtpHost,
+                c.SmtpPort,
+                c.SmtpUser,
+                c.SmtpEnableSsl,
+                !string.IsNullOrEmpty(c.SmtpPassword),
+                c.GoogleSenderEmail,
+                !string.IsNullOrEmpty(c.GoogleRefreshToken)
+            ))
             .ToListAsync(ct);
 
         return Results.Ok(companies);
     }
 }
 
-// 3. Endpoint
 public static class ListAllCompaniesEndpoints
 {
     public static void MapListAllCompaniesEndpoints(this IEndpointRouteBuilder app)

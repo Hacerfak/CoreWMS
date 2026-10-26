@@ -854,8 +854,28 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<int>("EmailProvider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("EmailSenderAddress")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("EmailSenderName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<int>("Environment")
                         .HasColumnType("integer");
+
+                    b.Property<string>("GoogleRefreshToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GoogleSenderEmail")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<string>("Iest")
                         .HasColumnType("text");
@@ -887,6 +907,27 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.Property<string>("Rntrc")
                         .HasColumnType("text");
+
+                    b.Property<bool>("SmtpEnableSsl")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("SmtpHost")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("SmtpPassword")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SmtpPort")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(587);
+
+                    b.Property<string>("SmtpUser")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<string>("State")
                         .IsRequired()

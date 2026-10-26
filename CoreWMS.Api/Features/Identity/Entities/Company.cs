@@ -1,4 +1,6 @@
 using CoreWMS.Api.Core.Entities;
+using CoreWMS.Api.Features.Identity.Enums;
+using CoreWMS.Api.Infrastructure.Security;
 
 namespace CoreWMS.Api.Features.Identity.Entities;
 
@@ -14,10 +16,10 @@ public class Company : AuditableEntity
 
     // Campos Fiscais / SEFAZ / ANTT
     public string? Cnae { get; private set; }
-    public string? Iest { get; private set; } // Inscrição Estadual ST
+    public string? Iest { get; private set; }
     public int NfeSerie { get; private set; } = 1;
     public int NfeNextNumber { get; private set; } = 1;
-    public string? Rntrc { get; private set; } // Registro Nacional de Transportadores (ANTT)
+    public string? Rntrc { get; private set; }
 
     // Contato
     public string? Email { get; private set; }
@@ -42,6 +44,24 @@ public class Company : AuditableEntity
     // Configurações Fiscais (1 = Produção, 2 = Homologação)
     public int Environment { get; private set; } = 2;
     public bool IsActive { get; private set; } = true;
+
+    // ====================================================================
+    // CONFIGURAÇÕES DE ENVIO DE E-MAIL (POR EMPRESA / MULTI-TENANT)
+    // ====================================================================
+    public EmailProviderType EmailProvider { get; private set; } = EmailProviderType.Disabled;
+    public string? EmailSenderName { get; private set; }
+    public string? EmailSenderAddress { get; private set; }
+
+    // Provedor 1: SMTP
+    public string? SmtpHost { get; private set; }
+    public int? SmtpPort { get; private set; } = 587;
+    public string? SmtpUser { get; private set; }
+    public string? SmtpPassword { get; private set; } // Criptografado
+    public bool SmtpEnableSsl { get; private set; } = true;
+
+    // Provedor 2: Google Workspace (OAuth 2.0)
+    public string? GoogleSenderEmail { get; private set; }
+    public string? GoogleRefreshToken { get; private set; } // Refresh Token criptografado
 
     protected Company() { }
 
@@ -100,4 +120,66 @@ public class Company : AuditableEntity
     public void UpdateEnvironment(int environment) => Environment = environment;
 
     public void ToggleActive() => IsActive = !IsActive;
+
+    // ====================================================================
+    // MÉTODOS DE DOMÍNIO PARA E-MAIL
+    // ====================================================================
+    public void ConfigureSmtp(
+        string? senderName,
+        string senderAddress,
+        string host,
+        int port,
+        string user,
+        string? rawPassword,
+        bool enableSsl)
+    {
+        if (string.IsNullOrWhiteSpace(senderAddress))
+            throw new ArgumentException("O e-mail do remetente é obrigatório.", nameof(senderAddress));
+        if (string.IsNullOrWhiteSpace(host))
+            throw new ArgumentException("O servidor SMTP (Host) é obrigatório.", nameof(host));
+        if (port <= 0)
+            throw new ArgumentException("A porta SMTP informada é inválida.", nameof(port));
+
+        EmailProvider = EmailProviderType.Smtp;
+        EmailSenderName = string.IsNullOrWhiteSpace(senderName) ? CorporateName : senderName.Trim();
+        EmailSenderAddress = senderAddress.Trim();
+        SmtpHost = host.Trim();
+        SmtpPort = port;
+        SmtpUser = user?.Trim();
+        SmtpEnableSsl = enableSsl;
+
+        if (!string.IsNullOrWhiteSpace(rawPassword))
+        {
+            SmtpPassword = CryptoService.Encrypt(rawPassword.Trim());
+        }
+    }
+
+    public void ConnectGoogleOAuth(string senderEmail, string refreshToken)
+    {
+        if (string.IsNullOrWhiteSpace(senderEmail))
+            throw new ArgumentException("E-mail da conta Google inválido.", nameof(senderEmail));
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            throw new ArgumentException("Refresh Token do Google inválido.", nameof(refreshToken));
+
+        EmailProvider = EmailProviderType.GoogleWorkspace;
+        GoogleSenderEmail = senderEmail.Trim();
+        GoogleRefreshToken = CryptoService.Encrypt(refreshToken.Trim());
+        EmailSenderAddress = senderEmail.Trim();
+        EmailSenderName ??= CorporateName;
+    }
+
+    public void DisconnectGoogleOAuth()
+    {
+        GoogleRefreshToken = null;
+        GoogleSenderEmail = null;
+        if (EmailProvider == EmailProviderType.GoogleWorkspace)
+        {
+            EmailProvider = EmailProviderType.Disabled;
+        }
+    }
+
+    public void DisableEmailProvider()
+    {
+        EmailProvider = EmailProviderType.Disabled;
+    }
 }

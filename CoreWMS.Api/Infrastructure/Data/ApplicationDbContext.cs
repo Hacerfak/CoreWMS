@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
+using CoreWMS.Api.Features.Identity.Enums;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Quality.Entities;
@@ -108,6 +109,23 @@ public class ApplicationDbContext : DbContext
             // O EF Core mapeia byte[] como bytea no PostgreSQL por padrão
             b.Property(c => c.CertificateBytes);
             b.Property(c => c.CertificatePassword).HasMaxLength(100);
+
+            b.Property(x => x.EmailProvider)
+                .HasConversion<int>()
+                .IsRequired()
+                .HasDefaultValue(EmailProviderType.Disabled);
+
+            b.Property(x => x.EmailSenderName).HasMaxLength(150);
+            b.Property(x => x.EmailSenderAddress).HasMaxLength(150);
+
+            b.Property(x => x.SmtpHost).HasMaxLength(150);
+            b.Property(x => x.SmtpPort).HasDefaultValue(587);
+            b.Property(x => x.SmtpUser).HasMaxLength(150);
+            b.Property(x => x.SmtpPassword).HasColumnType("text");
+            b.Property(x => x.SmtpEnableSsl).HasDefaultValue(true);
+
+            b.Property(x => x.GoogleSenderEmail).HasMaxLength(150);
+            b.Property(x => x.GoogleRefreshToken).HasColumnType("text");
         });
 
         builder.Entity<Customer>(b =>

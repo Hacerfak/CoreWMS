@@ -16,6 +16,7 @@ using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Infrastructure.Services.Billing;
+using CoreWMS.Api.Infrastructure.Services.Email;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -131,6 +132,8 @@ builder.Services.AddScoped<ISefazDistDFeService, SefazDistDFeService>();
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();
 builder.Services.AddSingleton<IZplTemplateEngine, ZplTemplateEngine>();
+
+builder.Services.AddScoped<IEmailSenderService, CompanyEmailSenderService>();
 
 // Módulo de Performance e Inventário (Infraestrutura)
 builder.Services.AddSingleton<KardexChannel>();

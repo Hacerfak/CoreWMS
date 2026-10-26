@@ -4,6 +4,7 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
+import type { EmailProviderType } from './emailProviderType';
 
 export interface UpdateCompanyCommand {
   id?: string;
@@ -46,4 +47,18 @@ export interface UpdateCompanyCommand {
   state?: string | null;
   /** @nullable */
   logoBase64?: string | null;
+  emailProvider?: EmailProviderType;
+  /** @nullable */
+  emailSenderName?: string | null;
+  /** @nullable */
+  emailSenderAddress?: string | null;
+  /** @nullable */
+  smtpHost?: string | null;
+  /** @nullable */
+  smtpPort?: number | null;
+  /** @nullable */
+  smtpUser?: string | null;
+  /** @nullable */
+  smtpPassword?: string | null;
+  smtpEnableSsl?: boolean;
 }

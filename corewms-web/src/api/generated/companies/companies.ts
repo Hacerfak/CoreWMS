@@ -24,7 +24,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  GetApiCompaniesGoogleOauthCallbackParams,
   PostApiCompaniesBody,
+  PostApiCompaniesIdTestEmailParams,
   PutApiCompaniesIdCertificateBody,
   UpdateCompanyCommand
 } from '../model';
@@ -478,6 +480,67 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCompaniesIdSyncSefazMutationOptions(options), queryClient);
     }
+    export const postApiCompaniesIdTestEmail = (
+    id: string,
+    params: PostApiCompaniesIdTestEmailParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/companies/${id}/test-email`, method: 'POST',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCompaniesIdTestEmailMutationKey = () => ['postApiCompaniesIdTestEmail'] as const;
+
+export const getPostApiCompaniesIdTestEmailMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdTestEmail>>, TError,PostApiCompaniesIdTestEmailMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdTestEmail>>, TError,PostApiCompaniesIdTestEmailMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCompaniesIdTestEmailMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCompaniesIdTestEmail>>, PostApiCompaniesIdTestEmailMutationVariables> = (props) => {
+          const {id,params} = props ?? {};
+
+          return  postApiCompaniesIdTestEmail(id,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCompaniesIdTestEmailMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCompaniesIdTestEmail>>>
+
+    export type PostApiCompaniesIdTestEmailMutationError = unknown
+    export type PostApiCompaniesIdTestEmailMutationVariables = {id: string;params: PostApiCompaniesIdTestEmailParams}
+
+    export const usePostApiCompaniesIdTestEmail = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesIdTestEmail>>, TError,PostApiCompaniesIdTestEmailMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCompaniesIdTestEmail>>,
+        TError,
+        PostApiCompaniesIdTestEmailMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCompaniesIdTestEmailMutationOptions(options), queryClient);
+    }
     export const patchApiCompaniesIdToggleActive = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -605,4 +668,236 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiCompaniesIdCertificateMutationOptions(options), queryClient);
+    }
+    export const getApiCompaniesCompanyIdGoogleOauthUrl = (
+    companyId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/companies/${companyId}/google-oauth/url`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiCompaniesCompanyIdGoogleOauthUrlQueryKey = (companyId: string,) => {
+    return [
+    `/api/companies/${companyId}/google-oauth/url`
+    ] as const;
+    }
+
+
+export const getGetApiCompaniesCompanyIdGoogleOauthUrlQueryOptions = <TData = Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError = unknown>(companyId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiCompaniesCompanyIdGoogleOauthUrlQueryKey(companyId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>> = ({ signal }) => getApiCompaniesCompanyIdGoogleOauthUrl(companyId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: companyId !== null && companyId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiCompaniesCompanyIdGoogleOauthUrlQueryResult = NonNullable<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>>
+export type GetApiCompaniesCompanyIdGoogleOauthUrlQueryError = unknown
+
+
+export function useGetApiCompaniesCompanyIdGoogleOauthUrl<TData = Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError = unknown>(
+ companyId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCompaniesCompanyIdGoogleOauthUrl<TData = Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError = unknown>(
+ companyId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCompaniesCompanyIdGoogleOauthUrl<TData = Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError = unknown>(
+ companyId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiCompaniesCompanyIdGoogleOauthUrl<TData = Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError = unknown>(
+ companyId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiCompaniesCompanyIdGoogleOauthUrlQueryOptions(companyId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiCompaniesGoogleOauthCallback = (
+    params: GetApiCompaniesGoogleOauthCallbackParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/companies/google-oauth/callback`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiCompaniesGoogleOauthCallbackQueryKey = (params?: GetApiCompaniesGoogleOauthCallbackParams,) => {
+    return [
+    `/api/companies/google-oauth/callback`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiCompaniesGoogleOauthCallbackQueryOptions = <TData = Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError = unknown>(params: GetApiCompaniesGoogleOauthCallbackParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiCompaniesGoogleOauthCallbackQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>> = ({ signal }) => getApiCompaniesGoogleOauthCallback(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiCompaniesGoogleOauthCallbackQueryResult = NonNullable<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>>
+export type GetApiCompaniesGoogleOauthCallbackQueryError = unknown
+
+
+export function useGetApiCompaniesGoogleOauthCallback<TData = Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError = unknown>(
+ params: GetApiCompaniesGoogleOauthCallbackParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCompaniesGoogleOauthCallback<TData = Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError = unknown>(
+ params: GetApiCompaniesGoogleOauthCallbackParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>,
+          TError,
+          Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiCompaniesGoogleOauthCallback<TData = Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError = unknown>(
+ params: GetApiCompaniesGoogleOauthCallbackParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiCompaniesGoogleOauthCallback<TData = Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError = unknown>(
+ params: GetApiCompaniesGoogleOauthCallbackParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiCompaniesGoogleOauthCallbackQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiCompaniesCompanyIdGoogleOauthDisconnect = (
+    companyId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/companies/${companyId}/google-oauth/disconnect`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCompaniesCompanyIdGoogleOauthDisconnectMutationKey = () => ['postApiCompaniesCompanyIdGoogleOauthDisconnect'] as const;
+
+export const getPostApiCompaniesCompanyIdGoogleOauthDisconnectMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesCompanyIdGoogleOauthDisconnect>>, TError,PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesCompanyIdGoogleOauthDisconnect>>, TError,PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCompaniesCompanyIdGoogleOauthDisconnectMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCompaniesCompanyIdGoogleOauthDisconnect>>, PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationVariables> = (props) => {
+          const {companyId} = props ?? {};
+
+          return  postApiCompaniesCompanyIdGoogleOauthDisconnect(companyId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCompaniesCompanyIdGoogleOauthDisconnect>>>
+
+    export type PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationError = unknown
+    export type PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationVariables = {companyId: string}
+
+    export const usePostApiCompaniesCompanyIdGoogleOauthDisconnect = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCompaniesCompanyIdGoogleOauthDisconnect>>, TError,PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCompaniesCompanyIdGoogleOauthDisconnect>>,
+        TError,
+        PostApiCompaniesCompanyIdGoogleOauthDisconnectMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCompaniesCompanyIdGoogleOauthDisconnectMutationOptions(options), queryClient);
     }
