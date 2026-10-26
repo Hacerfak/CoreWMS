@@ -6,7 +6,10 @@ import { useAuthStore } from '@/store/useAuthStore';
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
     ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine,
-    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode, FileText
+    Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode, FileText,
+    PackageOpen,
+    Contact,
+    Box
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -48,8 +51,8 @@ export default function MainLayout() {
         {
             scope: 'Cadastros',
             items: [
-                { icon: Users, label: 'Clientes', path: '/clientes', permission: 'customers:view' },
-                { icon: Package, label: 'Produtos e Embalagens', path: '/produtos', permission: 'products:view' },
+                { icon: Contact, label: 'Clientes', path: '/clientes', permission: 'customers:view' },
+                { icon: PackageOpen, label: 'Produtos e Embalagens', path: '/produtos', permission: 'products:view' },
             ]
         },
         {
@@ -94,7 +97,7 @@ export default function MainLayout() {
             <aside className="w-72 flex flex-col border-r border-slate-200 bg-slate-50/50 backdrop-blur-xl">
                 <div className="h-16 flex items-center px-6 border-b border-slate-200/60">
                     <div className="flex items-center gap-2.5 text-blue-600">
-                        <Warehouse size={24} strokeWidth={2.5} />
+                        <Box size={24} strokeWidth={2.5} />
                         <span className="text-xl font-bold tracking-tight text-slate-900">CoreWMS</span>
                     </div>
                 </div>

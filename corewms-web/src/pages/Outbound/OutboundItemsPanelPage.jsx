@@ -6,13 +6,81 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
     ArrowLeft, Box, Scissors, Loader2, Plus, Trash2, Layers,
-    FileText, ChevronRight, ChevronDown, CheckCircle2, ShoppingCart,
-    CheckSquare, Square, Search, X, Barcode, Package, DollarSign
+    ChevronRight, ChevronDown, CheckCircle2, ShoppingCart,
+    CheckSquare, Square, Search, X, Barcode, Package, MapPin, Calendar, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const formatDatePtBr = (dateValue) => {
+    if (!dateValue) return '-';
+    try {
+        const d = new Date(dateValue);
+        if (isNaN(d.getTime())) return '-';
+        return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    } catch {
+        return '-';
+    }
+};
+
+const translateItemStatus = (status) => {
+    switch (status) {
+        case 'Pending':
+            return <Badge variant="outline" className="text-[10px] font-mono bg-amber-50 text-amber-800 border-amber-200">Pendente</Badge>;
+        case 'Allocated':
+            return <Badge variant="outline" className="text-[10px] font-mono bg-blue-50 text-blue-800 border-blue-200">Alocado</Badge>;
+        case 'Picking':
+            return <Badge variant="outline" className="text-[10px] font-mono bg-purple-50 text-purple-800 border-purple-200">Em Separação</Badge>;
+        case 'Picked':
+            return <Badge variant="outline" className="text-[10px] font-mono bg-teal-50 text-teal-800 border-teal-200">Separado</Badge>;
+        case 'Packed':
+            return <Badge variant="outline" className="text-[10px] font-mono bg-indigo-50 text-indigo-800 border-indigo-200">Embalado</Badge>;
+        case 'Checked':
+            return <Badge variant="outline" className="text-[10px] font-mono bg-emerald-50 text-emerald-800 border-emerald-200">Conferido</Badge>;
+        default:
+            return <Badge variant="outline" className="text-[10px] font-mono">{status || 'Pendente'}</Badge>;
+    }
+};
+
+// Componente Padronizado: Exibe APENAS a NF-e e a Data de Entrada no Cabeçalho
+function InboundReceiptGroupHeader({
+    inboundInvoiceNumber,
+    receiptDate,
+    quantityLabel,
+    quantityValue,
+    unit,
+    action = null
+}) {
+    return (
+        <div className="flex items-center justify-between flex-wrap gap-2.5 w-full">
+            <div className="flex items-center gap-2 flex-wrap">
+                {/* 1. DESTAQUE NF-E DE ENTRADA */}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-600 text-white font-mono font-bold text-xs shadow-2xs">
+                    <FileText size={13} className="text-blue-100" />
+                    NF-e: {inboundInvoiceNumber || 'SEM NF'}
+                </span>
+
+                {/* 2. DESTAQUE DATA DE ENTRADA */}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-mono font-semibold text-xs border border-slate-200">
+                    <Calendar size={13} className="text-slate-500" />
+                    Entrada: {formatDatePtBr(receiptDate)}
+                </span>
+            </div>
+
+            <div className="flex items-center gap-3 font-mono text-xs">
+                {quantityLabel && (
+                    <div className="text-right">
+                        <span className="text-slate-400 text-[10px] mr-1.5 uppercase">{quantityLabel}:</span>
+                        <strong className="text-slate-900 font-bold">{Number(quantityValue).toLocaleString('pt-BR')} {unit}</strong>
+                    </div>
+                )}
+                {action}
+            </div>
+        </div>
+    );
+}
 
 // Seletor Pesquisável Moderno de Produtos (SKU, EAN ou Descrição)
 function SearchableProductSelect({ value, onChange, products, placeholder = "Pesquise por SKU, EAN/Código de barras ou Descrição..." }) {
@@ -162,11 +230,22 @@ export default function OutboundItemsPanelPage() {
     const [expandedGroupIdx, setExpandedGroupIdx] = useState({});
     const [fractionalQuantity, setFractionalQuantity] = useState('');
 
+    // Expansão dos SKUs no carrinho inferior
+    const [expandedItemIds, setExpandedItemIds] = useState({});
+
     // Reload da Ordem
     const loadOrderData = async () => {
         try {
             const orderData = await customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' });
             setOrder(orderData);
+
+            if (orderData?.items) {
+                const initialExpanded = {};
+                orderData.items.forEach(i => {
+                    initialExpanded[i.id] = true;
+                });
+                setExpandedItemIds(initialExpanded);
+            }
 
             if (orderData?.customerId && products.length === 0) {
                 const productsRes = await customInstance({
@@ -204,7 +283,11 @@ export default function OutboundItemsPanelPage() {
             });
             setAvailableStockData(stockData);
             if (stockData?.receiptGroups?.length > 0) {
-                setExpandedGroupIdx({ 0: true });
+                const initialExpand = {};
+                stockData.receiptGroups.forEach((_, idx) => {
+                    initialExpand[idx] = true;
+                });
+                setExpandedGroupIdx(initialExpand);
             }
         } catch {
             toast.error('Erro ao consultar estoque livre.');
@@ -309,6 +392,10 @@ export default function OutboundItemsPanelPage() {
         });
     };
 
+    const toggleItemExpand = (itemId) => {
+        setExpandedItemIds(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+    };
+
     // Cálculo das peças totais selecionadas nas HUs ativas
     const selectedClosedStats = useMemo(() => {
         if (!availableStockData?.receiptGroups || selectedHuIds.size === 0) return { count: 0, pieces: 0 };
@@ -326,20 +413,38 @@ export default function OutboundItemsPanelPage() {
     // Resumo Agregado dos Itens Gravados na Ordem de Saída
     const orderItemsSummary = useMemo(() => {
         if (!order?.items || order.items.length === 0) {
-            return { totalSkus: 0, totalUnits: 0, totalValue: 0, skuBreakdown: [] };
+            return { totalSkus: 0, totalUnits: 0, totalHus: 0, skuBreakdown: [] };
         }
 
         const totalSkus = order.items.length;
         let totalUnits = 0;
-        let totalValue = 0;
+        let totalHus = 0;
 
         const skuBreakdown = order.items.map(item => {
             const qty = Number(item.allocatedQuantity) || Number(item.expectedQuantity) || 0;
-            const unitVal = Number(item.inboundUnitValue) || Number(item.unitValue) || 0;
-            const subtotal = qty * unitVal;
-
             totalUnits += qty;
-            totalValue += subtotal;
+            const itemAllocations = item.allocations || [];
+            totalHus += itemAllocations.length;
+
+            // Agrupa alocações do SKU por NF-e de Entrada (Número e Data de Entrada)
+            const invoiceGroupsMap = new Map();
+            itemAllocations.forEach(alloc => {
+                const invoiceNumber = alloc.inboundInvoiceNumber?.trim() || 'SEM NF';
+                const receiptDate = alloc.inboundReceiptDate || null;
+                const groupKey = `${invoiceNumber}_${receiptDate || ''}`;
+
+                if (!invoiceGroupsMap.has(groupKey)) {
+                    invoiceGroupsMap.set(groupKey, {
+                        inboundInvoiceNumber: invoiceNumber !== 'SEM NF' ? invoiceNumber : null,
+                        receiptDate: receiptDate,
+                        totalQuantity: 0,
+                        allocations: []
+                    });
+                }
+                const invGroup = invoiceGroupsMap.get(groupKey);
+                invGroup.totalQuantity += Number(alloc.quantity) || 0;
+                invGroup.allocations.push(alloc);
+            });
 
             return {
                 id: item.id,
@@ -347,13 +452,12 @@ export default function OutboundItemsPanelPage() {
                 description: item.description,
                 unit: item.unit || 'UN',
                 quantity: qty,
-                unitValue: unitVal,
-                subtotal: subtotal,
-                status: item.status
+                status: item.status,
+                invoiceGroups: Array.from(invoiceGroupsMap.values())
             };
         });
 
-        return { totalSkus, totalUnits, totalValue, skuBreakdown };
+        return { totalSkus, totalUnits, totalHus, skuBreakdown };
     }, [order?.items]);
 
     if (isLoadingOrder) {
@@ -430,7 +534,7 @@ export default function OutboundItemsPanelPage() {
                 </div>
             </div>
 
-            {/* PAINEL CENTRAL DE SELEÇÃO E ESTOQUE COM ALTURA DINÂMICA: 520PX P/ FECHADOS, 220PX P/ FRACIONADO E VAZIO */}
+            {/* PAINEL CENTRAL DE SELEÇÃO E ESTOQUE */}
             <div className={`overflow-y-auto space-y-3 relative z-10 pr-1 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3 shadow-2xs transition-all duration-200 ${!selectedProductId
                 ? 'h-[220px]'
                 : mode === 'CLOSED_VOLUMES'
@@ -447,17 +551,17 @@ export default function OutboundItemsPanelPage() {
                         <Layers size={32} className="mx-auto text-slate-300" />
                         <p className="font-medium text-slate-600">Nenhum produto selecionado no catálogo</p>
                         <p className="text-[11px] text-slate-400 max-w-sm">
-                            Selecione um produto no campo acima para carregar as etiquetas LPN, posições e lotes disponíveis no armazém.
+                            Selecione um produto no campo acima para carregar as etiquetas LPN, NF-e de entrada, posições, lotes e validades disponíveis no armazém.
                         </p>
                     </div>
                 ) : mode === 'CLOSED_VOLUMES' ? (
                     <div className="space-y-3 pb-2">
-                        {/* BARRA DE FILTRO RÁPIDO DE HU */}
+                        {/* BARRA DE FILTRO RÁPIDO DE HU (INCLUINDO POSIÇÃO/ENDEREÇO NO ARMAZÉM) */}
                         <div className="bg-white p-3 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
-                            <div className="flex items-center gap-2 flex-1 max-w-sm">
+                            <div className="flex items-center gap-2 flex-1 max-w-md">
                                 <Search size={14} className="text-slate-400" />
                                 <Input
-                                    placeholder="Filtrar por código LPN ou lote..."
+                                    placeholder="Filtrar por código LPN, lote, NF-e ou posição..."
                                     value={huFilterTerm}
                                     onChange={(e) => setHuFilterTerm(e.target.value)}
                                     className="h-8 text-xs bg-slate-50 border-slate-200 font-mono"
@@ -474,43 +578,69 @@ export default function OutboundItemsPanelPage() {
                             const filteredHus = group.availableHus?.filter(h => {
                                 if (!huFilterTerm.trim()) return true;
                                 const t = huFilterTerm.trim().toLowerCase();
-                                return h.lpn?.toLowerCase().includes(t) || group.batch?.toLowerCase().includes(t);
+                                return (
+                                    h.lpn?.toLowerCase().includes(t) ||
+                                    (h.batch && h.batch.toLowerCase().includes(t)) ||
+                                    (group.inboundInvoiceNumber && group.inboundInvoiceNumber.toLowerCase().includes(t)) ||
+                                    (h.inboundInvoiceNumber && h.inboundInvoiceNumber.toLowerCase().includes(t)) ||
+                                    (h.locationPath && h.locationPath.toLowerCase().includes(t)) // <-- Filtro por Posição/Endereço
+                                );
                             }) || [];
 
                             if (filteredHus.length === 0 && huFilterTerm.trim()) return null;
 
                             const groupHuIds = filteredHus.map(h => h.handlingUnitId);
                             const isAllInGroupSelected = groupHuIds.length > 0 && groupHuIds.every(id => selectedHuIds.has(id));
+                            const groupTotalQty = filteredHus.reduce((acc, h) => acc + (Number(h.currentQuantity) || 0), 0);
 
                             return (
                                 <div key={gIdx} className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-2xs">
-                                    <div className="p-3 bg-slate-50 flex items-center justify-between border-b border-slate-100">
-                                        <button type="button" onClick={() => setExpandedGroupIdx(prev => ({ ...prev, [gIdx]: !prev[gIdx] }))} className="flex items-center gap-3 text-left flex-1">
-                                            {isExpanded ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
-                                            <FileText size={16} className="text-orange-600" />
-                                            <div>
-                                                <span className="font-bold text-xs text-slate-900 font-mono">Nota / Lote: {group.batch}</span>
-                                                <span className="text-[11px] text-slate-500 block">
-                                                    Entrada: {new Date(group.receiptDate).toLocaleDateString('pt-BR')}
-                                                    {group.expirationDate && ` | Validade: ${new Date(group.expirationDate).toLocaleDateString('pt-BR')}`}
-                                                </span>
-                                            </div>
+                                    <div className="p-3 bg-slate-50 flex items-center justify-between border-b border-slate-100 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setExpandedGroupIdx(prev => ({ ...prev, [gIdx]: !prev[gIdx] }))}
+                                            className="text-slate-400 hover:text-slate-600 transition-colors p-0.5 shrink-0"
+                                        >
+                                            {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                                         </button>
-                                        <Button type="button" variant="outline" size="sm" onClick={() => toggleSelectAllInGroup(group)} className="h-7 text-xs bg-white">
-                                            {isAllInGroupSelected ? <CheckSquare size={13} className="mr-1 text-orange-600" /> : <Square size={13} className="mr-1 text-slate-400" />}
-                                            {isAllInGroupSelected ? 'Desmarcar Lote' : 'Selecionar Lote'}
-                                        </Button>
+
+                                        {/* CABEÇALHO PADRONIZADO: APENAS NOTA E ENTRADA */}
+                                        <div className="flex-1">
+                                            <InboundReceiptGroupHeader
+                                                inboundInvoiceNumber={group.inboundInvoiceNumber || group.receiptNumber}
+                                                receiptDate={group.receiptDate}
+                                                quantityLabel="Disponível na NF"
+                                                quantityValue={groupTotalQty}
+                                                unit={availableStockData.baseUnit}
+                                                action={
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => toggleSelectAllInGroup(group)}
+                                                        className="h-7 text-xs bg-white font-semibold ml-2 shrink-0"
+                                                    >
+                                                        {isAllInGroupSelected ? <CheckSquare size={13} className="mr-1 text-orange-600" /> : <Square size={13} className="mr-1 text-slate-400" />}
+                                                        {isAllInGroupSelected ? 'Desmarcar NF' : 'Selecionar NF'}
+                                                    </Button>
+                                                }
+                                            />
+                                        </div>
                                     </div>
 
                                     {isExpanded && (
-                                        <div className="p-2 bg-white">
+                                        <div className="p-2 bg-white overflow-x-auto">
                                             <Table>
                                                 <TableHeader className="bg-slate-50">
                                                     <TableRow>
                                                         <TableHead className="w-10 text-center"></TableHead>
                                                         <TableHead>LPN / Volume</TableHead>
-                                                        <TableHead>Tipo Embalagem</TableHead>
-                                                        <TableHead>Quantidade Disponível</TableHead>
+                                                        <TableHead className="text-center">Tipo Embalagem</TableHead>
+                                                        <TableHead className="text-right">Quantidade Disponível</TableHead>
+                                                        <TableHead>Lote</TableHead>
+                                                        <TableHead className="text-center">Validade</TableHead>
+                                                        <TableHead className="text-center">Fabricação</TableHead>
+                                                        <TableHead className="text-center">Série</TableHead>
                                                         <TableHead className="text-right">Posição no Armazém</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
@@ -532,11 +662,23 @@ export default function OutboundItemsPanelPage() {
                                                                     />
                                                                 </TableCell>
                                                                 <TableCell className="font-mono font-bold text-xs text-slate-900">{hu.lpn}</TableCell>
-                                                                <TableCell><Badge variant="outline" className="text-[10px] font-mono">{hu.packagingTypeCode}</Badge></TableCell>
-                                                                <TableCell className="font-mono text-xs font-semibold text-slate-800">
-                                                                    {hu.currentQuantity} {availableStockData.baseUnit}
+                                                                <TableCell className="text-center">
+                                                                    <Badge variant="outline" className="font-mono text-[10px] font-bold bg-white text-slate-800 border-slate-300">
+                                                                        {hu.packagingTypeCode || 'PLT'}
+                                                                    </Badge>
                                                                 </TableCell>
-                                                                <TableCell className="text-right font-mono text-xs text-slate-600">{hu.locationPath}</TableCell>
+                                                                <TableCell className="font-mono text-xs font-bold text-emerald-700 text-right">
+                                                                    {Number(hu.currentQuantity).toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-500">{availableStockData.baseUnit}</span>
+                                                                </TableCell>
+                                                                <TableCell className="font-mono text-xs text-slate-800 font-bold">{hu.batch || '-'}</TableCell>
+                                                                <TableCell className="font-mono text-xs text-slate-600 text-center">{formatDatePtBr(hu.expirationDate)}</TableCell>
+                                                                <TableCell className="font-mono text-xs text-slate-500 text-center">{formatDatePtBr(hu.manufactureDate)}</TableCell>
+                                                                <TableCell className="font-mono text-xs text-slate-500 text-center">{hu.serialNumber || '-'}</TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1">
+                                                                        <MapPin size={11} className="text-blue-600" /> {hu.locationPath || 'DOCA'}
+                                                                    </span>
+                                                                </TableCell>
                                                             </TableRow>
                                                         );
                                                     })}
@@ -556,7 +698,7 @@ export default function OutboundItemsPanelPage() {
                                         <strong className="text-orange-400">{selectedClosedStats.count}</strong> volume(s) marcado(s)
                                     </span>
                                     <span className="text-xs text-slate-400 font-mono">
-                                        ({selectedClosedStats.pieces} {availableStockData?.baseUnit} selecionados)
+                                        ({selectedClosedStats.pieces.toLocaleString('pt-BR')} {availableStockData?.baseUnit} selecionados)
                                     </span>
                                 </div>
                                 <Button onClick={handleReserveClosedVolumes} disabled={isActionLoading} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-8 text-xs shadow-xs">
@@ -573,7 +715,7 @@ export default function OutboundItemsPanelPage() {
                                     <Scissors size={14} className="text-purple-600" /> Informar Quantidade Fracionada ({availableStockData?.baseUnit}) *
                                 </Label>
                                 <p className="text-[11px] text-purple-800/80">
-                                    Saldo livre em estoque para fracionamento: <strong className="font-mono text-purple-950">{availableStockData?.receiptGroups?.reduce((acc, g) => acc + (g.availableHus?.reduce((hAcc, h) => hAcc + (Number(h.currentQuantity) || 0), 0) || 0), 0) || 0} {availableStockData?.baseUnit}</strong>
+                                    Saldo livre em estoque para fracionamento: <strong className="font-mono text-purple-950">{(availableStockData?.receiptGroups?.reduce((acc, g) => acc + (g.availableHus?.reduce((hAcc, h) => hAcc + (Number(h.currentQuantity) || 0), 0) || 0), 0) || 0).toLocaleString('pt-BR')} {availableStockData?.baseUnit}</strong>
                                 </p>
                             </div>
                             <div className="flex gap-3">
@@ -594,7 +736,7 @@ export default function OutboundItemsPanelPage() {
                 )}
             </div>
 
-            {/* CARRINHO DA ORDEM (CRESCE NATURALMENTE PARA BAIXO) */}
+            {/* CARRINHO DA ORDEM (RESERVAS AGRUPADAS POR NF-E DE ENTRADA / SEM VALORES FINANCEIROS) */}
             <Card className="border-slate-200/80 shadow-xs bg-white">
                 <CardHeader className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
@@ -604,7 +746,7 @@ export default function OutboundItemsPanelPage() {
                         <Badge variant="secondary" className="font-mono">{orderItemsSummary.totalSkus} SKU(s)</Badge>
                     </div>
 
-                    {/* MINI CARDS DE TOTAIS CONSOLIDADOS */}
+                    {/* MINI CARDS DE TOTAIS OPERACIONAIS */}
                     {orderItemsSummary.totalSkus > 0 && (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                             <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs flex items-center justify-between">
@@ -625,12 +767,10 @@ export default function OutboundItemsPanelPage() {
 
                             <div className="bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs flex items-center justify-between">
                                 <div className="space-y-0.5">
-                                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">Valor Total Reservado</span>
-                                    <span className="font-mono font-bold text-blue-700 text-sm">
-                                        {orderItemsSummary.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-semibold uppercase block">Volumes / HUs Reservadas</span>
+                                    <span className="font-mono font-bold text-orange-700 text-sm">{orderItemsSummary.totalHus} Volume(s)</span>
                                 </div>
-                                <DollarSign size={16} className="text-blue-600" />
+                                <Box size={16} className="text-orange-600" />
                             </div>
                         </div>
                     )}
@@ -649,78 +789,163 @@ export default function OutboundItemsPanelPage() {
                     )}
                 </CardHeader>
 
-                <CardContent className="p-4">
+                <CardContent className="p-4 space-y-4">
                     {!order?.items || order.items.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs border border-dashed rounded-lg bg-slate-50">
                             Nenhum item reservado para esta ordem de saída ainda. Selecione um produto acima para adicionar.
                         </div>
                     ) : (
-                        <div className="border border-slate-200 rounded-lg overflow-hidden">
-                            <Table>
-                                <TableHeader className="bg-slate-50">
-                                    <TableRow>
-                                        <TableHead>SKU Produto</TableHead>
-                                        <TableHead>Descrição</TableHead>
-                                        <TableHead className="text-right">Qtd Total Alocada</TableHead>
-                                        <TableHead className="text-right">Vlr. Unitário Entrada</TableHead>
-                                        <TableHead className="text-right">Valor Subtotal</TableHead>
-                                        <TableHead className="text-center">Status</TableHead>
-                                        <TableHead className="w-12 text-right"></TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {order.items.map((item) => {
-                                        const qty = item.allocatedQuantity || item.expectedQuantity || 0;
-                                        const unitVal = item.inboundUnitValue || item.unitValue || 0;
-                                        const subtotal = qty * unitVal;
+                        <div className="space-y-3">
+                            {orderItemsSummary.skuBreakdown.map((item) => {
+                                const isExpanded = !!expandedItemIds[item.id];
 
-                                        return (
-                                            <TableRow key={item.id} className="hover:bg-slate-50/50">
-                                                <TableCell className="font-mono font-bold text-slate-900 text-xs">{item.skuCode}</TableCell>
-                                                <TableCell className="text-xs text-slate-600 truncate max-w-xs">{item.description}</TableCell>
-                                                <TableCell className="font-mono text-xs font-bold text-emerald-700 text-right">
-                                                    {qty.toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-500">{item.unit || 'UN'}</span>
-                                                </TableCell>
-                                                <TableCell className="font-mono text-xs text-slate-700 text-right">
-                                                    {unitVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                                </TableCell>
-                                                <TableCell className="font-mono text-xs font-bold text-slate-900 text-right">
-                                                    {subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge variant="outline" className="text-[10px] font-mono">{item.status}</Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleRemoveOrderItem(item.id)}
-                                                        disabled={isActionLoading}
-                                                        className="text-slate-400 hover:text-rose-600 p-1 h-7 w-7"
-                                                        title="Remover item da ordem e devolver saldo"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                                <TableFooter className="bg-slate-50/80 font-mono text-xs">
-                                    <TableRow>
-                                        <TableCell colSpan={2} className="font-bold text-slate-800">Total da Ordem de Saída:</TableCell>
-                                        <TableCell className="text-right font-extrabold text-emerald-700">
-                                            {orderItemsSummary.totalUnits.toLocaleString('pt-BR')} un
-                                        </TableCell>
-                                        <TableCell></TableCell>
-                                        <TableCell className="text-right font-extrabold text-slate-900">
-                                            {orderItemsSummary.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                        </TableCell>
-                                        <TableCell colSpan={2}></TableCell>
-                                    </TableRow>
-                                </TableFooter>
-                            </Table>
+                                return (
+                                    <div key={item.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                                        {/* CABEÇALHO DO SKU */}
+                                        <div
+                                            onClick={() => toggleItemExpand(item.id)}
+                                            className="p-3 bg-slate-50/80 flex items-center justify-between cursor-pointer hover:bg-slate-100/70 transition-colors border-b border-slate-100"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                {isExpanded ? <ChevronDown size={16} className="text-slate-400 shrink-0" /> : <ChevronRight size={16} className="text-slate-400 shrink-0" />}
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono font-bold text-xs text-slate-900">{item.skuCode}</span>
+                                                        <Badge variant="outline" className="text-[10px] font-mono">{item.unit}</Badge>
+                                                        <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]">
+                                                            {item.invoiceGroups.length} NF-e(s)
+                                                        </Badge>
+                                                    </div>
+                                                    <span className="text-[11px] text-slate-500 truncate max-w-sm block">{item.description}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right font-mono">
+                                                    <span className="text-[10px] text-slate-400 block uppercase">Total Alocado</span>
+                                                    <span className="font-bold text-emerald-700 text-xs">
+                                                        {item.quantity.toLocaleString('pt-BR')} {item.unit}
+                                                    </span>
+                                                </div>
+
+                                                {/* STATUS DO ITEM TRADUZIDO */}
+                                                {translateItemStatus(item.status)}
+
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRemoveOrderItem(item.id);
+                                                    }}
+                                                    disabled={isActionLoading}
+                                                    className="text-slate-400 hover:text-rose-600 p-1 h-7 w-7 shrink-0"
+                                                    title="Estornar reservas deste SKU"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </Button>
+                                            </div>
+                                        </div>
+
+                                        {/* DETALHAMENTO DAS ALOCAÇÕES AGRUPADAS POR NF-E DE ENTRADA */}
+                                        {isExpanded && (
+                                            <div className="p-3 bg-slate-50/30 space-y-3">
+                                                {item.invoiceGroups.length === 0 ? (
+                                                    <p className="text-xs text-slate-400 italic p-2">Nenhuma alocação vinculada encontrada.</p>
+                                                ) : (
+                                                    item.invoiceGroups.map((invGroup, lIdx) => (
+                                                        <div key={lIdx} className="bg-white border border-slate-200/90 rounded-lg p-3 space-y-2">
+                                                            {/* CABEÇALHO PADRONIZADO: APENAS NOTA E DATA DE ENTRADA */}
+                                                            <div className="border-b border-slate-100 pb-2">
+                                                                <InboundReceiptGroupHeader
+                                                                    inboundInvoiceNumber={invGroup.inboundInvoiceNumber}
+                                                                    receiptDate={invGroup.receiptDate}
+                                                                    quantityLabel="Alocado na NF"
+                                                                    quantityValue={invGroup.totalQuantity}
+                                                                    unit={item.unit}
+                                                                />
+                                                            </div>
+
+                                                            {/* TABELA DE HUS DA NF-E */}
+                                                            <div className="overflow-x-auto">
+                                                                <Table>
+                                                                    <TableHeader className="bg-slate-50/70">
+                                                                        <TableRow>
+                                                                            <TableHead className="text-xs">LPN / Volume</TableHead>
+                                                                            <TableHead className="text-center text-xs">Tipo Embalagem</TableHead>
+                                                                            <TableHead className="text-right text-xs">Quantidade Alocada</TableHead>
+                                                                            <TableHead>Lote</TableHead>
+                                                                            <TableHead className="text-center text-xs">Validade</TableHead>
+                                                                            <TableHead className="text-center text-xs">Fabricação</TableHead>
+                                                                            <TableHead className="text-center text-xs">Série</TableHead>
+                                                                            <TableHead className="text-center text-xs">Tipo</TableHead>
+                                                                            <TableHead className="text-right text-xs">Posição no Armazém</TableHead>
+                                                                        </TableRow>
+                                                                    </TableHeader>
+                                                                    <TableBody>
+                                                                        {invGroup.allocations.map((alloc) => (
+                                                                            <TableRow key={alloc.allocationId} className="hover:bg-slate-50/50">
+                                                                                <TableCell className="font-mono font-bold text-xs text-slate-900">
+                                                                                    {alloc.lpn}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-center">
+                                                                                    <Badge variant="outline" className="font-mono text-[10px] font-bold bg-white text-slate-800 border-slate-300">
+                                                                                        {alloc.packagingTypeCode || 'PLT'}
+                                                                                    </Badge>
+                                                                                </TableCell>
+                                                                                <TableCell className="font-mono text-xs font-bold text-emerald-700 text-right">
+                                                                                    {Number(alloc.quantity).toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-500">{item.unit}</span>
+                                                                                </TableCell>
+                                                                                <TableCell className="font-mono text-xs text-slate-800 font-bold">
+                                                                                    {alloc.batch || '-'}
+                                                                                </TableCell>
+                                                                                <TableCell className="font-mono text-xs text-slate-600 text-center">
+                                                                                    {formatDatePtBr(alloc.expirationDate)}
+                                                                                </TableCell>
+                                                                                <TableCell className="font-mono text-xs text-slate-500 text-center">
+                                                                                    {formatDatePtBr(alloc.manufactureDate)}
+                                                                                </TableCell>
+                                                                                <TableCell className="font-mono text-xs text-slate-500 text-center">
+                                                                                    {alloc.serialNumber || '-'}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-center">
+                                                                                    {alloc.isFractional ? (
+                                                                                        <Badge variant="outline" className="text-[9px] bg-purple-50 text-purple-700 border-purple-200">
+                                                                                            Fracionado
+                                                                                        </Badge>
+                                                                                    ) : (
+                                                                                        <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-700 border-blue-200">
+                                                                                            Fechado
+                                                                                        </Badge>
+                                                                                    )}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-right">
+                                                                                    <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1">
+                                                                                        <MapPin size={11} className="text-blue-600" /> {alloc.locationPath || 'DOCA'}
+                                                                                    </span>
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        ))}
+                                                                    </TableBody>
+                                                                </Table>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+
+                            {/* TOTALIZADOR NO RODAPÉ */}
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between font-mono text-xs">
+                                <span className="font-bold text-slate-800">Total Físico Alocado na Ordem de Saída:</span>
+                                <span className="font-extrabold text-emerald-700 text-sm">
+                                    {orderItemsSummary.totalUnits.toLocaleString('pt-BR')} un
+                                </span>
+                            </div>
                         </div>
                     )}
                 </CardContent>

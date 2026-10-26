@@ -12,15 +12,21 @@ public record OutboundAllocatedHuDetailDto(
     Guid HandlingUnitId,
     string Lpn,
     string? LocationPath,
+    string? PackagingTypeCode,
+    string? InboundInvoiceNumber,
+    DateTime? InboundReceiptDate,
     string? Batch,
+    DateTime? ManufactureDate,
     DateTime? ExpirationDate,
+    string? SerialNumber,
     decimal Quantity,
     bool IsPicked,
     string? PickedByName,
     DateTime? PickedAt,
     bool IsChecked,
     string? CheckedByName,
-    DateTime? CheckedAt
+    DateTime? CheckedAt,
+    bool IsFractional = false
 );
 
 public record OutboundOrderItemDetailDto(
@@ -34,7 +40,7 @@ public record OutboundOrderItemDetailDto(
     decimal AllocatedQuantity,
     decimal PickedQuantity,
     decimal PackedQuantity,
-    decimal CheckedQuantity, // <-- Adicionado
+    decimal CheckedQuantity,
     decimal UnitValue,
     decimal InboundUnitValue,
     string Status,
@@ -142,8 +148,41 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
                 .ThenInclude(h => h.CurrentLocation)
+            .Include(a => a.HandlingUnit)
+                .ThenInclude(h => h.PackagingType)
             .Where(a => a.OutboundOrderId == order.Id)
             .ToListAsync(ct);
+
+        // Localiza as notas de remessa/entrada das HUs
+        var receiptDocIds = allocations
+            .Where(a => a.HandlingUnit?.ReceiptDocumentId != null)
+            .Select(a => a.HandlingUnit!.ReceiptDocumentId!.Value)
+            .Distinct()
+            .ToList();
+
+        var inboundOrders = await _db.InboundOrders
+            .AsNoTracking()
+            .Where(io => receiptDocIds.Contains(io.Id))
+            .ToDictionaryAsync(io => io.Id, ct);
+
+        string? GetInboundInvoiceNumber(Guid? docId)
+        {
+            if (!docId.HasValue || !inboundOrders.TryGetValue(docId.Value, out var inb))
+                return null;
+
+            return !string.IsNullOrWhiteSpace(inb.InvoiceNumber)
+                ? inb.InvoiceNumber.TrimStart('0')
+                : (!string.IsNullOrWhiteSpace(inb.AccessKey) && inb.AccessKey.Length >= 34
+                    ? inb.AccessKey.Substring(25, 9).TrimStart('0')
+                    : inb.InvoiceNumber);
+        }
+
+        DateTime? GetInboundReceiptDate(Guid? docId, DateTime fallbackDate)
+        {
+            if (docId.HasValue && inboundOrders.TryGetValue(docId.Value, out var inb))
+                return inb.IssueDate;
+            return fallbackDate;
+        }
 
         var itemDtos = order.Items.OrderBy(i => i.LineNumber).Select(item =>
         {
@@ -151,18 +190,24 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 .Where(a => a.OutboundOrderItemId == item.Id)
                 .Select(a => new OutboundAllocatedHuDetailDto(
                     a.Id,
-                    a.HandlingUnitId,
-                    a.HandlingUnit.Lpn,
-                    a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
-                    a.HandlingUnit.Batch,
-                    a.HandlingUnit.ExpirationDate,
-                    a.Quantity,
-                    a.IsPicked,
-                    a.PickedByName,
-                    a.PickedAt,
-                    a.IsChecked,
-                    a.CheckedByName,
-                    a.CheckedAt
+            a.HandlingUnitId,
+            a.HandlingUnit.Lpn,
+            a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
+            a.HandlingUnit.PackagingType != null ? a.HandlingUnit.PackagingType.Code : "PLT",
+            GetInboundInvoiceNumber(a.HandlingUnit.ReceiptDocumentId),
+            GetInboundReceiptDate(a.HandlingUnit.ReceiptDocumentId, a.HandlingUnit.CreatedAt),
+            a.HandlingUnit.Batch,
+            a.HandlingUnit.ManufactureDate,
+            a.HandlingUnit.ExpirationDate,
+            a.HandlingUnit.SerialNumber,
+            a.Quantity,
+            a.IsPicked,
+            a.PickedByName,
+            a.PickedAt,
+            a.IsChecked,
+            a.CheckedByName,
+            a.CheckedAt,
+            a.IsFractional
                 )).ToList();
 
             return new OutboundOrderItemDetailDto(
@@ -178,7 +223,7 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 item.PackedQuantity,
                 item.CheckedQuantity,
                 item.UnitValue,
-                item.InboundUnitValue, // <-- Mapeado
+                item.InboundUnitValue,
                 item.Status.ToString(),
                 itemAllocations
             );

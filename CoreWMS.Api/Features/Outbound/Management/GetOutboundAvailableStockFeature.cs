@@ -13,15 +13,19 @@ public record AvailableHuDto(
     string Lpn,
     string PackagingTypeCode,
     decimal CurrentQuantity,
-    string LocationPath
+    string LocationPath,
+    string? InboundInvoiceNumber = null,
+    string? Batch = null,
+    DateTime? ManufactureDate = null,
+    DateTime? ExpirationDate = null,
+    string? SerialNumber = null
 );
 
 public record StockReceiptGroupDto(
     Guid? InboundOrderId,
     string ReceiptNumber,
+    string? InboundInvoiceNumber,
     DateTime ReceiptDate,
-    string? Batch,
-    DateTime? ExpirationDate,
     List<AvailableHuDto> AvailableHus
 );
 
@@ -63,7 +67,6 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
 
         if (product == null) return Results.NotFound(new { Message = "Produto não encontrado." });
 
-        // Busca HUs em estoque descontando a quantidade que já está reservada em OutboundAllocations
         var huQuery = _db.HandlingUnits
             .AsNoTracking()
             .Include(h => h.CurrentLocation)
@@ -80,7 +83,6 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
             })
             .Where(x => x.Hu.CurrentQuantity > x.AllocatedQty);
 
-        // Aplica ordenação pela estratégia logística (FEFO, FIFO, LIFO)
         if (product.PickingStrategy == PickingStrategy.Fefo)
             huQuery = huQuery.OrderBy(x => x.Hu.ExpirationDate).ThenBy(x => x.Hu.CreatedAt);
         else if (product.PickingStrategy == PickingStrategy.Fifo)
@@ -90,23 +92,59 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
 
         var husList = await huQuery.ToListAsync(ct);
 
-        // Agrupamento por Nota de Entrada / Lote
+        var receiptDocIds = husList
+            .Where(x => x.Hu.ReceiptDocumentId.HasValue)
+            .Select(x => x.Hu.ReceiptDocumentId!.Value)
+            .Distinct()
+            .ToList();
+
+        var inboundOrders = await _db.InboundOrders
+            .AsNoTracking()
+            .Where(io => receiptDocIds.Contains(io.Id))
+            .ToDictionaryAsync(io => io.Id, ct);
+
+        string? GetInboundInvoiceNumber(Guid? docId)
+        {
+            if (!docId.HasValue || !inboundOrders.TryGetValue(docId.Value, out var inb))
+                return null;
+
+            return !string.IsNullOrWhiteSpace(inb.InvoiceNumber)
+                ? inb.InvoiceNumber.TrimStart('0')
+                : (!string.IsNullOrWhiteSpace(inb.AccessKey) && inb.AccessKey.Length >= 34
+                    ? inb.AccessKey.Substring(25, 9).TrimStart('0')
+                    : inb.InvoiceNumber);
+        }
+
+        // Agrupamento direto por NF-e de Entrada (ReceiptDocumentId)
         var receiptGroups = husList
-            .GroupBy(h => new { h.Hu.ReceiptDocumentId, h.Hu.Batch, h.Hu.ExpirationDate })
-            .Select(g => new StockReceiptGroupDto(
-                g.Key.ReceiptDocumentId,
-                g.First().Hu.Batch ?? "SEM LOTE",
-                g.First().Hu.CreatedAt,
-                g.Key.Batch,
-                g.Key.ExpirationDate,
-                g.Select(x => new AvailableHuDto(
-                    x.Hu.Id,
-                    x.Hu.Lpn,
-                    x.Hu.PackagingType != null ? x.Hu.PackagingType.Code : "UN",
-                    x.Hu.CurrentQuantity - x.AllocatedQty, // Retorna apenas o saldo livre não reservado
-                    x.Hu.CurrentLocation != null ? x.Hu.CurrentLocation.FullPath : "SEM ENDEREÇO"
-                )).ToList()
-            )).ToList();
+            .GroupBy(h => h.Hu.ReceiptDocumentId)
+            .Select(g =>
+            {
+                var invNumber = GetInboundInvoiceNumber(g.Key);
+                var firstHu = g.First().Hu;
+                var receiptDate = g.Key.HasValue && inboundOrders.TryGetValue(g.Key.Value, out var inb)
+                    ? inb.IssueDate
+                    : firstHu.CreatedAt;
+
+                return new StockReceiptGroupDto(
+                    g.Key,
+                    invNumber ?? "SEM NF",
+                    invNumber,
+                    receiptDate,
+                    g.Select(x => new AvailableHuDto(
+                        x.Hu.Id,
+                        x.Hu.Lpn,
+                        x.Hu.PackagingType != null ? x.Hu.PackagingType.Code : "PLT",
+                        x.Hu.CurrentQuantity - x.AllocatedQty,
+                        x.Hu.CurrentLocation != null ? x.Hu.CurrentLocation.FullPath : "SEM ENDEREÇO",
+                        invNumber,
+                        x.Hu.Batch,
+                        x.Hu.ManufactureDate,
+                        x.Hu.ExpirationDate,
+                        x.Hu.SerialNumber
+                    )).ToList()
+                );
+            }).ToList();
 
         var response = new AvailableStockResponseDto(
             product.Id,

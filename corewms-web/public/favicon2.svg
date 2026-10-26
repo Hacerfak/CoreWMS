@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5">
+  <!-- Estrutura externa (Telhado e Paredes) -->
+  <path d="M22 8.364a2 2 0 0 0-1.125-1.794l-7.75-3.875a2 2 0 0 0-1.79 0l-7.75 3.875A2 2 0 0 0 2 8.364V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8.364Z" />
+  
+  <!-- Contorno do Portão da Doca -->
+  <path d="M6 21V12h12v9" />
+  
+  <!-- Listras do Portão -->
+  <path d="M6 15h12" />
+  <path d="M6 18h12" />
+</svg>

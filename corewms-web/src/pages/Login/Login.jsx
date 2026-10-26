@@ -98,8 +98,8 @@ export default function Login() {
             {/* Cabeçalho da Unidade: Logotipo da Ampla Armazenagem + Selo "Powered by CoreWMS" */}
             <div className="flex flex-col items-center mb-6 text-center animate-in fade-in slide-in-from-top-2 duration-500">
                 <img
-                    src="/logo-ampla.png"
-                    alt="Ampla Armazenagem"
+                    src="/logo.png"
+                    alt="Empresa"
                     className="h-28 max-w-[280px] w-auto object-contain mb-3 drop-shadow-xs"
                 />
 
