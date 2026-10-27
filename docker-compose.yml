@@ -1,7 +1,7 @@
 services:
   # 1. Banco de Dados Relacional (Operacional)
   postgres:
-    image: postgres:17-trixie
+    image: postgres:latest
     container_name: corewms_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - corewms_postgres_data:/var/lib/postgresql/data
+      - corewms_postgres_data:/var/lib/postgresql
     restart: unless-stopped
 
   # 2. Banco de Dados NoSQL (Logs de Auditoria)
@@ -40,6 +40,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__Postgres=Host=postgres;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};
       - ConnectionStrings__MongoDb=mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/?authSource=admin
+      - JwtSettings__Secret=${JWT_SECRET}
+      - CryptoSettings__Key=${CRYPTO_KEY}
       - GoogleOAuth__ClientId=${GOOGLE_CLIENT_ID}
       - GoogleOAuth__ClientSecret=${GOOGLE_CLIENT_SECRET}
       - GoogleOAuth__RedirectUri=http://localhost:5000/api/companies/google-oauth/callback
