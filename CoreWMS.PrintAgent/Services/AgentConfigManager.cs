@@ -11,7 +11,7 @@ public class AgentConfig
 
     public string ServerUrl => Dominio.StartsWith("http")
         ? $"{Dominio}/hubs/print"
-        : $"http://{Dominio}/hubs/print";
+        : $"https://{Dominio}/hubs/print";
 }
 
 public class AgentConfigManager

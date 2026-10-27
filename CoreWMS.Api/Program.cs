@@ -235,6 +235,6 @@ app.UseExceptionHandler();
 app.MapAllEndpoints();
 
 // Hub do SignalR continua sendo mapeado à parte
-app.MapHub<PrintHub>("/hubs/print");
+app.MapHub<PrintHub>("/hubs/print").AllowAnonymous();
 
 app.Run();
