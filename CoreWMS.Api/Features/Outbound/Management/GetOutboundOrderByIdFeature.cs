@@ -94,6 +94,7 @@ public record OutboundYardAppointmentDetailDto(
     DateTime ScheduledDate,
     DateTime? ArrivedAt,
     DateTime? DockedAt,
+    DateTime? DepartedAt, // <--- ADICIONADO PARA CONTROLE DE TEMPOS
     int? StayMinutes,
     Guid? DockLocationId,
     string? DockName
@@ -286,7 +287,7 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 f.CreatedAt
             )).ToListAsync(ct);
 
-        // 1. Busca o Agendamento de Pátio diretamente vinculado (por ID da Ordem ou pela FK direta)
+        // 1. Busca o Agendamento de Pátio diretamente vinculado
         var yardApp = await _db.YardAppointments
             .AsNoTracking()
             .Include(y => y.DockLocation)
@@ -316,6 +317,7 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 yardApp.ScheduledDate,
                 yardApp.ArrivedAt,
                 yardApp.DockedAt,
+                yardApp.DepartedAt, // <--- ADICIONADO PARA O FRONTEND
                 yardApp.ArrivedAt.HasValue ? (int)((yardApp.DepartedAt ?? DateTime.UtcNow) - yardApp.ArrivedAt.Value).TotalMinutes : null,
                 yardApp.DockLocationId,
                 yardApp.DockLocation?.FullPath

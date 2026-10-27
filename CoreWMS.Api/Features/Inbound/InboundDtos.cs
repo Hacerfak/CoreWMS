@@ -67,6 +67,7 @@ public record InboundYardAppointmentDetailDto(
     DateTime ScheduledDate,
     DateTime? ArrivedAt,
     DateTime? DockedAt,
+    DateTime? DepartedAt,
     int? StayMinutes,
     Guid? DockLocationId,
     string? DockName

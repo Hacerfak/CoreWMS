@@ -21,7 +21,7 @@ import {
     ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText,
     UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil,
     ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles, Mail,
-    Plus, ExternalLink, Link2
+    Plus, ExternalLink, Link2, Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
@@ -75,7 +75,7 @@ export default function OutboundOrderDetailsPage() {
             });
             const data = res?.data || res;
 
-            // Busca complementar garantida pelo endpoint específico da ordem se não vier no DTO
+            // Busca complementar garantida pelo endpoint específico da ordem se não vier no DTO principal
             if (!data.yardAppointment) {
                 try {
                     const yardRes = await customInstance({
@@ -827,13 +827,13 @@ export default function OutboundOrderDetailsPage() {
                         </CardHeader>
                         <CardContent className="p-4 space-y-2 text-xs">
                             {yardAppointment ? (
-                                <div className="space-y-2">
+                                <div className="space-y-2.5">
                                     <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border font-mono">
                                         <span className="text-[10px] text-slate-400 uppercase font-semibold">Cód. Reserva</span>
                                         <strong className="text-slate-900">{yardAppointment.reservationCode}</strong>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
+                                    <div className="grid grid-cols-2 gap-2 font-mono">
                                         <div>
                                             <span className="text-slate-400 block text-[10px] uppercase font-semibold">Veículo / Placa</span>
                                             <span className="font-bold text-slate-800">
@@ -855,18 +855,29 @@ export default function OutboundOrderDetailsPage() {
                                         {yardAppointment.driverCpf && <span className="text-[11px] font-mono text-slate-500">{yardAppointment.driverCpf}</span>}
                                     </div>
 
-                                    <div className="pt-1 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] font-mono">
-                                        <div>
-                                            <span className="text-slate-400 block text-[10px] uppercase">Chegada Pátio</span>
-                                            <span className="text-slate-700">{yardAppointment.arrivedAt ? new Date(yardAppointment.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                                    {/* HORÁRIOS OPERACIONAIS: ENTRADA PÁTIO, ENTRADA DOCA, SAÍDA/FIM */}
+                                    <div className="pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center font-mono">
+                                        <div className="p-1.5 bg-slate-50 rounded border">
+                                            <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Entrada no Pátio">Entrada Pátio</span>
+                                            <span className="text-[11px] font-bold text-slate-700 block mt-0.5">
+                                                {yardAppointment.arrivedAt ? new Date(yardAppointment.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                            </span>
                                         </div>
-                                        <div>
-                                            <span className="text-slate-400 block text-[10px] uppercase">Permanência</span>
-                                            <span className="text-amber-700 font-bold">{yardAppointment.stayMinutes ? `${yardAppointment.stayMinutes} min` : '-'}</span>
+                                        <div className="p-1.5 bg-slate-50 rounded border">
+                                            <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Entrada na Doca">Entrada Doca</span>
+                                            <span className="text-[11px] font-bold text-blue-700 block mt-0.5">
+                                                {yardAppointment.dockedAt ? new Date(yardAppointment.dockedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                            </span>
+                                        </div>
+                                        <div className="p-1.5 bg-slate-50 rounded border">
+                                            <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Finalização / Saída">Saída / Fim</span>
+                                            <span className="text-[11px] font-bold text-emerald-700 block mt-0.5">
+                                                {yardAppointment.departedAt ? new Date(yardAppointment.departedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                            </span>
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-2 pt-2">
+                                    <div className="flex gap-2 pt-1">
                                         <Button
                                             variant="outline"
                                             size="sm"

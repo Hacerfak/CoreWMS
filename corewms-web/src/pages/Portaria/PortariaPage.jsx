@@ -27,7 +27,7 @@ import {
 import {
     Truck, LogIn, LogOut, Search, Plus, Calendar, Clock, MapPin, Trash2, Ban,
     Loader2, User, RefreshCw, Warehouse, CheckCircle2, Pencil, CalendarClock,
-    CheckCircle, Link2
+    CheckCircle, Link2, Timer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import NovoAgendamentoModal from '@/pages/Portaria/NovoAgendamentoModal';
@@ -36,6 +36,23 @@ import VincularAgendamentoModal from '@/pages/Portaria/VincularAgendamentoModal'
 const getLocalDateString = (date = new Date()) => {
     const pad = (n) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+// Funções utilitárias para cálculo e formatação de durações
+const getDurationMinutes = (start, end) => {
+    if (!start) return null;
+    const startDate = new Date(start);
+    const endDate = end ? new Date(end) : new Date();
+    const diffMs = endDate - startDate;
+    return Math.max(0, Math.floor(diffMs / 60000));
+};
+
+const formatDuration = (minutes) => {
+    if (minutes === null || minutes === undefined || isNaN(minutes)) return '-';
+    if (minutes < 60) return `${minutes} min`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m}m`;
 };
 
 export default function PortariaPage() {
@@ -182,7 +199,7 @@ export default function PortariaPage() {
         }
     };
 
-    // Agrupamento para a Dashboard do Dia (4 grupos)
+    // Agrupamento para o Dashboard do Dia (4 grupos)
     const scheduledList = appointments.filter(a => a.status === 1 || a.status === 'Scheduled');
     const inYardList = appointments.filter(a => a.status === 2 || a.status === 'InYard');
     const inDockList = appointments.filter(a => a.status === 3 || a.status === 'InDock');
@@ -373,54 +390,59 @@ export default function PortariaPage() {
                                 {inYardList.length === 0 ? (
                                     <div className="p-6 text-center text-xs text-slate-400 italic">Nenhum veículo aguardando no pátio.</div>
                                 ) : (
-                                    inYardList.map(a => (
-                                        <div key={a.id} className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1.5 shadow-2xs">
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-mono font-bold text-xs text-slate-900">{a.vehiclePlate || 'SEM PLACA'}</span>
-                                                <span className="font-mono text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                                    {a.stayMinutes || 0} min
-                                                </span>
-                                            </div>
-                                            <div className="text-[11px] text-slate-600 space-y-0.5">
-                                                <p className="truncate"><User size={12} className="inline mr-1 text-slate-400" />{a.driverName || 'Motorista N/I'}</p>
-                                                {a.carrierName && <p className="text-[10px] text-slate-400 truncate">{a.carrierName}</p>}
-                                                {a.inboundOrderNumber && <p className="font-mono text-[10px] text-blue-700 font-semibold">Ordem Rec. #{a.inboundOrderNumber}</p>}
-                                                {a.outboundOrderNumber && <p className="font-mono text-[10px] text-purple-700 font-semibold">Ordem Exp. #{a.outboundOrderNumber}</p>}
-                                                {!a.inboundOrderNumber && !a.outboundOrderNumber && a.invoiceNumber && <p className="font-mono text-[10px] text-slate-500">NF-e #{a.invoiceNumber}</p>}
-                                            </div>
+                                    inYardList.map(a => {
+                                        const esperaMin = getDurationMinutes(a.arrivedAt, null);
+                                        return (
+                                            <div key={a.id} className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1.5 shadow-2xs">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-mono font-bold text-xs text-slate-900">{a.vehiclePlate || 'SEM PLACA'}</span>
+                                                    <span className="font-mono text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                                        <Timer size={10} /> Espera: {formatDuration(esperaMin)}
+                                                    </span>
+                                                </div>
 
-                                            {/* BOTÃO VINCULAR ORDEM SE AVULSO */}
-                                            {!a.inboundOrderId && !a.outboundOrderId && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => setAppointmentToLink(a)}
-                                                    className="w-full h-6 text-[10px] border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-100 font-semibold"
-                                                >
-                                                    <Link2 size={11} className="mr-1 text-blue-600" /> Vincular Ordem Existente
-                                                </Button>
-                                            )}
+                                                <div className="text-[11px] text-slate-600 space-y-0.5 font-mono">
+                                                    <p className="font-sans truncate"><User size={12} className="inline mr-1 text-slate-400" />{a.driverName || 'Motorista N/I'}</p>
+                                                    <p className="text-[10px] text-slate-500">
+                                                        Chegada: {a.arrivedAt ? new Date(a.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                                    </p>
+                                                    {a.inboundOrderNumber && <p className="text-[10px] text-blue-700 font-semibold font-sans">Ordem Rec. #{a.inboundOrderNumber}</p>}
+                                                    {a.outboundOrderNumber && <p className="text-[10px] text-purple-700 font-semibold font-sans">Ordem Exp. #{a.outboundOrderNumber}</p>}
+                                                    {!a.inboundOrderNumber && !a.outboundOrderNumber && a.invoiceNumber && <p className="text-[10px] text-slate-500 font-sans">NF-e #{a.invoiceNumber}</p>}
+                                                </div>
 
-                                            <div className="grid grid-cols-2 gap-1.5 pt-1">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => { setDocToMoveDock(a); setSelectedDockId(a.dockLocationId || ''); }}
-                                                    className="h-7 text-[11px] border-blue-200 text-blue-700 hover:bg-blue-50 font-bold px-1"
-                                                >
-                                                    <MapPin size={11} className="mr-1" /> Encostar
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => handleCheckout(a.id)}
-                                                    className="h-7 text-[11px] border-rose-200 text-rose-700 hover:bg-rose-50 font-bold px-1"
-                                                >
-                                                    <LogOut size={11} className="mr-1" /> Saída
-                                                </Button>
+                                                {!a.inboundOrderId && !a.outboundOrderId && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => setAppointmentToLink(a)}
+                                                        className="w-full h-6 text-[10px] border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-100 font-semibold"
+                                                    >
+                                                        <Link2 size={11} className="mr-1 text-blue-600" /> Vincular Ordem Existente
+                                                    </Button>
+                                                )}
+
+                                                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => { setDocToMoveDock(a); setSelectedDockId(a.dockLocationId || ''); }}
+                                                        className="h-7 text-[11px] border-blue-200 text-blue-700 hover:bg-blue-50 font-bold px-1"
+                                                    >
+                                                        <MapPin size={11} className="mr-1" /> Encostar
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => handleCheckout(a.id)}
+                                                        className="h-7 text-[11px] border-rose-200 text-rose-700 hover:bg-rose-50 font-bold px-1"
+                                                    >
+                                                        <LogOut size={11} className="mr-1" /> Saída
+                                                    </Button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </CardContent>
                         </Card>
@@ -437,29 +459,52 @@ export default function PortariaPage() {
                                 {inDockList.length === 0 ? (
                                     <div className="p-6 text-center text-xs text-slate-400 italic">Nenhum veículo em doca no momento.</div>
                                 ) : (
-                                    inDockList.map(a => (
-                                        <div key={a.id} className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1.5 shadow-2xs">
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-mono font-bold text-xs text-slate-900">{a.vehiclePlate || 'SEM PLACA'}</span>
-                                                <Badge className="bg-blue-600 text-white text-[9px] font-bold">
-                                                    <MapPin size={9} className="mr-0.5" /> {a.dockName || 'DOCA'}
-                                                </Badge>
+                                    inDockList.map(a => {
+                                        const esperaPátio = getDurationMinutes(a.arrivedAt, a.dockedAt);
+                                        const operacaoMin = getDurationMinutes(a.dockedAt, null);
+                                        const totalMin = getDurationMinutes(a.arrivedAt, null);
+
+                                        return (
+                                            <div key={a.id} className="p-2.5 bg-white border border-slate-200 rounded-lg space-y-1.5 shadow-2xs">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-mono font-bold text-xs text-slate-900">{a.vehiclePlate || 'SEM PLACA'}</span>
+                                                    <Badge className="bg-blue-600 text-white text-[9px] font-bold">
+                                                        <MapPin size={9} className="mr-0.5" /> {a.dockName || 'DOCA'}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="text-[11px] text-slate-600 space-y-0.5">
+                                                    <p className="truncate"><User size={12} className="inline mr-1 text-slate-400" />{a.driverName || 'Motorista N/I'}</p>
+                                                    {a.inboundOrderNumber && <p className="font-mono text-[10px] text-blue-700 font-semibold">Ordem Rec. #{a.inboundOrderNumber}</p>}
+                                                    {a.outboundOrderNumber && <p className="font-mono text-[10px] text-purple-700 font-semibold">Ordem Exp. #{a.outboundOrderNumber}</p>}
+                                                </div>
+
+                                                {/* BLOCO DE MARCOS E TEMPOS CALCULADOS */}
+                                                <div className="p-1.5 bg-blue-50/50 border border-blue-100 rounded text-[10px] font-mono space-y-1">
+                                                    <div className="flex justify-between text-slate-500">
+                                                        <span>Espera no Pátio:</span>
+                                                        <span className="font-semibold text-amber-800">{formatDuration(esperaPátio)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between text-slate-500">
+                                                        <span>Operação em Doca:</span>
+                                                        <span className="font-bold text-blue-800">{formatDuration(operacaoMin)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between border-t border-blue-200/60 pt-0.5 text-slate-700 font-bold">
+                                                        <span>Permanência Total:</span>
+                                                        <span>{formatDuration(totalMin)}</span>
+                                                    </div>
+                                                </div>
+
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleCheckout(a.id)}
+                                                    className="w-full h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-1"
+                                                >
+                                                    <LogOut size={12} className="mr-1" /> Liberar e Finalizar
+                                                </Button>
                                             </div>
-                                            <div className="text-[11px] text-slate-600 space-y-0.5">
-                                                <p className="truncate"><User size={12} className="inline mr-1 text-slate-400" />{a.driverName || 'Motorista N/I'}</p>
-                                                {a.inboundOrderNumber && <p className="font-mono text-[10px] text-blue-700 font-semibold">Ordem Rec. #{a.inboundOrderNumber}</p>}
-                                                {a.outboundOrderNumber && <p className="font-mono text-[10px] text-purple-700 font-semibold">Ordem Exp. #{a.outboundOrderNumber}</p>}
-                                                <p className="text-[10px] text-slate-400 font-mono">Encostou às {a.dockedAt ? new Date(a.dockedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</p>
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleCheckout(a.id)}
-                                                className="w-full h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-1"
-                                            >
-                                                <LogOut size={12} className="mr-1" /> Liberar e Finalizar
-                                            </Button>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </CardContent>
                         </Card>
@@ -476,18 +521,33 @@ export default function PortariaPage() {
                                 {finishedList.length === 0 ? (
                                     <div className="p-6 text-center text-xs text-slate-400 italic">Nenhum veículo finalizado ainda hoje.</div>
                                 ) : (
-                                    finishedList.map(a => (
-                                        <div key={a.id} className="p-2 bg-white border border-slate-200 rounded-lg space-y-1 text-xs shadow-2xs">
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-mono font-bold text-slate-900">{a.vehiclePlate || 'SEM PLACA'}</span>
-                                                <span className="text-[10px] font-mono text-emerald-800 font-bold">Total: {a.stayMinutes || 0} min</span>
+                                    finishedList.map(a => {
+                                        const esperaPátio = getDurationMinutes(a.arrivedAt, a.dockedAt);
+                                        const operacaoDoca = getDurationMinutes(a.dockedAt, a.departedAt);
+                                        const permanenciaTotal = getDurationMinutes(a.arrivedAt, a.departedAt);
+
+                                        return (
+                                            <div key={a.id} className="p-2 bg-white border border-slate-200 rounded-lg space-y-1.5 text-xs shadow-2xs">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-mono font-bold text-slate-900">{a.vehiclePlate || 'SEM PLACA'}</span>
+                                                    <span className="font-mono text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                                        Total: {formatDuration(permanenciaTotal)}
+                                                    </span>
+                                                </div>
+
+                                                <div className="text-[10px] font-mono text-slate-500 space-y-0.5">
+                                                    <div className="flex justify-between">
+                                                        <span>Entrada: {a.arrivedAt ? new Date(a.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                                                        <span>Saída: {a.departedAt ? new Date(a.departedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                                                    </div>
+                                                    <div className="flex justify-between pt-1 border-t border-slate-100">
+                                                        <span>Espera: <strong className="text-amber-800">{formatDuration(esperaPátio)}</strong></span>
+                                                        <span>Operação: <strong className="text-blue-800">{formatDuration(operacaoDoca)}</strong></span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="text-[10px] text-slate-500 font-mono flex justify-between">
-                                                <span>Saída: {a.departedAt ? new Date(a.departedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
-                                                <span className="text-slate-400">{a.type === 1 || a.type === 'Inbound' ? 'Descarga' : 'Carga'}</span>
-                                            </div>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </CardContent>
                         </Card>
@@ -556,6 +616,7 @@ export default function PortariaPage() {
                                         <TableHead>Transportadora</TableHead>
                                         <TableHead>NF-e / Ordem</TableHead>
                                         <TableHead>Doca</TableHead>
+                                        <TableHead>Marcos & Durações</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Ações</TableHead>
                                     </TableRow>
@@ -563,14 +624,14 @@ export default function PortariaPage() {
                                 <TableBody>
                                     {isLoading ? (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="h-32 text-center text-slate-500 text-xs">
+                                            <TableCell colSpan={11} className="h-32 text-center text-slate-500 text-xs">
                                                 <Loader2 className="animate-spin h-4 w-4 mx-auto text-orange-600 mb-1" />
                                                 Carregando agendamentos...
                                             </TableCell>
                                         </TableRow>
                                     ) : appointments.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={10} className="h-28 text-center text-slate-400 text-xs italic">
+                                            <TableCell colSpan={11} className="h-28 text-center text-slate-400 text-xs italic">
                                                 Nenhum agendamento encontrado para o período.
                                             </TableCell>
                                         </TableRow>
@@ -579,6 +640,10 @@ export default function PortariaPage() {
                                             const isScheduled = a.status === 1 || a.status === 'Scheduled';
                                             const isCanceled = a.status === 5 || a.status === 'Canceled';
                                             const isFinished = a.status === 4 || a.status === 'Finished';
+
+                                            const esperaPátio = getDurationMinutes(a.arrivedAt, a.dockedAt || (a.status === 2 || a.status === 'InYard' ? null : null));
+                                            const operacaoDoca = a.dockedAt ? getDurationMinutes(a.dockedAt, a.departedAt || (a.status === 3 || a.status === 'InDock' ? null : null)) : null;
+                                            const permanenciaTotal = a.arrivedAt ? getDurationMinutes(a.arrivedAt, a.departedAt || (isFinished ? a.departedAt : null)) : null;
 
                                             return (
                                                 <TableRow key={a.id} className="hover:bg-slate-50/50 text-xs">
@@ -616,6 +681,33 @@ export default function PortariaPage() {
                                                     </TableCell>
 
                                                     <TableCell className="font-mono">{a.dockName || '-'}</TableCell>
+
+                                                    {/* MARCOS TEMPORAIS & DURAÇÃO TOTAL */}
+                                                    <TableCell className="font-mono text-[10px]">
+                                                        {a.arrivedAt ? (
+                                                            <div className="space-y-0.5">
+                                                                <span className="text-slate-600 block">
+                                                                    Entrada: {new Date(a.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                                {a.dockedAt && (
+                                                                    <span className="text-blue-700 block">
+                                                                        Doca: {new Date(a.dockedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                )}
+                                                                {a.departedAt && (
+                                                                    <span className="text-emerald-700 block">
+                                                                        Saída: {new Date(a.departedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-slate-900 font-bold block pt-0.5 border-t border-slate-100">
+                                                                    Perm.: {formatDuration(permanenciaTotal)}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-slate-400 italic">Aguardando chegada</span>
+                                                        )}
+                                                    </TableCell>
+
                                                     <TableCell>
                                                         <Badge className={
                                                             a.status === 1 || a.status === 'Scheduled' ? 'bg-slate-100 text-slate-700 border-slate-200 text-[10px]' :
@@ -627,6 +719,7 @@ export default function PortariaPage() {
                                                             {a.statusDescription}
                                                         </Badge>
                                                     </TableCell>
+
                                                     <TableCell className="text-right">
                                                         <div className="flex items-center justify-end gap-1">
                                                             {/* VINCULAR ORDEM (Se não finalizado/cancelado e ainda sem ordem) */}

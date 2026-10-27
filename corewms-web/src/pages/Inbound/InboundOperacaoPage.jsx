@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
     Loader2, ArrowLeft, Warehouse, Play, PauseCircle, PackageCheck,
     CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw, EyeOff,
-    FileText, ShieldAlert, AlertTriangle, FileSearch, Truck, Plus, Link2, ExternalLink
+    FileText, ShieldAlert, AlertTriangle, FileSearch, Truck, Plus, Link2, ExternalLink, MapPin
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
 import { toast } from 'sonner';
@@ -367,17 +367,33 @@ export default function InboundOperacaoPage() {
 
                         {currentYard ? (
                             <div className="space-y-2 mt-2">
-                                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
-                                    <p>Motorista: <strong className="text-slate-800 font-mono">{currentYard.driverName || 'N/I'}</strong></p>
-                                    <p>Placa: <strong className="text-slate-800 font-mono">{currentYard.vehiclePlate || 'N/I'}</strong></p>
-                                    <p>Cód. Reserva: <strong className="text-slate-800 font-mono">{currentYard.reservationCode}</strong></p>
-                                    <p>Doca: <strong className="text-blue-700 font-mono">{currentYard.dockName || 'Aguardando'}</strong></p>
+                                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 font-mono">
+                                    <p>Motorista: <strong className="text-slate-800">{currentYard.driverName || 'N/I'}</strong></p>
+                                    <p>Placa: <strong className="text-slate-800">{currentYard.vehiclePlate || 'N/I'}</strong></p>
+                                    <p>Cód. Reserva: <strong className="text-slate-800">{currentYard.reservationCode}</strong></p>
+                                    <p>Doca: <strong className="text-blue-700 flex items-center gap-1"><MapPin size={11} /> {currentYard.dockName || 'Aguardando'}</strong></p>
                                 </div>
-                                <div className="text-[10px] text-slate-500 font-mono flex justify-between pt-1 border-t border-slate-100">
-                                    <span>Chegada: {currentYard.arrivedAt ? new Date(currentYard.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
-                                    {currentYard.stayMinutes !== null && currentYard.stayMinutes !== undefined && (
-                                        <span className="text-amber-700 font-bold">Permanência: {currentYard.stayMinutes} min</span>
-                                    )}
+
+                                {/* HORÁRIOS OPERACIONAIS: ENTRADA PÁTIO, ENTRADA DOCA, SAÍDA/FIM */}
+                                <div className="pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center font-mono">
+                                    <div className="p-1.5 bg-slate-50 rounded border">
+                                        <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Entrada no Pátio">Entrada Pátio</span>
+                                        <span className="text-[11px] font-bold text-slate-700 block mt-0.5">
+                                            {currentYard.arrivedAt ? new Date(currentYard.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                        </span>
+                                    </div>
+                                    <div className="p-1.5 bg-slate-50 rounded border">
+                                        <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Entrada na Doca">Entrada Doca</span>
+                                        <span className="text-[11px] font-bold text-blue-700 block mt-0.5">
+                                            {currentYard.dockedAt ? new Date(currentYard.dockedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                        </span>
+                                    </div>
+                                    <div className="p-1.5 bg-slate-50 rounded border">
+                                        <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Finalização / Saída">Saída / Fim</span>
+                                        <span className="text-[11px] font-bold text-emerald-700 block mt-0.5">
+                                            {currentYard.departedAt ? new Date(currentYard.departedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         ) : (

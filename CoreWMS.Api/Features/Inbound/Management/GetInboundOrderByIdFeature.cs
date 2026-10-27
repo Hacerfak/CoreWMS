@@ -51,7 +51,7 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
         if (order == null)
             return Results.NotFound(new { Message = "Ordem de recebimento não encontrada." });
 
-        // Busca o agendamento de pátio vinculado
+        // Procura o agendamento de pátio vinculado
         var yardApp = await _db.YardAppointments
             .AsNoTracking()
             .Include(y => y.DockLocation)
@@ -81,6 +81,7 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
                 yardApp.ScheduledDate,
                 yardApp.ArrivedAt,
                 yardApp.DockedAt,
+                yardApp.DepartedAt, // <-- Repasse do horário de saída
                 yardApp.ArrivedAt.HasValue ? (int)((yardApp.DepartedAt ?? DateTime.UtcNow) - yardApp.ArrivedAt.Value).TotalMinutes : null,
                 yardApp.DockLocationId,
                 yardApp.DockLocation?.FullPath
