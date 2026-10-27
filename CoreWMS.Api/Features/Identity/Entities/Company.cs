@@ -129,12 +129,12 @@ public class Company : AuditableEntity
         string senderAddress,
         string host,
         int port,
-        string user,
+        string? user,
         string? rawPassword,
         bool enableSsl)
     {
         if (string.IsNullOrWhiteSpace(senderAddress))
-            throw new ArgumentException("O e-mail do remetente é obrigatório.", nameof(senderAddress));
+            throw new ArgumentException("O e-mail do remetente é obrigatório para envio via SMTP.", nameof(senderAddress));
         if (string.IsNullOrWhiteSpace(host))
             throw new ArgumentException("O servidor SMTP (Host) é obrigatório.", nameof(host));
         if (port <= 0)
@@ -145,13 +145,20 @@ public class Company : AuditableEntity
         EmailSenderAddress = senderAddress.Trim();
         SmtpHost = host.Trim();
         SmtpPort = port;
-        SmtpUser = user?.Trim();
+        SmtpUser = user?.Trim(); // Aceita qualquer identificador ("api", "apikey", etc.)
         SmtpEnableSsl = enableSsl;
 
         if (!string.IsNullOrWhiteSpace(rawPassword))
         {
             SmtpPassword = CryptoService.Encrypt(rawPassword.Trim());
         }
+    }
+
+    public void SelectGoogleWorkspaceProvider(string? senderName = null, string? senderAddress = null)
+    {
+        EmailProvider = EmailProviderType.GoogleWorkspace;
+        if (!string.IsNullOrWhiteSpace(senderName)) EmailSenderName = senderName.Trim();
+        if (!string.IsNullOrWhiteSpace(senderAddress)) EmailSenderAddress = senderAddress.Trim();
     }
 
     public void ConnectGoogleOAuth(string senderEmail, string refreshToken)

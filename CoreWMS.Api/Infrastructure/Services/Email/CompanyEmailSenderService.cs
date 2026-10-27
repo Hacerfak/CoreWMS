@@ -9,9 +9,10 @@ using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Gmail.v1.Data;
 using Google.Apis.Services;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
 using MimeKit;
-using NFe.Utils.Email;
 
 namespace CoreWMS.Api.Infrastructure.Services.Email;
 
@@ -49,14 +50,14 @@ public class CompanyEmailSenderService : IEmailSenderService
                 ? company.EmailSenderName
                 : (!string.IsNullOrWhiteSpace(company.TradeName) ? company.TradeName : company.CorporateName));
 
-        // 1. SMTP
+        // 1. DISPARO VIA SMTP
         if (company.EmailProvider == EmailProviderType.Smtp)
         {
             await SendViaSmtpAsync(company, senderName, message, ct);
             return;
         }
 
-        // 2. Google Workspace (OAuth 2.0)
+        // 2. DISPARO VIA GOOGLE WORKSPACE (OAUTH 2.0)
         if (company.EmailProvider == EmailProviderType.GoogleWorkspace)
         {
             await SendViaGoogleOAuthAsync(company, senderName, message, ct);
@@ -71,82 +72,98 @@ public class CompanyEmailSenderService : IEmailSenderService
         if (string.IsNullOrWhiteSpace(company.SmtpHost))
             throw new InvalidOperationException("Servidor SMTP (Host) não configurado na empresa.");
 
+        // O endereço do remetente precisa ser um e-mail válido (ex: nfe@empresa.com.br)
+        string senderEmail = !string.IsNullOrWhiteSpace(company.EmailSenderAddress)
+            ? company.EmailSenderAddress.Trim()
+            : (!string.IsNullOrWhiteSpace(company.Email) ? company.Email.Trim() : "nao-responder@corewms.com.br");
+
+        var mimeMessage = new MimeMessage();
+        mimeMessage.From.Add(new MailboxAddress(senderName, senderEmail));
+        mimeMessage.To.Add(new MailboxAddress("", msg.DestinationEmail.Trim()));
+        mimeMessage.Subject = msg.Subject;
+
+        var bodyBuilder = new BodyBuilder { HtmlBody = msg.HtmlBody };
+
+        if (msg.Attachments != null && msg.Attachments.Any())
+        {
+            foreach (var att in msg.Attachments)
+            {
+                bodyBuilder.Attachments.Add(att.FileName, att.Content, ContentType.Parse(att.ContentType));
+            }
+        }
+
+        mimeMessage.Body = bodyBuilder.ToMessageBody();
+
         string password = "";
         if (!string.IsNullOrWhiteSpace(company.SmtpPassword))
         {
-            password = CryptoService.Decrypt(company.SmtpPassword);
+            try { password = CryptoService.Decrypt(company.SmtpPassword); }
+            catch (Exception ex) { throw new InvalidOperationException("Não foi possível descriptografar a senha do SMTP.", ex); }
         }
 
-        string tempDir = Path.Combine(Path.GetTempPath(), "CoreWMS_EmailAttachments", Guid.NewGuid().ToString("N"));
-        var createdTempFiles = new List<string>();
+        using var client = new SmtpClient();
 
-        try
+        // Configuração de segurança de conexão
+        SecureSocketOptions socketOptions;
+        if (!company.SmtpEnableSsl)
         {
-            var configEmail = new ConfiguracaoEmail(
-                email: company.SmtpUser ?? company.EmailSenderAddress ?? company.Email ?? "",
-                senha: password,
-                assunto: msg.Subject,
-                mensagem: msg.HtmlBody,
-                servidorSmtp: company.SmtpHost,
-                porta: company.SmtpPort ?? 587,
-                ssl: company.SmtpEnableSsl,
-                mensagemHtml: true,
-                timeout: 30000,
-                assincrono: false
-            )
-            {
-                Nome = senderName
-            };
-
-            var emailBuilder = new EmailBuilder(configEmail);
-            emailBuilder.AdicionarDestinatario(msg.DestinationEmail);
-
-            if (msg.Attachments != null && msg.Attachments.Any())
-            {
-                Directory.CreateDirectory(tempDir);
-                foreach (var att in msg.Attachments)
-                {
-                    string filePath = Path.Combine(tempDir, att.FileName);
-                    await File.WriteAllBytesAsync(filePath, att.Content, ct);
-                    createdTempFiles.Add(filePath);
-                    emailBuilder.AdicionarAnexo(filePath);
-                }
-            }
-
-            _logger.LogInformation("[EMAIL SMTP] Enviando para {Dest} via {Host}:{Port}...", msg.DestinationEmail, company.SmtpHost, company.SmtpPort);
-            emailBuilder.Enviar();
+            socketOptions = SecureSocketOptions.None;
         }
-        finally
+        else if (company.SmtpPort == 465)
         {
-            foreach (var path in createdTempFiles)
-            {
-                try { if (File.Exists(path)) File.Delete(path); } catch { }
-            }
-            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+            socketOptions = SecureSocketOptions.SslOnConnect;
         }
+        else
+        {
+            socketOptions = SecureSocketOptions.StartTlsWhenAvailable;
+        }
+
+        int port = company.SmtpPort ?? 587;
+
+        _logger.LogInformation("[EMAIL SMTP] Conectando a {Host}:{Port} (SSL: {Ssl})...", company.SmtpHost, port, socketOptions);
+        await client.ConnectAsync(company.SmtpHost, port, socketOptions, ct);
+
+        // O usuário de autenticação pode ser QUALQUER texto ("api", "apikey", login de sistema ou e-mail)
+        if (!string.IsNullOrWhiteSpace(company.SmtpUser))
+        {
+            _logger.LogInformation("[EMAIL SMTP] Autenticando com usuário: {User}...", company.SmtpUser);
+            await client.AuthenticateAsync(company.SmtpUser.Trim(), password, ct);
+        }
+
+        _logger.LogInformation("[EMAIL SMTP] Disparando e-mail de {Sender} para {Dest}...", senderEmail, msg.DestinationEmail);
+        await client.SendAsync(mimeMessage, ct);
+        await client.DisconnectAsync(true, ct);
+        _logger.LogInformation("[EMAIL SMTP] E-mail enviado com sucesso para {Dest}!", msg.DestinationEmail);
     }
 
     private async Task SendViaGoogleOAuthAsync(Company company, string senderName, SendEmailMessage msg, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(company.GoogleRefreshToken))
-            throw new InvalidOperationException("A conta do Google Workspace não está conectada. Clique em 'Conectar com o Google' no cadastro da empresa.");
+            throw new InvalidOperationException("A conta do Google Workspace não está conectada. Clique em 'Conectar com o Google Workspace' no cadastro da empresa.");
 
-        string refreshToken = CryptoService.Decrypt(company.GoogleRefreshToken);
-        string senderEmail = company.GoogleSenderEmail ?? company.EmailSenderAddress ?? company.Email!;
+        string refreshToken;
+        try { refreshToken = CryptoService.Decrypt(company.GoogleRefreshToken); }
+        catch (Exception ex) { throw new InvalidOperationException("Não foi possível descriptografar o token do Google.", ex); }
+
+        // 1. Define o e-mail do grupo preenchido no cadastro como endereço oficial de resposta e remetente
+        string replyToEmail = !string.IsNullOrWhiteSpace(company.EmailSenderAddress)
+            ? company.EmailSenderAddress.Trim()
+            : (company.GoogleSenderEmail ?? company.Email!);
+
+        // Tenta usar o e-mail do grupo no From. Caso o Gmail exija a conta autenticada, ele respeitará o Reply-To.
+        string fromEmail = !string.IsNullOrWhiteSpace(company.EmailSenderAddress)
+            ? company.EmailSenderAddress.Trim()
+            : (company.GoogleSenderEmail ?? company.Email!);
 
         var clientId = _config["GoogleOAuth:ClientId"];
         var clientSecret = _config["GoogleOAuth:ClientSecret"];
 
         if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(clientSecret))
-            throw new InvalidOperationException("Credenciais Google OAuth (ClientId/ClientSecret) não configuradas no appsettings.");
+            throw new InvalidOperationException("Credenciais Google OAuth (ClientId/ClientSecret) não configuradas no ambiente.");
 
         var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
         {
-            ClientSecrets = new ClientSecrets
-            {
-                ClientId = clientId,
-                ClientSecret = clientSecret
-            },
+            ClientSecrets = new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
             Scopes = new[] { GmailService.Scope.GmailSend }
         });
 
@@ -160,8 +177,12 @@ public class CompanyEmailSenderService : IEmailSenderService
         });
 
         var mimeMessage = new MimeMessage();
-        mimeMessage.From.Add(new MailboxAddress(senderName, senderEmail));
-        mimeMessage.To.Add(new MailboxAddress("", msg.DestinationEmail));
+        mimeMessage.From.Add(new MailboxAddress(senderName, fromEmail));
+        mimeMessage.To.Add(new MailboxAddress("", msg.DestinationEmail.Trim()));
+
+        // CABEÇALHO ESSENCIAL: Garante que qualquer resposta vá para a caixa do grupo
+        mimeMessage.ReplyTo.Add(new MailboxAddress(senderName, replyToEmail));
+
         mimeMessage.Subject = msg.Subject;
 
         var bodyBuilder = new BodyBuilder { HtmlBody = msg.HtmlBody };
@@ -186,7 +207,8 @@ public class CompanyEmailSenderService : IEmailSenderService
 
         var gmailMessage = new Message { Raw = rawMessage };
 
-        _logger.LogInformation("[GMAIL OAUTH] Disparando e-mail da conta {Sender} para {Dest}...", senderEmail, msg.DestinationEmail);
+        _logger.LogInformation("[GMAIL OAUTH] Disparando e-mail (From: {From}, Reply-To: {ReplyTo}) para {Dest}...", fromEmail, replyToEmail, msg.DestinationEmail);
         await gmailService.Users.Messages.Send(gmailMessage, "me").ExecuteAsync(ct);
+        _logger.LogInformation("[GMAIL OAUTH] E-mail enviado com sucesso via Gmail API!");
     }
 }

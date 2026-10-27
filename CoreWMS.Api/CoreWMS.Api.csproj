@@ -12,28 +12,29 @@
     <PackageReference Include="FastGuid" Version="1.4.3" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.2.0" />
     <PackageReference Include="Google.Apis.Gmail.v1" Version="1.77.0.4295" />
-    <PackageReference Include="Hercules.NET.NFe.NFCe" Version="2026.10.13.1850" />
+    <PackageReference Include="Hercules.NET.NFe.NFCe" Version="2026.10.27.1207" />
+    <PackageReference Include="MailKit" Version="4.18.2" />
     <PackageReference Include="Mapster" Version="10.0.13" />
     <PackageReference Include="MediatR" Version="14.2.0" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="5.9.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="MimeKit" Version="4.18.1" />
-    <PackageReference Include="MongoDB.Driver" Version="3.12.0" />
+    <PackageReference Include="MimeKit" Version="4.18.2" />
+    <PackageReference Include="MongoDB.Driver" Version="3.13.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="QuestPDF" Version="2026.9.1" />
     <PackageReference Include="SkiaSharp" Version="4.153.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
   </ItemGroup>
 
   <ItemGroup>

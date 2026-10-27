@@ -58,4 +58,8 @@ export interface EmitStandaloneNfeCommand {
   payment?: StandaloneNfePaymentCommand;
   /** @nullable */
   referencedAccessKeys?: string[] | null;
+  /** @nullable */
+  destinationEmail?: string | null;
+  /** @nullable */
+  customerId?: string | null;
 }
