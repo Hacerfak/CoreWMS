@@ -9,7 +9,8 @@ import {
     Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode, FileText,
     PackageOpen,
     Contact,
-    Box
+    Box,
+    CalendarClock
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -58,6 +59,7 @@ export default function MainLayout() {
         {
             scope: 'Operação',
             items: [
+                { icon: CalendarClock, label: 'Portaria & Pátio', path: '/portaria', permission: 'yard:view' },
                 { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
                 { icon: Barcode, label: 'Inventário', path: '/inventario/operacao', permission: 'inventory:view' },
                 { icon: Truck, label: 'Expedição', path: '/outbound', permission: 'outbound:view' },

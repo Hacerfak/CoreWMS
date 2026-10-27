@@ -1,11 +1,20 @@
+using System;
+using System.Linq;
 using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Features.Outbound.Enums;
+using CoreWMS.Api.Features.Yard.Entities;
+using CoreWMS.Api.Features.Yard.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Checking;
@@ -114,6 +123,10 @@ public class CheckOutboundItemHandler :
             _db.OutboundCheckLogs.Add(checkLog);
 
             order.RefreshStatusAfterProgress();
+
+            // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
+            await PromoteYardAppointmentToDockAsync(order, companyId, ct);
+
             await _db.SaveChangesAsync(ct);
 
             return Results.Ok(new
@@ -155,6 +168,10 @@ public class CheckOutboundItemHandler :
                 _db.OutboundCheckLogs.Add(checkLog);
 
                 order.RefreshStatusAfterProgress();
+
+                // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
+                await PromoteYardAppointmentToDockAsync(order, companyId, ct);
+
                 await _db.SaveChangesAsync(ct);
 
                 return Results.Ok(new
@@ -168,6 +185,10 @@ public class CheckOutboundItemHandler :
             }
 
             order.RefreshStatusAfterProgress();
+
+            // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
+            await PromoteYardAppointmentToDockAsync(order, companyId, ct);
+
             await _db.SaveChangesAsync(ct);
             return Results.Ok(new { Message = $"Volume de transporte {codeClean} marcado como conferido!", OrderStatus = order.Status.ToString() });
         }
@@ -200,6 +221,10 @@ public class CheckOutboundItemHandler :
             _db.OutboundCheckLogs.Add(checkLog);
 
             order.RefreshStatusAfterProgress();
+
+            // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
+            await PromoteYardAppointmentToDockAsync(order, companyId, ct);
+
             await _db.SaveChangesAsync(ct);
 
             return Results.Ok(new
@@ -249,7 +274,6 @@ public class CheckOutboundItemHandler :
             if (alloc != null)
             {
                 alloc.UpdateQuantity(alloc.Quantity); // Mantém alocação intacta
-                // Limpa flags de conferência
                 var propIsChecked = typeof(OutboundAllocation).GetProperty("IsChecked");
                 var propCheckedByName = typeof(OutboundAllocation).GetProperty("CheckedByName");
                 var propCheckedAt = typeof(OutboundAllocation).GetProperty("CheckedAt");
@@ -320,6 +344,27 @@ public class CheckOutboundItemHandler :
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { Message = "Toda a conferência do pedido foi resetada.", OrderStatus = order.Status.ToString() });
+    }
+
+    // ====================================================================
+    // GATILHO AUTOMÁTICO DE PÁTIO / PORTARIA
+    // ====================================================================
+    private async Task PromoteYardAppointmentToDockAsync(OutboundOrder order, Guid companyId, CancellationToken ct)
+    {
+        var appointment = await _db.YardAppointments
+            .FirstOrDefaultAsync(y => y.OutboundOrderId == order.Id && y.CompanyId == companyId, ct);
+
+        if (appointment != null &&
+            appointment.Status != YardAppointmentStatus.InDock &&
+            appointment.Status != YardAppointmentStatus.Finished &&
+            appointment.Status != YardAppointmentStatus.Canceled)
+        {
+            var targetDock = order.DockLocationId ?? appointment.DockLocationId;
+            if (targetDock.HasValue && targetDock.Value != Guid.Empty)
+            {
+                appointment.MoveToDock(targetDock.Value);
+            }
+        }
     }
 }
 

@@ -54,6 +54,24 @@ public record InboundOrderItemDto(
     DateTime? ExpectedExpirationDate
 );
 
+public record InboundYardAppointmentDetailDto(
+    Guid Id,
+    string ReservationCode,
+    int Status,
+    string StatusDescription,
+    string? VehiclePlate,
+    string? VehiclePlateState,
+    string? DriverName,
+    string? DriverCpf,
+    string? CarrierName,
+    DateTime ScheduledDate,
+    DateTime? ArrivedAt,
+    DateTime? DockedAt,
+    int? StayMinutes,
+    Guid? DockLocationId,
+    string? DockName
+);
+
 public record InboundOrderDetailsDto(
     Guid Id,
     Guid? CustomerId,
@@ -69,5 +87,6 @@ public record InboundOrderDetailsDto(
     string? SefazManifestProtocol,
     DateTime? SefazManifestDate,
     string? SefazManifestJustification,
-    List<InboundOrderItemDto> Items
+    List<InboundOrderItemDto> Items,
+    InboundYardAppointmentDetailDto? YardAppointment = null
 );

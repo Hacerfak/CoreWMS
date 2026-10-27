@@ -18,7 +18,7 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.13")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1173,6 +1173,9 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("YardAppointmentId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
@@ -1779,6 +1782,9 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
 
                     b.Property<string>("VehiclePlateState")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("YardAppointmentId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -2528,6 +2534,112 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.ToTable("Zones");
                 });
 
+            modelBuilder.Entity("CoreWMS.Api.Features.Yard.Entities.YardAppointment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AccessKey")
+                        .HasMaxLength(44)
+                        .HasColumnType("character varying(44)");
+
+                    b.Property<string>("AdditionalNotes")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ArrivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CarrierCnpj")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("CarrierName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DepartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DockLocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("DockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DriverCpf")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("InboundOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("InvoiceNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("InvoiceSerie")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid?>("OutboundOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReservationCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("ScheduledDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehiclePlate")
+                        .HasMaxLength(15)
+                        .HasColumnType("character varying(15)");
+
+                    b.Property<string>("VehiclePlateState")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DockLocationId");
+
+                    b.HasIndex("InboundOrderId")
+                        .IsUnique();
+
+                    b.HasIndex("OutboundOrderId")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "ReservationCode")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "ScheduledDate");
+
+                    b.HasIndex("CompanyId", "Status");
+
+                    b.ToTable("YardAppointments", (string)null);
+                });
+
             modelBuilder.Entity("CoreWMS.Api.Features.Billing.Entities.BillingCycle", b =>
                 {
                     b.HasOne("CoreWMS.Api.Features.Customers.Entities.Customer", "Customer")
@@ -3091,6 +3203,38 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("CoreWMS.Api.Features.Yard.Entities.YardAppointment", b =>
+                {
+                    b.HasOne("CoreWMS.Api.Features.Identity.Entities.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CoreWMS.Api.Features.Topology.Entities.Location", "DockLocation")
+                        .WithMany()
+                        .HasForeignKey("DockLocationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CoreWMS.Api.Features.Inbound.Entities.InboundOrder", "InboundOrder")
+                        .WithOne("YardAppointment")
+                        .HasForeignKey("CoreWMS.Api.Features.Yard.Entities.YardAppointment", "InboundOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", "OutboundOrder")
+                        .WithOne("YardAppointment")
+                        .HasForeignKey("CoreWMS.Api.Features.Yard.Entities.YardAppointment", "OutboundOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("DockLocation");
+
+                    b.Navigation("InboundOrder");
+
+                    b.Navigation("OutboundOrder");
+                });
+
             modelBuilder.Entity("CoreWMS.Api.Features.Billing.Entities.BillingCycle", b =>
                 {
                     b.Navigation("Items");
@@ -3121,6 +3265,8 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
             modelBuilder.Entity("CoreWMS.Api.Features.Inbound.Entities.InboundOrder", b =>
                 {
                     b.Navigation("Items");
+
+                    b.Navigation("YardAppointment");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Outbound.Entities.OutboundOrder", b =>
@@ -3128,6 +3274,8 @@ namespace CoreWMS.Api.Infrastructure.Data.Migrations
                     b.Navigation("Items");
 
                     b.Navigation("Volumes");
+
+                    b.Navigation("YardAppointment");
                 });
 
             modelBuilder.Entity("CoreWMS.Api.Features.Printing.Entities.PrintAgent", b =>

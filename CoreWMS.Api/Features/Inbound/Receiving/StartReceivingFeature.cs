@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Enums;
+using CoreWMS.Api.Features.Yard.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -49,10 +50,20 @@ public class StartReceivingHandler : IRequestHandler<StartReceivingCommand, IRes
         {
             item.LockForReceiving(userId, request.DockLocationId);
 
-            // Atualiza a ordem para "Em Recebimento" caso ainda esteja em "Aguardando Recebimento"
             if (item.InboundOrder.Status == InboundOrderStatus.Pending)
             {
                 item.InboundOrder.UpdateStatus(InboundOrderStatus.Receiving);
+            }
+
+            // ====================================================================
+            // GATILHO AUTOMÁTICO: Promove o agendamento para "Na Doca"
+            // ====================================================================
+            var appointment = await _db.YardAppointments
+                .FirstOrDefaultAsync(y => y.InboundOrderId == item.InboundOrderId && y.CompanyId == companyId, ct);
+
+            if (appointment != null && appointment.Status != YardAppointmentStatus.InDock && appointment.Status != YardAppointmentStatus.Finished)
+            {
+                appointment.MoveToDock(request.DockLocationId);
             }
 
             await _db.SaveChangesAsync(ct);

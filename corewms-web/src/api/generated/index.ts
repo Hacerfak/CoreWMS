@@ -16,3 +16,4 @@ export * from './quality/quality';
 export * from './roles/roles';
 export * from './topology/topology';
 export * from './users/users';
+export * from './yard/yard';

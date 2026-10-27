@@ -20,12 +20,15 @@ import {
 import {
     ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText,
     UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil,
-    ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles, Mail
+    ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles, Mail,
+    Plus, ExternalLink, Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
 import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
 import SendNfeEmailModal from '@/pages/Fiscal/SendNfeEmailModal';
+import NovoAgendamentoModal from '@/pages/Portaria/NovoAgendamentoModal';
+import VincularAgendamentoModal from '@/pages/Portaria/VincularAgendamentoModal';
 
 export default function OutboundOrderDetailsPage() {
     const { id: orderId } = useParams();
@@ -59,6 +62,10 @@ export default function OutboundOrderDetailsPage() {
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [selectedDocForEmail, setSelectedDocForEmail] = useState(null);
 
+    // Modais de Agendamento de Portaria / Pátio
+    const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+    const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+
     const loadOrderDetails = async () => {
         try {
             setIsLoading(true);
@@ -67,6 +74,23 @@ export default function OutboundOrderDetailsPage() {
                 method: 'GET'
             });
             const data = res?.data || res;
+
+            // Busca complementar garantida pelo endpoint específico da ordem se não vier no DTO
+            if (!data.yardAppointment) {
+                try {
+                    const yardRes = await customInstance({
+                        url: `/api/yard/appointments/by-order/${orderId}`,
+                        method: 'GET'
+                    });
+                    const yardData = yardRes?.data || yardRes;
+                    if (yardData && yardData.id) {
+                        data.yardAppointment = yardData;
+                    }
+                } catch {
+                    // Sem agendamento vinculado
+                }
+            }
+
             setOrder(data);
             if (data?.items) {
                 const initialExpanded = {};
@@ -123,6 +147,20 @@ export default function OutboundOrderDetailsPage() {
             toast.error(error.response?.data?.message || 'Erro ao descarregar o PDF.');
         } finally {
             setDownloadingDocId(null);
+        }
+    };
+
+    const handleUnlinkAppointment = async (appointmentId) => {
+        if (!confirm('Deseja realmente desvincular este agendamento do pedido de saída?')) return;
+        try {
+            await customInstance({
+                url: `/api/yard/appointments/${appointmentId}/unlink-order`,
+                method: 'POST'
+            });
+            toast.success('Agendamento desvinculado com sucesso!');
+            loadOrderDetails();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Erro ao desvincular agendamento.');
         }
     };
 
@@ -280,6 +318,8 @@ export default function OutboundOrderDetailsPage() {
     const canManageShippedOrder = order?.status === 'Shipped' && !hasActiveNfe;
     const canCancelOrder = order?.status !== 'Shipped' && order?.status !== 'Canceled' && !hasActiveNfe;
     const canDeleteOrder = order?.status === 'Canceled' && (!order?.fiscalDocuments || order.fiscalDocuments.length === 0);
+
+    const yardAppointment = order?.yardAppointment;
 
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -763,6 +803,119 @@ export default function OutboundOrderDetailsPage() {
 
                 {/* COLUNA DIREITA */}
                 <div className="space-y-6">
+                    {/* CARD DE AGENDAMENTO & PORTARIA (PÁTIO) */}
+                    <Card className="border-slate-200/80 bg-white shadow-xs">
+                        <CardHeader className="p-4 border-b bg-slate-50/60 flex flex-row items-center justify-between">
+                            <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
+                                <Truck size={16} className="text-orange-600" /> Agendamento & Portaria
+                            </CardTitle>
+                            {yardAppointment ? (
+                                <Badge className={
+                                    yardAppointment.status === 1 || yardAppointment.status === 'Scheduled' ? 'bg-slate-100 text-slate-700 border-slate-200 text-[10px]' :
+                                        yardAppointment.status === 2 || yardAppointment.status === 'InYard' ? 'bg-amber-100 text-amber-800 border-amber-200 text-[10px]' :
+                                            yardAppointment.status === 3 || yardAppointment.status === 'InDock' ? 'bg-blue-100 text-blue-800 border-blue-200 text-[10px]' :
+                                                yardAppointment.status === 4 || yardAppointment.status === 'Finished' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px]' :
+                                                    'bg-rose-100 text-rose-800 border-rose-200 text-[10px]'
+                                }>
+                                    {yardAppointment.statusDescription || yardAppointment.status}
+                                </Badge>
+                            ) : (
+                                <Badge variant="outline" className="text-[10px] text-slate-400">
+                                    Sem Agendamento
+                                </Badge>
+                            )}
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-2 text-xs">
+                            {yardAppointment ? (
+                                <div className="space-y-2">
+                                    <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border font-mono">
+                                        <span className="text-[10px] text-slate-400 uppercase font-semibold">Cód. Reserva</span>
+                                        <strong className="text-slate-900">{yardAppointment.reservationCode}</strong>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
+                                        <div>
+                                            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Veículo / Placa</span>
+                                            <span className="font-bold text-slate-800">
+                                                {yardAppointment.vehiclePlate || order?.vehiclePlate || '-'}
+                                                {yardAppointment.vehiclePlateState ? ` (${yardAppointment.vehiclePlateState})` : ''}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-400 block text-[10px] uppercase font-semibold">Doca</span>
+                                            <span className="font-bold text-blue-700 flex items-center gap-1">
+                                                <MapPin size={11} /> {yardAppointment.dockName || order?.dockLocationName || 'Aguardando'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-1 border-t border-slate-100">
+                                        <span className="text-slate-400 block text-[10px] uppercase font-semibold">Motorista</span>
+                                        <span className="font-semibold text-slate-800 block">{yardAppointment.driverName || 'Não informado'}</span>
+                                        {yardAppointment.driverCpf && <span className="text-[11px] font-mono text-slate-500">{yardAppointment.driverCpf}</span>}
+                                    </div>
+
+                                    <div className="pt-1 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] font-mono">
+                                        <div>
+                                            <span className="text-slate-400 block text-[10px] uppercase">Chegada Pátio</span>
+                                            <span className="text-slate-700">{yardAppointment.arrivedAt ? new Date(yardAppointment.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-400 block text-[10px] uppercase">Permanência</span>
+                                            <span className="text-amber-700 font-bold">{yardAppointment.stayMinutes ? `${yardAppointment.stayMinutes} min` : '-'}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 pt-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => navigate('/portaria')}
+                                            className="flex-1 h-8 text-[11px] bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-medium"
+                                        >
+                                            <ExternalLink size={12} className="mr-1.5" /> Abrir Portaria
+                                        </Button>
+                                        {(yardAppointment.status === 1 || yardAppointment.status === 2 || yardAppointment.status === 'Scheduled' || yardAppointment.status === 'InYard') && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleUnlinkAppointment(yardAppointment.id)}
+                                                className="h-8 text-[11px] border-rose-200 text-rose-600 hover:bg-rose-50"
+                                                title="Desvincular agendamento"
+                                            >
+                                                Desvincular
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-3 py-1">
+                                    <p className="text-slate-500 text-[11px]">
+                                        Nenhum registo de agendamento ou motorista vinculado a esta ordem de saída.
+                                    </p>
+                                    <div className="flex flex-col gap-1.5">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setIsLinkModalOpen(true)}
+                                            className="w-full text-xs border-blue-200 text-blue-800 bg-blue-50 hover:bg-blue-100 font-semibold h-8"
+                                        >
+                                            <Link2 size={13} className="mr-1.5 text-blue-600" /> Vincular Agendamento Existente
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setIsNewAppointmentOpen(true)}
+                                            className="w-full text-xs border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-semibold h-8"
+                                        >
+                                            <Plus size={13} className="mr-1.5 text-orange-600" /> Registar Dados de Carga (Portaria)
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-4 border-b bg-slate-50/60">
                             <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
@@ -862,6 +1015,34 @@ export default function OutboundOrderDetailsPage() {
                 </div>
             </div>
 
+            {/* MODAL AGENDAMENTO DIRETO DE PORTARIA */}
+            <NovoAgendamentoModal
+                open={isNewAppointmentOpen}
+                onOpenChange={setIsNewAppointmentOpen}
+                preSelectedOrderId={order?.id}
+                preSelectedOrderType={2} // 2 = Outbound / Saída
+                preSelectedAccessKey={order?.accessKey}
+                preSelectedInvoice={order?.invoiceNumber || ''}
+                preSelectedPlate={order?.vehiclePlate || ''}
+                preSelectedPlateState={order?.vehiclePlateState || 'RS'}
+                preSelectedCarrier={order?.carrierName || ''}
+                preSelectedDockId={order?.dockLocationId || ''}
+                onSuccess={() => {
+                    setIsNewAppointmentOpen(false);
+                    loadOrderDetails();
+                }}
+            />
+
+            {/* MODAL VINCULAR AGENDAMENTO EXISTENTE */}
+            <VincularAgendamentoModal
+                open={isLinkModalOpen}
+                onOpenChange={setIsLinkModalOpen}
+                orderId={order?.id}
+                orderNumber={order?.orderNumber}
+                orderType={2} // Outbound
+                onSuccess={loadOrderDetails}
+            />
+
             {/* MODAL DISPARO MANUAL DE E-MAIL */}
             <SendNfeEmailModal
                 open={isEmailModalOpen}
@@ -885,8 +1066,8 @@ export default function OutboundOrderDetailsPage() {
                                 <span className="font-bold block uppercase text-[10px] text-amber-900">Esta ação irá:</span>
                                 <ol className="list-decimal list-inside space-y-0.5 text-slate-700">
                                     <li>Devolver o saldo para as Unidades Logísticas (HUs).</li>
-                                    <li>Restaurar o saldo alocado no estoque.</li>
-                                    <li>Registrar a movimentação de estorno no Kardex.</li>
+                                    <li>Restaurar o saldo alocado no stock.</li>
+                                    <li>Registar a movimentação de estorno no Kardex.</li>
                                     <li>Retornar a ordem para <strong>Pronto para Expedir</strong> (ReadyToShip), permitindo reemitir a nota fiscal ou cancelar o pedido.</li>
                                 </ol>
                             </div>
@@ -951,7 +1132,7 @@ export default function OutboundOrderDetailsPage() {
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-xs text-slate-500">
                             Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{order?.orderNumber}</strong>?
-                            Todas as reservas de estoque, alocações de coletor e volumes gerados serão liberados de volta ao armazém.
+                            Todas as reservas de stock, alocações de coletor e volumes gerados serão libertados de volta ao armazém.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
 
@@ -1005,7 +1186,7 @@ export default function OutboundOrderDetailsPage() {
                         <AlertDialogDescription>
                             Tem certeza que deseja excluir definitivamente a ordem cancelada <strong className="text-slate-800">#{order?.orderNumber}</strong>?
                             <br /><br />
-                            Esta ação removerá permanentemente o registro e seus itens do sistema.
+                            Esta ação removerá permanentemente o registo e os seus itens do sistema.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

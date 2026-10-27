@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,10 +18,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import {
     Loader2, ArrowLeft, Warehouse, Play, PauseCircle, PackageCheck,
     CheckCircle2, Calendar, Clock, Building2, Layers, RotateCcw, EyeOff,
-    FileText, ShieldAlert, AlertTriangle, FileSearch
+    FileText, ShieldAlert, AlertTriangle, FileSearch, Truck, Plus, Link2, ExternalLink
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
 import { toast } from 'sonner';
+
+import NovoAgendamentoModal from '@/pages/Portaria/NovoAgendamentoModal';
+import VincularAgendamentoModal from '@/pages/Portaria/VincularAgendamentoModal';
 
 export default function InboundOperacaoPage() {
     const { id: orderId } = useParams();
@@ -34,6 +37,11 @@ export default function InboundOperacaoPage() {
     const [isManifesting, setIsManifesting] = useState(false);
     const [isNotRealizedModalOpen, setIsNotRealizedModalOpen] = useState(false);
     const [justification, setJustification] = useState('');
+
+    // Estados de Agendamento de Portaria / Pátio
+    const [yardAppointment, setYardAppointment] = useState(null);
+    const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+    const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
     // 1. Detalhes da Ordem
     const { data: order, isLoading } = useGetApiInboundId(orderId);
@@ -50,12 +58,32 @@ export default function InboundOperacaoPage() {
     // 3. Lista de Docas da Topologia
     const { data: dockLocations = [], isLoading: isLoadingDocks } = useGetApiTopologyLocationsDocks();
 
+    // Consulta complementar garantida para pátio / agendamento
+    const loadYardAppointment = async () => {
+        if (!orderId) return;
+        try {
+            const res = await customInstance({
+                url: `/api/yard/appointments/by-order/${orderId}`,
+                method: 'GET'
+            });
+            setYardAppointment(res?.data || res || null);
+        } catch {
+            setYardAppointment(null);
+        }
+    };
+
+    useEffect(() => {
+        loadYardAppointment();
+    }, [orderId]);
+
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
         mutation: {
             onSuccess: (_, variables) => {
                 toast.success('Doca atribuída e recebimento do item iniciado!');
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                queryClient.invalidateQueries({ queryKey: ['/api/yard'] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
+                loadYardAppointment();
                 navigate(`/inbound/operacao/${orderId}/item/${variables.data.orderItemId}`);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao iniciar recebimento do item.')
@@ -72,6 +100,21 @@ export default function InboundOperacaoPage() {
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao liberar item.')
         }
     });
+
+    const handleUnlinkAppointment = async (appointmentId) => {
+        if (!confirm('Deseja realmente desvincular este agendamento da ordem?')) return;
+        try {
+            await customInstance({
+                url: `/api/yard/appointments/${appointmentId}/unlink-order`,
+                method: 'POST'
+            });
+            toast.success('Agendamento desvinculado com sucesso!');
+            await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+            loadYardAppointment();
+        } catch (err) {
+            toast.error(err.response?.data?.message || 'Erro ao desvincular agendamento.');
+        }
+    };
 
     // Função de Disparo da Manifestação SEFAZ
     const handleSendManifest = async (eventTypeCode, customJustification = '') => {
@@ -91,7 +134,6 @@ export default function InboundOperacaoPage() {
 
             toast.success(res?.message || 'Manifestação transmitida para a SEFAZ com sucesso!');
 
-            // Invalida e força a re-busca de todas as queries de Inbound no TanStack Query
             await queryClient.invalidateQueries({
                 predicate: (query) => Array.isArray(query.queryKey) && String(query.queryKey[0]).startsWith('/api/inbound')
             });
@@ -193,6 +235,8 @@ export default function InboundOperacaoPage() {
         ? parseInt(order.accessKey.substring(25, 34), 10)
         : 'N/A';
 
+    const currentYard = yardAppointment || order?.yardAppointment;
+
     return (
         <div className="flex flex-col h-full space-y-5">
             {/* CABEÇALHO */}
@@ -248,54 +292,144 @@ export default function InboundOperacaoPage() {
                 </div>
             </div>
 
-            {/* CARD DE PAINEL SEFAZ / MANIFESTAÇÃO DO DESTINATÁRIO */}
-            <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <FileText size={18} className="text-blue-600" />
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Manifestação do Destinatário (SEFAZ)</h3>
-                        {renderSefazManifestBadge(order.lastSefazManifestType)}
+            {/* GRID DE CARDS SUPERIORES: SEFAZ & PORTARIA */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* CARD DE PAINEL SEFAZ / MANIFESTAÇÃO DO DESTINATÁRIO */}
+                <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-col justify-between h-full gap-4">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            <FileText size={18} className="text-blue-600" />
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Manifestação do Destinatário (SEFAZ)</h3>
+                            {renderSefazManifestBadge(order.lastSefazManifestType)}
+                        </div>
+                        <p className="text-[11px] text-slate-500 font-mono mt-1">
+                            Chave: {order.accessKey || 'N/A'} {order.sefazManifestProtocol && `| Prot: ${order.sefazManifestProtocol}`}
+                        </p>
                     </div>
-                    <p className="text-xs text-slate-500 font-mono">
-                        Chave: {order.accessKey || 'N/A'} {order.sefazManifestProtocol && `| Protocolo: ${order.sefazManifestProtocol}`}
-                    </p>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                            size="sm"
+                            onClick={() => handleSendManifest(210200)}
+                            disabled={isManifesting || order.lastSefazManifestType === 210200}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] h-8 px-2.5"
+                        >
+                            {isManifesting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                            Confirmar Operação
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsNotRealizedModalOpen(true)}
+                            disabled={isManifesting || order.lastSefazManifestType === 210240}
+                            className="border-amber-300 text-amber-900 hover:bg-amber-50 font-semibold text-[11px] h-8 px-2.5"
+                        >
+                            <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                            Não Realizada
+                        </Button>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSendManifest(210220)}
+                            disabled={isManifesting || order.lastSefazManifestType === 210220}
+                            className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-[11px] h-8 px-2.5"
+                        >
+                            <ShieldAlert className="h-3.5 w-3.5 mr-1" />
+                            Desconhecimento
+                        </Button>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    {/* Botão Confirmação (210200) */}
-                    <Button
-                        size="sm"
-                        onClick={() => handleSendManifest(210200)}
-                        disabled={isManifesting || order.lastSefazManifestType === 210200}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
-                    >
-                        {isManifesting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                        Confirmar Operação (210200)
-                    </Button>
+                {/* CARD DE PORTARIA & PÁTIO */}
+                <div className="bg-white border border-slate-200/60 rounded-xl p-4 shadow-xs flex flex-col justify-between h-full gap-4">
+                    <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Truck size={18} className="text-orange-600" />
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">Agendamento & Pátio</h3>
+                            </div>
+                            {currentYard ? (
+                                <Badge className={
+                                    currentYard.status === 1 || currentYard.status === 'Scheduled' ? 'bg-slate-100 text-slate-700 border-slate-200 text-[10px]' :
+                                        currentYard.status === 2 || currentYard.status === 'InYard' ? 'bg-amber-100 text-amber-800 border-amber-200 text-[10px]' :
+                                            currentYard.status === 3 || currentYard.status === 'InDock' ? 'bg-blue-100 text-blue-800 border-blue-200 text-[10px]' :
+                                                currentYard.status === 4 || currentYard.status === 'Finished' ? 'bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px]' :
+                                                    'bg-rose-100 text-rose-800 border-rose-200 text-[10px]'
+                                }>
+                                    {currentYard.statusDescription || currentYard.status}
+                                </Badge>
+                            ) : (
+                                <Badge variant="outline" className="text-[10px] text-slate-400">Sem Agendamento</Badge>
+                            )}
+                        </div>
 
-                    {/* Botão Operação Não Realizada (210240) */}
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsNotRealizedModalOpen(true)}
-                        disabled={isManifesting || order.lastSefazManifestType === 210240}
-                        className="border-amber-300 text-amber-900 hover:bg-amber-50 font-semibold text-xs h-8"
-                    >
-                        <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                        Op. Não Realizada (210240)
-                    </Button>
+                        {currentYard ? (
+                            <div className="space-y-2 mt-2">
+                                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                                    <p>Motorista: <strong className="text-slate-800 font-mono">{currentYard.driverName || 'N/I'}</strong></p>
+                                    <p>Placa: <strong className="text-slate-800 font-mono">{currentYard.vehiclePlate || 'N/I'}</strong></p>
+                                    <p>Cód. Reserva: <strong className="text-slate-800 font-mono">{currentYard.reservationCode}</strong></p>
+                                    <p>Doca: <strong className="text-blue-700 font-mono">{currentYard.dockName || 'Aguardando'}</strong></p>
+                                </div>
+                                <div className="text-[10px] text-slate-500 font-mono flex justify-between pt-1 border-t border-slate-100">
+                                    <span>Chegada: {currentYard.arrivedAt ? new Date(currentYard.arrivedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                                    {currentYard.stayMinutes !== null && currentYard.stayMinutes !== undefined && (
+                                        <span className="text-amber-700 font-bold">Permanência: {currentYard.stayMinutes} min</span>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-slate-500 mt-2">
+                                Nenhuma informação de veículo ou agendamento de pátio vinculada a esta ordem.
+                            </p>
+                        )}
+                    </div>
 
-                    {/* Botão Desconhecimento (210220) */}
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleSendManifest(210220)}
-                        disabled={isManifesting || order.lastSefazManifestType === 210220}
-                        className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-xs h-8"
-                    >
-                        <ShieldAlert className="h-3.5 w-3.5 mr-1" />
-                        Desconhecimento (210220)
-                    </Button>
+                    {currentYard ? (
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigate('/portaria')}
+                                className="h-7 text-[11px] bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 font-medium"
+                            >
+                                <ExternalLink size={12} className="mr-1" /> Abrir Portaria
+                            </Button>
+
+                            {(currentYard.status === 1 || currentYard.status === 2 || currentYard.status === 'Scheduled' || currentYard.status === 'InYard') && (
+                                <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleUnlinkAppointment(currentYard.id)}
+                                    className="h-7 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                    title="Desvincular agendamento"
+                                >
+                                    Desvincular
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex gap-2 flex-wrap">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setIsLinkModalOpen(true)}
+                                className="h-8 text-xs border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-semibold"
+                            >
+                                <Link2 size={13} className="mr-1.5" /> Vincular Agendamento Existente
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setIsNewAppointmentOpen(true)}
+                                className="h-8 text-xs border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 font-semibold"
+                            >
+                                <Plus size={13} className="mr-1.5" /> Criar Novo Agendamento
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -499,6 +633,40 @@ export default function InboundOperacaoPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* MODAL PORTARIA / NOVO AGENDAMENTO */}
+            <NovoAgendamentoModal
+                open={isNewAppointmentOpen}
+                onOpenChange={setIsNewAppointmentOpen}
+                preSelectedOrderId={order?.id}
+                preSelectedOrderType={1} // 1 = Inbound / Entrada
+                preSelectedAccessKey={order?.accessKey}
+                preSelectedInvoice={
+                    order?.invoiceNumber ||
+                    (order?.accessKey && order.accessKey.length >= 34
+                        ? parseInt(order.accessKey.substring(25, 34), 10).toString()
+                        : '')
+                }
+                preSelectedCarrier={order?.issuerName || order?.customerName}
+                onSuccess={async () => {
+                    setIsNewAppointmentOpen(false);
+                    await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                    loadYardAppointment();
+                }}
+            />
+
+            {/* MODAL VINCULAR AGENDAMENTO EXISTENTE */}
+            <VincularAgendamentoModal
+                open={isLinkModalOpen}
+                onOpenChange={setIsLinkModalOpen}
+                orderId={order?.id}
+                orderNumber={documentNumber}
+                orderType={1} // Inbound
+                onSuccess={async () => {
+                    await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                    loadYardAppointment();
+                }}
+            />
         </div>
     );
 }

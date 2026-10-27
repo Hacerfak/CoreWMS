@@ -3,6 +3,7 @@ using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Features.Topology.Entities;
+using CoreWMS.Api.Features.Yard.Entities;
 using SecurityDriven;
 
 namespace CoreWMS.Api.Features.Outbound.Entities;
@@ -59,6 +60,9 @@ public class OutboundOrder : AuditableEntity
     private readonly List<OutboundOrderItem> _items = new();
     public IReadOnlyCollection<OutboundOrderItem> Items => _items.AsReadOnly();
     public ICollection<OutboundVolume> Volumes { get; private set; } = new List<OutboundVolume>();
+
+    public Guid? YardAppointmentId { get; private set; }
+    public YardAppointment? YardAppointment { get; private set; }
 
     protected OutboundOrder() { }
 
@@ -340,5 +344,17 @@ public class OutboundOrder : AuditableEntity
                 return utcDateTime.AddHours(-3);
             }
         }
+    }
+
+    public void LinkYardAppointment(Guid appointmentId)
+    {
+        YardAppointmentId = appointmentId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UnlinkYardAppointment()
+    {
+        YardAppointmentId = null;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

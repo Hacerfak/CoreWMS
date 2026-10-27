@@ -101,4 +101,16 @@ public static class Permissions
         // (Administração/Gestão)
         public const string Manage = "outbound:manage";
     }
+
+    public static class Yard
+    {
+        // Visualizar agenda e pátio (Todos / Operação)
+        public const string View = "yard:view";
+
+        // Check-in, Check-out e Encostar na Doca (Portaria / Encarregados)
+        public const string Operate = "yard:operate";
+
+        // Criar agendamentos, importar XML, cancelar e excluir (Gestão / Portaria)
+        public const string Manage = "yard:manage";
+    }
 }

@@ -46,6 +46,7 @@ import CompanyFiscalDocumentsPage from '@/pages/Fiscal/CompanyFiscalDocumentsPag
 import CompanyFiscalDocumentDetailsPage from '@/pages/Fiscal/CompanyFiscalDocumentDetailsPage';
 import CreateStandaloneNfePage from '@/pages/Fiscal/CreateStandaloneNfePage';
 import PublicDanfePage from '@/pages/Fiscal/PublicDanfePage';
+import PortariaPage from '@/pages/Portaria/PortariaPage';
 
 // Componente para sincronização automática do título do separador
 function PageTitleHandler() {
@@ -59,6 +60,7 @@ function PageTitleHandler() {
     else if (path === '/selecao-empresa') title = 'Seleção de Empresa';
     else if (path === '/onboarding') title = 'Boas-vindas';
     else if (path === '/dashboard') title = 'Dashboard';
+    else if (path.startsWith('/portaria')) title = 'Portaria & Pátio';
     else if (path.startsWith('/clientes')) title = 'Clientes';
     else if (path.startsWith('/usuarios')) title = 'Usuários';
     else if (path.startsWith('/perfis')) title = 'Perfis de Acesso';
@@ -148,6 +150,11 @@ export default function App() {
                   Painel do Dashboard em construção
                 </div>
               } />
+
+              {/* MÓDULO DE PORTARIA & PÁTIO (OPERAÇÃO) */}
+              <Route element={<PermissionGuard requiredPermission="yard:view" />}>
+                <Route path="/portaria" element={<PortariaPage />} />
+              </Route>
 
               <Route element={<PermissionGuard requiredPermission="customers:view" />}>
                 <Route path="/clientes" element={<ClientesList />} />

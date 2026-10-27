@@ -1,6 +1,7 @@
 using CoreWMS.Api.Core.Entities;
 using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
+using CoreWMS.Api.Features.Yard.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
 
 namespace CoreWMS.Api.Features.Inbound.Entities;
@@ -30,6 +31,9 @@ public class InboundOrder : AuditableEntity
 
     private readonly List<InboundOrderItem> _items = new();
     public IReadOnlyCollection<InboundOrderItem> Items => _items.AsReadOnly();
+
+    public Guid? YardAppointmentId { get; private set; }
+    public YardAppointment? YardAppointment { get; private set; }
 
     protected InboundOrder() { }
 
@@ -114,5 +118,17 @@ public class InboundOrder : AuditableEntity
             210240 => "Operação Não Realizada",
             _ => "Sem Manifestação"
         };
+    }
+
+    public void LinkYardAppointment(Guid appointmentId)
+    {
+        YardAppointmentId = appointmentId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UnlinkYardAppointment()
+    {
+        YardAppointmentId = null;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

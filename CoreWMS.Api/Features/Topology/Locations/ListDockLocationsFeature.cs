@@ -20,7 +20,15 @@ public class ListDockLocationsHandler : IRequestHandler<ListDockLocationsQuery, 
             .AsNoTracking()
             .Include(l => l.StorageType)
             .Where(l => l.StorageType.Role == StorageRole.Dock && l.IsActive)
-            .Select(l => new { l.Id, l.FullPath, l.BaseCapacity })
+            .Select(l => new
+            {
+                l.Id,
+                l.Code,
+                l.FullPath,
+                Name = l.FullPath, // Garante compatibilidade caso o front acesse .name
+                l.BaseCapacity
+            })
+            .OrderBy(l => l.FullPath)
             .ToListAsync(ct);
 
         return Results.Ok(docks);
@@ -31,9 +39,9 @@ public static class ListDockLocationsEndpoints
 {
     public static void MapListDockLocationsEndpoints(this IEndpointRouteBuilder app)
     {
+        // Requer apenas autenticação para alimentar os selects de Inbound, Outbound e Portaria
         app.MapGet("/api/topology/locations/docks", async (IMediator mediator) => await mediator.Send(new ListDockLocationsQuery()))
            .WithTags("Topology")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Topology.Manage);
+           .RequireAuthorization();
     }
 }

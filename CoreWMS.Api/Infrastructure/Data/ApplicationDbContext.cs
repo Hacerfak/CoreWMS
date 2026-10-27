@@ -14,6 +14,7 @@ using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Features.Printing.Entities;
 using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Features.Products.Entities;
+using CoreWMS.Api.Features.Yard.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Infrastructure.Data;
@@ -81,6 +82,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<FiscalOperationRule> FiscalOperationRules => Set<FiscalOperationRule>();
     public DbSet<FiscalOperationRuleException> FiscalOperationRuleExceptions => Set<FiscalOperationRuleException>();
     public DbSet<CompanyFiscalDocument> CompanyFiscalDocuments => Set<CompanyFiscalDocument>();
+    public DbSet<YardAppointment> YardAppointments => Set<YardAppointment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -828,6 +830,46 @@ public class ApplicationDbContext : DbContext
             b.HasIndex(x => x.OutboundOrderId);
             b.HasIndex(x => x.AccessKey);
             b.HasIndex(x => x.Status);
+        });
+
+        builder.Entity<YardAppointment>(b =>
+        {
+            b.ToTable("YardAppointments");
+            b.HasKey(x => x.Id);
+            b.HasIndex(x => new { x.CompanyId, x.ReservationCode }).IsUnique();
+            b.HasIndex(x => new { x.CompanyId, x.Status });
+            b.HasIndex(x => new { x.CompanyId, x.ScheduledDate });
+
+            b.Property(x => x.ReservationCode).HasMaxLength(30).IsRequired();
+            b.Property(x => x.VehiclePlate).HasMaxLength(15);
+            b.Property(x => x.VehiclePlateState).HasMaxLength(2);
+            b.Property(x => x.DriverName).HasMaxLength(150);
+            b.Property(x => x.DriverCpf).HasMaxLength(20);
+            b.Property(x => x.CarrierName).HasMaxLength(150);
+            b.Property(x => x.CarrierCnpj).HasMaxLength(20);
+            b.Property(x => x.AccessKey).HasMaxLength(44);
+            b.Property(x => x.InvoiceNumber).HasMaxLength(20);
+            b.Property(x => x.InvoiceSerie).HasMaxLength(10);
+
+            b.HasOne(x => x.Company)
+                .WithMany()
+                .HasForeignKey(x => x.CompanyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            b.HasOne(x => x.DockLocation)
+                .WithMany()
+                .HasForeignKey(x => x.DockLocationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            b.HasOne(x => x.InboundOrder)
+                .WithOne(o => o.YardAppointment)
+                .HasForeignKey<YardAppointment>(x => x.InboundOrderId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            b.HasOne(x => x.OutboundOrder)
+                .WithOne(o => o.YardAppointment)
+                .HasForeignKey<YardAppointment>(x => x.OutboundOrderId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 

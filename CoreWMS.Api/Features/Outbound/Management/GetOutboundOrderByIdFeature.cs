@@ -1,8 +1,17 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Yard.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
@@ -72,6 +81,24 @@ public record OutboundFiscalDocumentDto(
     DateTime CreatedAt
 );
 
+public record OutboundYardAppointmentDetailDto(
+    Guid Id,
+    string ReservationCode,
+    int Status,
+    string StatusDescription,
+    string? VehiclePlate,
+    string? VehiclePlateState,
+    string? DriverName,
+    string? DriverCpf,
+    string? CarrierName,
+    DateTime ScheduledDate,
+    DateTime? ArrivedAt,
+    DateTime? DockedAt,
+    int? StayMinutes,
+    Guid? DockLocationId,
+    string? DockName
+);
+
 public record OutboundOrderFullDetailDto(
     Guid Id,
     Guid CustomerId,
@@ -109,7 +136,8 @@ public record OutboundOrderFullDetailDto(
     bool HasRawXml,
     List<OutboundOrderItemDetailDto> Items,
     List<OutboundOrderVolumeDetailDto> Volumes,
-    List<OutboundFiscalDocumentDto> FiscalDocuments
+    List<OutboundFiscalDocumentDto> FiscalDocuments,
+    OutboundYardAppointmentDetailDto? YardAppointment = null
 );
 
 public record GetOutboundOrderByIdQuery(Guid Id) : IRequest<IResult>;
@@ -190,24 +218,24 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 .Where(a => a.OutboundOrderItemId == item.Id)
                 .Select(a => new OutboundAllocatedHuDetailDto(
                     a.Id,
-            a.HandlingUnitId,
-            a.HandlingUnit.Lpn,
-            a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
-            a.HandlingUnit.PackagingType != null ? a.HandlingUnit.PackagingType.Code : "PLT",
-            GetInboundInvoiceNumber(a.HandlingUnit.ReceiptDocumentId),
-            GetInboundReceiptDate(a.HandlingUnit.ReceiptDocumentId, a.HandlingUnit.CreatedAt),
-            a.HandlingUnit.Batch,
-            a.HandlingUnit.ManufactureDate,
-            a.HandlingUnit.ExpirationDate,
-            a.HandlingUnit.SerialNumber,
-            a.Quantity,
-            a.IsPicked,
-            a.PickedByName,
-            a.PickedAt,
-            a.IsChecked,
-            a.CheckedByName,
-            a.CheckedAt,
-            a.IsFractional
+                    a.HandlingUnitId,
+                    a.HandlingUnit.Lpn,
+                    a.HandlingUnit.CurrentLocation != null ? a.HandlingUnit.CurrentLocation.FullPath : "SEM ENDEREÇO",
+                    a.HandlingUnit.PackagingType != null ? a.HandlingUnit.PackagingType.Code : "PLT",
+                    GetInboundInvoiceNumber(a.HandlingUnit.ReceiptDocumentId),
+                    GetInboundReceiptDate(a.HandlingUnit.ReceiptDocumentId, a.HandlingUnit.CreatedAt),
+                    a.HandlingUnit.Batch,
+                    a.HandlingUnit.ManufactureDate,
+                    a.HandlingUnit.ExpirationDate,
+                    a.HandlingUnit.SerialNumber,
+                    a.Quantity,
+                    a.IsPicked,
+                    a.PickedByName,
+                    a.PickedAt,
+                    a.IsChecked,
+                    a.CheckedByName,
+                    a.CheckedAt,
+                    a.IsFractional
                 )).ToList();
 
             return new OutboundOrderItemDetailDto(
@@ -258,6 +286,42 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
                 f.CreatedAt
             )).ToListAsync(ct);
 
+        // 1. Busca o Agendamento de Pátio diretamente vinculado (por ID da Ordem ou pela FK direta)
+        var yardApp = await _db.YardAppointments
+            .AsNoTracking()
+            .Include(y => y.DockLocation)
+            .FirstOrDefaultAsync(y => (y.OutboundOrderId == order.Id || (order.YardAppointmentId != null && y.Id == order.YardAppointmentId)) && y.CompanyId == companyId, ct);
+
+        OutboundYardAppointmentDetailDto? yardDto = null;
+        if (yardApp != null)
+        {
+            yardDto = new OutboundYardAppointmentDetailDto(
+                yardApp.Id,
+                yardApp.ReservationCode,
+                (int)yardApp.Status,
+                yardApp.Status switch
+                {
+                    YardAppointmentStatus.Scheduled => "Agendado",
+                    YardAppointmentStatus.InYard => "No Pátio",
+                    YardAppointmentStatus.InDock => "Na Doca",
+                    YardAppointmentStatus.Finished => "Finalizado",
+                    YardAppointmentStatus.Canceled => "Cancelado",
+                    _ => yardApp.Status.ToString()
+                },
+                yardApp.VehiclePlate,
+                yardApp.VehiclePlateState,
+                yardApp.DriverName,
+                yardApp.DriverCpf,
+                yardApp.CarrierName,
+                yardApp.ScheduledDate,
+                yardApp.ArrivedAt,
+                yardApp.DockedAt,
+                yardApp.ArrivedAt.HasValue ? (int)((yardApp.DepartedAt ?? DateTime.UtcNow) - yardApp.ArrivedAt.Value).TotalMinutes : null,
+                yardApp.DockLocationId,
+                yardApp.DockLocation?.FullPath
+            );
+        }
+
         var customerName = order.Customer?.CorporateName ?? "NÃO INFORMADO";
 
         var dto = new OutboundOrderFullDetailDto(
@@ -297,7 +361,8 @@ public class GetOutboundOrderByIdHandler : IRequestHandler<GetOutboundOrderByIdQ
             !string.IsNullOrWhiteSpace(order.RawXml),
             itemDtos,
             volumeDtos,
-            fiscalDocDtos
+            fiscalDocDtos,
+            yardDto
         );
 
         return Results.Ok(dto);
