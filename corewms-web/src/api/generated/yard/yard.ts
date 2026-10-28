@@ -31,8 +31,6 @@ import type {
   PostApiYardAppointmentsAppointmentIdCancelParams,
   PostApiYardAppointmentsAppointmentIdLinkOrderParams,
   PostApiYardAppointmentsAppointmentIdMoveToDockParams,
-  PostApiYardAppointmentsImportXmlBody,
-  PostApiYardAppointmentsImportXmlParams,
   UpdateYardAppointmentCommand,
   YardCheckinCommand
 } from '../model';
@@ -273,21 +271,13 @@ export function useGetApiYardAppointments<TData = Awaited<ReturnType<typeof getA
 
 
 export const postApiYardAppointmentsImportXml = (
-    params: PostApiYardAppointmentsImportXmlParams,
-    postApiYardAppointmentsImportXmlBody?: PostApiYardAppointmentsImportXmlBody,
+
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
-if(postApiYardAppointmentsImportXmlBody?.file !== undefined) {
- formData.append(`file`, postApiYardAppointmentsImportXmlBody.file);
- }
 
       return customInstance<void>(
-      {url: `/api/yard/appointments/import-xml`, method: 'POST',
-      headers: {'Content-Type': 'multipart/form-data', },
-       data: formData,
-        params, signal
+      {url: `/api/yard/appointments/import-xml`, method: 'POST', signal
     },
       options);
     }
@@ -298,8 +288,8 @@ if(postApiYardAppointmentsImportXmlBody?.file !== undefined) {
 export const getPostApiYardAppointmentsImportXmlMutationKey = () => ['postApiYardAppointmentsImportXml'] as const;
 
 export const getPostApiYardAppointmentsImportXmlMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, TError,PostApiYardAppointmentsImportXmlMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, TError,PostApiYardAppointmentsImportXmlMutationVariables, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, TError,void, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, TError,void, TContext> => {
 
 const mutationKey = getPostApiYardAppointmentsImportXmlMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -311,10 +301,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, PostApiYardAppointmentsImportXmlMutationVariables> = (props) => {
-          const {params,data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, void> = () => {
 
-          return  postApiYardAppointmentsImportXml(params,data,requestOptions)
+
+          return  postApiYardAppointmentsImportXml(requestOptions)
         }
 
 
@@ -325,16 +315,16 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type PostApiYardAppointmentsImportXmlMutationResult = NonNullable<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>>
-    export type PostApiYardAppointmentsImportXmlMutationBody = PostApiYardAppointmentsImportXmlBody | undefined
+
     export type PostApiYardAppointmentsImportXmlMutationError = unknown
-    export type PostApiYardAppointmentsImportXmlMutationVariables = {params: PostApiYardAppointmentsImportXmlParams;data?: PostApiYardAppointmentsImportXmlBody}
+
 
     export const usePostApiYardAppointmentsImportXml = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, TError,PostApiYardAppointmentsImportXmlMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>, TError,void, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiYardAppointmentsImportXml>>,
         TError,
-        PostApiYardAppointmentsImportXmlMutationVariables,
+        void,
         TContext
       > => {
       return useMutation(getPostApiYardAppointmentsImportXmlMutationOptions(options), queryClient);

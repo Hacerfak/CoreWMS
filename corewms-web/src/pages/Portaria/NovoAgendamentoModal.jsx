@@ -14,13 +14,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { CalendarClock, UploadCloud, Truck, Loader2, CheckCircle2, FileCode, Sparkles } from 'lucide-react';
+import { CalendarClock, UploadCloud, Loader2, CheckCircle2, FileCode, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-
-const getLocalDateTimeString = (date = new Date()) => {
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
+import { DatePickerTime } from '@/components/ui/date-picker-time';
 
 export default function NovoAgendamentoModal({
     open,
@@ -39,13 +35,12 @@ export default function NovoAgendamentoModal({
     const isEdit = Boolean(appointmentToEdit);
     const [isLoading, setIsLoading] = useState(false);
     const [docks, setDocks] = useState([]);
-    const [xmlFileName, setXmlFileName] = useState('');
+    const [xmlRawFile, setXmlRawFile] = useState(null);
 
-    // Formulário Unificado com TODOS os campos
     const [form, setForm] = useState({
-        type: 1, // 1 = Inbound, 2 = Outbound
-        directCheckIn: false, // true = Criar já "No Pátio"
-        scheduledDate: getLocalDateTimeString(),
+        type: 1,
+        directCheckIn: false,
+        scheduledDate: new Date(),
         vehiclePlate: '',
         vehiclePlateState: 'RS',
         driverName: '',
@@ -61,17 +56,15 @@ export default function NovoAgendamentoModal({
 
     useEffect(() => {
         if (open) {
-            // Carrega docas ativas
             customInstance({ url: '/api/topology/locations/docks', method: 'GET' })
                 .then(res => setDocks(Array.isArray(res?.data || res) ? (res?.data || res) : []))
                 .catch(() => { });
 
             if (isEdit) {
-                // Modo Edição: Popula todos os dados do agendamento existente
                 setForm({
                     type: appointmentToEdit.type === 'Inbound' || appointmentToEdit.type === 1 ? 1 : 2,
                     directCheckIn: false,
-                    scheduledDate: appointmentToEdit.scheduledDate ? getLocalDateTimeString(new Date(appointmentToEdit.scheduledDate)) : getLocalDateTimeString(),
+                    scheduledDate: appointmentToEdit.scheduledDate ? new Date(appointmentToEdit.scheduledDate) : new Date(),
                     vehiclePlate: appointmentToEdit.vehiclePlate || '',
                     vehiclePlateState: appointmentToEdit.vehiclePlateState || 'RS',
                     driverName: appointmentToEdit.driverName || '',
@@ -84,13 +77,12 @@ export default function NovoAgendamentoModal({
                     dockLocationId: appointmentToEdit.dockLocationId || '',
                     additionalNotes: appointmentToEdit.additionalNotes || ''
                 });
-                setXmlFileName('');
+                setXmlRawFile(null);
             } else {
-                // Modo Criação
                 setForm({
                     type: preSelectedOrderType || 1,
                     directCheckIn: false,
-                    scheduledDate: getLocalDateTimeString(),
+                    scheduledDate: new Date(),
                     vehiclePlate: preSelectedPlate || '',
                     vehiclePlateState: preSelectedPlateState || 'RS',
                     driverName: '',
@@ -103,17 +95,16 @@ export default function NovoAgendamentoModal({
                     dockLocationId: preSelectedDockId || '',
                     additionalNotes: ''
                 });
-                setXmlFileName('');
+                setXmlRawFile(null);
             }
         }
     }, [open, appointmentToEdit, preSelectedOrderId]);
 
-    // Leitura inteligente de XML no navegador via DOMParser
     const handleXmlFileChange = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setXmlFileName(file.name);
+        setXmlRawFile(file);
         try {
             const text = await file.text();
             const parser = new DOMParser();
@@ -126,18 +117,15 @@ export default function NovoAgendamentoModal({
             const nNF = xmlDoc.getElementsByTagName('nNF')[0]?.textContent?.trim() || '';
             const serie = xmlDoc.getElementsByTagName('serie')[0]?.textContent?.trim() || '';
 
-            // Transportadora
             const transp = xmlDoc.getElementsByTagName('transporta')[0];
             const carrierName = transp?.getElementsByTagName('xNome')[0]?.textContent?.trim() || '';
             const carrierCnpj = transp?.getElementsByTagName('CNPJ')[0]?.textContent?.trim() ||
                 transp?.getElementsByTagName('CPF')[0]?.textContent?.trim() || '';
 
-            // Veículo
             const veic = xmlDoc.getElementsByTagName('veicTransp')[0];
             const plate = veic?.getElementsByTagName('placa')[0]?.textContent?.trim()?.toUpperCase() || '';
             const uf = veic?.getElementsByTagName('UF')[0]?.textContent?.trim()?.toUpperCase() || 'RS';
 
-            // Observações adicionais
             const infCpl = xmlDoc.getElementsByTagName('infCpl')[0]?.textContent?.trim() || '';
 
             setForm(prev => ({
@@ -152,9 +140,9 @@ export default function NovoAgendamentoModal({
                 additionalNotes: infCpl ? `[XML]: ${infCpl}` : prev.additionalNotes
             }));
 
-            toast.success('Dados extraídos do XML com sucesso! Confira e complemente o motorista.');
+            toast.success('Dados extraídos do XML! Preencha o motorista caso necessário.');
         } catch {
-            toast.error('Não foi possível interpretar os dados do XML.');
+            toast.error('Não foi possível interpretar o XML.');
         }
     };
 
@@ -162,18 +150,21 @@ export default function NovoAgendamentoModal({
         e.preventDefault();
         if (!form.scheduledDate) return toast.warning('Informe a data e horário previsto.');
 
+        const scheduledIso = form.scheduledDate instanceof Date
+            ? form.scheduledDate.toISOString()
+            : new Date(form.scheduledDate).toISOString();
+
         try {
             setIsLoading(true);
 
             if (isEdit) {
-                // Atualização completa (PUT)
                 await customInstance({
                     url: `/api/yard/appointments/${appointmentToEdit.id}`,
                     method: 'PUT',
                     data: {
                         id: appointmentToEdit.id,
                         type: Number(form.type),
-                        scheduledDate: new Date(form.scheduledDate).toISOString(),
+                        scheduledDate: scheduledIso,
                         vehiclePlate: form.vehiclePlate ? form.vehiclePlate.toUpperCase() : null,
                         vehiclePlateState: form.vehiclePlateState || null,
                         driverName: form.driverName || null,
@@ -188,11 +179,35 @@ export default function NovoAgendamentoModal({
                     }
                 });
                 toast.success('Agendamento atualizado com sucesso!');
+            } else if (xmlRawFile) {
+                const formData = new FormData();
+                formData.append('file', xmlRawFile);
+                formData.append('type', form.type);
+                formData.append('scheduledDate', scheduledIso);
+                if (form.vehiclePlate) formData.append('vehiclePlate', form.vehiclePlate.toUpperCase());
+                if (form.vehiclePlateState) formData.append('vehiclePlateState', form.vehiclePlateState.toUpperCase());
+                if (form.driverName) formData.append('driverName', form.driverName);
+                if (form.driverCpf) formData.append('driverCpf', form.driverCpf);
+                if (form.carrierName) formData.append('carrierName', form.carrierName);
+                if (form.carrierCnpj) formData.append('carrierCnpj', form.carrierCnpj);
+                if (form.invoiceNumber) formData.append('invoiceNumber', form.invoiceNumber);
+                if (form.invoiceSerie) formData.append('invoiceSerie', form.invoiceSerie);
+                if (form.dockLocationId) formData.append('dockLocationId', form.dockLocationId);
+                if (form.additionalNotes) formData.append('additionalNotes', form.additionalNotes);
+                formData.append('directCheckIn', Boolean(form.directCheckIn));
+
+                const res = await customInstance({
+                    url: '/api/yard/appointments/import-xml',
+                    method: 'POST',
+                    data: formData,
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                toast.success(res?.message || 'Ordem gerada e agendamento vinculado com sucesso!');
             } else {
-                // Cadastro (POST)
                 const payload = {
                     type: Number(form.type),
-                    scheduledDate: new Date(form.scheduledDate).toISOString(),
+                    scheduledDate: scheduledIso,
                     vehiclePlate: form.vehiclePlate ? form.vehiclePlate.toUpperCase() : null,
                     vehiclePlateState: form.vehiclePlateState || null,
                     driverName: form.driverName || null,
@@ -215,7 +230,7 @@ export default function NovoAgendamentoModal({
                     data: payload
                 });
 
-                toast.success(form.directCheckIn ? 'Entrada no pátio registrada com sucesso!' : 'Agendamento registrado com sucesso!');
+                toast.success(form.directCheckIn ? 'Entrada no pátio registrada!' : 'Agendamento registrado com sucesso!');
             }
 
             onSuccess?.();
@@ -236,12 +251,11 @@ export default function NovoAgendamentoModal({
                         {isEdit ? `Editar Agendamento (${appointmentToEdit?.reservationCode})` : 'Registrar Entrada / Agendamento de Pátio'}
                     </DialogTitle>
                     <DialogDescription className="text-xs text-slate-500">
-                        {isEdit ? 'Atualize todos os dados cadastrais, veículo ou doca deste agendamento.' : 'Preencha os dados manualmente ou solte o arquivo XML para extração automática.'}
+                        {isEdit ? 'Atualize todos os dados cadastrais, veículo ou doca deste agendamento.' : 'Preencha os dados manualmente ou selecione um arquivo XML para gerar a ordem automaticamente.'}
                     </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 mt-1">
-                    {/* DROPZONE DE XML (APENAS NA CRIAÇÃO) */}
                     {!isEdit && (
                         <div className="p-3 border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/50 hover:bg-blue-50 transition-colors">
                             <input
@@ -258,21 +272,20 @@ export default function NovoAgendamentoModal({
                                     </div>
                                     <div>
                                         <span className="text-xs font-bold text-slate-800 block">
-                                            {xmlFileName ? `Arquivo: ${xmlFileName}` : 'Preencher automaticamente a partir do XML da NF-e'}
+                                            {xmlRawFile ? `Arquivo Selecionado: ${xmlRawFile.name}` : 'Importar XML da NF-e (Gera a Ordem + Agendamento)'}
                                         </span>
                                         <span className="text-[11px] text-slate-500 block">
-                                            O sistema extrai chave, número, transportadora e placa instantaneamente.
+                                            {xmlRawFile ? 'A ordem correspondente será criada no WMS ao salvar.' : 'O sistema lê a nota e cria a ordem de recebimento/expedição vinculada.'}
                                         </span>
                                     </div>
                                 </div>
                                 <Button type="button" size="sm" variant="outline" className="bg-white h-7 text-xs border-blue-300 text-blue-700 pointer-events-none">
-                                    <FileCode size={13} className="mr-1" /> Selecionar XML
+                                    <FileCode size={13} className="mr-1" /> {xmlRawFile ? 'Trocar XML' : 'Selecionar XML'}
                                 </Button>
                             </label>
                         </div>
                     )}
 
-                    {/* SELEÇÃO DO STATUS INICIAL (APENAS NA CRIAÇÃO) */}
                     {!isEdit && (
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
                             <Label className="text-xs font-bold uppercase text-slate-700 block">Situação Inicial do Veículo *</Label>
@@ -300,7 +313,6 @@ export default function NovoAgendamentoModal({
                         </div>
                     )}
 
-                    {/* DADOS GERAIS: TIPO & DATA/HORA */}
                     <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
                             <Label className="text-xs font-bold">Tipo de Operação *</Label>
@@ -317,18 +329,14 @@ export default function NovoAgendamentoModal({
                             </Select>
                         </div>
                         <div>
-                            <Label className="text-xs font-bold">Data/Hora Prevista *</Label>
-                            <Input
-                                type="datetime-local"
-                                className="h-9 mt-1 bg-white font-mono"
-                                value={form.scheduledDate}
-                                onChange={(e) => setForm({ ...form, scheduledDate: e.target.value })}
-                                required
+                            <Label className="text-xs font-bold mb-1 block">Data/Hora Prevista *</Label>
+                            <DatePickerTime
+                                date={form.scheduledDate}
+                                setDate={(d) => setForm(prev => ({ ...prev, scheduledDate: d || new Date() }))}
                             />
                         </div>
                     </div>
 
-                    {/* VEÍCULO & MOTORISTA */}
                     <div className="grid grid-cols-4 gap-3 text-xs">
                         <div className="col-span-1">
                             <Label className="text-xs font-bold">Placa Veículo</Label>
@@ -369,7 +377,6 @@ export default function NovoAgendamentoModal({
                         </div>
                     </div>
 
-                    {/* TRANSPORTADORA & DOCA */}
                     <div className="grid grid-cols-3 gap-3 text-xs">
                         <div>
                             <Label className="text-xs font-bold">Transportadora</Label>
@@ -406,7 +413,6 @@ export default function NovoAgendamentoModal({
                         </div>
                     </div>
 
-                    {/* DADOS FISCAIS: NÚMERO NF, SÉRIE, CHAVE DE ACESSO */}
                     <div className="grid grid-cols-4 gap-3 text-xs">
                         <div className="col-span-1">
                             <Label className="text-xs font-bold">Nº NF-e</Label>
@@ -438,7 +444,6 @@ export default function NovoAgendamentoModal({
                         </div>
                     </div>
 
-                    {/* OBSERVAÇÕES */}
                     <div className="text-xs">
                         <Label className="text-xs font-bold">Observações Internas</Label>
                         <Textarea
@@ -456,7 +461,7 @@ export default function NovoAgendamentoModal({
                         </Button>
                         <Button type="submit" disabled={isLoading} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
                             {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            {isEdit ? 'Salvar Alterações' : form.directCheckIn ? 'Registrar Entrada no Pátio' : 'Agendar Veículo'}
+                            {isEdit ? 'Salvar Alterações' : xmlRawFile ? 'Importar XML e Gerar Ordem' : form.directCheckIn ? 'Registrar Entrada no Pátio' : 'Agendar Veículo'}
                         </Button>
                     </DialogFooter>
                 </form>
