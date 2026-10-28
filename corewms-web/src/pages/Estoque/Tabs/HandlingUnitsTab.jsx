@@ -22,6 +22,7 @@ import {
     Undo2, X, SlidersHorizontal, Columns, ChevronDown, ChevronUp, RotateCcw,
     MoreHorizontal, Merge, Split, Pencil
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { downloadBackendCsv } from '@/lib/exportCsv';
 import RegisterHoldModal from '@/pages/Qualidade/RegisterHoldModal';
@@ -29,6 +30,19 @@ import PrintHuModal from '@/pages/Inbound/PrintHuModal';
 import AgruparHuModal from '../Modals/AgruparHuModal';
 import TransbordoHuModal from '../Modals/TransbordoHuModal';
 import EditarHuModal from '../Modals/EditarHuModal';
+
+// Extração segura de mensagens de erro do backend
+const getErrorMessage = (err, fallback) => {
+    const data = err.response?.data;
+    if (typeof data === 'string') return data;
+    if (data?.message) return data.message;
+    if (data?.title) return data.title;
+    if (data?.errors && typeof data.errors === 'object') {
+        const first = Object.values(data.errors).flat()[0];
+        if (first) return String(first);
+    }
+    return err.message || fallback;
+};
 
 const formatCivilDate = (dateVal) => {
     if (!dateVal) return '-';
@@ -180,6 +194,7 @@ export default function HandlingUnitsTab() {
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 20;
 
+    // Modais e Diálogos
     const [husToHold, setHusToHold] = useState(null);
     const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
@@ -190,10 +205,10 @@ export default function HandlingUnitsTab() {
     const [husToRollback, setHusToRollback] = useState(null);
     const [isRollingBack, setIsRollingBack] = useState(false);
 
-    // Ações Individuais (Popover)
+    // Ações Individuais (Popover) e Lote
     const [huToMerge, setHuToMerge] = useState(null);
     const [huToSplit, setHuToSplit] = useState(null);
-    const [huToEdit, setHuToEdit] = useState(null);
+    const [editingHus, setEditingHus] = useState([]);
     const [openPopoverId, setOpenPopoverId] = useState(null);
 
     const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
@@ -260,6 +275,13 @@ export default function HandlingUnitsTab() {
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
+    // FUNÇÃO CENTRALIZADA DE RECARREGAMENTO E ATUALIZAÇÃO DA TELA
+    const refreshData = async () => {
+        await refetch();
+        await queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
+    };
+
     const toggleSelectAll = () => {
         if (selectedHus.length === hus.length) setSelectedHus([]);
         else setSelectedHus(hus);
@@ -281,6 +303,7 @@ export default function HandlingUnitsTab() {
         setIsMoveModalOpen(true);
     };
 
+    // EXECUÇÃO DO MOVIMENTO COM TOAST E RECARGA
     const handleExecuteMove = async () => {
         if (!targetLocationId || husToMove.length === 0) return toast.warning('Selecione o endereço de destino.');
         setIsMoving(true);
@@ -291,36 +314,38 @@ export default function HandlingUnitsTab() {
                 method: 'POST',
                 data: { handlingUnitIds: huIds, destinationLocationId: targetLocationId }
             });
-            toast.success(res?.message || 'Movimentação concluída!');
-            await refetch();
-            setSelectedHus(prev => prev.filter(h => !huIds.includes(h.id)));
+
+            toast.success(res?.message || `${huIds.length} HU(s) movimentada(s) com sucesso!`);
             setIsMoveModalOpen(false);
             setHusToMove([]);
             setTargetLocationId('');
+            setSelectedHus([]);
+            await refreshData();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao movimentar HUs.');
+            toast.error(getErrorMessage(err, 'Erro ao movimentar HUs.'));
         } finally {
             setIsMoving(false);
         }
     };
 
+    // EXECUÇÃO DO ESTORNO COM TOAST E RECARGA
     const handleConfirmRollback = async () => {
         if (!husToRollback || husToRollback.length === 0) return;
         setIsRollingBack(true);
         try {
             const huIds = husToRollback.map(h => h.id);
-            await customInstance({
+            const res = await customInstance({
                 url: '/api/inbound/receive/hus/rollback',
                 method: 'POST',
                 data: { handlingUnitIds: huIds }
             });
-            toast.success(`${huIds.length} HU(s) estornada(s) com sucesso!`);
-            await refetch();
-            queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
-            setSelectedHus(prev => prev.filter(h => !huIds.includes(h.id)));
+
+            toast.success(res?.message || `${huIds.length} HU(s) estornada(s) com sucesso!`);
             setHusToRollback(null);
+            setSelectedHus([]);
+            await refreshData();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao realizar o estorno das HUs.');
+            toast.error(getErrorMessage(err, 'Erro ao realizar o estorno das HUs.'));
         } finally {
             setIsRollingBack(false);
         }
@@ -352,6 +377,7 @@ export default function HandlingUnitsTab() {
 
     return (
         <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex flex-col overflow-hidden h-full">
+            {/* PAINEL DE FILTROS FIXO */}
             <form onSubmit={handleSearchSubmit} className="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -378,6 +404,7 @@ export default function HandlingUnitsTab() {
                         </Popover>
                     </div>
 
+                    {/* AÇÕES EM LOTE NO CABEÇALHO */}
                     <div className="flex items-center gap-2 flex-wrap">
                         <Button type="button" onClick={() => setHusToHold(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 text-xs font-semibold h-9">
                             <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-600" /> Avaria ({selectedHus.length})
@@ -385,6 +412,17 @@ export default function HandlingUnitsTab() {
                         <Button type="button" onClick={() => handleOpenMoveModal(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="text-xs font-semibold h-9">
                             <MapPin className="w-3.5 h-3.5 mr-1 text-blue-600" /> Mover ({selectedHus.length})
                         </Button>
+
+                        <Button
+                            type="button"
+                            onClick={() => setEditingHus(selectedHus)}
+                            disabled={selectedHus.length === 0}
+                            variant="outline"
+                            className="border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100 text-xs font-semibold h-9"
+                        >
+                            <Pencil className="w-3.5 h-3.5 mr-1 text-blue-600" /> Editar ({selectedHus.length})
+                        </Button>
+
                         <Button type="button" onClick={() => setHusToRollback(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold h-9">
                             <Undo2 className="w-3.5 h-3.5 mr-1 text-rose-600" /> Estornar ({selectedHus.length})
                         </Button>
@@ -473,6 +511,7 @@ export default function HandlingUnitsTab() {
                 )}
             </form>
 
+            {/* TABELA DE HUS COM POPOVER DE AÇÕES */}
             <div className="flex-1 overflow-auto">
                 <Table>
                     <TableHeader className="bg-slate-50 sticky top-0 z-10 backdrop-blur-sm">
@@ -604,8 +643,8 @@ export default function HandlingUnitsTab() {
                                                             </button>
                                                         </>
                                                     )}
-                                                    <button onClick={() => { setHuToEdit(h); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                        <Pencil size={14} /> Editar Rastreabilidade
+                                                    <button onClick={() => { setEditingHus([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                        <Pencil size={14} className="text-blue-600" /> Editar Dados / Pesos
                                                     </button>
                                                     <button onClick={() => { setHusToRollback([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-rose-50 hover:text-rose-700 rounded-md transition-colors border-t border-slate-100 mt-1 pt-2">
                                                         <Undo2 size={14} className="text-rose-500" /> Estornar Entrada
@@ -620,6 +659,7 @@ export default function HandlingUnitsTab() {
                     </TableBody>
                 </Table>
             </div>
+
             {totalCount > 0 && (
                 <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0 text-xs text-slate-500">
                     <span>Mostrando {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} HUs</span>
@@ -631,7 +671,7 @@ export default function HandlingUnitsTab() {
                 </div>
             )}
 
-            {/* MODAIS (IDÊNTICOS À INBOUND HUS) */}
+            {/* MODAL DE MOVIMENTAÇÃO */}
             <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
@@ -685,15 +725,21 @@ export default function HandlingUnitsTab() {
                 </DialogContent>
             </Dialog>
 
+            {/* MODAL DE APONTAMENTO DE AVARIA */}
             {husToHold && husToHold.length > 0 && (
                 <RegisterHoldModal
                     open={!!husToHold && husToHold.length > 0}
                     onOpenChange={(open) => !open && setHusToHold(null)}
                     hus={husToHold}
-                    onSuccess={() => { refetch(); setSelectedHus([]); }}
+                    onSuccess={async () => {
+                        toast.success('Apontamento de qualidade atualizado!');
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
 
+            {/* MODAL DE IMPRESSÃO */}
             {isPrintModalOpen && (
                 <PrintHuModal
                     open={isPrintModalOpen}
@@ -702,6 +748,7 @@ export default function HandlingUnitsTab() {
                 />
             )}
 
+            {/* ALERTA DE ESTORNO */}
             <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>
@@ -721,30 +768,42 @@ export default function HandlingUnitsTab() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            {/* MODAL DE AGRUPAMENTO COM RECARGA */}
             {huToMerge && (
                 <AgruparHuModal
                     open={Boolean(huToMerge)}
                     onOpenChange={(open) => !open && setHuToMerge(null)}
                     sourceHu={huToMerge}
-                    onSuccess={refetch}
+                    onSuccess={async () => {
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
 
+            {/* MODAL DE TRANSBORDO COM RECARGA */}
             {huToSplit && (
                 <TransbordoHuModal
                     open={Boolean(huToSplit)}
                     onOpenChange={(open) => !open && setHuToSplit(null)}
                     sourceHu={huToSplit}
-                    onSuccess={refetch}
+                    onSuccess={async () => {
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
 
-            {huToEdit && (
+            {/* MODAL DE EDIÇÃO INDIVIDUAL OU EM LOTE COM RECARGA */}
+            {editingHus.length > 0 && (
                 <EditarHuModal
-                    open={Boolean(huToEdit)}
-                    onOpenChange={(open) => !open && setHuToEdit(null)}
-                    hu={huToEdit}
-                    onSuccess={refetch}
+                    open={editingHus.length > 0}
+                    onOpenChange={(open) => !open && setEditingHus([])}
+                    hus={editingHus}
+                    onSuccess={async () => {
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
         </div>

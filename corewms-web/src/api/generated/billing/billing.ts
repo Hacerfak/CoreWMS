@@ -30,6 +30,8 @@ import type {
   GetApiBillingCyclesParams,
   GetApiBillingTariffsParams,
   ProcessDailyBillingCycleCommand,
+  RollbackInboundBillingByHandlingUnitsCommand,
+  RollbackOutboundBillingCommand,
   UpdateBillingServiceCommand
 } from '../model';
 
@@ -533,6 +535,128 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiBillingServicesIdMutationOptions(options), queryClient);
+    }
+    export const postApiBillingInboundRollbackByHus = (
+    rollbackInboundBillingByHandlingUnitsCommand: RollbackInboundBillingByHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/inbound/rollback-by-hus`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: rollbackInboundBillingByHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiBillingInboundRollbackByHusMutationKey = () => ['postApiBillingInboundRollbackByHus'] as const;
+
+export const getPostApiBillingInboundRollbackByHusMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingInboundRollbackByHus>>, TError,PostApiBillingInboundRollbackByHusMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingInboundRollbackByHus>>, TError,PostApiBillingInboundRollbackByHusMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBillingInboundRollbackByHusMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingInboundRollbackByHus>>, PostApiBillingInboundRollbackByHusMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiBillingInboundRollbackByHus(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiBillingInboundRollbackByHusMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingInboundRollbackByHus>>>
+    export type PostApiBillingInboundRollbackByHusMutationBody = RollbackInboundBillingByHandlingUnitsCommand
+    export type PostApiBillingInboundRollbackByHusMutationError = unknown
+    export type PostApiBillingInboundRollbackByHusMutationVariables = {data: RollbackInboundBillingByHandlingUnitsCommand}
+
+    export const usePostApiBillingInboundRollbackByHus = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingInboundRollbackByHus>>, TError,PostApiBillingInboundRollbackByHusMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiBillingInboundRollbackByHus>>,
+        TError,
+        PostApiBillingInboundRollbackByHusMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiBillingInboundRollbackByHusMutationOptions(options), queryClient);
+    }
+    export const postApiBillingOutboundRollback = (
+    rollbackOutboundBillingCommand: RollbackOutboundBillingCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/outbound/rollback`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: rollbackOutboundBillingCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiBillingOutboundRollbackMutationKey = () => ['postApiBillingOutboundRollback'] as const;
+
+export const getPostApiBillingOutboundRollbackMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundRollback>>, TError,PostApiBillingOutboundRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundRollback>>, TError,PostApiBillingOutboundRollbackMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBillingOutboundRollbackMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingOutboundRollback>>, PostApiBillingOutboundRollbackMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiBillingOutboundRollback(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiBillingOutboundRollbackMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingOutboundRollback>>>
+    export type PostApiBillingOutboundRollbackMutationBody = RollbackOutboundBillingCommand
+    export type PostApiBillingOutboundRollbackMutationError = unknown
+    export type PostApiBillingOutboundRollbackMutationVariables = {data: RollbackOutboundBillingCommand}
+
+    export const usePostApiBillingOutboundRollback = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundRollback>>, TError,PostApiBillingOutboundRollbackMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiBillingOutboundRollback>>,
+        TError,
+        PostApiBillingOutboundRollbackMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiBillingOutboundRollbackMutationOptions(options), queryClient);
     }
     export const getApiBillingCyclesIdExportPdf = (
     id: string,

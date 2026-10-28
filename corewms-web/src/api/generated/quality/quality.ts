@@ -25,6 +25,7 @@ import type {
 
 import type {
   CreateQualityReasonCommand,
+  DeleteQualityEventsByHandlingUnitsCommand,
   HoldHandlingUnitCommand,
   ReleaseHandlingUnitCommand
 } from '../model';
@@ -202,7 +203,68 @@ export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApi
 
 
 
-export const postApiQualityHold = (
+export const postApiQualityEventsByHandlingUnitsDelete = (
+    deleteQualityEventsByHandlingUnitsCommand: DeleteQualityEventsByHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/events/by-handling-units/delete`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: deleteQualityEventsByHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiQualityEventsByHandlingUnitsDeleteMutationKey = () => ['postApiQualityEventsByHandlingUnitsDelete'] as const;
+
+export const getPostApiQualityEventsByHandlingUnitsDeleteMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiQualityEventsByHandlingUnitsDelete>>, TError,PostApiQualityEventsByHandlingUnitsDeleteMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiQualityEventsByHandlingUnitsDelete>>, TError,PostApiQualityEventsByHandlingUnitsDeleteMutationVariables, TContext> => {
+
+const mutationKey = getPostApiQualityEventsByHandlingUnitsDeleteMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiQualityEventsByHandlingUnitsDelete>>, PostApiQualityEventsByHandlingUnitsDeleteMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiQualityEventsByHandlingUnitsDelete(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiQualityEventsByHandlingUnitsDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof postApiQualityEventsByHandlingUnitsDelete>>>
+    export type PostApiQualityEventsByHandlingUnitsDeleteMutationBody = DeleteQualityEventsByHandlingUnitsCommand
+    export type PostApiQualityEventsByHandlingUnitsDeleteMutationError = unknown
+    export type PostApiQualityEventsByHandlingUnitsDeleteMutationVariables = {data: DeleteQualityEventsByHandlingUnitsCommand}
+
+    export const usePostApiQualityEventsByHandlingUnitsDelete = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiQualityEventsByHandlingUnitsDelete>>, TError,PostApiQualityEventsByHandlingUnitsDeleteMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiQualityEventsByHandlingUnitsDelete>>,
+        TError,
+        PostApiQualityEventsByHandlingUnitsDeleteMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiQualityEventsByHandlingUnitsDeleteMutationOptions(options), queryClient);
+    }
+    export const postApiQualityHold = (
     holdHandlingUnitCommand: HoldHandlingUnitCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {

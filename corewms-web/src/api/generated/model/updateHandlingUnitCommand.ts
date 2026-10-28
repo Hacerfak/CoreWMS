@@ -20,7 +20,9 @@ export interface UpdateHandlingUnitCommand {
   /** @nullable */
   packagingTypeId?: string | null;
   /** @nullable */
-  unitValue?: number | null;
+  unitNetWeight?: number | null;
+  /** @nullable */
+  unitGrossWeight?: number | null;
   /** @nullable */
   consumedAt?: string | null;
 }

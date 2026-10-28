@@ -1,3 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
@@ -8,6 +14,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
@@ -70,7 +77,7 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
 
         decimal totalToTransfer = request.NewHandlingUnits.Sum(x => x.Quantity);
 
-        // 3. REGRA ESTRITA: O transbordo NÃO pode ser feito com o saldo total da origem
+        // 3. REGRA ESTRITA: O transbordo NÃO pode transferir o saldo total da origem
         if (totalToTransfer >= sourceHu.CurrentQuantity)
         {
             return Results.BadRequest(new
@@ -83,12 +90,11 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
         sourceHu.Consume(totalToTransfer);
 
         var createdHus = new List<HandlingUnit>();
-        var random = new Random();
 
         foreach (var item in request.NewHandlingUnits)
         {
-            // Gera LPN padronizado
-            string newLpn = $"HU{DateTime.UtcNow:yyMMddHHmmss}{random.Next(100, 999)}";
+            // Gera o LPN seguindo rigorosamente o padrão do recebimento (Base36 de 10 caracteres)
+            string newLpn = GenerateShortLpn();
 
             var packagingId = item.PackagingTypeId.HasValue && item.PackagingTypeId.Value != Guid.Empty
                 ? item.PackagingTypeId.Value
@@ -111,14 +117,8 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
                 sourceHu.UnitGrossWeight
             );
 
-            // Herda localização e status físico da origem
-            if (sourceHu.CurrentLocationId.HasValue)
-            {
-                if (sourceHu.Status == HuStatus.Received)
-                    newHu.ReceiveAtDock(sourceHu.CurrentLocationId.Value);
-                else
-                    newHu.MoveTo(sourceHu.CurrentLocationId.Value);
-            }
+            // Herda status físico real (Stored, Received, etc.) e o endereço da HU mãe
+            newHu.InheritPhysicalState(sourceHu.Status, sourceHu.CurrentLocationId);
 
             if (sourceHu.QualityStatus != QualityStatus.Available)
                 newHu.ChangeQuality(sourceHu.QualityStatus);
@@ -151,13 +151,33 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
             CreatedHus = createdHus.Select(h => new { h.Id, h.Lpn, Quantity = h.CurrentQuantity })
         });
     }
+
+    // ALGORITMO OFICIAL DE LPN BASE36 (IDÊNTICO AO RECEIVELOTEFEATURE)
+    private static string GenerateShortLpn()
+    {
+        var ticks = (DateTime.UtcNow.Ticks - 638000000000000000L) % 2176782336L;
+        var randomVal = Random.Shared.Next(0, 1679616);
+        return $"{ConvertToBase36(ticks, 6)}{ConvertToBase36(randomVal, 4)}".ToUpper();
+    }
+
+    private static string ConvertToBase36(long number, int minLength)
+    {
+        const string chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var result = new StringBuilder();
+        while (number > 0)
+        {
+            result.Insert(0, chars[(int)(number % 36)]);
+            number /= 36;
+        }
+        return result.ToString().PadLeft(minLength, '0');
+    }
 }
 
 public static class SplitHandlingUnitEndpoints
 {
     public static void MapSplitHandlingUnitEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/inventory/handling-units/split", async (SplitHandlingUnitCommand cmd, IMediator mediator) =>
+        app.MapPost("/api/inventory/handling-units/split", async ([FromBody] SplitHandlingUnitCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd))
            .WithTags("Inventory")
            .RequireAuthorization()

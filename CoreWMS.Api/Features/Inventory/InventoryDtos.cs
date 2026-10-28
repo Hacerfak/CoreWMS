@@ -4,9 +4,11 @@ public record HandlingUnitDto(
     Guid Id,
     string Lpn,
     string CustomerName,
+    Guid ProductId,                 // <-- Adicionado
     string ProductSku,
     string ProductDescription,
     string Unit,
+    Guid PackagingTypeId,           // <-- Adicionado
     string PackagingTypeCode,
     Guid? CurrentLocationId,
     string? LocationPath,
@@ -18,6 +20,8 @@ public record HandlingUnitDto(
     decimal CurrentQuantity,
     decimal UnitValue,
     decimal TotalValue,
+    decimal UnitNetWeight,          // <-- Adicionado
+    decimal UnitGrossWeight,        // <-- Adicionado
     string Status,
     string QualityStatus,
     Guid? ReceiptDocumentId,

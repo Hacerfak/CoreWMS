@@ -1,16 +1,23 @@
-using CoreWMS.Api.Features.Fiscal.Entities;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
+using CoreWMS.Api.Features.Billing.Operations;
+using CoreWMS.Api.Features.Fiscal.Queries;
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
-using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Features.Outbound.Enums;
-using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
 
@@ -34,12 +41,18 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly IHttpContextAccessor _http;
+    private readonly IMediator _mediator;
 
-    public CancelOutboundOrderHandler(ApplicationDbContext db, ITenantProvider tenant, IHttpContextAccessor http)
+    public CancelOutboundOrderHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IHttpContextAccessor http,
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
         _http = http;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(CancelOutboundOrderCommand request, CancellationToken ct)
@@ -48,8 +61,6 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
         var order = await _db.OutboundOrders
             .Include(o => o.Items)
-            .Include(o => o.Volumes)
-            .Include(o => o.DockLocation)
             .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.Id, ct);
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
@@ -61,14 +72,12 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
         {
             return Results.BadRequest(new
             {
-                Message = "Não é possível cancelar diretamente um pedido expedido (Shipped). Execute o 'Estorno de Expedição' primeiro para restaurar o estoque."
+                Message = "Não é possível cancelar directamente um pedido expedido (Shipped). Execute o 'Estorno de Expedição' primeiro para restaurar o estoque."
             });
         }
 
-        var hasAuthorizedInvoices = await _db.CompanyFiscalDocuments
-            .AnyAsync(d => d.OutboundOrderId == order.Id
-                        && (int)d.Type >= 1 && (int)d.Type <= 6
-                        && d.Status == FiscalDocumentStatus.Authorized, ct);
+        // 1. DELEGAÇÃO AO FISCAL: Verifica a existência de notas fiscais autorizadas vinculadas à ordem
+        var hasAuthorizedInvoices = await _mediator.Send(new HasActiveFiscalDocumentByOutboundOrderQuery(order.Id), ct);
 
         if (hasAuthorizedInvoices)
         {
@@ -78,66 +87,55 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
             });
         }
 
-        // 1. Estorna alocações e devolve saldo reservado
+        // 2. Localiza as alocações da ordem no domínio de Outbound
         var allocations = await _db.OutboundAllocations
-            .Include(a => a.HandlingUnit)
             .Where(a => a.OutboundOrderId == order.Id)
             .ToListAsync(ct);
 
-        var targetLocationId = order.DockLocationId;
-        if (!targetLocationId.HasValue)
+        if (allocations.Any())
         {
-            targetLocationId = await _db.Set<Location>()
-                .Where(l => l.IsActive)
-                .Select(l => (Guid?)l.Id)
-                .FirstOrDefaultAsync(ct);
+            var itemsMap = order.Items.ToDictionary(i => i.Id, i => i.ProductId);
+            var allocationDtos = allocations.Select(a => new CancelAllocationItemDto(
+                itemsMap.TryGetValue(a.OutboundOrderItemId, out var prodId) ? prodId : Guid.Empty,
+                a.Quantity,
+                a.HandlingUnitId
+            )).Where(a => a.ProductId != Guid.Empty).ToList();
+
+            // 3. DELEGAÇÃO AO INVENTORY: Liberta as reservas de saldo (Unallocate) e reabre HUs consumidas
+            await _mediator.Send(new CancelOutboundInventoryAllocationsCommand(
+                order.CustomerId,
+                order.DockLocationId,
+                allocationDtos
+            ), ct);
+
+            // Remove as alocações da ordem
+            _db.OutboundAllocations.RemoveRange(allocations);
         }
 
-        foreach (var alloc in allocations)
-        {
-            var orderItem = order.Items.First(i => i.Id == alloc.OutboundOrderItemId);
-
-            var balance = await _db.InventoryBalances
-                .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == orderItem.ProductId && b.CustomerId == order.CustomerId, ct);
-
-            if (balance != null)
-            {
-                balance.UnallocateForPicking(alloc.Quantity);
-            }
-
-            if (alloc.HandlingUnit != null && alloc.HandlingUnit.Status == HuStatus.Consumed)
-            {
-                alloc.HandlingUnit.RestoreConsumed(alloc.Quantity, targetLocationId);
-            }
-        }
-
-        if (allocations.Any()) _db.OutboundAllocations.RemoveRange(allocations);
-
-        // 2. Remove logs de conferência (Checking)
+        // 4. Limpeza interna de registros do módulo Outbound
         var checkLogs = await _db.OutboundCheckLogs
             .Where(c => c.OutboundOrderId == order.Id)
             .ToListAsync(ct);
         if (checkLogs.Any()) _db.OutboundCheckLogs.RemoveRange(checkLogs);
 
-        // 3. Remove volumes de expedição (auto-packing e fracionados)
         var volumes = await _db.OutboundVolumes
             .Where(v => v.OutboundOrderId == order.Id)
             .ToListAsync(ct);
         if (volumes.Any()) _db.OutboundVolumes.RemoveRange(volumes);
 
-        // 4. Remove apontamentos de embalagem (Packing Momento 1)
         var itemPacks = await _db.OutboundItemPacks
             .Where(p => p.OutboundOrderId == order.Id)
             .ToListAsync(ct);
         if (itemPacks.Any()) _db.OutboundItemPacks.RemoveRange(itemPacks);
 
-        // 5. Remove itens de cobrança associados em ciclos abertos
-        var billingItems = await _db.BillingItems
-            .Where(b => b.DocumentId == order.Id || b.Description.Contains(order.OrderNumber))
-            .ToListAsync(ct);
-        if (billingItems.Any()) _db.BillingItems.RemoveRange(billingItems);
+        // 5. DELEGAÇÃO AO BILLING: Expurga itens de facturação abertos e agenda recálculo de diárias
+        await _mediator.Send(new RollbackOutboundBillingCommand(
+            order.Id,
+            order.OrderNumber,
+            order.CustomerId
+        ), ct);
 
-        // 6. Cancela a ordem no domínio (zera Allocated, Picked, Packed, Checked nos itens)
+        // 6. Cancela a ordem no domínio
         var user = _http.HttpContext?.User;
         var userName = user?.FindFirst("Name")?.Value ?? user?.Identity?.Name ?? "Operador";
         var formattedReason = $"{request.Reason.Trim()} (por {userName})";

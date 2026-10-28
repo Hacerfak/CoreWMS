@@ -156,6 +156,7 @@ public class HandlingUnit : AuditableEntity
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
+    // Atualização Individual da HU
     public void UpdateFullDetails(
         string? batch,
         DateTime? mfgDate,
@@ -163,13 +164,14 @@ public class HandlingUnit : AuditableEntity
         string? serialNumber,
         DateTime? createdAt,
         Guid? packagingTypeId,
-        decimal? unitValue,
+        decimal? unitNetWeight,
+        decimal? unitGrossWeight,
         DateTime? consumedAt = null)
     {
         Batch = batch?.ToUpper().Trim();
         ManufactureDate = mfgDate.HasValue ? DateTime.SpecifyKind(mfgDate.Value.Date, DateTimeKind.Utc) : null;
         ExpirationDate = expDate.HasValue ? DateTime.SpecifyKind(expDate.Value.Date, DateTimeKind.Utc) : null;
-        SerialNumber = serialNumber?.ToUpper().Trim();
+        SerialNumber = string.IsNullOrWhiteSpace(serialNumber) ? null : serialNumber.ToUpper().Trim();
 
         if (createdAt.HasValue)
         {
@@ -181,9 +183,14 @@ public class HandlingUnit : AuditableEntity
             PackagingTypeId = packagingTypeId.Value;
         }
 
-        if (unitValue.HasValue && unitValue.Value >= 0)
+        if (unitNetWeight.HasValue && unitNetWeight.Value >= 0)
         {
-            UnitValue = unitValue.Value;
+            UnitNetWeight = unitNetWeight.Value;
+        }
+
+        if (unitGrossWeight.HasValue && unitGrossWeight.Value >= 0)
+        {
+            UnitGrossWeight = unitGrossWeight.Value;
         }
 
         if (consumedAt.HasValue)
@@ -191,6 +198,49 @@ public class HandlingUnit : AuditableEntity
             ConsumedAt = DateTime.SpecifyKind(consumedAt.Value, DateTimeKind.Utc);
         }
 
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    // Atualização em Lote (aplica apenas os campos que foram preenchidos, preservando o número de série e valores existentes)
+    public void UpdateBatchDetails(
+        string? batch,
+        DateTime? mfgDate,
+        DateTime? expDate,
+        DateTime? createdAt,
+        Guid? packagingTypeId,
+        decimal? unitNetWeight,
+        decimal? unitGrossWeight)
+    {
+        if (!string.IsNullOrWhiteSpace(batch))
+            Batch = batch.ToUpper().Trim();
+
+        if (mfgDate.HasValue)
+            ManufactureDate = DateTime.SpecifyKind(mfgDate.Value.Date, DateTimeKind.Utc);
+
+        if (expDate.HasValue)
+            ExpirationDate = DateTime.SpecifyKind(expDate.Value.Date, DateTimeKind.Utc);
+
+        if (createdAt.HasValue)
+            CreatedAt = DateTime.SpecifyKind(createdAt.Value, DateTimeKind.Utc);
+
+        if (packagingTypeId.HasValue && packagingTypeId.Value != Guid.Empty)
+            PackagingTypeId = packagingTypeId.Value;
+
+        if (unitNetWeight.HasValue && unitNetWeight.Value >= 0)
+            UnitNetWeight = unitNetWeight.Value;
+
+        if (unitGrossWeight.HasValue && unitGrossWeight.Value >= 0)
+            UnitGrossWeight = unitGrossWeight.Value;
+
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void InheritPhysicalState(HuStatus status, Guid? locationId)
+    {
+        Status = status;
+        CurrentLocationId = locationId;
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
     }

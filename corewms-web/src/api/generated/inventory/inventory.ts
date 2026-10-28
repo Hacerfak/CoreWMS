@@ -24,6 +24,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CancelOutboundInventoryAllocationsCommand,
   ChangeQualityCommand,
   GetApiInventoryBalancesExportParams,
   GetApiInventoryBalancesParams,
@@ -33,7 +34,11 @@ import type {
   GetApiInventoryKardexParams,
   MergeHandlingUnitsCommand,
   MoveHandlingUnitCommand,
+  RevertOutboundInventoryShipmentCommand,
+  RollbackInventoryBalanceByHandlingUnitsCommand,
+  RollbackKardexByHandlingUnitsCommand,
   SplitHandlingUnitCommand,
+  UpdateBatchHandlingUnitsCommand,
   UpdateHandlingUnitCommand
 } from '../model';
 
@@ -585,7 +590,68 @@ export function useGetApiInventoryKardex<TData = Awaited<ReturnType<typeof getAp
 
 
 
-export const postApiInventoryHandlingUnitsQuality = (
+export const postApiInventoryOutboundCancelAllocations = (
+    cancelOutboundInventoryAllocationsCommand: CancelOutboundInventoryAllocationsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/outbound/cancel-allocations`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: cancelOutboundInventoryAllocationsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInventoryOutboundCancelAllocationsMutationKey = () => ['postApiInventoryOutboundCancelAllocations'] as const;
+
+export const getPostApiInventoryOutboundCancelAllocationsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryOutboundCancelAllocations>>, TError,PostApiInventoryOutboundCancelAllocationsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryOutboundCancelAllocations>>, TError,PostApiInventoryOutboundCancelAllocationsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInventoryOutboundCancelAllocationsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryOutboundCancelAllocations>>, PostApiInventoryOutboundCancelAllocationsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInventoryOutboundCancelAllocations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInventoryOutboundCancelAllocationsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryOutboundCancelAllocations>>>
+    export type PostApiInventoryOutboundCancelAllocationsMutationBody = CancelOutboundInventoryAllocationsCommand
+    export type PostApiInventoryOutboundCancelAllocationsMutationError = unknown
+    export type PostApiInventoryOutboundCancelAllocationsMutationVariables = {data: CancelOutboundInventoryAllocationsCommand}
+
+    export const usePostApiInventoryOutboundCancelAllocations = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryOutboundCancelAllocations>>, TError,PostApiInventoryOutboundCancelAllocationsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInventoryOutboundCancelAllocations>>,
+        TError,
+        PostApiInventoryOutboundCancelAllocationsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInventoryOutboundCancelAllocationsMutationOptions(options), queryClient);
+    }
+    export const postApiInventoryHandlingUnitsQuality = (
     changeQualityCommand: ChangeQualityCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -767,6 +833,189 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiInventoryHandlingUnitsMoveMutationOptions(options), queryClient);
+    }
+    export const postApiInventoryOutboundRevertShipment = (
+    revertOutboundInventoryShipmentCommand: RevertOutboundInventoryShipmentCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/outbound/revert-shipment`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: revertOutboundInventoryShipmentCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInventoryOutboundRevertShipmentMutationKey = () => ['postApiInventoryOutboundRevertShipment'] as const;
+
+export const getPostApiInventoryOutboundRevertShipmentMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryOutboundRevertShipment>>, TError,PostApiInventoryOutboundRevertShipmentMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryOutboundRevertShipment>>, TError,PostApiInventoryOutboundRevertShipmentMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInventoryOutboundRevertShipmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryOutboundRevertShipment>>, PostApiInventoryOutboundRevertShipmentMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInventoryOutboundRevertShipment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInventoryOutboundRevertShipmentMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryOutboundRevertShipment>>>
+    export type PostApiInventoryOutboundRevertShipmentMutationBody = RevertOutboundInventoryShipmentCommand
+    export type PostApiInventoryOutboundRevertShipmentMutationError = unknown
+    export type PostApiInventoryOutboundRevertShipmentMutationVariables = {data: RevertOutboundInventoryShipmentCommand}
+
+    export const usePostApiInventoryOutboundRevertShipment = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryOutboundRevertShipment>>, TError,PostApiInventoryOutboundRevertShipmentMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInventoryOutboundRevertShipment>>,
+        TError,
+        PostApiInventoryOutboundRevertShipmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInventoryOutboundRevertShipmentMutationOptions(options), queryClient);
+    }
+    export const postApiInventoryBalancesRollbackByHus = (
+    rollbackInventoryBalanceByHandlingUnitsCommand: RollbackInventoryBalanceByHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/balances/rollback-by-hus`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: rollbackInventoryBalanceByHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInventoryBalancesRollbackByHusMutationKey = () => ['postApiInventoryBalancesRollbackByHus'] as const;
+
+export const getPostApiInventoryBalancesRollbackByHusMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryBalancesRollbackByHus>>, TError,PostApiInventoryBalancesRollbackByHusMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryBalancesRollbackByHus>>, TError,PostApiInventoryBalancesRollbackByHusMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInventoryBalancesRollbackByHusMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryBalancesRollbackByHus>>, PostApiInventoryBalancesRollbackByHusMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInventoryBalancesRollbackByHus(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInventoryBalancesRollbackByHusMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryBalancesRollbackByHus>>>
+    export type PostApiInventoryBalancesRollbackByHusMutationBody = RollbackInventoryBalanceByHandlingUnitsCommand
+    export type PostApiInventoryBalancesRollbackByHusMutationError = unknown
+    export type PostApiInventoryBalancesRollbackByHusMutationVariables = {data: RollbackInventoryBalanceByHandlingUnitsCommand}
+
+    export const usePostApiInventoryBalancesRollbackByHus = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryBalancesRollbackByHus>>, TError,PostApiInventoryBalancesRollbackByHusMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInventoryBalancesRollbackByHus>>,
+        TError,
+        PostApiInventoryBalancesRollbackByHusMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInventoryBalancesRollbackByHusMutationOptions(options), queryClient);
+    }
+    export const postApiInventoryKardexRollbackByHus = (
+    rollbackKardexByHandlingUnitsCommand: RollbackKardexByHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/kardex/rollback-by-hus`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: rollbackKardexByHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInventoryKardexRollbackByHusMutationKey = () => ['postApiInventoryKardexRollbackByHus'] as const;
+
+export const getPostApiInventoryKardexRollbackByHusMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryKardexRollbackByHus>>, TError,PostApiInventoryKardexRollbackByHusMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryKardexRollbackByHus>>, TError,PostApiInventoryKardexRollbackByHusMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInventoryKardexRollbackByHusMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryKardexRollbackByHus>>, PostApiInventoryKardexRollbackByHusMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInventoryKardexRollbackByHus(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInventoryKardexRollbackByHusMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryKardexRollbackByHus>>>
+    export type PostApiInventoryKardexRollbackByHusMutationBody = RollbackKardexByHandlingUnitsCommand
+    export type PostApiInventoryKardexRollbackByHusMutationError = unknown
+    export type PostApiInventoryKardexRollbackByHusMutationVariables = {data: RollbackKardexByHandlingUnitsCommand}
+
+    export const usePostApiInventoryKardexRollbackByHus = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryKardexRollbackByHus>>, TError,PostApiInventoryKardexRollbackByHusMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInventoryKardexRollbackByHus>>,
+        TError,
+        PostApiInventoryKardexRollbackByHusMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInventoryKardexRollbackByHusMutationOptions(options), queryClient);
     }
     export const postApiInventoryHandlingUnitsSplit = (
     splitHandlingUnitCommand: SplitHandlingUnitCommand,
@@ -976,4 +1225,65 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPutApiInventoryHandlingUnitsIdMutationOptions(options), queryClient);
+    }
+    export const putApiInventoryHandlingUnitsBatch = (
+    updateBatchHandlingUnitsCommand: UpdateBatchHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/handling-units/batch`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateBatchHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiInventoryHandlingUnitsBatchMutationKey = () => ['putApiInventoryHandlingUnitsBatch'] as const;
+
+export const getPutApiInventoryHandlingUnitsBatchMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsBatch>>, TError,PutApiInventoryHandlingUnitsBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsBatch>>, TError,PutApiInventoryHandlingUnitsBatchMutationVariables, TContext> => {
+
+const mutationKey = getPutApiInventoryHandlingUnitsBatchMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsBatch>>, PutApiInventoryHandlingUnitsBatchMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  putApiInventoryHandlingUnitsBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiInventoryHandlingUnitsBatchMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsBatch>>>
+    export type PutApiInventoryHandlingUnitsBatchMutationBody = UpdateBatchHandlingUnitsCommand
+    export type PutApiInventoryHandlingUnitsBatchMutationError = unknown
+    export type PutApiInventoryHandlingUnitsBatchMutationVariables = {data: UpdateBatchHandlingUnitsCommand}
+
+    export const usePutApiInventoryHandlingUnitsBatch = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsBatch>>, TError,PutApiInventoryHandlingUnitsBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiInventoryHandlingUnitsBatch>>,
+        TError,
+        PutApiInventoryHandlingUnitsBatchMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiInventoryHandlingUnitsBatchMutationOptions(options), queryClient);
     }

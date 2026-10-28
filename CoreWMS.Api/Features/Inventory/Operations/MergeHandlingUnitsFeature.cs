@@ -15,7 +15,8 @@ namespace CoreWMS.Api.Features.Inventory.Operations;
 
 public record MergeHandlingUnitsCommand(
     Guid SourceHandlingUnitId,
-    Guid DestinationHandlingUnitId,
+    string? DestinationLpn,
+    Guid? DestinationHandlingUnitId,
     decimal Quantity
 ) : IRequest<IResult>;
 
@@ -23,9 +24,15 @@ public class MergeHandlingUnitsCommandValidator : AbstractValidator<MergeHandlin
 {
     public MergeHandlingUnitsCommandValidator()
     {
-        RuleFor(x => x.SourceHandlingUnitId).NotEmpty().WithMessage("Informe a HU de origem.");
-        RuleFor(x => x.DestinationHandlingUnitId).NotEmpty().WithMessage("Informe a HU de destino.");
-        RuleFor(x => x.Quantity).GreaterThan(0).WithMessage("A quantidade a ser agrupada deve ser maior que zero.");
+        RuleFor(x => x.SourceHandlingUnitId)
+            .NotEmpty().WithMessage("Informe a HU de origem.");
+
+        RuleFor(x => x)
+            .Must(x => !string.IsNullOrWhiteSpace(x.DestinationLpn) || (x.DestinationHandlingUnitId.HasValue && x.DestinationHandlingUnitId.Value != Guid.Empty))
+            .WithMessage("Informe ou bipe o LPN / Código da HU de destino.");
+
+        RuleFor(x => x.Quantity)
+            .GreaterThan(0).WithMessage("A quantidade a ser agrupada deve ser maior que zero.");
     }
 }
 
@@ -46,19 +53,36 @@ public class MergeHandlingUnitsHandler : IRequestHandler<MergeHandlingUnitsComma
     {
         var companyId = _tenant.GetCompanyId();
 
-        if (request.SourceHandlingUnitId == request.DestinationHandlingUnitId)
-            return Results.BadRequest(new { Message = "A HU de origem não pode ser igual à HU de destino." });
-
+        // 1. Busca HU de Origem
         var sourceHu = await _db.HandlingUnits
             .Include(h => h.Product)
             .FirstOrDefaultAsync(h => h.Id == request.SourceHandlingUnitId && h.CompanyId == companyId, ct);
 
-        var destHu = await _db.HandlingUnits
-            .Include(h => h.Product)
-            .FirstOrDefaultAsync(h => h.Id == request.DestinationHandlingUnitId && h.CompanyId == companyId, ct);
+        if (sourceHu == null)
+            return Results.NotFound(new { Message = "HU de origem não encontrada." });
 
-        if (sourceHu == null || destHu == null)
-            return Results.NotFound(new { Message = "Uma ou ambas as HUs não foram encontradas." });
+        // 2. Busca HU de Destino por LPN bipado ou por Id
+        IQueryable<HandlingUnit> destQuery = _db.HandlingUnits
+            .Include(h => h.Product)
+            .Where(h => h.CompanyId == companyId);
+
+        if (!string.IsNullOrWhiteSpace(request.DestinationLpn))
+        {
+            var lpnClean = request.DestinationLpn.Trim().ToUpper();
+            destQuery = destQuery.Where(h => h.Lpn.ToUpper() == lpnClean);
+        }
+        else if (request.DestinationHandlingUnitId.HasValue)
+        {
+            destQuery = destQuery.Where(h => h.Id == request.DestinationHandlingUnitId.Value);
+        }
+
+        var destHu = await destQuery.FirstOrDefaultAsync(ct);
+
+        if (destHu == null)
+            return Results.NotFound(new { Message = $"HU de destino '{(request.DestinationLpn ?? request.DestinationHandlingUnitId?.ToString())}' não encontrada no armazém." });
+
+        if (sourceHu.Id == destHu.Id)
+            return Results.BadRequest(new { Message = "A HU de origem não pode ser a mesma de destino." });
 
         if (_tenant.IsPartnerUser())
         {
@@ -67,30 +91,30 @@ public class MergeHandlingUnitsHandler : IRequestHandler<MergeHandlingUnitsComma
                 return Results.Forbid();
         }
 
-        // 1. Não podem estar consumidas ou expedidas
+        // 3. Validação de Status (Não podem estar consumidas ou expedidas)
         if (sourceHu.Status == HuStatus.Consumed || sourceHu.Status == HuStatus.Shipped)
-            return Results.BadRequest(new { Message = $"A HU de origem {sourceHu.Lpn} está {sourceHu.Status} e não pode ser agrupada." });
+            return Results.BadRequest(new { Message = $"A HU de origem {sourceHu.Lpn} está com status '{sourceHu.Status}' e não pode transferir saldo." });
 
         if (destHu.Status == HuStatus.Consumed || destHu.Status == HuStatus.Shipped)
-            return Results.BadRequest(new { Message = $"A HU de destino {destHu.Lpn} está {destHu.Status} e não pode receber saldo." });
+            return Results.BadRequest(new { Message = $"A HU de destino {destHu.Lpn} está com status '{destHu.Status}' e não pode receber saldo." });
 
-        // 2. Trava de Número de Série
+        // 4. Trava de Número de Série
         if (!string.IsNullOrWhiteSpace(sourceHu.SerialNumber) || !string.IsNullOrWhiteSpace(destHu.SerialNumber))
             return Results.BadRequest(new { Message = "HUs com controle de Número de Série não podem ser agrupadas." });
 
-        // 3. Trava de Mesma Nota Fiscal (ReceiptDocumentId)
+        // 5. Trava de Mesma Nota Fiscal (ReceiptDocumentId)
         if (sourceHu.ReceiptDocumentId != destHu.ReceiptDocumentId)
-            return Results.BadRequest(new { Message = "As HUs devem pertencer à mesma Nota Fiscal / Ordem de Entrada para serem agrupadas." });
+            return Results.BadRequest(new { Message = $"Bloqueio Fiscal: A HU {destHu.Lpn} pertence a outra Nota Fiscal / Ordem de Entrada." });
 
-        // 4. Trava de Mesmo Produto
+        // 6. Trava de Mesmo Produto
         if (sourceHu.ProductId != destHu.ProductId)
-            return Results.BadRequest(new { Message = "As HUs devem pertencer ao mesmo Produto (SKU)." });
+            return Results.BadRequest(new { Message = $"Incompatibilidade de Produto: A HU {destHu.Lpn} contém o produto '{destHu.Product?.Sku}', diferente da origem '{sourceHu.Product?.Sku}'." });
 
-        // 5. Trava de Lote, Validade e Fabricação
+        // 7. Trava de Lote, Validade e Fabricação
         var sourceBatch = sourceHu.Batch?.Trim().ToUpper() ?? string.Empty;
         var destBatch = destHu.Batch?.Trim().ToUpper() ?? string.Empty;
         if (sourceBatch != destBatch)
-            return Results.BadRequest(new { Message = $"Conflito de Lotes: Origem ({sourceBatch}) e Destino ({destBatch}) são diferentes." });
+            return Results.BadRequest(new { Message = $"Divergência de Lote: Origem ({sourceBatch}) e Destino ({destBatch})." });
 
         if (sourceHu.ManufactureDate?.Date != destHu.ManufactureDate?.Date)
             return Results.BadRequest(new { Message = "As HUs possuem datas de fabricação diferentes." });
@@ -98,21 +122,21 @@ public class MergeHandlingUnitsHandler : IRequestHandler<MergeHandlingUnitsComma
         if (sourceHu.ExpirationDate?.Date != destHu.ExpirationDate?.Date)
             return Results.BadRequest(new { Message = "As HUs possuem datas de validade diferentes." });
 
-        // 6. Trava de Qualidade
+        // 8. Trava de Qualidade
         if (sourceHu.QualityStatus != destHu.QualityStatus)
-            return Results.BadRequest(new { Message = "As HUs possuem status de qualidade divergentes." });
+            return Results.BadRequest(new { Message = $"Status de qualidade divergente entre as HUs ({sourceHu.QualityStatus} vs {destHu.QualityStatus})." });
 
-        // 7. Validação de Saldo
+        // 9. Validação de Saldo
         if (request.Quantity > sourceHu.CurrentQuantity)
-            return Results.BadRequest(new { Message = $"Saldo insuficiente na HU de origem {sourceHu.Lpn}. Disponível: {sourceHu.CurrentQuantity}." });
+            return Results.BadRequest(new { Message = $"Saldo insuficiente na HU {sourceHu.Lpn}. Disponível: {sourceHu.CurrentQuantity}." });
 
-        // Execução do Agrupamento
+        // 10. Execução do Agrupamento
         bool wasFullyConsumed = (request.Quantity == sourceHu.CurrentQuantity);
 
         sourceHu.Consume(request.Quantity);
         destHu.AddQuantity(request.Quantity);
 
-        // Registro Kardex
+        // Registro no Kardex
         await _kardex.WriteAsync(new InventoryTransaction(
             companyId, sourceHu.CustomerId, sourceHu.ProductId, sourceHu.Id, sourceHu.CurrentLocationId,
             TransactionType.Internal_Move, -request.Quantity, sourceHu.CurrentQuantity,
@@ -130,7 +154,7 @@ public class MergeHandlingUnitsHandler : IRequestHandler<MergeHandlingUnitsComma
         return Results.Ok(new
         {
             Message = wasFullyConsumed
-                ? $"Saldo total transferido com sucesso! A HU de origem {sourceHu.Lpn} foi consumida/finalizada."
+                ? $"Saldo total ({request.Quantity}) transferido com sucesso! A HU de origem {sourceHu.Lpn} foi consumida/finalizada."
                 : $"Saldo de {request.Quantity} agrupado com sucesso na HU {destHu.Lpn}!",
             SourceLpn = sourceHu.Lpn,
             SourceRemaining = sourceHu.CurrentQuantity,

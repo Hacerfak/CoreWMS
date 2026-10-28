@@ -1,48 +1,55 @@
-using CoreWMS.Api.Features.Billing.Entities;
-using CoreWMS.Api.Features.Fiscal.Entities;
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using CoreWMS.Api.Features.Billing.Operations;
+using CoreWMS.Api.Features.Fiscal.Queries;
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
-using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Features.Outbound.Enums;
-using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Billing;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
+using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Management;
 
 public record RevertOutboundShipmentCommand(Guid OrderId) : IRequest<IResult>;
 
+public class RevertOutboundShipmentCommandValidator : AbstractValidator<RevertOutboundShipmentCommand>
+{
+    public RevertOutboundShipmentCommandValidator()
+    {
+        RuleFor(x => x.OrderId).NotEmpty().WithMessage("ID do pedido de saída obrigatório.");
+    }
+}
+
 public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipmentCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
-    private readonly BillingChannel? _billingChannel;
+    private readonly IMediator _mediator;
 
     public RevertOutboundShipmentHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        KardexChannel kardex,
-        BillingChannel? billingChannel = null)
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
-        _billingChannel = billingChannel;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(RevertOutboundShipmentCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Localiza o pedido com itens e doca
+        // 1. Localiza a ordem de saída
         var order = await _db.OutboundOrders
-            .Include(o => o.Items)
-            .Include(o => o.DockLocation)
             .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.OrderId, ct);
 
         if (order == null)
@@ -53,11 +60,8 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             return Results.BadRequest(new { Message = "Apenas pedidos com status 'Expedido' (Shipped) podem ter a expedição estornada." });
         }
 
-        // 2. Trava de Segurança Fiscal: Não permite estornar se houver NF-e autorizada
-        var hasActiveNfe = await _db.CompanyFiscalDocuments
-            .AnyAsync(d => d.OutboundOrderId == order.Id
-                        && (int)d.Type >= 1 && (int)d.Type <= 6
-                        && d.Status == FiscalDocumentStatus.Authorized, ct);
+        // 2. DELEGAÇÃO FISCAL: Verifica via módulo Fiscal se existe NF-e autorizada ativa
+        var hasActiveNfe = await _mediator.Send(new HasActiveFiscalDocumentByOutboundOrderQuery(order.Id), ct);
 
         if (hasActiveNfe)
         {
@@ -67,10 +71,10 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             });
         }
 
-        // 3. Localiza as alocações bipadas que foram consumidas na expedição
+        // 3. Localiza as alocações da ordem que foram consumidas na expedição
         var allocations = await _db.OutboundAllocations
-            .Include(a => a.HandlingUnit)
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
+            .Select(a => new RevertOutboundShipmentItemDto(a.HandlingUnitId, a.Quantity))
             .ToListAsync(ct);
 
         if (!allocations.Any())
@@ -78,81 +82,25 @@ public class RevertOutboundShipmentHandler : IRequestHandler<RevertOutboundShipm
             return Results.BadRequest(new { Message = "Nenhuma alocação confirmada encontrada para estorno neste pedido." });
         }
 
-        var targetLocationId = order.DockLocationId;
-        if (!targetLocationId.HasValue)
-        {
-            targetLocationId = await _db.Set<Location>()
-                .Where(l => l.IsActive)
-                .Select(l => (Guid?)l.Id)
-                .FirstOrDefaultAsync(ct);
-        }
+        // 4. DELEGAÇÃO AO INVENTORY: Restaura HUs, saldos (InventoryBalances) e lança no Kardex
+        var inventoryResult = await _mediator.Send(new RevertOutboundInventoryShipmentCommand(
+            order.Id,
+            order.OrderNumber,
+            order.CustomerId,
+            order.DockLocationId,
+            allocations
+        ), ct);
 
-        foreach (var alloc in allocations)
-        {
-            var hu = alloc.HandlingUnit;
-            if (hu == null) continue;
+        // 5. DELEGAÇÃO AO BILLING: Expurga itens de faturamento abertos e enfileira recálculo de diárias
+        await _mediator.Send(new RollbackOutboundBillingCommand(
+            order.Id,
+            order.OrderNumber,
+            order.CustomerId
+        ), ct);
 
-            // A) Restaura saldo, endereço e status via método de domínio
-            hu.RestoreConsumed(alloc.Quantity, targetLocationId);
-
-            // B) Devolve o saldo ao estoque consolidado como Alocado via método de domínio
-            var balance = await _db.InventoryBalances
-                .FirstOrDefaultAsync(b => b.CompanyId == companyId && b.ProductId == hu.ProductId && b.CustomerId == order.CustomerId, ct);
-
-            if (balance != null)
-            {
-                balance.RestoreShipped(alloc.Quantity);
-            }
-
-            // C) Lançamento de compensação no Kardex
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId,
-                order.CustomerId,
-                hu.ProductId,
-                hu.Id,
-                targetLocationId ?? order.DockLocationId,
-                TransactionType.Outbound_FullPallet,
-                alloc.Quantity,
-                hu.CurrentQuantity,
-                order.Id,
-                $"ESTORNO EXPEDIÇÃO - PEDIDO #{order.OrderNumber} (NF-E CANCELADA)"
-            ), ct);
-        }
-
-        // 4. Retorna a ordem para 'ReadyToShip'
+        // 6. Atualiza o status do pedido de volta para 'ReadyToShip'
         order.UpdateStatus(OutboundOrderStatus.ReadyToShip);
-
-        // 5. Exclusão dos itens operacionais de saída em ciclos abertos
-        var billingItems = await _db.BillingItems
-            .Where(b => (b.DocumentId == order.Id || b.Description.Contains(order.OrderNumber))
-                     && _db.BillingCycles.Any(c => c.Id == b.BillingCycleId && c.Status == BillingStatus.Draft))
-            .ToListAsync(ct);
-
-        if (billingItems.Any())
-        {
-            _db.BillingItems.RemoveRange(billingItems);
-        }
-
-        try
-        {
-            await _db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Results.Conflict(new { Message = "Conflito de concorrência ao estornar a expedição." });
-        }
-
-        // 6. Recálculo das diárias de armazenagem
-        if (_billingChannel != null)
-        {
-            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
-                CompanyId: companyId,
-                CustomerId: order.CustomerId,
-                ReferenceDate: DateTime.UtcNow,
-                TriggerOrderId: order.Id,
-                TriggerType: "Outbound_Shipment_Revert"
-            ), ct);
-        }
+        await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new
         {

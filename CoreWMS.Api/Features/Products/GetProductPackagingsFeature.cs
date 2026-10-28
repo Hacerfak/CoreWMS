@@ -73,7 +73,6 @@ public static class GetProductPackagingsEndpoints
         app.MapGet("/api/products/{productId:guid}/packagings", async (Guid productId, IMediator mediator) =>
             await mediator.Send(new GetProductPackagingsQuery(productId)))
            .WithTags("Products")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Products.View);
+           .RequireAuthorization();
     }
 }

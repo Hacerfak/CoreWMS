@@ -13,25 +13,41 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Split, Loader2, CheckCircle2, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Split, Loader2, CheckCircle2, Plus, Trash2, AlertCircle, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSuccess }) {
     const [packagings, setPackagings] = useState([]);
+    const [isLoadingPackagings, setIsLoadingPackagings] = useState(false);
     const [newHus, setNewHus] = useState([{ quantity: '', packagingTypeId: '' }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (open) {
-            setNewHus([{ quantity: '', packagingTypeId: '' }]);
-            customInstance({ url: '/api/topology/packaging-types', method: 'GET' })
-                .then(res => setPackagings(Array.isArray(res?.data || res) ? (res?.data || res) : []))
-                .catch(() => { });
+        if (open && sourceHu) {
+            setNewHus([{ quantity: '', packagingTypeId: sourceHu.packagingTypeId || '' }]);
+
+            const productId = sourceHu.productId;
+            if (productId) {
+                setIsLoadingPackagings(true);
+                // Consulta estrita ao endpoint de embalagens do produto
+                customInstance({ url: `/api/products/${productId}/packagings`, method: 'GET' })
+                    .then(res => {
+                        const items = res?.data || res || [];
+                        setPackagings(Array.isArray(items) ? items : []);
+                    })
+                    .catch(() => {
+                        toast.error('Não foi possível carregar as embalagens cadastradas para este produto.');
+                        setPackagings([]);
+                    })
+                    .finally(() => setIsLoadingPackagings(false));
+            } else {
+                setPackagings([]);
+            }
         }
-    }, [open]);
+    }, [open, sourceHu]);
 
     const handleAddLine = () => {
-        setNewHus(prev => [...prev, { quantity: '', packagingTypeId: '' }]);
+        setNewHus(prev => [...prev, { quantity: '', packagingTypeId: sourceHu?.packagingTypeId || '' }]);
     };
 
     const handleRemoveLine = (index) => {
@@ -50,12 +66,14 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
         e.preventDefault();
 
         if (newHus.some(h => !h.quantity || Number(h.quantity) <= 0)) {
-            return toast.warning('Preencha a quantidade de todas as novas HUs.');
+            return toast.warning('Indique uma quantidade válida (> 0) para cada nova HU gerada.');
         }
 
-        // REGRA ESTRITA: Não pode transferir 100% no transbordo
+        // REGRA ESTRITA: O transbordo NÃO pode transferir 100% do saldo da origem
         if (totalToTransfer >= sourceHu.currentQuantity) {
-            return toast.warning('O transbordo não pode transferir o saldo total da HU. Para transferir todo o saldo, utilize o Agrupamento.');
+            return toast.warning(
+                `Não é permitido transbordar todo o saldo da HU (${sourceHu.currentQuantity}). O transbordo exige a retenção de saldo residual. Para transferir a totalidade, utilize o Agrupamento.`
+            );
         }
 
         try {
@@ -76,7 +94,9 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
             onSuccess?.();
             onOpenChange(false);
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao realizar transbordo.');
+            const data = err.response?.data;
+            const msg = data?.message || data?.title || (data?.errors ? Object.values(data.errors).flat()[0] : null) || err.message || 'Erro ao realizar transbordo.';
+            toast.error(msg);
         } finally {
             setIsSubmitting(false);
         }
@@ -90,45 +110,59 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                         <Split className="h-5 w-5 text-purple-600" /> Divisão / Transbordo de HU
                     </DialogTitle>
                     <DialogDescription className="text-xs text-slate-500">
-                        Crie novas HUs filhas transferindo parte do saldo desta unidade.
+                        Crie novas HUs filhas transferindo parte do saldo disponível desta unidade de manuseio.
                     </DialogDescription>
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4 py-2">
-                    {/* RESUMO ORIGEM */}
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs font-mono">
+                    {/* RESUMO DA HU DE ORIGEM */}
+                    <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-1.5 text-xs font-mono">
                         <div className="flex justify-between items-center">
                             <span className="font-bold text-sm text-slate-900">{sourceHu?.lpn}</span>
                             <Badge className="bg-slate-200 text-slate-800 border-none font-bold">
                                 Saldo Atual: {sourceHu?.currentQuantity} {sourceHu?.unit || 'UN'}
                             </Badge>
                         </div>
-                        <div className="flex justify-between pt-1 border-t border-slate-200/60 text-slate-500 text-[11px]">
-                            <span>Transbordando: <strong className="text-purple-700">{totalToTransfer}</strong></span>
-                            <span>Saldo Restante na Origem: <strong className={remainingInSource <= 0 ? "text-rose-600" : "text-emerald-700"}>{remainingInSource}</strong></span>
+                        <div className="flex justify-between pt-1.5 border-t border-slate-200/60 text-slate-500 text-[11px]">
+                            <span>A transbordar: <strong className="text-purple-700">{totalToTransfer}</strong></span>
+                            <span>
+                                Saldo Restante na Origem:{' '}
+                                <strong className={remainingInSource <= 0 ? "text-rose-600 font-bold" : "text-emerald-700 font-bold"}>
+                                    {remainingInSource}
+                                </strong>
+                            </span>
                         </div>
                     </div>
 
                     {remainingInSource <= 0 && (
                         <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-center gap-2">
                             <AlertCircle size={15} className="shrink-0 text-rose-600" />
-                            <span>O transbordo deve manter um saldo residual na HU de origem.</span>
+                            <span>O transbordo requer a permanência de saldo residual na HU de origem.</span>
                         </div>
                     )}
 
-                    {/* LISTA DE NOVAS HUS */}
+                    {/* LISTAGEM DE NOVAS HUS */}
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                            <Label className="text-xs font-bold text-slate-700 uppercase">Novas HUs a Serem Geradas</Label>
-                            <Button type="button" size="sm" variant="outline" onClick={handleAddLine} className="h-7 text-xs border-purple-200 text-purple-700 hover:bg-purple-50">
+                            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                                Novas HUs a Gerar
+                            </Label>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={handleAddLine}
+                                className="h-7 text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                            >
                                 <Plus size={12} className="mr-1" /> Adicionar HU
                             </Button>
                         </div>
 
                         <div className="space-y-2">
                             {newHus.map((item, index) => (
-                                <div key={index} className="flex items-center gap-2 p-2 bg-slate-50/60 border border-slate-200 rounded-lg">
+                                <div key={index} className="flex items-center gap-2 p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
                                     <span className="text-xs font-mono font-bold text-slate-400 w-6 text-center">#{index + 1}</span>
+
                                     <div className="flex-1">
                                         <Input
                                             type="number"
@@ -140,19 +174,31 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                                             required
                                         />
                                     </div>
-                                    <div className="w-44">
+
+                                    <div className="w-48">
                                         <Select
                                             value={item.packagingTypeId}
                                             onValueChange={(val) => handleUpdateLine(index, 'packagingTypeId', val)}
                                         >
-                                            <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Embalagem..." /></SelectTrigger>
+                                            <SelectTrigger className="h-8 text-xs bg-white">
+                                                <SelectValue placeholder={isLoadingPackagings ? "A carregar..." : "Embalagem..."} />
+                                            </SelectTrigger>
                                             <SelectContent>
-                                                {packagings.map(p => (
-                                                    <SelectItem key={p.id} value={p.id}>{p.code} - {p.description}</SelectItem>
-                                                ))}
+                                                {packagings.length === 0 ? (
+                                                    <div className="p-2 text-center text-xs text-slate-400">
+                                                        Sem embalagens cadastradas
+                                                    </div>
+                                                ) : (
+                                                    packagings.map(p => (
+                                                        <SelectItem key={p.packagingTypeId} value={p.packagingTypeId}>
+                                                            {p.code} {p.description ? `- ${p.description}` : ''}
+                                                        </SelectItem>
+                                                    ))
+                                                )}
                                             </SelectContent>
                                         </Select>
                                     </div>
+
                                     {newHus.length > 1 && (
                                         <Button
                                             type="button"
@@ -170,11 +216,13 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                     </div>
 
                     <DialogFooter className="pt-2">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancelar
+                        </Button>
                         <Button
                             type="submit"
                             disabled={isSubmitting || totalToTransfer <= 0 || remainingInSource <= 0}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9"
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 shadow-xs text-xs"
                         >
                             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
                             Gerar {newHus.length} Nova(s) HU(s)

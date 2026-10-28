@@ -28,13 +28,22 @@ import AgruparHuModal from '@/pages/Estoque/Modals/AgruparHuModal';
 import TransbordoHuModal from '@/pages/Estoque/Modals/TransbordoHuModal';
 import EditarHuModal from '@/pages/Estoque/Modals/EditarHuModal';
 
-// COMPONENTE SELETOR PESQUISÁVEL DE POSIÇÕES
-function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição (ex: P1C1AB01)..." }) {
+const getErrorMessage = (err, fallback) => {
+    const data = err.response?.data;
+    if (typeof data === 'string') return data;
+    if (data?.message) return data.message;
+    if (data?.title) return data.title;
+    if (data?.errors && typeof data.errors === 'object') {
+        const first = Object.values(data.errors).flat()[0];
+        if (first) return String(first);
+    }
+    return err.message || fallback;
+};
+
+function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição..." }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-
     const selectedLocation = locations.find(l => l.id === value);
-
     const filteredLocations = useMemo(() => {
         if (!searchTerm) return locations.slice(0, 40);
         const term = searchTerm.toLowerCase();
@@ -53,40 +62,22 @@ function SearchableLocationSelect({ value, onChange, locations, placeholder = "P
                 </span>
                 <Search size={14} className="text-slate-400 shrink-0 ml-2" />
             </button>
-
             {isOpen && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-2">
                     <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                         <input
-                            type="text"
-                            autoFocus
-                            placeholder="Digite para filtrar..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            type="text" autoFocus placeholder="Digite para filtrar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md outline-none focus:border-blue-500 font-mono"
                         />
                     </div>
-
                     <div className="max-h-48 overflow-y-auto space-y-1">
-                        {filteredLocations.length === 0 ? (
-                            <p className="text-[11px] text-slate-400 p-2 text-center">Nenhuma posição encontrada.</p>
-                        ) : (
-                            filteredLocations.map(loc => (
-                                <div
-                                    key={loc.id}
-                                    onClick={() => {
-                                        onChange(loc.id);
-                                        setIsOpen(false);
-                                        setSearchTerm('');
-                                    }}
-                                    className={`px-2.5 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between font-mono transition-colors ${value === loc.id ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-100 text-slate-700'}`}
-                                >
-                                    <span>{loc.fullPath}</span>
-                                    {value === loc.id && <CheckCircle2 size={12} className="text-blue-600" />}
-                                </div>
-                            ))
-                        )}
+                        {filteredLocations.map(loc => (
+                            <div key={loc.id} onClick={() => { onChange(loc.id); setIsOpen(false); setSearchTerm(''); }} className={`px-2.5 py-1.5 rounded text-xs cursor-pointer flex items-center justify-between font-mono transition-colors ${value === loc.id ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-100 text-slate-700'}`}>
+                                <span>{loc.fullPath}</span>
+                                {value === loc.id && <CheckCircle2 size={12} className="text-blue-600" />}
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
@@ -111,14 +102,12 @@ export default function InboundOrderHusPage() {
     const [husToRollback, setHusToRollback] = useState(null);
     const [isRollingBack, setIsRollingBack] = useState(false);
 
-    // Modais e Diálogos de Ação Individual
     const [husToHold, setHusToHold] = useState(null);
     const [huToMerge, setHuToMerge] = useState(null);
     const [huToSplit, setHuToSplit] = useState(null);
-    const [huToEdit, setHuToEdit] = useState(null);
+    const [editingHus, setEditingHus] = useState([]);
     const [openPopoverId, setOpenPopoverId] = useState(null);
 
-    // Modal de Alocação / Movimentação
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
     const [husToMove, setHusToMove] = useState([]);
     const [targetLocationId, setTargetLocationId] = useState('');
@@ -143,6 +132,14 @@ export default function InboundOrderHusPage() {
     const orderHus = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
     const totalCount = apiResponse?.totalCount || orderHus.length;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+    // FUNÇÃO DE ATUALIZAÇÃO INTEGRAL DA ORDEM E DO INVENTÁRIO
+    const refreshData = async () => {
+        await refetch();
+        await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+    };
 
     const filteredHus = useMemo(() => {
         return orderHus.filter(hu => {
@@ -186,19 +183,17 @@ export default function InboundOrderHusPage() {
         setIsRollingBack(true);
         try {
             const huIds = husToRollback.map(h => h.id);
-            await customInstance({
+            const res = await customInstance({
                 url: '/api/inbound/receive/hus/rollback',
                 method: 'POST',
                 data: { handlingUnitIds: huIds }
             });
-            toast.success(`${huIds.length} HU(s) estornada(s) com sucesso!`);
-            await refetch();
-            queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-            queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
-            setSelectedHus(prev => prev.filter(h => !huIds.includes(h.id)));
+            toast.success(res?.message || `${huIds.length} HU(s) estornada(s) com sucesso!`);
             setHusToRollback(null);
+            setSelectedHus([]);
+            await refreshData();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao realizar o estorno das HUs.');
+            toast.error(getErrorMessage(err, 'Erro ao realizar o estorno das HUs.'));
         } finally {
             setIsRollingBack(false);
         }
@@ -215,15 +210,13 @@ export default function InboundOrderHusPage() {
                 data: { handlingUnitIds: huIds, destinationLocationId: targetLocationId }
             });
             toast.success(res?.message || 'Alocação/Movimentação concluída com sucesso!');
-            await refetch();
-            queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-            queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
-            setSelectedHus(prev => prev.filter(h => !huIds.includes(h.id)));
             setIsMoveModalOpen(false);
             setHusToMove([]);
             setTargetLocationId('');
+            setSelectedHus([]);
+            await refreshData();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao movimentar HUs.');
+            toast.error(getErrorMessage(err, 'Erro ao movimentar HUs.'));
         } finally {
             setIsMoving(false);
         }
@@ -278,7 +271,8 @@ export default function InboundOrderHusPage() {
                             <p className="text-xs text-slate-500 mt-1">Gerencie a alocação no estoque, avarias, agrupamentos e estornos da Nota Fiscal.</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
+
+                    <div className="flex gap-2 flex-wrap items-center">
                         {metrics.pendingAllocationHus > 0 && (
                             <Button onClick={() => navigate(`/inbound/operacao/${orderId}/alocacao`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs">
                                 <Sparkles className="w-4 h-4 mr-1.5" /> Alocação Inteligente ({metrics.pendingAllocationHus})
@@ -289,6 +283,14 @@ export default function InboundOrderHusPage() {
                         </Button>
                         <Button onClick={() => handleOpenMoveModal(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="text-xs font-semibold">
                             <MapPin className="w-4 h-4 mr-1.5 text-blue-600" /> Mover ({selectedHus.length})
+                        </Button>
+                        <Button
+                            onClick={() => setEditingHus(selectedHus)}
+                            disabled={selectedHus.length === 0}
+                            variant="outline"
+                            className="border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100 text-xs font-semibold"
+                        >
+                            <Pencil className="w-4 h-4 mr-1.5 text-blue-600" /> Editar ({selectedHus.length})
                         </Button>
                         <Button onClick={() => setHusToRollback(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold">
                             <Undo2 className="w-4 h-4 mr-1.5 text-rose-600" /> Estornar ({selectedHus.length})
@@ -460,8 +462,8 @@ export default function InboundOrderHusPage() {
                                                                     </button>
                                                                 </>
                                                             )}
-                                                            <button onClick={() => { setHuToEdit(hu); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                <Pencil size={14} /> Editar Rastreabilidade
+                                                            <button onClick={() => { setEditingHus([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                <Pencil size={14} className="text-blue-600" /> Editar Dados / Pesos
                                                             </button>
                                                             <button onClick={() => { setHusToRollback([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-rose-50 hover:text-rose-700 rounded-md transition-colors border-t border-slate-100 mt-1 pt-2">
                                                                 <Undo2 size={14} className="text-rose-500" /> Estornar Entrada
@@ -490,7 +492,7 @@ export default function InboundOrderHusPage() {
                 )}
             </div>
 
-            {/* MODAIS (MANTIDOS E ATUALIZADOS) */}
+            {/* MODAL DE MOVIMENTAÇÃO */}
             <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
                 <DialogContent className="sm:max-w-md bg-white">
                     <DialogHeader>
@@ -550,20 +552,21 @@ export default function InboundOrderHusPage() {
                 </DialogContent>
             </Dialog>
 
+            {/* MODAL DE APONTAMENTO DE AVARIA */}
             {husToHold && husToHold.length > 0 && (
                 <RegisterHoldModal
                     open={!!husToHold && husToHold.length > 0}
                     onOpenChange={(open) => !open && setHusToHold(null)}
                     hus={husToHold}
-                    onSuccess={() => {
-                        refetch();
-                        queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-                        queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+                    onSuccess={async () => {
+                        toast.success('Apontamento de qualidade atualizado!');
                         setSelectedHus([]);
+                        await refreshData();
                     }}
                 />
             )}
 
+            {/* ALERTA DE ESTORNO */}
             <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
                 <AlertDialogContent className="bg-white">
                     <AlertDialogHeader>
@@ -579,21 +582,27 @@ export default function InboundOrderHusPage() {
                 </AlertDialogContent>
             </AlertDialog>
 
+            {/* MODAL DE IMPRESSÃO */}
             {isPrintModalOpen && (
                 <PrintHuModal
                     open={isPrintModalOpen}
                     onOpenChange={setIsPrintModalOpen}
                     husToPrint={selectedHus}
                     orderData={order}
+                    orderDataParam={order}
                 />
             )}
 
+            {/* MODAIS COM RECARGA AUTOMÁTICA */}
             {huToMerge && (
                 <AgruparHuModal
                     open={Boolean(huToMerge)}
                     onOpenChange={(open) => !open && setHuToMerge(null)}
                     sourceHu={huToMerge}
-                    onSuccess={refetch}
+                    onSuccess={async () => {
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
 
@@ -602,16 +611,22 @@ export default function InboundOrderHusPage() {
                     open={Boolean(huToSplit)}
                     onOpenChange={(open) => !open && setHuToSplit(null)}
                     sourceHu={huToSplit}
-                    onSuccess={refetch}
+                    onSuccess={async () => {
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
 
-            {huToEdit && (
+            {editingHus.length > 0 && (
                 <EditarHuModal
-                    open={Boolean(huToEdit)}
-                    onOpenChange={(open) => !open && setHuToEdit(null)}
-                    hu={huToEdit}
-                    onSuccess={refetch}
+                    open={editingHus.length > 0}
+                    onOpenChange={(open) => !open && setEditingHus([])}
+                    hus={editingHus}
+                    onSuccess={async () => {
+                        setSelectedHus([]);
+                        await refreshData();
+                    }}
                 />
             )}
         </div>

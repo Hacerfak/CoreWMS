@@ -7,6 +7,9 @@
 
 export interface MergeHandlingUnitsCommand {
   sourceHandlingUnitId?: string;
-  destinationHandlingUnitId?: string;
+  /** @nullable */
+  destinationLpn?: string | null;
+  /** @nullable */
+  destinationHandlingUnitId?: string | null;
   quantity?: number;
 }

@@ -145,9 +145,11 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
                 h.Id,
                 h.Lpn,
                 h.Customer.CorporateName,
+                h.ProductId,                // <-- h.ProductId
                 h.Product.Sku,
                 h.Product.Description,
                 h.Product.BaseUnit,
+                h.PackagingTypeId,          // <-- h.PackagingTypeId
                 h.PackagingType.Code,
                 h.CurrentLocationId,
                 h.CurrentLocation?.FullPath,
@@ -159,6 +161,8 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
                 h.CurrentQuantity,
                 h.UnitValue,
                 totalValue,
+                h.UnitNetWeight,           // <-- h.UnitNetWeight
+                h.UnitGrossWeight,         // <-- h.UnitGrossWeight
                 h.Status.ToString(),
                 h.QualityStatus.ToString(),
                 h.ReceiptDocumentId,

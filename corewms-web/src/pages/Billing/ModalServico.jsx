@@ -95,7 +95,7 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
 SELECT
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
     io."IssueDate"::date AS "DATA_ENTRADA",
-    p."SkuCode" AS "SKU",
+    p."Sku" AS "SKU",
     p."Description" AS "DESCRICAO",
     pt."Code" AS "TIPO_VOLUME",
     COUNT(DISTINCT h."Id") AS "VOLUME",
@@ -111,15 +111,15 @@ WHERE h."CompanyId" = @ArmazemId
       h."Status" IN (1, 2)
       OR (h."UpdatedAt" >= @CobrancaDataIni)
   )
-GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."SkuCode", p."Description", pt."Code"
-ORDER BY "NF_ENTRADA", p."SkuCode";`;
+GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
+ORDER BY "NF_ENTRADA", p."Sku";`;
                 break;
             case 'ad_valorem':
                 sql = `-- Seguro / Ad-Valorem Diário (Sobre valor de mercadoria em custódia)
 SELECT
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
     io."IssueDate"::date AS "DATA_ENTRADA",
-    p."SkuCode" AS "SKU",
+    p."Sku" AS "SKU",
     p."Description" AS "DESCRICAO",
     pt."Code" AS "TIPO_VOLUME",
     COUNT(DISTINCT h."Id") AS "VOLUME",
@@ -138,8 +138,8 @@ WHERE h."CompanyId" = @ArmazemId
       h."Status" IN (1, 2)
       OR (h."UpdatedAt" >= @CobrancaDataIni)
   )
-GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."SkuCode", p."Description", pt."Code"
-ORDER BY "NF_ENTRADA", p."SkuCode";`;
+GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
+ORDER BY "NF_ENTRADA", p."Sku";`;
                 break;
             case 'inbound_volumes':
                 sql = `-- Recebimento por Tipo de Volume (Inbound)
