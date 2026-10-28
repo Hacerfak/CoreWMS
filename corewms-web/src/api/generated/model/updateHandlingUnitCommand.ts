@@ -15,4 +15,12 @@ export interface UpdateHandlingUnitCommand {
   expirationDate?: string | null;
   /** @nullable */
   serialNumber?: string | null;
+  /** @nullable */
+  createdAt?: string | null;
+  /** @nullable */
+  packagingTypeId?: string | null;
+  /** @nullable */
+  unitValue?: number | null;
+  /** @nullable */
+  consumedAt?: string | null;
 }

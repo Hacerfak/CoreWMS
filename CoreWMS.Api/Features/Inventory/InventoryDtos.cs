@@ -24,7 +24,8 @@ public record HandlingUnitDto(
     DateTime CreatedAt,
     string? NfeNumber,
     string? NfeSeries,
-    string? AccessKey
+    string? AccessKey,
+    DateTime? ConsumedAt = null
 );
 
 public record InventoryBalanceDto(

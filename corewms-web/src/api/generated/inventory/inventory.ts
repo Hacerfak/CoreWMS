@@ -31,7 +31,9 @@ import type {
   GetApiInventoryHandlingUnitsParams,
   GetApiInventoryKardexExportParams,
   GetApiInventoryKardexParams,
+  MergeHandlingUnitsCommand,
   MoveHandlingUnitCommand,
+  SplitHandlingUnitCommand,
   UpdateHandlingUnitCommand
 } from '../model';
 
@@ -644,6 +646,67 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiInventoryHandlingUnitsQualityMutationOptions(options), queryClient);
     }
+    export const postApiInventoryHandlingUnitsMerge = (
+    mergeHandlingUnitsCommand: MergeHandlingUnitsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/handling-units/merge`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: mergeHandlingUnitsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInventoryHandlingUnitsMergeMutationKey = () => ['postApiInventoryHandlingUnitsMerge'] as const;
+
+export const getPostApiInventoryHandlingUnitsMergeMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsMerge>>, TError,PostApiInventoryHandlingUnitsMergeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsMerge>>, TError,PostApiInventoryHandlingUnitsMergeMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInventoryHandlingUnitsMergeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsMerge>>, PostApiInventoryHandlingUnitsMergeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInventoryHandlingUnitsMerge(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInventoryHandlingUnitsMergeMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsMerge>>>
+    export type PostApiInventoryHandlingUnitsMergeMutationBody = MergeHandlingUnitsCommand
+    export type PostApiInventoryHandlingUnitsMergeMutationError = unknown
+    export type PostApiInventoryHandlingUnitsMergeMutationVariables = {data: MergeHandlingUnitsCommand}
+
+    export const usePostApiInventoryHandlingUnitsMerge = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsMerge>>, TError,PostApiInventoryHandlingUnitsMergeMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInventoryHandlingUnitsMerge>>,
+        TError,
+        PostApiInventoryHandlingUnitsMergeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInventoryHandlingUnitsMergeMutationOptions(options), queryClient);
+    }
     export const postApiInventoryHandlingUnitsMove = (
     moveHandlingUnitCommand: MoveHandlingUnitCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -704,6 +767,67 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiInventoryHandlingUnitsMoveMutationOptions(options), queryClient);
+    }
+    export const postApiInventoryHandlingUnitsSplit = (
+    splitHandlingUnitCommand: SplitHandlingUnitCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/inventory/handling-units/split`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: splitHandlingUnitCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiInventoryHandlingUnitsSplitMutationKey = () => ['postApiInventoryHandlingUnitsSplit'] as const;
+
+export const getPostApiInventoryHandlingUnitsSplitMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsSplit>>, TError,PostApiInventoryHandlingUnitsSplitMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsSplit>>, TError,PostApiInventoryHandlingUnitsSplitMutationVariables, TContext> => {
+
+const mutationKey = getPostApiInventoryHandlingUnitsSplitMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsSplit>>, PostApiInventoryHandlingUnitsSplitMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiInventoryHandlingUnitsSplit(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiInventoryHandlingUnitsSplitMutationResult = NonNullable<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsSplit>>>
+    export type PostApiInventoryHandlingUnitsSplitMutationBody = SplitHandlingUnitCommand
+    export type PostApiInventoryHandlingUnitsSplitMutationError = unknown
+    export type PostApiInventoryHandlingUnitsSplitMutationVariables = {data: SplitHandlingUnitCommand}
+
+    export const usePostApiInventoryHandlingUnitsSplit = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiInventoryHandlingUnitsSplit>>, TError,PostApiInventoryHandlingUnitsSplitMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiInventoryHandlingUnitsSplit>>,
+        TError,
+        PostApiInventoryHandlingUnitsSplitMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiInventoryHandlingUnitsSplitMutationOptions(options), queryClient);
     }
     export const getApiInventoryPutawaySuggestionsOrderId = (
     orderId: string,
@@ -791,7 +915,7 @@ export function useGetApiInventoryPutawaySuggestionsOrderId<TData = Awaited<Retu
 
 
 
-export const putApiInventoryHandlingUnitsIdTraceability = (
+export const putApiInventoryHandlingUnitsId = (
     id: string,
     updateHandlingUnitCommand: UpdateHandlingUnitCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -799,7 +923,7 @@ export const putApiInventoryHandlingUnitsIdTraceability = (
 
 
       return customInstance<void>(
-      {url: `/api/inventory/handling-units/${id}/traceability`, method: 'PUT',
+      {url: `/api/inventory/handling-units/${id}`, method: 'PUT',
       headers: {'Content-Type': 'application/json', },
       data: updateHandlingUnitCommand, signal
     },
@@ -809,13 +933,13 @@ export const putApiInventoryHandlingUnitsIdTraceability = (
 
 
 
-export const getPutApiInventoryHandlingUnitsIdTraceabilityMutationKey = () => ['putApiInventoryHandlingUnitsIdTraceability'] as const;
+export const getPutApiInventoryHandlingUnitsIdMutationKey = () => ['putApiInventoryHandlingUnitsId'] as const;
 
-export const getPutApiInventoryHandlingUnitsIdTraceabilityMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext> => {
+export const getPutApiInventoryHandlingUnitsIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsId>>, TError,PutApiInventoryHandlingUnitsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsId>>, TError,PutApiInventoryHandlingUnitsIdMutationVariables, TContext> => {
 
-const mutationKey = getPutApiInventoryHandlingUnitsIdTraceabilityMutationKey();
+const mutationKey = getPutApiInventoryHandlingUnitsIdMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -825,10 +949,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsId>>, PutApiInventoryHandlingUnitsIdMutationVariables> = (props) => {
           const {id,data} = props ?? {};
 
-          return  putApiInventoryHandlingUnitsIdTraceability(id,data,requestOptions)
+          return  putApiInventoryHandlingUnitsId(id,data,requestOptions)
         }
 
 
@@ -838,18 +962,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>>
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationBody = UpdateHandlingUnitCommand
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationError = unknown
-    export type PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables = {id: string;data: UpdateHandlingUnitCommand}
+    export type PutApiInventoryHandlingUnitsIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsId>>>
+    export type PutApiInventoryHandlingUnitsIdMutationBody = UpdateHandlingUnitCommand
+    export type PutApiInventoryHandlingUnitsIdMutationError = unknown
+    export type PutApiInventoryHandlingUnitsIdMutationVariables = {id: string;data: UpdateHandlingUnitCommand}
 
-    export const usePutApiInventoryHandlingUnitsIdTraceability = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>, TError,PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+    export const usePutApiInventoryHandlingUnitsId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiInventoryHandlingUnitsId>>, TError,PutApiInventoryHandlingUnitsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof putApiInventoryHandlingUnitsIdTraceability>>,
+        Awaited<ReturnType<typeof putApiInventoryHandlingUnitsId>>,
         TError,
-        PutApiInventoryHandlingUnitsIdTraceabilityMutationVariables,
+        PutApiInventoryHandlingUnitsIdMutationVariables,
         TContext
       > => {
-      return useMutation(getPutApiInventoryHandlingUnitsIdTraceabilityMutationOptions(options), queryClient);
+      return useMutation(getPutApiInventoryHandlingUnitsIdMutationOptions(options), queryClient);
     }

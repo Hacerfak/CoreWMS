@@ -113,13 +113,16 @@ public class ExportHandlingUnitsHandler : IRequestHandler<ExportHandlingUnitsQue
             .ToDictionaryAsync(o => o.Id, o => o.AccessKey, ct);
 
         var builder = new StringBuilder();
-        builder.AppendLine("LPN;CnpjDepositante;Depositante;SKU;UnidadeBase;DescricaoProduto;TipoVolume;DataEntrada;NumeroNFe;SerieNFe;ChaveAcesso;Endereco;Lote;DataFabricacao;DataValidade;NumeroSerie;QtdInicial;QtdAtual;ValorUnitario;ValorTotalHU;Status;Qualidade");
+        builder.AppendLine("LPN;CnpjDepositante;Depositante;SKU;UnidadeBase;DescricaoProduto;TipoVolume;DataEntrada;DataFinalizacao;NumeroNFe;SerieNFe;ChaveAcesso;Endereco;Lote;DataFabricacao;DataValidade;NumeroSerie;QtdInicial;QtdAtual;ValorUnitario;ValorTotalHU;Status;Qualidade");
 
         foreach (var h in hus)
         {
-            // Conversão de UTC para Brasília (UTC-3)
             var localCreatedAt = TimeZoneInfo.ConvertTimeFromUtc(h.CreatedAt, BrasiliaTimeZone);
             var createdAtStr = localCreatedAt.ToString("dd/MM/yyyy HH:mm:ss");
+
+            var consumedAtStr = h.ConsumedAt.HasValue
+                ? TimeZoneInfo.ConvertTimeFromUtc(h.ConsumedAt.Value, BrasiliaTimeZone).ToString("dd/MM/yyyy HH:mm:ss")
+                : "";
 
             var mfg = h.ManufactureDate?.ToString("dd/MM/yyyy") ?? "";
             var exp = h.ExpirationDate?.ToString("dd/MM/yyyy") ?? "";
@@ -135,7 +138,6 @@ public class ExportHandlingUnitsHandler : IRequestHandler<ExportHandlingUnitsQue
                 nfeNum = int.Parse(accessKey.Substring(25, 9)).ToString();
             }
 
-            // Apóstrofo sem aspas duplas envolventes no CSV
             var cnpjCell = string.IsNullOrWhiteSpace(h.Customer.Cnpj) ? "" : $"'{h.Customer.Cnpj.Trim()}";
             var accessKeyCell = string.IsNullOrWhiteSpace(accessKey) ? "" : $"'{accessKey.Trim()}";
 
@@ -145,7 +147,7 @@ public class ExportHandlingUnitsHandler : IRequestHandler<ExportHandlingUnitsQue
             var unitValStr = h.UnitValue.ToString("0.00######", PtBrCulture);
             var totalValStr = totalValue.ToString("0.00######", PtBrCulture);
 
-            builder.AppendLine($"\"{h.Lpn}\";{cnpjCell};\"{h.Customer.CorporateName}\";\"{h.Product.Sku}\";\"{h.Product.BaseUnit}\";\"{h.Product.Description}\";\"{h.PackagingType.Code}\";\"{createdAtStr}\";\"{nfeNum}\";\"{nfeSerie}\";{accessKeyCell};\"{loc}\";\"{h.Batch ?? ""}\";\"{mfg}\";\"{exp}\";\"{h.SerialNumber ?? ""}\";{initialQtyStr};{currentQtyStr};{unitValStr};{totalValStr};\"{h.Status}\";\"{h.QualityStatus}\"");
+            builder.AppendLine($"\"{h.Lpn}\";{cnpjCell};\"{h.Customer.CorporateName}\";\"{h.Product.Sku}\";\"{h.Product.BaseUnit}\";\"{h.Product.Description}\";\"{h.PackagingType.Code}\";\"{createdAtStr}\";\"{consumedAtStr}\";\"{nfeNum}\";\"{nfeSerie}\";{accessKeyCell};\"{loc}\";\"{h.Batch ?? ""}\";\"{mfg}\";\"{exp}\";\"{h.SerialNumber ?? ""}\";{initialQtyStr};{currentQtyStr};{unitValStr};{totalValStr};\"{h.Status}\";\"{h.QualityStatus}\"");
         }
 
         var preamble = Encoding.UTF8.GetPreamble();

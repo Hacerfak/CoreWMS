@@ -165,7 +165,8 @@ public class ListHandlingUnitsHandler : IRequestHandler<ListHandlingUnitsQuery, 
                 h.CreatedAt,
                 nfeNum,
                 nfeSerie,
-                accessKey
+                accessKey,
+                h.ConsumedAt
             );
         }).ToList();
 

@@ -33,6 +33,10 @@ public class HandlingUnit : AuditableEntity
     public decimal UnitGrossWeight { get; private set; }
     public HuStatus Status { get; private set; }
     public QualityStatus QualityStatus { get; private set; }
+
+    // Data de Finalização / Consumo 100%
+    public DateTime? ConsumedAt { get; private set; }
+
     public Guid Version { get; private set; } = FastGuid.NewPostgreSqlGuid();
 
     protected HandlingUnit() { }
@@ -51,7 +55,6 @@ public class HandlingUnit : AuditableEntity
         ReceiptDocumentId = receiptDocumentId;
         Batch = batch?.ToUpper().Trim();
 
-        // Normalização estrita de data civil
         ManufactureDate = mfgDate.HasValue ? DateTime.SpecifyKind(mfgDate.Value.Date, DateTimeKind.Utc) : null;
         ExpirationDate = expDate.HasValue ? DateTime.SpecifyKind(expDate.Value.Date, DateTimeKind.Utc) : null;
 
@@ -63,6 +66,7 @@ public class HandlingUnit : AuditableEntity
         QualityStatus = QualityStatus.Available;
         UnitNetWeight = unitNetWeight;
         UnitGrossWeight = unitGrossWeight;
+        ConsumedAt = null;
     }
 
     public void ReceiveAtDock(Guid dockLocationId)
@@ -88,15 +92,35 @@ public class HandlingUnit : AuditableEntity
         Version = FastGuid.NewPostgreSqlGuid();
     }
 
+    public void AddQuantity(decimal quantityToAdd)
+    {
+        if (quantityToAdd <= 0)
+            throw new ArgumentException("A quantidade a ser adicionada deve ser maior que zero.", nameof(quantityToAdd));
+
+        CurrentQuantity += quantityToAdd;
+        if (CurrentQuantity > 0 && Status == HuStatus.Consumed)
+        {
+            Status = HuStatus.Stored;
+            ConsumedAt = null;
+        }
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
     public void Consume(decimal quantityToConsume)
     {
-        if (quantityToConsume > CurrentQuantity) throw new InvalidOperationException($"Saldo insuficiente na HU {Lpn}. Tentativa: {quantityToConsume}, Disponível: {CurrentQuantity}");
+        if (quantityToConsume > CurrentQuantity)
+            throw new InvalidOperationException($"Saldo insuficiente na HU {Lpn}. Tentativa: {quantityToConsume}, Disponível: {CurrentQuantity}");
+
         CurrentQuantity -= quantityToConsume;
+
         if (CurrentQuantity == 0)
         {
             Status = HuStatus.Consumed;
             CurrentLocationId = null;
+            ConsumedAt = DateTime.UtcNow; // Registra a data/hora exata do consumo total
         }
+
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
     }
@@ -105,15 +129,19 @@ public class HandlingUnit : AuditableEntity
     {
         if (quantityToRestore <= 0)
             throw new ArgumentException("A quantidade a ser restaurada deve ser maior que zero.", nameof(quantityToRestore));
+
         CurrentQuantity += quantityToRestore;
+
         if (Status == HuStatus.Consumed || !CurrentLocationId.HasValue || CurrentLocationId == Guid.Empty)
         {
             Status = HuStatus.Stored;
+            ConsumedAt = null; // Reabre a HU limpando a data de finalização
             if (restoreLocationId.HasValue && restoreLocationId.Value != Guid.Empty)
             {
                 CurrentLocationId = restoreLocationId.Value;
             }
         }
+
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
     }
@@ -124,6 +152,45 @@ public class HandlingUnit : AuditableEntity
         ManufactureDate = mfgDate.HasValue ? DateTime.SpecifyKind(mfgDate.Value.Date, DateTimeKind.Utc) : null;
         ExpirationDate = expDate.HasValue ? DateTime.SpecifyKind(expDate.Value.Date, DateTimeKind.Utc) : null;
         SerialNumber = serialNumber?.ToUpper().Trim();
+        UpdatedAt = DateTime.UtcNow;
+        Version = FastGuid.NewPostgreSqlGuid();
+    }
+
+    public void UpdateFullDetails(
+        string? batch,
+        DateTime? mfgDate,
+        DateTime? expDate,
+        string? serialNumber,
+        DateTime? createdAt,
+        Guid? packagingTypeId,
+        decimal? unitValue,
+        DateTime? consumedAt = null)
+    {
+        Batch = batch?.ToUpper().Trim();
+        ManufactureDate = mfgDate.HasValue ? DateTime.SpecifyKind(mfgDate.Value.Date, DateTimeKind.Utc) : null;
+        ExpirationDate = expDate.HasValue ? DateTime.SpecifyKind(expDate.Value.Date, DateTimeKind.Utc) : null;
+        SerialNumber = serialNumber?.ToUpper().Trim();
+
+        if (createdAt.HasValue)
+        {
+            CreatedAt = DateTime.SpecifyKind(createdAt.Value, DateTimeKind.Utc);
+        }
+
+        if (packagingTypeId.HasValue && packagingTypeId.Value != Guid.Empty)
+        {
+            PackagingTypeId = packagingTypeId.Value;
+        }
+
+        if (unitValue.HasValue && unitValue.Value >= 0)
+        {
+            UnitValue = unitValue.Value;
+        }
+
+        if (consumedAt.HasValue)
+        {
+            ConsumedAt = DateTime.SpecifyKind(consumedAt.Value, DateTimeKind.Utc);
+        }
+
         UpdatedAt = DateTime.UtcNow;
         Version = FastGuid.NewPostgreSqlGuid();
     }
