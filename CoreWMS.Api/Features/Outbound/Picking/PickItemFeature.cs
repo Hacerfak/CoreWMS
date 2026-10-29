@@ -1,4 +1,9 @@
+using System;
+using System.Linq;
 using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
+using CoreWMS.Api.Features.Billing.Operations;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Outbound.Entities;
@@ -7,6 +12,10 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Picking;
@@ -15,7 +24,8 @@ public record PickItemCommand(
     Guid OrderId,
     Guid? OrderItemId,
     string ScannedLpn,
-    decimal PickedQuantity
+    decimal PickedQuantity,
+    Guid? HandlingServiceId = null
 ) : IRequest<IResult>;
 
 public class PickItemCommandValidator : AbstractValidator<PickItemCommand>
@@ -33,12 +43,18 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly IHttpContextAccessor _http;
+    private readonly IMediator _mediator;
 
-    public PickItemHandler(ApplicationDbContext db, ITenantProvider tenant, IHttpContextAccessor http)
+    public PickItemHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IHttpContextAccessor http,
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
         _http = http;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(PickItemCommand request, CancellationToken ct)
@@ -106,7 +122,7 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
         if (request.PickedQuantity > freeQtyOnHu)
             return Results.BadRequest(new { Message = $"A etiqueta '{lpnClean}' não possui saldo livre suficiente. Disponível: {freeQtyOnHu}, Solicitado: {request.PickedQuantity}." });
 
-        // 1. Grava a alocação recolhida com carimbo do utilizador
+        // 1. Grava a alocação recolhida
         var existingPickedAlloc = await _db.OutboundAllocations
             .FirstOrDefaultAsync(a => a.OutboundOrderId == order.Id &&
                                       a.OutboundOrderItemId == orderItem.Id &&
@@ -125,7 +141,7 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
             _db.OutboundAllocations.Add(pickedAlloc);
         }
 
-        // 2. Abate reservas não colhidas
+        // 2. Abate reservas não recolhidas
         var unpickedAllocations = await _db.OutboundAllocations
             .Where(a => a.OutboundOrderId == order.Id && a.OutboundOrderItemId == orderItem.Id && !a.IsPicked)
             .OrderByDescending(a => a.HandlingUnitId == hu.Id)
@@ -155,12 +171,10 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
         }
         orderItem.AddPickedQuantity(request.PickedQuantity);
 
-        // 3. AUTO-PACKING PARA VOLUMES FECHADOS:
-        // Se a quantidade recolhida iguala a quantidade total física da HU (palete/caixa fechada intacta)
+        // 3. AUTO-PACKING PARA VOLUMES FECHADOS
         bool isFullClosedHu = (request.PickedQuantity == hu.CurrentQuantity);
         if (isFullClosedHu)
         {
-            // Cria ou reutiliza o OutboundVolume com o LPN da HU
             var existingVol = order.Volumes.FirstOrDefault(v => v.VolumeLpn == hu.Lpn);
             if (existingVol == null)
             {
@@ -181,34 +195,39 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
                 _db.OutboundVolumes.Add(autoVol);
             }
 
-            // Atualiza balde de packing do item
             orderItem.AddPackedQuantity(request.PickedQuantity);
         }
 
-        // 4. Avalia transição do status macro
+        // 4. Avalia transição de status macro
         bool allPicked = order.Items.All(i => i.PickedQuantity >= i.ExpectedQuantity);
         bool allPacked = order.Items.All(i => i.PackedQuantity >= i.ExpectedQuantity);
 
         if (allPicked && allPacked)
         {
-            order.UpdateStatus(OutboundOrderStatus.Checking); // Pronto para conferência final
+            order.UpdateStatus(OutboundOrderStatus.Checking);
         }
         else if (allPicked)
         {
-            order.UpdateStatus(OutboundOrderStatus.Packing); // Ainda há fracionados na mesa de packing
+            order.UpdateStatus(OutboundOrderStatus.Packing);
         }
         else
         {
-            order.UpdateStatus(OutboundOrderStatus.Picking); // Separação em curso (conferência paralela permitida!)
+            order.UpdateStatus(OutboundOrderStatus.Picking);
         }
 
-        try
+        await _db.SaveChangesAsync(ct);
+
+        // 5. DELEGAÇÃO MODULAR VIA MEDIATR: Se 100% Auto-Packing, cobra a expedição imediatamente
+        if (allPicked && allPacked)
         {
-            await _db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            return Results.Conflict(new { Message = "Conflito de concorrência ao recolher volume. Tente novamente." });
+            await _mediator.Send(new BillOutboundHandlingCommand(
+                OutboundOrderId: order.Id,
+                OrderNumber: order.OrderNumber,
+                CustomerId: order.CustomerId,
+                HandlingServiceId: request.HandlingServiceId,
+                UsedStretchFilm: false,
+                TriggerType: "Outbound_AutoPacking"
+            ), ct);
         }
 
         return Results.Ok(new
@@ -230,7 +249,8 @@ public static class OutboundPickingEndpoints
 {
     public static void MapOutboundPickingEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/outbound/picking/scan", async (PickItemCommand cmd, IMediator mediator) => await mediator.Send(cmd))
+        app.MapPost("/api/outbound/picking/scan", async ([FromBody] PickItemCommand cmd, IMediator mediator) =>
+            await mediator.Send(cmd))
            .WithTags("Outbound")
            .RequireAuthorization()
            .RequirePermission(Permissions.Outbound.Manage);

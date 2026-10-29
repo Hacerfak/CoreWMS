@@ -1,13 +1,16 @@
 using System.Security.Claims;
-using CoreWMS.Api.Features.Billing.Entities;
+using CoreWMS.Api.Features.Billing.Operations;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Billing;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Packing;
@@ -47,29 +50,25 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly BillingEngineService _billingEngine;
-    private readonly BillingChannel? _billingChannel;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IMediator _mediator;
 
     public FinalizeOrderPackingHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        BillingEngineService billingEngine,
         IHttpContextAccessor httpContextAccessor,
-        BillingChannel? billingChannel = null)
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _billingEngine = billingEngine;
         _httpContextAccessor = httpContextAccessor;
-        _billingChannel = billingChannel;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(FinalizeOrderPackingCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
-        // Extrai a identificação nominal do utilizador a partir do contexto HTTP
         var user = _httpContextAccessor.HttpContext?.User;
         var userId = Guid.TryParse(user?.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uGuid) ? uGuid : (Guid?)null;
         var userName = user?.FindFirst("Name")?.Value
@@ -96,7 +95,6 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             });
         }
 
-        // 1. Validação do Momento 1: todos os itens precisam de estar 100% apontados
         var pendingItems = order.Items.Where(i =>
             i.Status != OutboundOrderItemStatus.Packed && i.PackedQuantity < i.ExpectedQuantity).ToList();
 
@@ -125,13 +123,13 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
         if (packagingTypes.Count != packTypeIds.Count)
             return Results.BadRequest(new { Message = "Um ou mais tipos de embalagens de transporte são inválidos." });
 
-        // 2. Remove volumes manuais anteriores se houver re-packing (mantendo registos de conferência íntegros)
-        if (order.Volumes.Any())
+        // Remove apenas volumes manuais anteriores (preserva volumes criados via Auto-Packing)
+        var manualVolumes = order.Volumes.Where(v => !v.IsAutoPacked).ToList();
+        if (manualVolumes.Any())
         {
-            _db.OutboundVolumes.RemoveRange(order.Volumes);
+            _db.OutboundVolumes.RemoveRange(manualVolumes);
         }
 
-        // 3. Cálculo de peso bruto automático com fallback para HUs e Produtos
         var allocations = await _db.OutboundAllocations
             .AsNoTracking()
             .Include(a => a.HandlingUnit)
@@ -153,7 +151,6 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             ? Math.Round(calculatedOrderGrossWeight / totalShippingVolumesCount, 3)
             : 0m;
 
-        // 4. Momento 2: Geração das unidades logísticas finais de transporte com rastreabilidade nominal
         var createdShippingVolumes = new List<OutboundVolume>();
         int volumeSequence = 1;
 
@@ -185,49 +182,19 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
         }
 
         _db.OutboundVolumes.AddRange(createdShippingVolumes);
-
-        // 5. Atualiza a doca e reavalia a máquina de estados (Checking se conferência pendente, ReadyToShip se 100%)
         order.StageAtDock(request.DockLocationId);
 
-        // Persiste as alterações físicas
         await _db.SaveChangesAsync(ct);
 
-        // 6. Faturamento dos Eventos Operacionais (Handling Out e Stretch) vinculados ao Pedido
-        var billingItemsGenerated = await GenerateBillingEventsAsync(
-            companyId,
-            order,
-            request.UsedStretchFilm,
-            request.HandlingServiceId,
-            ct
-        );
-
-        // 7. Atualização assíncrona das diárias cumulativas
-        if (_billingChannel != null)
-        {
-            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
-                CompanyId: companyId,
-                CustomerId: order.CustomerId,
-                ReferenceDate: DateTime.UtcNow,
-                TriggerOrderId: order.Id,
-                TriggerType: "Outbound_Packing"
-            ), ct);
-        }
-        else
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _billingEngine.UpsertDailyChargesAsync(
-                        companyId,
-                        order.CustomerId,
-                        DateTime.UtcNow,
-                        CancellationToken.None
-                    );
-                }
-                catch { }
-            });
-        }
+        // DELEGAÇÃO MODULAR VIA MEDIATR: Módulo Billing apura Handling Out e Stretch
+        await _mediator.Send(new BillOutboundHandlingCommand(
+            OutboundOrderId: order.Id,
+            OrderNumber: order.OrderNumber,
+            CustomerId: order.CustomerId,
+            HandlingServiceId: request.HandlingServiceId,
+            UsedStretchFilm: request.UsedStretchFilm,
+            TriggerType: "Outbound_Packing"
+        ), ct);
 
         return Results.Ok(new
         {
@@ -237,145 +204,8 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
             DockLocation = dockLocation.FullPath,
             TotalShippingVolumes = createdShippingVolumes.Count,
             UsedStretchFilm = request.UsedStretchFilm,
-            TotalCalculatedGrossWeight = createdShippingVolumes.Sum(v => v.GrossWeight),
-            BillingEventsCount = billingItemsGenerated.Count
+            TotalCalculatedGrossWeight = createdShippingVolumes.Sum(v => v.GrossWeight)
         });
-    }
-
-    private async Task<List<BillingItem>> GenerateBillingEventsAsync(
-        Guid companyId,
-        OutboundOrder order,
-        bool usedStretch,
-        Guid? handlingServiceId,
-        CancellationToken ct)
-    {
-        var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
-
-        var cycle = await _db.BillingCycles
-            .Include(c => c.Items)
-            .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
-                                      c.CustomerId == order.CustomerId &&
-                                      c.ReferenceMonth == currentMonth &&
-                                      c.Status == BillingStatus.Draft, ct);
-
-        if (cycle == null)
-        {
-            cycle = new BillingCycle(companyId, order.CustomerId, DateTime.UtcNow);
-            _db.BillingCycles.Add(cycle);
-            await _db.SaveChangesAsync(ct);
-        }
-
-        var customerTariffs = await _db.CustomerTariffs
-            .Include(t => t.BillingService)
-            .Where(t => t.CompanyId == companyId &&
-                        t.CustomerId == order.CustomerId &&
-                        t.BillingService.IsActive &&
-                        t.ValidFrom <= DateTime.UtcNow &&
-                        (t.ValidTo == null || t.ValidTo >= DateTime.UtcNow))
-            .ToListAsync(ct);
-
-        var generatedItems = new List<BillingItem>();
-
-        CustomerTariff? handlingTariff = null;
-        if (handlingServiceId.HasValue)
-        {
-            handlingTariff = customerTariffs.FirstOrDefault(t => t.BillingServiceId == handlingServiceId.Value);
-        }
-
-        handlingTariff ??= customerTariffs.FirstOrDefault(t =>
-            !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
-            (t.BillingService.Name.Contains("Expedição", StringComparison.OrdinalIgnoreCase) ||
-             t.BillingService.Name.Contains("Handling Out", StringComparison.OrdinalIgnoreCase) ||
-             t.BillingService.Name.Contains("Saída", StringComparison.OrdinalIgnoreCase)));
-
-        if (handlingTariff != null)
-        {
-            var calculatedItem = await _billingEngine.ExecuteOperationalEventAsync(
-                cycle,
-                handlingTariff.BillingService,
-                handlingTariff,
-                orderId: order.Id,
-                documentType: "Ordem de Saída",
-                documentNumber: order.OrderNumber,
-                orderItemId: null
-            );
-
-            if (calculatedItem != null && (calculatedItem.QuantityTotal > 0 || calculatedItem.ServiceTotal > 0))
-            {
-                var existingItem = cycle.Items.FirstOrDefault(i =>
-                    i.BillingServiceId == handlingTariff.BillingServiceId &&
-                    i.DocumentId == order.Id &&
-                    i.DocumentType == "Ordem de Saída");
-
-                if (existingItem != null)
-                {
-                    existingItem.UpdateValues(
-                        calculatedItem.QuantityTotal,
-                        calculatedItem.ServiceTotal,
-                        calculatedItem.StatementDataJson,
-                        $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Finalização Packing)"
-                    );
-                    generatedItems.Add(existingItem);
-                }
-                else
-                {
-                    _db.BillingItems.Add(calculatedItem);
-                    generatedItems.Add(calculatedItem);
-                }
-            }
-        }
-
-        if (usedStretch)
-        {
-            var stretchTariff = customerTariffs.FirstOrDefault(t =>
-                !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
-                (t.BillingService.Name.Contains("Stretch", StringComparison.OrdinalIgnoreCase) ||
-                 t.BillingService.Name.Contains("Filme", StringComparison.OrdinalIgnoreCase)));
-
-            if (stretchTariff != null)
-            {
-                var calculatedStretchItem = await _billingEngine.ExecuteOperationalEventAsync(
-                    cycle,
-                    stretchTariff.BillingService,
-                    stretchTariff,
-                    orderId: order.Id,
-                    documentType: "Ordem de Saída",
-                    documentNumber: order.OrderNumber,
-                    orderItemId: null
-                );
-
-                if (calculatedStretchItem != null && (calculatedStretchItem.QuantityTotal > 0 || calculatedStretchItem.ServiceTotal > 0))
-                {
-                    var existingStretch = cycle.Items.FirstOrDefault(i =>
-                        i.BillingServiceId == stretchTariff.BillingServiceId &&
-                        i.DocumentId == order.Id &&
-                        i.DocumentType == "Ordem de Saída");
-
-                    if (existingStretch != null)
-                    {
-                        existingStretch.UpdateValues(
-                            calculatedStretchItem.QuantityTotal,
-                            calculatedStretchItem.ServiceTotal,
-                            calculatedStretchItem.StatementDataJson,
-                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Aplicação Stretch)"
-                        );
-                        generatedItems.Add(existingStretch);
-                    }
-                    else
-                    {
-                        _db.BillingItems.Add(calculatedStretchItem);
-                        generatedItems.Add(calculatedStretchItem);
-                    }
-                }
-            }
-        }
-
-        if (generatedItems.Any())
-        {
-            await _db.SaveChangesAsync(ct);
-        }
-
-        return generatedItems;
     }
 }
 
@@ -387,7 +217,7 @@ public static class FinalizeOrderPackingEndpoints
 
         group.MapPost("/orders/{orderId:guid}/finalize", async (
             Guid orderId,
-            FinalizeOrderPackingCommand cmd,
+            [FromBody] FinalizeOrderPackingCommand cmd,
             IMediator mediator) =>
         {
             var command = cmd with { OrderId = orderId };

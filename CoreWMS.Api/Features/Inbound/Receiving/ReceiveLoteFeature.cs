@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text;
+using CoreWMS.Api.Features.Billing.Operations;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
@@ -9,11 +10,14 @@ using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Billing;
 using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Infrastructure.Storage;
 using FluentValidation;
 using MediatR;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inbound.Receiving;
@@ -45,8 +49,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     private readonly KardexChannel _kardex;
     private readonly IHttpContextAccessor _http;
     private readonly ILocalImageStorageService _imageStorage;
-    private readonly BillingEngineService _billingEngine;
-    private readonly BillingChannel? _billingChannel;
+    private readonly IMediator _mediator;
 
     public ReceiveLoteHandler(
         ApplicationDbContext db,
@@ -55,8 +58,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         KardexChannel kardex,
         IHttpContextAccessor http,
         ILocalImageStorageService imageStorage,
-        BillingEngineService billingEngine,
-        BillingChannel? billingChannel = null)
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
@@ -64,8 +66,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         _kardex = kardex;
         _http = http;
         _imageStorage = imageStorage;
-        _billingEngine = billingEngine;
-        _billingChannel = billingChannel;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(ReceiveLoteCommand request, CancellationToken ct)
@@ -108,7 +109,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         foreach (var vol in request.Volumes)
         {
-            // 1. Resolução do LOTE com base nas regras do produto
             string? effectiveBatch = null;
             if (rules.TracksBatch)
             {
@@ -117,7 +117,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                     : (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) ? orderItem.ExpectedBatch.Trim().ToUpper() : null);
             }
 
-            // 2. Resolução da DATA DE FABRICAÇÃO com base nas regras do produto
             DateTime? effectiveMfgDate = null;
             if (rules.TracksManufacture)
             {
@@ -128,7 +127,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 }
             }
 
-            // 3. Resolução da DATA DE VALIDADE com base nas regras do produto
             DateTime? effectiveExpDate = null;
             if (rules.TracksExpiration)
             {
@@ -139,7 +137,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 }
             }
 
-            // Validações de rastreabilidade do produto
             if (rules.StrictBatch && string.IsNullOrWhiteSpace(effectiveBatch))
                 throw new InvalidOperationException($"O produto {rules.Sku} exige lote.");
 
@@ -256,68 +253,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         var docNumber = orderItem.InboundOrder.InvoiceNumber ??
             (orderItem.InboundOrder.AccessKey!.Length == 44 ? long.Parse(orderItem.InboundOrder.AccessKey.Substring(25, 9)).ToString() : orderItem.InboundOrder.AccessKey[..8]);
 
-        if (request.BillingServiceId.HasValue && orderItem.InboundOrder.CustomerId.HasValue)
-        {
-            var customerId = orderItem.InboundOrder.CustomerId.Value;
-            var currentMonth = DateTime.UtcNow.ToString("MM/yyyy");
-
-            var activeCycle = await _db.BillingCycles
-                .Include(c => c.Items)
-                .FirstOrDefaultAsync(c => c.CompanyId == companyId &&
-                                          c.CustomerId == customerId &&
-                                          c.ReferenceMonth == currentMonth &&
-                                          c.Status == Billing.Entities.BillingStatus.Draft, ct);
-
-            if (activeCycle == null)
-            {
-                activeCycle = new Billing.Entities.BillingCycle(companyId, customerId, DateTime.UtcNow);
-                _db.BillingCycles.Add(activeCycle);
-                await _db.SaveChangesAsync(ct);
-            }
-
-            var tariff = await _db.CustomerTariffs
-                .Include(t => t.BillingService)
-                .FirstOrDefaultAsync(t => t.CustomerId == customerId &&
-                                          t.BillingServiceId == request.BillingServiceId.Value &&
-                                          t.BillingService.IsActive, ct);
-
-            if (tariff != null && !string.IsNullOrWhiteSpace(tariff.BillingService.SqlTemplate))
-            {
-                await _db.SaveChangesAsync(ct);
-                var calculatedBillingItem = await _billingEngine.ExecuteOperationalEventAsync(
-                    activeCycle,
-                    tariff.BillingService,
-                    tariff,
-                    orderId: orderItem.InboundOrderId,
-                    documentType: "NF-e Entrada",
-                    documentNumber: docNumber,
-                    orderItemId: orderItem.Id
-                );
-
-                if (calculatedBillingItem != null)
-                {
-                    var existingItem = activeCycle.Items.FirstOrDefault(i =>
-                        i.BillingServiceId == tariff.BillingServiceId &&
-                        i.DocumentId == orderItem.InboundOrderId &&
-                        i.DocumentType == "NF-e Entrada");
-
-                    if (existingItem != null)
-                    {
-                        existingItem.UpdateValues(
-                            calculatedBillingItem.QuantityTotal,
-                            calculatedBillingItem.ServiceTotal,
-                            calculatedBillingItem.StatementDataJson,
-                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Recebimento NF-e #{docNumber})"
-                        );
-                    }
-                    else
-                    {
-                        _db.BillingItems.Add(calculatedBillingItem);
-                    }
-                }
-            }
-        }
-
         try
         {
             await _db.SaveChangesAsync(ct);
@@ -327,37 +262,42 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
         }
 
-        if (orderItem.InboundOrder.CustomerId.HasValue)
-        {
-            var custId = orderItem.InboundOrder.CustomerId.Value;
-            var inOrderId = orderItem.InboundOrderId;
+        // Localize o bloco de faturamento no final do Handle (substituindo as linhas 350 a 375):
 
-            if (_billingChannel != null)
+        // Agrupa as HUs geradas por BillingServiceId
+        var serviceGroups = new Dictionary<Guid, List<Guid>>();
+        int huIndex = 0;
+
+        foreach (var vol in request.Volumes)
+        {
+            var sId = vol.BillingServiceId ?? request.BillingServiceId;
+            var currentHuIds = husToInsert.Skip(huIndex).Take(vol.VolumeCount).Select(h => h.Id).ToList();
+            huIndex += vol.VolumeCount;
+
+            if (sId.HasValue && sId.Value != Guid.Empty)
             {
-                await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
-                    companyId,
-                    custId,
-                    DateTime.UtcNow,
-                    TriggerOrderId: inOrderId,
-                    TriggerType: "Inbound_Receipt"
-                ), ct);
+                if (!serviceGroups.ContainsKey(sId.Value))
+                    serviceGroups[sId.Value] = new List<Guid>();
+
+                serviceGroups[sId.Value].AddRange(currentHuIds);
             }
-            else
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await _billingEngine.UpsertDailyChargesAsync(
-                            companyId,
-                            custId,
-                            DateTime.UtcNow,
-                            CancellationToken.None
-                        );
-                    }
-                    catch { }
-                });
-            }
+        }
+
+        // DELEGAÇÃO VIA MEDIATR PARA O MÓDULO BILLING
+        if (orderItem.InboundOrder.CustomerId.HasValue && serviceGroups.Any())
+        {
+            var billingGroups = serviceGroups.Select(kvp => new InboundBillingServiceItemDto(
+                BillingServiceId: kvp.Key,
+                HandlingUnitIds: kvp.Value
+            )).ToList();
+
+            await _mediator.Send(new BillInboundReceiptCommand(
+                InboundOrderId: orderItem.InboundOrderId,
+                CustomerId: orderItem.InboundOrder.CustomerId.Value,
+                DocumentNumber: docNumber,
+                OrderItemId: orderItem.Id,
+                ServiceGroups: billingGroups
+            ), ct);
         }
 
         return Results.Ok(new
@@ -417,7 +357,8 @@ public static class ReceiveLoteEndpoints
 {
     public static void MapReceiveLoteEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/inbound/receive/checkout", async (ReceiveLoteCommand cmd, IMediator mediator) => await mediator.Send(cmd))
+        app.MapPost("/api/inbound/receive/checkout", async ([FromBody] ReceiveLoteCommand cmd, IMediator mediator) =>
+            await mediator.Send(cmd))
            .WithTags("Inbound")
            .RequireAuthorization()
            .RequirePermission(Permissions.Inbound.Receive);

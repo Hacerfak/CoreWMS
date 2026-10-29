@@ -4,10 +4,13 @@
  * CoreWMS API
  * OpenAPI spec version: v1
  */
+import type { RolledBackHuDto } from './rolledBackHuDto';
 
 export interface RollbackInboundBillingByHandlingUnitsCommand {
   /** @nullable */
   inboundOrderIds?: string[] | null;
   /** @nullable */
   customerIds?: string[] | null;
+  /** @nullable */
+  rolledBackHus?: RolledBackHuDto[] | null;
 }

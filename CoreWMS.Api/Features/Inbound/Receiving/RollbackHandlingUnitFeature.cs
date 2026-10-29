@@ -124,22 +124,26 @@ public class RollbackHandlingUnitsHandler : IRequestHandler<RollbackHandlingUnit
         }
 
         // 4. DELEGAÇÃO MODULAR VIA MEDIATR:
-        // A) Módulo Inventory: Recomposição das gavetas de saldo físico e quarentena
         await _mediator.Send(new RollbackInventoryBalanceByHandlingUnitsCommand(huIds), ct);
-
-        // B) Módulo Inventory: Registro contábil de saída no Kardex e desvinculação de FKs
         await _mediator.Send(new RollbackKardexByHandlingUnitsCommand(huIds, request.Reason), ct);
-
-        // C) Módulo Quality: Expurgo de prontuários de avaria e fotos físicas
         await _mediator.Send(new DeleteQualityEventsByHandlingUnitsCommand(huIds), ct);
 
-        // 5. Exclusão física das HUs no banco (com todas as dependências desvinculadas)
+        // Captura os dados das HUs para ajuste financeiro antes da remoção
+        var rolledBackHuDtos = hus.Where(h => h.ReceiptDocumentId.HasValue).Select(h => new RolledBackHuDto(
+            HuId: h.Id,
+            ReceiptDocumentId: h.ReceiptDocumentId!.Value,
+            CustomerId: h.CustomerId,
+            PackagingCode: h.PackagingType?.Code ?? "VOL"
+        )).ToList();
+
+        var customerIds = hus.Select(h => h.CustomerId).Distinct().ToList();
+
+        // 5. Exclusão física das HUs no banco
         _db.HandlingUnits.RemoveRange(hus);
         await _db.SaveChangesAsync(ct);
 
-        // D) Módulo Billing: Expurgo ou recálculo do Handling In e recalibração das diárias de armazenagem
-        var customerIds = hus.Select(h => h.CustomerId).Distinct().ToList();
-        await _mediator.Send(new RollbackInboundBillingByHandlingUnitsCommand(orderIds, customerIds), ct);
+        // D) Módulo Billing: Abate nominal nos itens faturados e recálculo das diárias
+        await _mediator.Send(new RollbackInboundBillingByHandlingUnitsCommand(orderIds, customerIds, rolledBackHuDtos), ct);
 
         return Results.Ok(new { Message = $"{hus.Count} HU(s) estornada(s) com sucesso." });
     }

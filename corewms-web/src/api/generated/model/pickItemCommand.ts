@@ -12,4 +12,6 @@ export interface PickItemCommand {
   /** @nullable */
   scannedLpn?: string | null;
   pickedQuantity?: number;
+  /** @nullable */
+  handlingServiceId?: string | null;
 }

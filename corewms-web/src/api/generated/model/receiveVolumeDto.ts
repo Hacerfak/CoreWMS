@@ -27,4 +27,6 @@ export interface ReceiveVolumeDto {
   qualityNotes?: string | null;
   /** @nullable */
   qualityImages?: QualityImageDto[] | null;
+  /** @nullable */
+  billingServiceId?: string | null;
 }

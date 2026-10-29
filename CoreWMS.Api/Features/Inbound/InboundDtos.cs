@@ -18,7 +18,8 @@ public record ReceiveVolumeDto(
     Inventory.Enums.QualityStatus QualityStatus,
     Guid? QualityReasonId,
     string? QualityNotes,
-    List<Quality.QualityImageDto>? QualityImages
+    List<Quality.QualityImageDto>? QualityImages,
+    Guid? BillingServiceId = null // <-- Identificador do serviço vinculado a este grupo de volumes
 );
 
 public record InboundOrderDto(

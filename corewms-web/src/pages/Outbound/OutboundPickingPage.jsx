@@ -9,9 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2, ArrowRight,
-    Check, Calendar, Tag, ChevronDown, ChevronRight
+    Check, Calendar, Tag, ChevronDown, ChevronRight, Receipt
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,6 +32,8 @@ export default function OutboundPickingPage() {
     const navigate = useNavigate();
 
     const [orderData, setOrderData] = useState(null);
+    const [billingServices, setBillingServices] = useState([]);
+    const [selectedHandlingServiceId, setSelectedHandlingServiceId] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [selectedItemId, setSelectedItemId] = useState(null);
 
@@ -47,21 +50,35 @@ export default function OutboundPickingPage() {
     const loadTasks = async (maintainSelection = true) => {
         try {
             setIsLoading(true);
-            const res = await customInstance({
-                url: `/api/outbound/picking/${orderId}/tasks`,
-                method: 'GET'
-            });
+            const [tasksRes, servicesRes] = await Promise.all([
+                customInstance({ url: `/api/outbound/picking/${orderId}/tasks`, method: 'GET' }),
+                customInstance({ url: '/api/billing/services', method: 'GET' })
+            ]);
 
-            setOrderData(res);
+            setOrderData(tasksRes);
 
-            // Seleção inteligente do SKU: prioriza o atual se ainda pendente, ou seleciona o primeiro pendente
-            if (res?.items?.length > 0) {
-                const currentItem = res.items.find(i => i.orderItemId === selectedItemId);
+            const servicesList = Array.isArray(servicesRes) ? servicesRes : (servicesRes?.items || []);
+            setBillingServices(servicesList);
+
+            if (servicesList.length > 0 && !selectedHandlingServiceId) {
+                const defaultHandling = servicesList.find(s =>
+                    s.name?.toLowerCase().includes('expedição') ||
+                    s.name?.toLowerCase().includes('handling out') ||
+                    s.name?.toLowerCase().includes('separação') ||
+                    s.name?.toLowerCase().includes('saída')
+                );
+                if (defaultHandling) {
+                    setSelectedHandlingServiceId(defaultHandling.id);
+                }
+            }
+
+            if (tasksRes?.items?.length > 0) {
+                const currentItem = tasksRes.items.find(i => i.orderItemId === selectedItemId);
                 const isCurrentComplete = currentItem && currentItem.pickedQuantity >= currentItem.expectedQuantity;
 
                 if (!selectedItemId || (maintainSelection && isCurrentComplete)) {
-                    const firstPending = res.items.find(i => i.pickedQuantity < i.expectedQuantity);
-                    setSelectedItemId(firstPending ? firstPending.orderItemId : res.items[0].orderItemId);
+                    const firstPending = tasksRes.items.find(i => i.pickedQuantity < i.expectedQuantity);
+                    setSelectedItemId(firstPending ? firstPending.orderItemId : tasksRes.items[0].orderItemId);
                 }
             }
         } catch {
@@ -75,7 +92,6 @@ export default function OutboundPickingPage() {
         if (orderId) loadTasks(false);
     }, [orderId]);
 
-    // Separação de SKUs pendentes vs finalizados
     const pendingItems = useMemo(() => {
         return orderData?.items?.filter(i => i.pickedQuantity < i.expectedQuantity) || [];
     }, [orderData]);
@@ -84,19 +100,16 @@ export default function OutboundPickingPage() {
         return orderData?.items?.filter(i => i.pickedQuantity >= i.expectedQuantity) || [];
     }, [orderData]);
 
-    // SKU ativo em trabalho
     const activeItem = useMemo(() => {
         if (!orderData?.items) return null;
         return orderData.items.find(i => i.orderItemId === selectedItemId) || pendingItems[0] || orderData.items[0];
     }, [orderData, selectedItemId, pendingItems]);
 
-    // Sugestões de HUs pendentes do SKU ativo
     const suggestedHus = useMemo(() => {
         if (!activeItem?.allocations) return [];
         return activeItem.allocations.filter(a => !a.isPicked);
     }, [activeItem]);
 
-    // Atualiza campo de quantidade sugerida ao trocar de SKU
     useEffect(() => {
         if (activeItem) {
             const pendingQty = activeItem.expectedQuantity - activeItem.pickedQuantity;
@@ -113,7 +126,6 @@ export default function OutboundPickingPage() {
         }
     }, [activeItem?.orderItemId, suggestedHus.length]);
 
-    // Atalho para pré-preencher com a HU clicada
     const handleQuickSelectHu = (hu) => {
         setScannedLpn(hu.lpn);
         const pendingQty = activeItem.expectedQuantity - activeItem.pickedQuantity;
@@ -123,7 +135,6 @@ export default function OutboundPickingPage() {
         }
     };
 
-    // Submissão da bipagem
     const handleExecuteScan = async (e) => {
         e?.preventDefault();
         if (!scannedLpn.trim() || !pickedQuantity) {
@@ -141,7 +152,8 @@ export default function OutboundPickingPage() {
                 orderId,
                 orderItemId: activeItem?.orderItemId || null,
                 scannedLpn: scannedLpn.trim().toUpperCase(),
-                pickedQuantity: qtyNum
+                pickedQuantity: qtyNum,
+                handlingServiceId: selectedHandlingServiceId && selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null
             };
 
             const res = await customInstance({
@@ -179,7 +191,7 @@ export default function OutboundPickingPage() {
 
     return (
         <div className="flex flex-col space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* CABEÇALHO */}
+            {/* CABEÇALHO COM SELEÇÃO DO SERVIÇO DE SEPARAÇÃO */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="sm" onClick={() => navigate('/outbound')} className="bg-white">
@@ -201,26 +213,41 @@ export default function OutboundPickingPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="text-right font-mono text-xs hidden sm:block">
-                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Progresso dos SKUs</span>
-                        <strong className="text-slate-800">{completedItems.length}</strong> de <strong className="text-slate-800">{orderData?.items?.length || 0}</strong> concluídos
+                    {/* SELETOR DE TARIFA OPERACIONAL DE SEPARAÇÃO */}
+                    <div className="flex flex-col space-y-1">
+                        <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                            <Receipt className="text-purple-600" size={13} /> Serviço de Separação (Handling Out)
+                        </Label>
+                        <Select value={selectedHandlingServiceId} onValueChange={setSelectedHandlingServiceId}>
+                            <SelectTrigger className="bg-slate-50 h-9 text-xs w-[240px] border-slate-200">
+                                <SelectValue placeholder="Selecione o serviço..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {billingServices.map(s => (
+                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                ))}
+                                <SelectItem value="none">Isento de Tarifa</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
-                    <Button
-                        onClick={() => navigate('/outbound')}
-                        className={isOrderComplete ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-5 shadow-xs" : "bg-white text-slate-700 border-slate-200 h-10 text-xs font-semibold"}
-                        variant={isOrderComplete ? "default" : "outline"}
-                    >
-                        {isOrderComplete ? (
-                            <><CheckCircle2 size={16} className="mr-2" /> Concluir e Voltar</>
-                        ) : (
-                            'Salvar e Sair'
-                        )}
-                    </Button>
+                    <div className="pt-4">
+                        <Button
+                            onClick={() => navigate('/outbound')}
+                            className={isOrderComplete ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs" : "bg-white text-slate-700 border-slate-200 h-9 text-xs font-semibold"}
+                            variant={isOrderComplete ? "default" : "outline"}
+                        >
+                            {isOrderComplete ? (
+                                <><CheckCircle2 size={16} className="mr-2" /> Concluir e Voltar</>
+                            ) : (
+                                'Salvar e Sair'
+                            )}
+                        </Button>
+                    </div>
                 </div>
             </div>
 
-            {/* BANNER DE SEPARAÇÃO 100% CONCLUÍDA (SEM DIRECIONAR PARA O PACKING) */}
+            {/* BANNER DE SEPARAÇÃO 100% CONCLUÍDA */}
             {isOrderComplete && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3 shadow-2xs">
                     <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
@@ -228,7 +255,9 @@ export default function OutboundPickingPage() {
                     </div>
                     <h2 className="text-lg font-bold text-slate-900">Todos os SKUs deste pedido foram 100% separados!</h2>
                     <p className="text-xs text-slate-600 max-w-md mx-auto">
-                        Todas as HUs e produtos foram coletados com sucesso no armazém.
+                        {orderData?.status === 'Checking'
+                            ? 'Volumes fechados embalados automaticamente (Auto-Packing). O faturamento operacional foi registrado com sucesso.'
+                            : 'Itens separados. Prossiga para a mesa de conferência/embalagem.'}
                     </p>
                     <div className="pt-2">
                         <Button
@@ -241,11 +270,9 @@ export default function OutboundPickingPage() {
                 </div>
             )}
 
-            {/* ÁREA DE TRABALHO: SKU ATIVO + NAVEGAÇÃO */}
+            {/* ÁREA DE TRABALHO: SKU ATIVO */}
             {!isOrderComplete && activeItem && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-
-                    {/* COLUNA ESQUERDA: LISTA RÁPIDA DE SELEÇÃO DE SKUs */}
                     <div className="lg:col-span-4 space-y-3">
                         <Card className="border-slate-200/80 bg-white shadow-xs">
                             <CardHeader className="p-3 border-b bg-slate-50/70 flex flex-row items-center justify-between">
@@ -291,10 +318,7 @@ export default function OutboundPickingPage() {
                         </Card>
                     </div>
 
-                    {/* COLUNA DIREITA: FOCO NO SKU ATIVO (BIPAGEM + RASTREABILIDADE DAS HUS) */}
                     <div className="lg:col-span-8 space-y-4">
-
-                        {/* CARD PRINCIPAL DO SKU ATIVO */}
                         <Card className="border-purple-200 bg-purple-50/20 shadow-xs overflow-hidden">
                             <CardHeader className="p-4 bg-purple-100/50 border-b border-purple-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
@@ -325,7 +349,6 @@ export default function OutboundPickingPage() {
                             </CardHeader>
 
                             <CardContent className="p-4 space-y-4">
-                                {/* FORMULÁRIO DE BIPAGEM DIRETA */}
                                 <form onSubmit={handleExecuteScan} className="bg-white p-4 rounded-xl border border-purple-200 shadow-2xs space-y-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -371,7 +394,6 @@ export default function OutboundPickingPage() {
                                     </div>
                                 </form>
 
-                                {/* LISTA DE HUS SUGERIDAS (ONDE BUSCAR NO ARMAZÉM) */}
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <Label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -400,7 +422,6 @@ export default function OutboundPickingPage() {
                                                             <Badge variant="outline" className="text-[10px] font-mono">{hu.packagingCode || 'PLT'}</Badge>
                                                         </div>
 
-                                                        {/* RASTREABILIDADE: LOTE, VALIDADE, FABRICAÇÃO E SÉRIE */}
                                                         <div className="flex items-center gap-3 text-[11px] font-mono text-slate-600 flex-wrap pt-0.5">
                                                             {hu.batch && (
                                                                 <span className="flex items-center gap-1">
@@ -452,7 +473,7 @@ export default function OutboundPickingPage() {
                 </div>
             )}
 
-            {/* SEÇÃO DE SKUS CONCLUÍDOS (AGRUPADOS COM EXPANSÃO PARA AUDITORIA) */}
+            {/* SEÇÃO DE SKUS CONCLUÍDOS */}
             {completedItems.length > 0 && (
                 <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
@@ -498,7 +519,6 @@ export default function OutboundPickingPage() {
                                         </div>
                                     </div>
 
-                                    {/* DETALHAMENTO EXPANDIDO DAS HUS DESTE SKU */}
                                     {isExpanded && (
                                         <CardContent className="p-3 bg-slate-50/60 border-t border-emerald-100">
                                             <Table>

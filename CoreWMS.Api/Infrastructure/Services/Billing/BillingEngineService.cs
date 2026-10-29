@@ -1,17 +1,23 @@
+using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace CoreWMS.Api.Infrastructure.Services.Billing;
 
 public class BillingEngineService
 {
     private readonly ApplicationDbContext _db;
-
+    private readonly ILogger<BillingEngineService> _logger;
     private static readonly TimeZoneInfo OperationalTimeZone = GetOperationalTimeZone();
 
     private static TimeZoneInfo GetOperationalTimeZone()
@@ -34,44 +40,65 @@ public class BillingEngineService
     }
 
     /// <summary>
-    /// Obtém a data civil corrente no fuso horário operacional (com hora zerada e Kind=Utc).
+    /// Obtém o dia civil corrente em Brasília com hora 00:00:00 e Kind=Utc.
     /// </summary>
     public static DateTime GetOperationalToday()
     {
         var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, OperationalTimeZone);
-        return DateTime.SpecifyKind(localNow.Date, DateTimeKind.Utc);
+        return new DateTime(localNow.Year, localNow.Month, localNow.Day, 0, 0, 0, DateTimeKind.Utc);
     }
 
     /// <summary>
-    /// Normaliza uma data para a respectiva data civil no fuso operacional, com hora 00:00:00 e Kind=Utc.
+    /// Normaliza uma data para o dia civil correspondente (00:00:00, Kind=Utc).
+    /// Se a data já for uma data pura (meia-noite), NÃO converte fuso de novo para não voltar 1 dia!
     /// </summary>
     public static DateTime ToOperationalDate(DateTime dateTime)
     {
-        DateTime localDate;
-        if (dateTime.Kind == DateTimeKind.Utc)
+        if (dateTime.TimeOfDay == TimeSpan.Zero)
         {
-            localDate = TimeZoneInfo.ConvertTimeFromUtc(dateTime, OperationalTimeZone).Date;
-        }
-        else
-        {
-            localDate = dateTime.Date;
+            return DateTime.SpecifyKind(dateTime.Date, DateTimeKind.Utc);
         }
 
-        return DateTime.SpecifyKind(localDate, DateTimeKind.Utc);
-    }
-
-    public BillingEngineService(ApplicationDbContext db)
-    {
-        _db = db;
+        var utcInstant = dateTime.Kind == DateTimeKind.Utc ? dateTime : dateTime.ToUniversalTime();
+        var localTime = TimeZoneInfo.ConvertTimeFromUtc(utcInstant, OperationalTimeZone);
+        return new DateTime(localTime.Year, localTime.Month, localTime.Day, 0, 0, 0, DateTimeKind.Utc);
     }
 
     /// <summary>
-    /// Recálculo manual ou de fechamento completo do ciclo dia a dia.
+    /// Converte um dia civil de Brasília (00:00:00 a 23:59:59 local) nos limites UTC exatos para o PostgreSQL.
+    /// Exemplo para o dia 29/10/2026 em Brasília (UTC-3):
+    /// StartUtc: 2026-10-29 03:00:00 UTC
+    /// EndUtc:   2026-10-30 02:59:59.999 UTC
+    /// </summary>
+    public static (DateTime DateKey, DateTime StartUtc, DateTime EndUtc) GetDayUtcBounds(DateTime civilDate)
+    {
+        var date = ToOperationalDate(civilDate);
+        var startLocal = new DateTime(date.Year, date.Month, date.Day, 0, 0, 0, DateTimeKind.Unspecified);
+        var endLocal = new DateTime(date.Year, date.Month, date.Day, 23, 59, 59, 999, DateTimeKind.Unspecified);
+
+        var startUtc = TimeZoneInfo.ConvertTimeToUtc(startLocal, OperationalTimeZone);
+        var endUtc = TimeZoneInfo.ConvertTimeToUtc(endLocal, OperationalTimeZone);
+
+        return (date, startUtc, endUtc);
+    }
+
+    public BillingEngineService(ApplicationDbContext db, ILogger<BillingEngineService> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Recálculo retroativo dia a dia de todo o ciclo de faturação.
     /// </summary>
     public async Task<int> RecalculateFullCycleAsync(BillingCycle cycle, CancellationToken ct = default)
     {
         var companyId = cycle.CompanyId;
         var customerId = cycle.CustomerId;
+
+        _logger.LogInformation("================================================================================");
+        _logger.LogInformation("[BILLING RECALC] Iniciando recálculo do ciclo {CycleId} ({RefMonth}) para Cliente {CustomerId}",
+            cycle.Id, cycle.ReferenceMonth, customerId);
 
         var activeTariffs = await _db.CustomerTariffs
             .Include(t => t.BillingService)
@@ -82,34 +109,49 @@ public class BillingEngineService
                         !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate))
             .ToListAsync(ct);
 
-        // Considera o dia civil da operação, evitando avançar para o dia seguinte a partir das 21h
+        _logger.LogInformation("[BILLING RECALC] Tarifas automáticas diárias configuradas: {Count}", activeTariffs.Count);
+
         var operationalToday = GetOperationalToday();
+        var cycleStartDate = ToOperationalDate(cycle.StartDate);
         var cycleEndDate = ToOperationalDate(cycle.EndDate);
         var maxDate = cycleEndDate < operationalToday ? cycleEndDate : operationalToday;
+
+        _logger.LogInformation("[BILLING RECALC] Janela de Apuração: De {Inicio:dd/MM/yyyy} até {Fim:dd/MM/yyyy} (Hoje operacional: {Hoje:dd/MM/yyyy})",
+            cycleStartDate, maxDate, operationalToday);
+
         int processedCount = 0;
 
-        for (var currentDate = ToOperationalDate(cycle.StartDate); currentDate <= maxDate; currentDate = currentDate.AddDays(1))
+        for (var currentDate = cycleStartDate; currentDate <= maxDate; currentDate = currentDate.AddDays(1))
         {
-            var calculatedList = await ExecuteDailyServicesPerInboundOrderAsync(cycle, activeTariffs, currentDate);
+            var (dateKey, startUtc, endUtc) = GetDayUtcBounds(currentDate);
+
+            var tariffsForDate = activeTariffs.Where(t =>
+                t.ValidFrom <= endUtc &&
+                (!t.ValidTo.HasValue || t.ValidTo.Value >= startUtc)
+            ).ToList();
+
+            if (!tariffsForDate.Any()) continue;
+
+            var calculatedList = await ExecuteDailyServicesPerInboundOrderAsync(cycle, tariffsForDate, dateKey, startUtc, endUtc);
             processedCount += calculatedList.Count;
         }
 
         await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("[BILLING RECALC] Concluído com sucesso! Total de diárias geradas no ciclo: {Total}", processedCount);
+        _logger.LogInformation("================================================================================");
         return processedCount;
     }
 
     /// <summary>
-    /// Apura as diárias de estoque agrupadas por NF-e de entrada (ReceiptDocumentId),
-    /// vinculando o DocumentId e DocumentNumber para rastreabilidade 3PL.
+    /// Apura as diárias de estoque agrupadas por NF-e de entrada vinculando o DocumentId da ordem.
     /// </summary>
     public async Task<List<BillingItem>> ExecuteDailyServicesPerInboundOrderAsync(
         BillingCycle cycle,
         List<CustomerTariff> tariffs,
-        DateTime referenceDate)
+        DateTime dateKey,
+        DateTime startUtc,
+        DateTime endUtc)
     {
-        var refDateUtc = ToOperationalDate(referenceDate);
-        var refDateFimUtc = refDateUtc.AddDays(1).AddTicks(-1);
-
         var processedItems = new List<BillingItem>();
 
         foreach (var tariff in tariffs)
@@ -121,9 +163,9 @@ public class BillingEngineService
                 ArmazemId = cycle.CompanyId,
                 DepositanteId = cycle.CustomerId,
                 ServicoValor = tariff.UnitValue,
-                DataReferencia = refDateUtc,
-                CobrancaDataIni = refDateUtc,
-                CobrancaDataFim = refDateFimUtc
+                DataReferencia = dateKey,
+                CobrancaDataIni = startUtc,
+                CobrancaDataFim = endUtc
             };
 
             var connection = _db.Database.GetDbConnection();
@@ -137,17 +179,29 @@ public class BillingEngineService
                 .Replace("'{cobranca_data_ini}'", "@CobrancaDataIni").Replace("{cobranca_data_ini}", "@CobrancaDataIni")
                 .Replace("'{cobranca_data_fim}'", "@CobrancaDataFim").Replace("{cobranca_data_fim}", "@CobrancaDataFim");
 
-            var resultRows = await connection.QueryAsync<dynamic>(safeQuery, parameters, transaction);
+            IEnumerable<dynamic> resultRows;
+            try
+            {
+                resultRows = await connection.QueryAsync<dynamic>(safeQuery, parameters, transaction);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[SQL ERRO FATAL] Falha no serviço '{Servico}': {Mensagem}",
+                    tariff.BillingService.Name, ex.Message);
+                continue;
+            }
 
-            // Agrupa os resultados do SQL por Nota Fiscal de Entrada
+            var rowsList = resultRows.ToList();
             var groupedByOrder = new Dictionary<string, (Guid? OrderId, string DocNum, decimal TotalQty, decimal TotalAmount, List<IDictionary<string, object>> ExtractList)>();
 
-            foreach (var row in resultRows)
+            foreach (var row in rowsList)
             {
                 var dict = new Dictionary<string, object>((IDictionary<string, object>)row, StringComparer.OrdinalIgnoreCase);
 
                 string docNum = dict.TryGetValue("NF_ENTRADA", out var nfeObj) && nfeObj != null ? nfeObj.ToString()! : "Estoque Consolidado";
-                Guid? orderId = dict.TryGetValue("ORDEM_ID", out var ordObj) && ordObj is Guid g ? g : (dict.TryGetValue("RECEIPTDOCUMENTID", out var rObj) && rObj is Guid rg ? rg : null);
+                Guid? orderId = dict.TryGetValue("ORDEM_ID", out var ordObj) && ordObj is Guid g
+                    ? g
+                    : (dict.TryGetValue("RECEIPTDOCUMENTID", out var rObj) && rObj is Guid rg ? rg : null);
 
                 decimal qty = 0;
                 if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull and not null)
@@ -159,6 +213,12 @@ public class BillingEngineService
                 else if (dict.TryGetValue("VALOR_DIARIA", out var vObj) && vObj is not DBNull and not null)
                     amount = Convert.ToDecimal(vObj, System.Globalization.CultureInfo.InvariantCulture);
 
+                // GARANTIA: Se a query não projetou VALOR_UNITARIO, injeta a tarifa unitária contratual
+                if (!dict.TryGetValue("VALOR_UNITARIO", out var unitObj) || unitObj is DBNull or null || Convert.ToDecimal(unitObj) == 0)
+                {
+                    dict["VALOR_UNITARIO"] = tariff.UnitValue;
+                }
+
                 if (!groupedByOrder.ContainsKey(docNum))
                 {
                     groupedByOrder[docNum] = (orderId, docNum, 0, 0, new List<IDictionary<string, object>>());
@@ -167,12 +227,11 @@ public class BillingEngineService
                 var current = groupedByOrder[docNum];
                 current.TotalQty += qty;
                 current.TotalAmount += amount;
-                current.ExtractList.Add((IDictionary<string, object>)row);
+                current.ExtractList.Add(dict);
                 if (!current.OrderId.HasValue && orderId.HasValue) current.OrderId = orderId;
                 groupedByOrder[docNum] = current;
             }
 
-            // Para cada NF-e encontrada no estoque deste dia, atualiza ou insere o BillingItem vinculado
             foreach (var entry in groupedByOrder.Values)
             {
                 if (entry.TotalQty <= 0 && entry.TotalAmount <= 0) continue;
@@ -182,7 +241,7 @@ public class BillingEngineService
 
                 var existingItem = cycle.Items.FirstOrDefault(i =>
                     i.BillingServiceId == tariff.BillingServiceId &&
-                    i.ChargeDate.Date == refDateUtc.Date &&
+                    i.ChargeDate.Date == dateKey.Date &&
                     i.DocumentNumber == entry.DocNum);
 
                 if (existingItem != null)
@@ -200,7 +259,7 @@ public class BillingEngineService
                     var newItem = new BillingItem(
                         billingCycleId: cycle.Id,
                         billingServiceId: tariff.BillingServiceId,
-                        chargeDate: refDateUtc,
+                        chargeDate: dateKey,
                         documentType: "NF-e Entrada",
                         documentNumber: entry.DocNum,
                         documentId: entry.OrderId,
@@ -214,13 +273,25 @@ public class BillingEngineService
                     processedItems.Add(newItem);
                 }
             }
+
+            // Remove diárias de notas fiscais que não possuem mais saldo em estoque (ex: estorno total de HUs)
+            var staleItems = cycle.Items.Where(i =>
+                i.BillingServiceId == tariff.BillingServiceId &&
+                i.ChargeDate.Date == dateKey.Date &&
+                !string.IsNullOrWhiteSpace(i.DocumentNumber) &&
+                !groupedByOrder.ContainsKey(i.DocumentNumber)).ToList();
+
+            if (staleItems.Any())
+            {
+                _db.BillingItems.RemoveRange(staleItems);
+            }
         }
 
         return processedItems;
     }
 
     /// <summary>
-    /// Chamado pelo Background Worker ou pós-checkout para atualizar as diárias do dia.
+    /// Ponto de entrada acionado pelo background worker ou após novas entradas físicas.
     /// </summary>
     public async Task<List<BillingItem>> UpsertDailyChargesAsync(
         Guid companyId,
@@ -228,8 +299,11 @@ public class BillingEngineService
         DateTime referenceDate,
         CancellationToken ct = default)
     {
-        var dateOnly = ToOperationalDate(referenceDate);
-        var refMonth = dateOnly.ToString("MM/yyyy");
+        var (dateKey, startUtc, endUtc) = GetDayUtcBounds(referenceDate);
+        var refMonth = dateKey.ToString("MM/yyyy");
+
+        _logger.LogInformation("[BILLING UPSERT] Executando para Cliente {CustomerId} em {Data:dd/MM/yyyy}",
+            customerId, dateKey);
 
         var cycle = await _db.BillingCycles
             .Include(c => c.Items)
@@ -240,7 +314,7 @@ public class BillingEngineService
 
         if (cycle == null)
         {
-            cycle = new BillingCycle(companyId, customerId, dateOnly);
+            cycle = new BillingCycle(companyId, customerId, dateKey);
             _db.BillingCycles.Add(cycle);
             await _db.SaveChangesAsync(ct);
         }
@@ -252,19 +326,16 @@ public class BillingEngineService
                         t.BillingService.IsActive &&
                         t.BillingService.Type == BillingServiceType.Automatic_Daily &&
                         !string.IsNullOrWhiteSpace(t.BillingService.SqlTemplate) &&
-                        t.ValidFrom <= dateOnly &&
-                        (t.ValidTo == null || t.ValidTo >= dateOnly))
+                        t.ValidFrom <= endUtc &&
+                        (!t.ValidTo.HasValue || t.ValidTo.Value >= startUtc))
             .ToListAsync(ct);
 
-        var processedItems = await ExecuteDailyServicesPerInboundOrderAsync(cycle, activeTariffs, dateOnly);
+        var processedItems = await ExecuteDailyServicesPerInboundOrderAsync(cycle, activeTariffs, dateKey, startUtc, endUtc);
 
         await _db.SaveChangesAsync(ct);
         return processedItems;
     }
 
-    /// <summary>
-    /// Executa serviço operacional vinculado a documento de origem (Inbound NF-e ou Outbound Pedido).
-    /// </summary>
     public async Task<BillingItem?> ExecuteOperationalEventAsync(
         BillingCycle cycle,
         BillingService service,
@@ -272,11 +343,12 @@ public class BillingEngineService
         Guid orderId,
         string documentType,
         string documentNumber,
-        Guid? orderItemId = null)
+        Guid? orderItemId = null,
+        List<Guid>? handlingUnitIds = null)
     {
         if (string.IsNullOrWhiteSpace(service.SqlTemplate)) return null;
 
-        var operationalToday = GetOperationalToday();
+        var (operationalToday, startUtc, endUtc) = GetDayUtcBounds(DateTime.UtcNow);
 
         var parameters = new
         {
@@ -287,10 +359,11 @@ public class BillingEngineService
             OrderItemId = orderItemId ?? Guid.Empty,
             DataReferencia = operationalToday,
             CobrancaDataIni = cycle.StartDate,
-            CobrancaDataFim = cycle.EndDate
+            CobrancaDataFim = cycle.EndDate,
+            HuIds = handlingUnitIds != null && handlingUnitIds.Any() ? handlingUnitIds.ToArray() : null
         };
 
-        var (totalQty, totalAmount, extractJson) = await RunDynamicQueryAsync(service.SqlTemplate, parameters);
+        var (totalQty, totalAmount, extractJson) = await RunDynamicQueryAsync(service.SqlTemplate, parameters, handlingUnitIds);
 
         if (totalQty <= 0 && totalAmount <= 0) return null;
 
@@ -311,7 +384,8 @@ public class BillingEngineService
 
     private async Task<(decimal TotalQty, decimal TotalAmount, string ExtractJson)> RunDynamicQueryAsync(
         string sqlTemplate,
-        object queryParams)
+        object queryParams,
+        List<Guid>? huIds = null)
     {
         var safeQuery = sqlTemplate
             .Replace("'{armazem_id}'", "@ArmazemId").Replace("{armazem_id}", "@ArmazemId")
@@ -322,6 +396,14 @@ public class BillingEngineService
             .Replace("'{cobranca_data_fim}'", "@CobrancaDataFim").Replace("{cobranca_data_fim}", "@CobrancaDataFim")
             .Replace("'{ordem_id}'", "@OrdemId").Replace("{ordem_id}", "@OrdemId")
             .Replace("'{order_item_id}'", "@OrderItemId").Replace("{order_item_id}", "@OrderItemId");
+
+        if (huIds != null && huIds.Any() && !safeQuery.Contains("@HuIds"))
+        {
+            safeQuery = safeQuery.Replace(
+                "WHERE ",
+                "WHERE h.\"Id\" = ANY(@HuIds) AND "
+            );
+        }
 
         var connection = _db.Database.GetDbConnection();
         var transaction = _db.Database.CurrentTransaction?.GetDbTransaction();

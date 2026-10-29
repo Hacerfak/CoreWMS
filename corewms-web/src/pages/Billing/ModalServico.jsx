@@ -91,8 +91,9 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
         let sql = '';
         switch (presetKey) {
             case 'storage_daily':
-                sql = `-- Armazenagem Diária (Rotina Noturna - Inclui HUs baixadas no dia)
-SELECT
+                sql = `-- Armazenagem Diária (Apuração Contínua por Volume em Custódia)
+SELECT 
+    h."ReceiptDocumentId" AS "ORDEM_ID",
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
     io."IssueDate"::date AS "DATA_ENTRADA",
     p."Sku" AS "SKU",
@@ -106,17 +107,18 @@ LEFT JOIN "Products" p ON p."Id" = h."ProductId"
 LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
-  AND h."CreatedAt" <= @CobrancaDataFim
-  AND (
-      h."Status" IN (1, 2)
-      OR (h."UpdatedAt" >= @CobrancaDataIni)
-  )
-GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
+  AND h."CurrentQuantity" > 0
+  AND h."ReceiptDocumentId" IS NOT NULL
+  AND h."CreatedAt"::date <= @DataReferencia::date
+  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt"::date >= @DataReferencia::date)
+GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
 ORDER BY "NF_ENTRADA", p."Sku";`;
                 break;
+
             case 'ad_valorem':
-                sql = `-- Seguro / Ad-Valorem Diário (Sobre valor de mercadoria em custódia)
-SELECT
+                sql = `-- Seguro / Ad-Valorem Diário (Sobre Valor das Mercadorias em Custódia)
+SELECT 
+    h."ReceiptDocumentId" AS "ORDEM_ID",
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
     io."IssueDate"::date AS "DATA_ENTRADA",
     p."Sku" AS "SKU",
@@ -124,7 +126,7 @@ SELECT
     pt."Code" AS "TIPO_VOLUME",
     COUNT(DISTINCT h."Id") AS "VOLUME",
     ROUND(
-        SUM(h."CurrentQuantity" * h."UnitValue") * @ServicoValor,
+        SUM(COALESCE(NULLIF(h."CurrentQuantity", 0), h."InitialQuantity") * h."UnitValue") * @ServicoValor, 
         10
     ) AS "VALOR_TOTAL"
 FROM "HandlingUnits" h
@@ -133,37 +135,36 @@ LEFT JOIN "Products" p ON p."Id" = h."ProductId"
 LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
-  AND h."CreatedAt" <= @CobrancaDataFim
-  AND (
-      h."Status" IN (1, 2)
-      OR (h."UpdatedAt" >= @CobrancaDataIni)
-  )
-GROUP BY io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
+  AND h."CurrentQuantity" > 0
+  AND h."ReceiptDocumentId" IS NOT NULL
+  AND h."CreatedAt"::date <= @DataReferencia::date
+  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt"::date >= @DataReferencia::date)
+GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
 ORDER BY "NF_ENTRADA", p."Sku";`;
                 break;
+
             case 'inbound_volumes':
-                sql = `-- Recebimento por Tipo de Volume (Inbound)
-SELECT
+                sql = `-- Recebimento por Tipo de Volume (Inbound - Valores Fixos por Embalagem)
+SELECT 
     pt."Code" AS "TIPO_VOLUME",
     pt."Description" AS "DESCRICAO",
     COUNT(h."Id") AS "VOLUME",
+    CASE pt."Code" 
+        WHEN 'PLT' THEN 12.00 
+        WHEN 'CX'  THEN 1.80 
+        WHEN 'UN'  THEN 0.90 
+        WHEN 'GF'  THEN 0.50
+        ELSE 0.90 
+    END AS "VALOR_UNITARIO",
     ROUND(
-        CASE pt."Code"
-            WHEN 'PLT' THEN 12.00
-            WHEN 'CX'  THEN 1.80
-            WHEN 'UN'  THEN 0.90
-            ELSE 0.90
-        END * COALESCE(NULLIF(@ServicoValor, 0), 1.0),
-        2
-    ) AS "VALOR_UNITARIO",
-    ROUND(
-        COUNT(h."Id") *
-        (CASE pt."Code"
-            WHEN 'PLT' THEN 12.00
-            WHEN 'CX'  THEN 1.80
-            WHEN 'UN'  THEN 0.90
-            ELSE 0.90
-        END * COALESCE(NULLIF(@ServicoValor, 0), 1.0)),
+        COUNT(h."Id") * 
+        CASE pt."Code" 
+            WHEN 'PLT' THEN 12.00 
+            WHEN 'CX'  THEN 1.80 
+            WHEN 'UN'  THEN 0.90 
+            WHEN 'GF'  THEN 0.50
+            ELSE 0.90 
+        END, 
         2
     ) AS "VALOR_TOTAL"
 FROM "HandlingUnits" h
@@ -172,39 +173,40 @@ WHERE h."ReceiptDocumentId" = @OrdemId
   AND h."CustomerId" = @DepositanteId
 GROUP BY pt."Code", pt."Description";`;
                 break;
+
             case 'outbound_handling':
-                sql = `-- Expedição / Handling Out por Embalagem (Outbound - Momento 1)
-SELECT
+                sql = `-- Expedição / Handling Out por Embalagem (Cobre Auto-Packing e Fracionado)
+SELECT 
     pt."Code" AS "TIPO_VOLUME",
     pt."Description" AS "DESCRICAO",
-    SUM(p."VolumeCount") AS "VOLUME",
+    COUNT(v."Id") AS "VOLUME",
+    CASE pt."Code" 
+        WHEN 'PLT' THEN 12.00 
+        WHEN 'CX'  THEN 1.80 
+        WHEN 'UN'  THEN 0.90 
+        WHEN 'GF'  THEN 0.50
+        ELSE 0.90 
+    END AS "VALOR_UNITARIO",
     ROUND(
-        CASE pt."Code"
-            WHEN 'PLT' THEN 12.00
-            WHEN 'CX'  THEN 1.80
-            WHEN 'UN'  THEN 0.90
-            ELSE 0.90
-        END * COALESCE(NULLIF(@ServicoValor, 0), 1.0),
-        2
-    ) AS "VALOR_UNITARIO",
-    ROUND(
-        SUM(p."VolumeCount") *
-        (CASE pt."Code"
-            WHEN 'PLT' THEN 12.00
-            WHEN 'CX'  THEN 1.80
-            WHEN 'UN'  THEN 0.90
-            ELSE 0.90
-        END * COALESCE(NULLIF(@ServicoValor, 0), 1.0)),
+        COUNT(v."Id") * 
+        CASE pt."Code" 
+            WHEN 'PLT' THEN 12.00 
+            WHEN 'CX'  THEN 1.80 
+            WHEN 'UN'  THEN 0.90 
+            WHEN 'GF'  THEN 0.50
+            ELSE 0.90 
+        END, 
         2
     ) AS "VALOR_TOTAL"
-FROM "OutboundItemPacks" p
-JOIN "PackagingTypes" pt ON pt."Id" = p."PackagingTypeId"
-WHERE p."OutboundOrderId" = @OrdemId
+FROM "OutboundVolumes" v
+JOIN "PackagingTypes" pt ON pt."Id" = v."PackagingTypeId"
+WHERE v."OutboundOrderId" = @OrdemId
 GROUP BY pt."Code", pt."Description";`;
                 break;
+
             case 'outbound_stretch':
                 sql = `-- Insumo Filme Stretch Aplicado (Outbound - Momento 2)
-SELECT
+SELECT 
     pt."Code" AS "TIPO_VOLUME",
     'Aplicação Filme Stretch' AS "DESCRICAO",
     COUNT(v."Id") AS "VOLUME",
@@ -216,11 +218,13 @@ WHERE v."OutboundOrderId" = @OrdemId
   AND v."UsedStretchFilm" = TRUE
 GROUP BY pt."Code";`;
                 break;
+
             default:
                 break;
         }
+
         setValue('sqlTemplate', sql);
-        toast.info('Template SQL carregado!');
+        toast.info('Template SQL carregado e validado!');
     };
 
     return (

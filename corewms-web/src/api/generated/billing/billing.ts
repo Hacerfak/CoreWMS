@@ -24,6 +24,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BillInboundReceiptCommand,
+  BillOutboundHandlingCommand,
   CreateBillingServiceCommand,
   CreateCustomerTariffCommand,
   GenerateBillingCycleCommand,
@@ -536,6 +538,128 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPutApiBillingServicesIdMutationOptions(options), queryClient);
     }
+    export const postApiBillingInboundBillReceipt = (
+    billInboundReceiptCommand: BillInboundReceiptCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/inbound/bill-receipt`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: billInboundReceiptCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiBillingInboundBillReceiptMutationKey = () => ['postApiBillingInboundBillReceipt'] as const;
+
+export const getPostApiBillingInboundBillReceiptMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingInboundBillReceipt>>, TError,PostApiBillingInboundBillReceiptMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingInboundBillReceipt>>, TError,PostApiBillingInboundBillReceiptMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBillingInboundBillReceiptMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingInboundBillReceipt>>, PostApiBillingInboundBillReceiptMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiBillingInboundBillReceipt(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiBillingInboundBillReceiptMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingInboundBillReceipt>>>
+    export type PostApiBillingInboundBillReceiptMutationBody = BillInboundReceiptCommand
+    export type PostApiBillingInboundBillReceiptMutationError = unknown
+    export type PostApiBillingInboundBillReceiptMutationVariables = {data: BillInboundReceiptCommand}
+
+    export const usePostApiBillingInboundBillReceipt = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingInboundBillReceipt>>, TError,PostApiBillingInboundBillReceiptMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiBillingInboundBillReceipt>>,
+        TError,
+        PostApiBillingInboundBillReceiptMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiBillingInboundBillReceiptMutationOptions(options), queryClient);
+    }
+    export const postApiBillingOutboundBillHandling = (
+    billOutboundHandlingCommand: BillOutboundHandlingCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/outbound/bill-handling`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: billOutboundHandlingCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiBillingOutboundBillHandlingMutationKey = () => ['postApiBillingOutboundBillHandling'] as const;
+
+export const getPostApiBillingOutboundBillHandlingMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, TError,PostApiBillingOutboundBillHandlingMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, TError,PostApiBillingOutboundBillHandlingMutationVariables, TContext> => {
+
+const mutationKey = getPostApiBillingOutboundBillHandlingMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, PostApiBillingOutboundBillHandlingMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiBillingOutboundBillHandling(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiBillingOutboundBillHandlingMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>>
+    export type PostApiBillingOutboundBillHandlingMutationBody = BillOutboundHandlingCommand
+    export type PostApiBillingOutboundBillHandlingMutationError = unknown
+    export type PostApiBillingOutboundBillHandlingMutationVariables = {data: BillOutboundHandlingCommand}
+
+    export const usePostApiBillingOutboundBillHandling = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, TError,PostApiBillingOutboundBillHandlingMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>,
+        TError,
+        PostApiBillingOutboundBillHandlingMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiBillingOutboundBillHandlingMutationOptions(options), queryClient);
+    }
     export const postApiBillingInboundRollbackByHus = (
     rollbackInboundBillingByHandlingUnitsCommand: RollbackInboundBillingByHandlingUnitsCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
@@ -658,14 +782,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiBillingOutboundRollbackMutationOptions(options), queryClient);
     }
-    export const getApiBillingCyclesIdExportPdf = (
+    export const getApiBillingCyclesIdStatementHtml = (
     id: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/billing/cycles/${id}/export-pdf`, method: 'GET', signal
+      {url: `/api/billing/cycles/${id}/statement-html`, method: 'GET', signal
     },
       options);
     }
@@ -673,66 +797,152 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiBillingCyclesIdExportPdfQueryKey = (id: string,) => {
+export const getGetApiBillingCyclesIdStatementHtmlQueryKey = (id: string,) => {
     return [
-    `/api/billing/cycles/${id}/export-pdf`
+    `/api/billing/cycles/${id}/statement-html`
     ] as const;
     }
 
 
-export const getGetApiBillingCyclesIdExportPdfQueryOptions = <TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiBillingCyclesIdStatementHtmlQueryOptions = <TData = Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiBillingCyclesIdExportPdfQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetApiBillingCyclesIdStatementHtmlQueryKey(id);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>> = ({ signal }) => getApiBillingCyclesIdExportPdf(id, requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>> = ({ signal }) => getApiBillingCyclesIdStatementHtml(id, requestOptions, signal);
 
 
 
 
 
-   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetApiBillingCyclesIdExportPdfQueryResult = NonNullable<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>>
-export type GetApiBillingCyclesIdExportPdfQueryError = unknown
+export type GetApiBillingCyclesIdStatementHtmlQueryResult = NonNullable<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>>
+export type GetApiBillingCyclesIdStatementHtmlQueryError = unknown
 
 
-export function useGetApiBillingCyclesIdExportPdf<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError = unknown>(
- id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError, TData>> & Pick<
+export function useGetApiBillingCyclesIdStatementHtml<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>,
+          Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>,
           TError,
-          Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>
+          Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiBillingCyclesIdExportPdf<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError, TData>> & Pick<
+export function useGetApiBillingCyclesIdStatementHtml<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>,
+          Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>,
           TError,
-          Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>
+          Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>
         > , 'initialData'
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetApiBillingCyclesIdExportPdf<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiBillingCyclesIdStatementHtml<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetApiBillingCyclesIdExportPdf<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError = unknown>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export function useGetApiBillingCyclesIdStatementHtml<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiBillingCyclesIdExportPdfQueryOptions(id,options)
+  const queryOptions = getGetApiBillingCyclesIdStatementHtmlQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiBillingCyclesIdExportCsv = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/billing/cycles/${id}/export-csv`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiBillingCyclesIdExportCsvQueryKey = (id: string,) => {
+    return [
+    `/api/billing/cycles/${id}/export-csv`
+    ] as const;
+    }
+
+
+export const getGetApiBillingCyclesIdExportCsvQueryOptions = <TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError = unknown>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiBillingCyclesIdExportCsvQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>> = ({ signal }) => getApiBillingCyclesIdExportCsv(id, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiBillingCyclesIdExportCsvQueryResult = NonNullable<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>>
+export type GetApiBillingCyclesIdExportCsvQueryError = unknown
+
+
+export function useGetApiBillingCyclesIdExportCsv<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError = unknown>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>,
+          TError,
+          Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiBillingCyclesIdExportCsv<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>,
+          TError,
+          Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiBillingCyclesIdExportCsv<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetApiBillingCyclesIdExportCsv<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError = unknown>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiBillingCyclesIdExportCsvQueryOptions(id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

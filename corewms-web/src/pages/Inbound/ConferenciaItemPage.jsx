@@ -287,12 +287,10 @@ export default function ConferenciaItemPage() {
             return toast.warning('Adicione pelo menos um lote ao carrinho antes de finalizar.');
         }
 
-        const serviceId = stagedVolumes[0]?.billingServiceId !== 'none' ? stagedVolumes[0]?.billingServiceId : null;
-
         checkoutLotes({
             data: {
                 orderItemId: item.id,
-                billingServiceId: serviceId,
+                billingServiceId: null, // O serviço agora é enviado individualmente em cada volume
                 volumes: stagedVolumes.map(v => ({
                     packagingTypeId: v.packagingTypeId,
                     volumeCount: v.volumeCount,
@@ -306,7 +304,9 @@ export default function ConferenciaItemPage() {
                     qualityNotes: v.notes?.trim() || null,
                     qualityImages: v.images && v.images.length > 0
                         ? v.images.map(img => ({ fileName: img.fileName, base64Data: img.base64Data }))
-                        : null
+                        : null,
+                    // Garante o envio do serviço específico deste volume para o backend:
+                    billingServiceId: v.billingServiceId && v.billingServiceId !== 'none' ? v.billingServiceId : null
                 }))
             }
         });
