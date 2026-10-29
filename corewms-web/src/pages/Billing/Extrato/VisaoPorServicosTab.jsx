@@ -136,6 +136,11 @@ export default function VisaoPorServicosTab({
                                                         </TableCell>
                                                         <TableCell className="font-sans text-slate-800 font-medium">
                                                             {item.description}
+                                                            {item.documentType === 'Ordem de Saída' && (
+                                                                <span className="block text-[10px] text-slate-400 font-mono">
+                                                                    Origem: {docNum}
+                                                                </span>
+                                                            )}
                                                         </TableCell>
 
                                                         {/* VALOR COBRADO */}

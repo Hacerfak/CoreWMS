@@ -36,23 +36,23 @@ public class RollbackOutboundBillingHandler : IRequestHandler<RollbackOutboundBi
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly BillingChannel? _billingChannel;
+    private readonly BillingEngineService _billingEngine;
 
     public RollbackOutboundBillingHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        BillingChannel? billingChannel = null)
+        BillingEngineService billingEngine)
     {
         _db = db;
         _tenant = tenant;
-        _billingChannel = billingChannel;
+        _billingEngine = billingEngine;
     }
 
     public async Task<IResult> Handle(RollbackOutboundBillingCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Localiza e exclui cobranças operacionais da ordem de saída em ciclos abertos (Draft)
+        // Localiza e remove todas as frações da ordem de saída em ciclos abertos
         var billingItems = await _db.BillingItems
             .Where(b => (b.DocumentId == request.OrderId || b.Description.Contains(request.OrderNumber))
                      && _db.BillingCycles.Any(c => c.Id == b.BillingCycleId && c.Status == BillingStatus.Draft && c.CompanyId == companyId))
@@ -64,17 +64,13 @@ public class RollbackOutboundBillingHandler : IRequestHandler<RollbackOutboundBi
             await _db.SaveChangesAsync(ct);
         }
 
-        // 2. Enfileira o recálculo em segundo plano das diárias de armazenagem do depositante
-        if (_billingChannel != null)
-        {
-            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
-                CompanyId: companyId,
-                CustomerId: request.CustomerId,
-                ReferenceDate: DateTime.UtcNow,
-                TriggerOrderId: request.OrderId,
-                TriggerType: "Outbound_Shipment_Revert"
-            ), ct);
-        }
+        // Recalibra as diárias de stock em tempo real
+        await _billingEngine.UpsertDailyChargesAsync(
+            companyId,
+            request.CustomerId,
+            DateTime.UtcNow,
+            ct
+        );
 
         return Results.Ok(new { Message = "Faturamento da ordem de saída estornado com sucesso." });
     }

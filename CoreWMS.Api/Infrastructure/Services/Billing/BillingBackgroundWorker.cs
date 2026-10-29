@@ -1,6 +1,13 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace CoreWMS.Api.Infrastructure.Services.Billing;
 
@@ -22,13 +29,13 @@ public class BillingBackgroundWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Billing Background Worker iniciado (Consumo de Eventos + Cron Noturno Autônomo).");
+        _logger.LogInformation("Billing Background Worker iniciado (Consumo de Eventos + Cron Diário Autônomo).");
 
-        // Executa em paralelo: Fila do Channel + Agendador Noturno da Madrugada
+        // Executa em paralelo: Fila do Channel + Agendador Matutino às 04:00
         var channelTask = ProcessChannelQueueAsync(stoppingToken);
-        var midnightCronTask = ScheduleAutonomousMidnightBillingAsync(stoppingToken);
+        var dailyCronTask = ScheduleAutonomousDailyBillingAsync(stoppingToken);
 
-        await Task.WhenAll(channelTask, midnightCronTask);
+        await Task.WhenAll(channelTask, dailyCronTask);
     }
 
     // 1. Processa eventos operacionais em tempo real (Recebimento, Packing e Estornos)
@@ -54,8 +61,8 @@ public class BillingBackgroundWorker : BackgroundService
         }
     }
 
-    // 2. Cron autônomo da madrugada: roda todos os dias às 00:05 (Horário de Brasília)
-    private async Task ScheduleAutonomousMidnightBillingAsync(CancellationToken ct)
+    // 2. Cron autônomo matutino: roda todos os dias às 04:00 (Horário de Brasília)
+    private async Task ScheduleAutonomousDailyBillingAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
@@ -64,23 +71,28 @@ public class BillingBackgroundWorker : BackgroundService
                 var tz = GetBrasiliaTimeZone();
                 var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
 
-                // Próxima execução: 00:05 da madrugada seguinte
-                var nextRun = now.Date.AddDays(1).AddMinutes(5);
+                // Próxima execução programada para as 04:00
+                var nextRun = now.Date.AddHours(4);
+                if (now >= nextRun)
+                {
+                    nextRun = nextRun.AddDays(1);
+                }
+
                 var delay = nextRun - now;
 
                 _logger.LogInformation(
-                    "[BILLING CRON] Próxima apuração noturna agendada para {DataHora} (em {Horas}h {Minutos}min).",
+                    "[BILLING CRON] Próxima apuração matutina agendada para {DataHora} (em {Horas}h {Minutos}min).",
                     nextRun.ToString("dd/MM/yyyy HH:mm:ss"), (int)delay.TotalHours, delay.Minutes);
 
                 await Task.Delay(delay, ct);
 
-                _logger.LogInformation("[BILLING CRON] Iniciando rotina noturna autônoma de faturamento diário...");
+                _logger.LogInformation("[BILLING CRON] Iniciando rotina matutina autônoma de faturamento diário...");
 
                 using var scope = _scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var engine = scope.ServiceProvider.GetRequiredService<BillingEngineService>();
 
-                // Apura as diárias de "ontem" (o dia que acabou de se encerrar)
+                // Apura as diárias de "ontem" (o dia operacional que acabou de se encerrar)
                 var yesterday = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date.AddDays(-1);
                 var refMonth = yesterday.ToString("MM/yyyy");
 
@@ -107,7 +119,7 @@ public class BillingBackgroundWorker : BackgroundService
                     }
                 }
 
-                _logger.LogInformation("[BILLING CRON] Apuração noturna finalizada com sucesso.");
+                _logger.LogInformation("[BILLING CRON] Apuração matutina finalizada com sucesso.");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -115,7 +127,7 @@ public class BillingBackgroundWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[BILLING CRON] Erro no agendador noturno. Tentando novamente em 30 minutos.");
+                _logger.LogError(ex, "[BILLING CRON] Erro no agendador matutino. Tentando novamente em 30 minutos.");
                 await Task.Delay(TimeSpan.FromMinutes(30), ct);
             }
         }

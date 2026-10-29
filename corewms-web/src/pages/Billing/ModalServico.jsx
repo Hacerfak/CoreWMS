@@ -91,56 +91,53 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
         let sql = '';
         switch (presetKey) {
             case 'storage_daily':
-                sql = `-- Armazenagem Diária (Apuração Contínua por Volume em Custódia)
+                sql = `-- Armazenagem Diária (Apuração Contínua Agrupada por Tipo de Volume)
 SELECT 
     h."ReceiptDocumentId" AS "ORDEM_ID",
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
     io."IssueDate"::date AS "DATA_ENTRADA",
-    p."Sku" AS "SKU",
-    p."Description" AS "DESCRICAO",
     pt."Code" AS "TIPO_VOLUME",
+    pt."Description" AS "DESCRICAO",
     COUNT(DISTINCT h."Id") AS "VOLUME",
-    ROUND(COUNT(DISTINCT h."Id") * @ServicoValor, 10) AS "VALOR_TOTAL"
+    @ServicoValor AS "VALOR_UNITARIO",
+    ROUND(COUNT(DISTINCT h."Id") * @ServicoValor, 2) AS "VALOR_TOTAL"
 FROM "HandlingUnits" h
 LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
-LEFT JOIN "Products" p ON p."Id" = h."ProductId"
 LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
-  AND h."CurrentQuantity" > 0
-  AND h."ReceiptDocumentId" IS NOT NULL
-  AND h."CreatedAt"::date <= @DataReferencia::date
-  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt"::date >= @DataReferencia::date)
-GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
-ORDER BY "NF_ENTRADA", p."Sku";`;
+  AND h."Status" NOT IN (1,7)
+  AND h."CreatedAt" <= @CobrancaDataFim
+  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt" >= @CobrancaDataIni)
+GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", pt."Code", pt."Description"
+ORDER BY "NF_ENTRADA", pt."Code";`;
                 break;
 
             case 'ad_valorem':
-                sql = `-- Seguro / Ad-Valorem Diário (Sobre Valor das Mercadorias em Custódia)
+                sql = `-- Seguro / Ad-Valorem Diário (Sobre o Valor Patrimonial das Mercadorias)
 SELECT 
     h."ReceiptDocumentId" AS "ORDEM_ID",
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
     io."IssueDate"::date AS "DATA_ENTRADA",
-    p."Sku" AS "SKU",
-    p."Description" AS "DESCRICAO",
     pt."Code" AS "TIPO_VOLUME",
+    pt."Description" AS "DESCRICAO",
     COUNT(DISTINCT h."Id") AS "VOLUME",
+    ROUND(SUM(COALESCE(NULLIF(h."CurrentQuantity", 0), h."InitialQuantity") * h."UnitValue"), 2) AS "BASE_CALCULO",
+    @ServicoValor AS "VALOR_UNITARIO",
     ROUND(
         SUM(COALESCE(NULLIF(h."CurrentQuantity", 0), h."InitialQuantity") * h."UnitValue") * @ServicoValor, 
-        10
+        2
     ) AS "VALOR_TOTAL"
 FROM "HandlingUnits" h
 LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
-LEFT JOIN "Products" p ON p."Id" = h."ProductId"
 LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
-  AND h."CurrentQuantity" > 0
-  AND h."ReceiptDocumentId" IS NOT NULL
-  AND h."CreatedAt"::date <= @DataReferencia::date
-  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt"::date >= @DataReferencia::date)
-GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", p."Sku", p."Description", pt."Code"
-ORDER BY "NF_ENTRADA", p."Sku";`;
+  AND h."Status" NOT IN (1,7)
+  AND h."CreatedAt" <= @CobrancaDataFim
+  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt" >= @CobrancaDataIni)
+GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", pt."Code", pt."Description"
+ORDER BY "NF_ENTRADA", pt."Code";`;
                 break;
 
             case 'inbound_volumes':
@@ -175,21 +172,59 @@ GROUP BY pt."Code", pt."Description";`;
                 break;
 
             case 'outbound_handling':
-                sql = `-- Expedição / Handling Out por Embalagem (Cobre Auto-Packing e Fracionado)
+                sql = `-- Expedição / Handling Out por NF-e de Entrada de Origem (Custódia 3PL)
+WITH "OutboundVolumeOrigins" AS (
+    -- 1. Volumes Fechados (Auto-Packing: o VolumeLpn é o LPN da HU original)
+    SELECT 
+        h."ReceiptDocumentId" AS "ORDEM_ID",
+        COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
+        pt."Code" AS "TIPO_VOLUME",
+        pt."Description" AS "DESCRICAO",
+        v."Id" AS "VOLUME_ID"
+    FROM "OutboundVolumes" v
+    JOIN "PackagingTypes" pt ON pt."Id" = v."PackagingTypeId"
+    JOIN "HandlingUnits" h ON h."Lpn" = v."VolumeLpn"
+    LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
+    WHERE v."OutboundOrderId" = @OrdemId
+      AND v."IsAutoPacked" = TRUE
+
+    UNION ALL
+
+    -- 2. Volumes Fracionados / Caixas (Packing Manual: liga pelo item e HU alocada)
+    SELECT 
+        h."ReceiptDocumentId" AS "ORDEM_ID",
+        COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
+        pt."Code" AS "TIPO_VOLUME",
+        pt."Description" AS "DESCRICAO",
+        v."Id" AS "VOLUME_ID"
+    FROM "OutboundVolumes" v
+    JOIN "PackagingTypes" pt ON pt."Id" = v."PackagingTypeId"
+    JOIN "OutboundItemPacks" p ON p."OutboundOrderId" = v."OutboundOrderId" AND p."PackagingTypeId" = v."PackagingTypeId"
+    JOIN "OutboundAllocations" a ON a."OutboundOrderItemId" = p."OutboundOrderItemId"
+    JOIN "HandlingUnits" h ON h."Id" = a."HandlingUnitId"
+    LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
+    WHERE v."OutboundOrderId" = @OrdemId
+      AND v."IsAutoPacked" = FALSE
+)
 SELECT 
-    pt."Code" AS "TIPO_VOLUME",
-    pt."Description" AS "DESCRICAO",
-    COUNT(v."Id") AS "VOLUME",
-    CASE pt."Code" 
-        WHEN 'PLT' THEN 12.00 
-        WHEN 'CX'  THEN 1.80 
-        WHEN 'UN'  THEN 0.90 
-        WHEN 'GF'  THEN 0.50
-        ELSE 0.90 
-    END AS "VALOR_UNITARIO",
+    "ORDEM_ID",
+    "NF_ENTRADA",
+    "TIPO_VOLUME",
+    "DESCRICAO",
+    COUNT(DISTINCT "VOLUME_ID") AS "VOLUME",
     ROUND(
-        COUNT(v."Id") * 
-        CASE pt."Code" 
+        CASE "TIPO_VOLUME" 
+            WHEN 'PLT' THEN 12.00 
+            WHEN 'CX'  THEN 1.80 
+            WHEN 'UN'  THEN 0.90 
+            WHEN 'GF'  THEN 0.50
+            ELSE 0.90 
+        END, 
+        2
+    ) AS "VALOR_UNITARIO",
+    ROUND(
+        COUNT(DISTINCT "VOLUME_ID") * 
+        CASE "TIPO_VOLUME" 
             WHEN 'PLT' THEN 12.00 
             WHEN 'CX'  THEN 1.80 
             WHEN 'UN'  THEN 0.90 
@@ -198,10 +233,9 @@ SELECT
         END, 
         2
     ) AS "VALOR_TOTAL"
-FROM "OutboundVolumes" v
-JOIN "PackagingTypes" pt ON pt."Id" = v."PackagingTypeId"
-WHERE v."OutboundOrderId" = @OrdemId
-GROUP BY pt."Code", pt."Description";`;
+FROM "OutboundVolumeOrigins"
+GROUP BY "ORDEM_ID", "NF_ENTRADA", "TIPO_VOLUME", "DESCRICAO"
+ORDER BY "NF_ENTRADA", "TIPO_VOLUME";`;
                 break;
 
             case 'outbound_stretch':

@@ -17,6 +17,10 @@ public static class BillingCycleHtmlGenerator
   {
     var customer = cycle.Customer;
 
+    var tz = GetBrasiliaTimeZone();
+    var startLocal = TimeZoneInfo.ConvertTimeFromUtc(cycle.StartDate, tz);
+    var endLocal = TimeZoneInfo.ConvertTimeFromUtc(cycle.EndDate, tz);
+
     // 1. Cálculos de Totais dos Indicadores
     decimal dailyTotal = 0;
     decimal eventsTotal = 0;
@@ -351,7 +355,7 @@ public static class BillingCycleHtmlGenerator
       </td>
       <td class=""period-badge"">
         <div style=""font-size: 13px; font-weight: 800; color: #1e3a8a;"">Competência: {cycle.ReferenceMonth}</div>
-        <div style=""color: #64748b; font-size: 10px; margin-top: 2px;"">Período: {cycle.StartDate:dd/MM/yyyy} a {cycle.EndDate:dd/MM/yyyy}</div>
+        <div style=""color: #64748b; font-size: 10px; margin-top: 2px;"">Período: {startLocal:dd/MM/yyyy} a {endLocal:dd/MM/yyyy}</div>
       </td>
     </tr>
   </table>
@@ -630,6 +634,17 @@ public static class BillingCycleHtmlGenerator
                 TotalValue = fallbackAmount
             }
         };
+  }
+
+  private static TimeZoneInfo GetBrasiliaTimeZone()
+  {
+    string[] tzIds = ["America/Sao_Paulo", "E. South America Standard Time", "Central Brazilian Standard Time"];
+    foreach (var id in tzIds)
+    {
+      try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+      catch { }
+    }
+    return TimeZoneInfo.CreateCustomTimeZone("Brasilia", TimeSpan.FromHours(-3), "Brasilia", "Brasilia");
   }
 
   private static List<NfeGroupDetailedDto> GroupItemsByNfeDetailed(BillingCycle cycle)

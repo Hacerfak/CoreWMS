@@ -1,19 +1,15 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Data;
+using System.Globalization;
+using System.Text.Json;
 using CoreWMS.Api.Features.Billing.Entities;
-using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Billing;
+using Dapper;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CoreWMS.Api.Features.Billing.Operations;
 
@@ -26,33 +22,20 @@ public record BillOutboundHandlingCommand(
     string TriggerType = "Outbound_Packing"
 ) : IRequest<IResult>;
 
-public class BillOutboundHandlingCommandValidator : AbstractValidator<BillOutboundHandlingCommand>
-{
-    public BillOutboundHandlingCommandValidator()
-    {
-        RuleFor(x => x.OutboundOrderId).NotEmpty().WithMessage("O pedido de saída é obrigatório.");
-        RuleFor(x => x.OrderNumber).NotEmpty().WithMessage("O número do pedido é obrigatório.");
-        RuleFor(x => x.CustomerId).NotEmpty().WithMessage("O depositante é obrigatório.");
-    }
-}
-
 public class BillOutboundHandlingHandler : IRequestHandler<BillOutboundHandlingCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly BillingEngineService _billingEngine;
-    private readonly BillingChannel? _billingChannel;
 
     public BillOutboundHandlingHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        BillingEngineService billingEngine,
-        BillingChannel? billingChannel = null)
+        BillingEngineService billingEngine)
     {
         _db = db;
         _tenant = tenant;
         _billingEngine = billingEngine;
-        _billingChannel = billingChannel;
     }
 
     public async Task<IResult> Handle(BillOutboundHandlingCommand request, CancellationToken ct)
@@ -83,7 +66,7 @@ public class BillOutboundHandlingHandler : IRequestHandler<BillOutboundHandlingC
                         (!t.ValidTo.HasValue || t.ValidTo >= DateTime.UtcNow))
             .ToListAsync(ct);
 
-        // 1. Apuração de Separação / Handling Out
+        // 1. Apuração de Separação / Handling Out (Valores fixos da query)
         CustomerTariff? handlingTariff = null;
         if (request.HandlingServiceId.HasValue)
         {
@@ -97,39 +80,15 @@ public class BillOutboundHandlingHandler : IRequestHandler<BillOutboundHandlingC
              t.BillingService.Name.Contains("Saída", StringComparison.OrdinalIgnoreCase) ||
              t.BillingService.Name.Contains("Separação", StringComparison.OrdinalIgnoreCase)));
 
-        if (handlingTariff != null)
+        if (handlingTariff != null && !string.IsNullOrWhiteSpace(handlingTariff.BillingService.SqlTemplate))
         {
-            var calculatedItem = await _billingEngine.ExecuteOperationalEventAsync(
+            await ProcessSegmentedOutboundServiceAsync(
                 cycle,
-                handlingTariff.BillingService,
                 handlingTariff,
-                orderId: request.OutboundOrderId,
-                documentType: "Ordem de Saída",
-                documentNumber: request.OrderNumber,
-                orderItemId: null
+                request.OutboundOrderId,
+                request.OrderNumber,
+                request.TriggerType
             );
-
-            if (calculatedItem != null && (calculatedItem.QuantityTotal > 0 || calculatedItem.ServiceTotal > 0))
-            {
-                var existingItem = cycle.Items.FirstOrDefault(i =>
-                    i.BillingServiceId == handlingTariff.BillingServiceId &&
-                    i.DocumentId == request.OutboundOrderId &&
-                    i.DocumentType == "Ordem de Saída");
-
-                if (existingItem != null)
-                {
-                    existingItem.UpdateValues(
-                        calculatedItem.QuantityTotal,
-                        calculatedItem.ServiceTotal,
-                        calculatedItem.StatementDataJson,
-                        $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} ({request.TriggerType})"
-                    );
-                }
-                else
-                {
-                    _db.BillingItems.Add(calculatedItem);
-                }
-            }
         }
 
         // 2. Apuração de Insumo Stretch Film
@@ -140,68 +99,135 @@ public class BillOutboundHandlingHandler : IRequestHandler<BillOutboundHandlingC
                 (t.BillingService.Name.Contains("Stretch", StringComparison.OrdinalIgnoreCase) ||
                  t.BillingService.Name.Contains("Filme", StringComparison.OrdinalIgnoreCase)));
 
-            if (stretchTariff != null)
+            if (stretchTariff != null && !string.IsNullOrWhiteSpace(stretchTariff.BillingService.SqlTemplate))
             {
-                var calculatedStretchItem = await _billingEngine.ExecuteOperationalEventAsync(
+                await ProcessSegmentedOutboundServiceAsync(
                     cycle,
-                    stretchTariff.BillingService,
                     stretchTariff,
-                    orderId: request.OutboundOrderId,
-                    documentType: "Ordem de Saída",
-                    documentNumber: request.OrderNumber,
-                    orderItemId: null
+                    request.OutboundOrderId,
+                    request.OrderNumber,
+                    "Aplicação Stretch"
                 );
-
-                if (calculatedStretchItem != null && (calculatedStretchItem.QuantityTotal > 0 || calculatedStretchItem.ServiceTotal > 0))
-                {
-                    var existingStretch = cycle.Items.FirstOrDefault(i =>
-                        i.BillingServiceId == stretchTariff.BillingServiceId &&
-                        i.DocumentId == request.OutboundOrderId &&
-                        i.DocumentType == "Ordem de Saída");
-
-                    if (existingStretch != null)
-                    {
-                        existingStretch.UpdateValues(
-                            calculatedStretchItem.QuantityTotal,
-                            calculatedStretchItem.ServiceTotal,
-                            calculatedStretchItem.StatementDataJson,
-                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Aplicação Stretch)"
-                        );
-                    }
-                    else
-                    {
-                        _db.BillingItems.Add(calculatedStretchItem);
-                    }
-                }
             }
         }
 
         await _db.SaveChangesAsync(ct);
 
-        // Enfileira recálculo de diárias
-        if (_billingChannel != null)
+        // Recalibra as diárias de armazenagem em tempo real
+        await _billingEngine.UpsertDailyChargesAsync(
+            companyId,
+            request.CustomerId,
+            DateTime.UtcNow,
+            ct
+        );
+
+        return Results.Ok(new { Message = "Faturamento de expedição segmentado por NF-e de entrada com sucesso." });
+    }
+
+    private async Task ProcessSegmentedOutboundServiceAsync(
+        BillingCycle cycle,
+        CustomerTariff tariff,
+        Guid outboundOrderId,
+        string orderNumber,
+        string triggerLabel)
+    {
+        var parameters = new
         {
-            await _billingChannel.EnqueueRecalculationAsync(new BillingRecalculationTask(
-                CompanyId: companyId,
-                CustomerId: request.CustomerId,
-                ReferenceDate: DateTime.UtcNow,
-                TriggerOrderId: request.OutboundOrderId,
-                TriggerType: request.TriggerType
-            ), ct);
+            ArmazemId = cycle.CompanyId,
+            DepositanteId = cycle.CustomerId,
+            OrdemId = outboundOrderId,
+            DataReferencia = BillingEngineService.GetOperationalToday(),
+            CobrancaDataIni = cycle.StartDate,
+            CobrancaDataFim = cycle.EndDate
+        };
+
+        var safeQuery = tariff.BillingService.SqlTemplate!
+            .Replace("'{armazem_id}'", "@ArmazemId").Replace("{armazem_id}", "@ArmazemId")
+            .Replace("'{depositante_id}'", "@DepositanteId").Replace("{depositante_id}", "@DepositanteId")
+            .Replace("'{ordem_id}'", "@OrdemId").Replace("{ordem_id}", "@OrdemId")
+            .Replace("'{data_referencia}'", "@DataReferencia").Replace("{data_referencia}", "@DataReferencia")
+            .Replace("'{cobranca_data_ini}'", "@CobrancaDataIni").Replace("{cobranca_data_ini}", "@CobrancaDataIni")
+            .Replace("'{cobranca_data_fim}'", "@CobrancaDataFim").Replace("{cobranca_data_fim}", "@CobrancaDataFim");
+
+        var connection = _db.Database.GetDbConnection();
+        var transaction = _db.Database.CurrentTransaction?.GetDbTransaction();
+
+        var resultRows = await connection.QueryAsync<dynamic>(safeQuery, parameters, transaction);
+
+        // Agrupa por NOTA FISCAL DE ENTRADA de origem
+        var groupedByInboundNfe = new Dictionary<string, (Guid? InboundOrderId, string DocNum, decimal TotalQty, decimal TotalAmount, List<IDictionary<string, object>> ExtractList)>();
+
+        foreach (var row in resultRows)
+        {
+            var rawDict = (IDictionary<string, object>)row;
+            var dict = new Dictionary<string, object>(rawDict, StringComparer.OrdinalIgnoreCase);
+
+            string nfeEntrada = dict.TryGetValue("NF_ENTRADA", out var nfeObj) && nfeObj != null && !string.IsNullOrWhiteSpace(nfeObj.ToString())
+                ? nfeObj.ToString()!
+                : orderNumber;
+
+            Guid? inboundOrderId = dict.TryGetValue("ORDEM_ID", out var ordObj) && ordObj is Guid g ? g : null;
+
+            decimal qty = 0;
+            if (dict.TryGetValue("VOLUME", out var qtyObj) && qtyObj is not DBNull and not null)
+                qty = Convert.ToDecimal(qtyObj, CultureInfo.InvariantCulture);
+
+            decimal amount = 0;
+            if (dict.TryGetValue("VALOR_TOTAL", out var valObj) && valObj is not DBNull and not null)
+                amount = Convert.ToDecimal(valObj, CultureInfo.InvariantCulture);
+
+            if (!groupedByInboundNfe.ContainsKey(nfeEntrada))
+            {
+                groupedByInboundNfe[nfeEntrada] = (inboundOrderId, nfeEntrada, 0, 0, new List<IDictionary<string, object>>());
+            }
+
+            var current = groupedByInboundNfe[nfeEntrada];
+            current.TotalQty += qty;
+            current.TotalAmount += amount;
+            current.ExtractList.Add(rawDict);
+            if (!current.InboundOrderId.HasValue && inboundOrderId.HasValue) current.InboundOrderId = inboundOrderId;
+            groupedByInboundNfe[nfeEntrada] = current;
         }
 
-        return Results.Ok(new { Message = "Faturamento de expedição apurado com sucesso." });
-    }
-}
+        var today = BillingEngineService.GetOperationalToday();
 
-public static class BillOutboundHandlingEndpoints
-{
-    public static void MapBillOutboundHandlingEndpoints(this IEndpointRouteBuilder app)
-    {
-        app.MapPost("/api/billing/outbound/bill-handling", async ([FromBody] BillOutboundHandlingCommand cmd, IMediator mediator) =>
-            await mediator.Send(cmd))
-           .WithTags("Billing")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.Manage);
+        foreach (var entry in groupedByInboundNfe.Values)
+        {
+            if (entry.TotalQty <= 0 && entry.TotalAmount <= 0) continue;
+
+            var extractJson = JsonSerializer.Serialize(entry.ExtractList);
+
+            var existingItem = cycle.Items.FirstOrDefault(i =>
+                i.BillingServiceId == tariff.BillingServiceId &&
+                i.DocumentNumber == entry.DocNum &&
+                i.Description.Contains(orderNumber));
+
+            if (existingItem != null)
+            {
+                existingItem.UpdateValues(
+                    entry.TotalQty,
+                    entry.TotalAmount,
+                    extractJson,
+                    $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} ({triggerLabel} #{orderNumber})"
+                );
+            }
+            else
+            {
+                var newItem = new BillingItem(
+                    billingCycleId: cycle.Id,
+                    billingServiceId: tariff.BillingServiceId,
+                    chargeDate: today,
+                    documentType: "Ordem de Saída",
+                    documentNumber: entry.DocNum, // Rastreabilidade 3PL: grava a NF-e de entrada de origem
+                    documentId: outboundOrderId, // Mantém o ID da OS para cancelamento/estorno
+                    description: $"{tariff.BillingService.Name} (Ordem de Saída #{orderNumber})",
+                    quantityTotal: entry.TotalQty,
+                    serviceTotal: entry.TotalAmount,
+                    statementDataJson: extractJson,
+                    manualNotes: $"Expedição de mercadorias vinculadas à NF-e de Entrada #{entry.DocNum}"
+                );
+                _db.BillingItems.Add(newItem);
+            }
+        }
     }
 }

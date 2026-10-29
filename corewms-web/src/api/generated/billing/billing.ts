@@ -25,7 +25,6 @@ import type {
 
 import type {
   BillInboundReceiptCommand,
-  BillOutboundHandlingCommand,
   CreateBillingServiceCommand,
   CreateCustomerTariffCommand,
   GenerateBillingCycleCommand,
@@ -598,67 +597,6 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiBillingInboundBillReceiptMutationOptions(options), queryClient);
-    }
-    export const postApiBillingOutboundBillHandling = (
-    billOutboundHandlingCommand: BillOutboundHandlingCommand,
- options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
-) => {
-
-
-      return customInstance<void>(
-      {url: `/api/billing/outbound/bill-handling`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: billOutboundHandlingCommand, signal
-    },
-      options);
-    }
-
-
-
-
-export const getPostApiBillingOutboundBillHandlingMutationKey = () => ['postApiBillingOutboundBillHandling'] as const;
-
-export const getPostApiBillingOutboundBillHandlingMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, TError,PostApiBillingOutboundBillHandlingMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, TError,PostApiBillingOutboundBillHandlingMutationVariables, TContext> => {
-
-const mutationKey = getPostApiBillingOutboundBillHandlingMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, PostApiBillingOutboundBillHandlingMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  postApiBillingOutboundBillHandling(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type PostApiBillingOutboundBillHandlingMutationResult = NonNullable<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>>
-    export type PostApiBillingOutboundBillHandlingMutationBody = BillOutboundHandlingCommand
-    export type PostApiBillingOutboundBillHandlingMutationError = unknown
-    export type PostApiBillingOutboundBillHandlingMutationVariables = {data: BillOutboundHandlingCommand}
-
-    export const usePostApiBillingOutboundBillHandling = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>, TError,PostApiBillingOutboundBillHandlingMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof postApiBillingOutboundBillHandling>>,
-        TError,
-        PostApiBillingOutboundBillHandlingMutationVariables,
-        TContext
-      > => {
-      return useMutation(getPostApiBillingOutboundBillHandlingMutationOptions(options), queryClient);
     }
     export const postApiBillingInboundRollbackByHus = (
     rollbackInboundBillingByHandlingUnitsCommand: RollbackInboundBillingByHandlingUnitsCommand,

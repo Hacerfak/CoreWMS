@@ -2,18 +2,26 @@
 
 export const formatDatePtBr = (dateValue) => {
     if (!dateValue) return '-';
-    if (typeof dateValue === 'string') {
-        const clean = dateValue.split('T')[0];
-        const parts = clean.split('-');
-        if (parts.length === 3) {
-            const [year, month, day] = parts;
-            return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
-        }
+
+    // 1. Se for apenas string de data sem hora (ex: "2026-10-31")
+    if (typeof dateValue === 'string' && dateValue.length === 10 && dateValue.includes('-')) {
+        const [year, month, day] = dateValue.split('-');
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
     }
+
+    // 2. Se for uma data com horário zerado em UTC (ex: "2026-10-29T00:00:00.000Z")
+    if (typeof dateValue === 'string' && (dateValue.includes('T00:00:00') || dateValue.includes(' 00:00:00'))) {
+        const clean = dateValue.split('T')[0].split(' ')[0];
+        const [year, month, day] = clean.split('-');
+        return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+    }
+
+    // 3. Para timestamps completos (ex: EndDate "2026-11-01T02:59:59.999Z")
+    // Converte para a data civil no fuso horário do usuário (31/10/2026)
     try {
         const d = new Date(dateValue);
         if (isNaN(d.getTime())) return '-';
-        return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+        return d.toLocaleDateString('pt-BR');
     } catch {
         return '-';
     }
@@ -57,11 +65,14 @@ export const formatNumber = (val) => {
 
 export const extractNfeNumber = (item) => {
     if (!item) return 'Estoque Consolidado';
+
+    // 1. O DocumentNumber agora guarda sempre o número da NF-e de Entrada de Origem
     if (item.documentNumber && !item.documentNumber.includes('/') && item.documentNumber !== 'Estoque Consolidado') {
-        return item.documentNumber.replace(/[^0-9]/g, '') || item.documentNumber;
+        const clean = item.documentNumber.replace(/[^0-9]/g, '');
+        if (clean.length > 0) return clean;
     }
-    const match = (item.description || '').match(/NF(?:-e)?\s*(?:Entrada)?\s*#?\s*(\d+)/i);
-    if (match) return match[1];
+
+    // 2. Fallback de extração via JSON analítico da query
     if (item.statementDataJson) {
         try {
             const parsed = JSON.parse(item.statementDataJson);
@@ -71,6 +82,7 @@ export const extractNfeNumber = (item) => {
             }
         } catch { }
     }
+
     return item.documentNumber || 'Estoque Consolidado';
 };
 
