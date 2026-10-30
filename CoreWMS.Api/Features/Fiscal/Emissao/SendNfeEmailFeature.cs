@@ -71,7 +71,7 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
         string baseUrl = _config["App:PublicBaseUrl"]
             ?? (requestHttp != null ? $"{requestHttp.Scheme}://{requestHttp.Host}" : "https://corewms.com.br");
 
-        string danfePublicUrl = $"{baseUrl.TrimEnd('/')}/public/danfe/{doc.AccessKey}";
+        string danfePublicUrl = $"{baseUrl.TrimEnd('/')}/api/public/danfe/{doc.AccessKey}";
         string identificador = doc.OutboundOrder != null
             ? $"Pedido #{doc.OutboundOrder.OrderNumber}"
             : $"NF-e #{doc.AccessKey}";
