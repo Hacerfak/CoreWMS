@@ -91,7 +91,7 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
         let sql = '';
         switch (presetKey) {
             case 'storage_daily':
-                sql = `-- Armazenagem Diária (Apuração Contínua Agrupada por Tipo de Volume)
+                sql = `-- Armazenagem Diária (Apuração por HU em Custódia)
 SELECT 
     h."ReceiptDocumentId" AS "ORDEM_ID",
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
@@ -106,7 +106,7 @@ LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
 LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
 WHERE h."CompanyId" = @ArmazemId
   AND h."CustomerId" = @DepositanteId
-  AND h."Status" NOT IN (1,7)
+  AND h."Status" != 1
   AND h."CreatedAt" <= @CobrancaDataFim
   AND (h."ConsumedAt" IS NULL OR h."ConsumedAt" >= @CobrancaDataIni)
 GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", pt."Code", pt."Description"
@@ -114,7 +114,36 @@ ORDER BY "NF_ENTRADA", pt."Code";`;
                 break;
 
             case 'ad_valorem':
-                sql = `-- Seguro / Ad-Valorem Diário (Sobre o Valor Patrimonial das Mercadorias)
+                sql = `-- Seguro / Ad-Valorem Diário com Reconstrução Histórica via Kardex
+WITH "HuSaldoKardex" AS (
+    SELECT 
+        t."HandlingUnitId",
+        SUM(
+            CASE 
+                -- Se a HU entrou no próprio dia, considera a quantidade de entrada recebida
+                WHEN t."Type" = 1 AND t."CreatedAt" >= @CobrancaDataIni AND t."CreatedAt" <= @CobrancaDataFim 
+                    THEN t."QuantityChange"
+                -- Para histórico anterior ao dia, soma o saldo acumulado que amanheceu no galpão
+                WHEN t."CreatedAt" < @CobrancaDataIni 
+                    THEN t."QuantityChange"
+                ELSE 0 
+            END
+        ) AS "SaldoPecas"
+    FROM "InventoryTransactions" t
+    WHERE t."CompanyId" = @ArmazemId
+      AND t."CustomerId" = @DepositanteId
+      AND t."CreatedAt" <= @CobrancaDataFim
+    GROUP BY t."HandlingUnitId"
+    HAVING SUM(
+        CASE 
+            WHEN t."Type" = 1 AND t."CreatedAt" >= @CobrancaDataIni AND t."CreatedAt" <= @CobrancaDataFim 
+                THEN t."QuantityChange"
+            WHEN t."CreatedAt" < @CobrancaDataIni 
+                THEN t."QuantityChange"
+            ELSE 0 
+        END
+    ) > 0
+)
 SELECT 
     h."ReceiptDocumentId" AS "ORDEM_ID",
     COALESCE(io."InvoiceNumber", SUBSTRING(io."AccessKey" FROM 26 FOR 9), 'SEM-NF') AS "NF_ENTRADA",
@@ -122,20 +151,13 @@ SELECT
     pt."Code" AS "TIPO_VOLUME",
     pt."Description" AS "DESCRICAO",
     COUNT(DISTINCT h."Id") AS "VOLUME",
-    ROUND(SUM(COALESCE(NULLIF(h."CurrentQuantity", 0), h."InitialQuantity") * h."UnitValue"), 2) AS "BASE_CALCULO",
+    ROUND(SUM(k."SaldoPecas" * h."UnitValue"), 2) AS "BASE_CALCULO",
     @ServicoValor AS "VALOR_UNITARIO",
-    ROUND(
-        SUM(COALESCE(NULLIF(h."CurrentQuantity", 0), h."InitialQuantity") * h."UnitValue") * @ServicoValor, 
-        2
-    ) AS "VALOR_TOTAL"
-FROM "HandlingUnits" h
+    ROUND(SUM(k."SaldoPecas" * h."UnitValue") * @ServicoValor, 2) AS "VALOR_TOTAL"
+FROM "HuSaldoKardex" k
+JOIN "HandlingUnits" h ON h."Id" = k."HandlingUnitId"
 LEFT JOIN "InboundOrders" io ON io."Id" = h."ReceiptDocumentId"
 LEFT JOIN "PackagingTypes" pt ON pt."Id" = h."PackagingTypeId"
-WHERE h."CompanyId" = @ArmazemId
-  AND h."CustomerId" = @DepositanteId
-  AND h."Status" NOT IN (1,7)
-  AND h."CreatedAt" <= @CobrancaDataFim
-  AND (h."ConsumedAt" IS NULL OR h."ConsumedAt" >= @CobrancaDataIni)
 GROUP BY h."ReceiptDocumentId", io."InvoiceNumber", io."AccessKey", io."IssueDate", pt."Code", pt."Description"
 ORDER BY "NF_ENTRADA", pt."Code";`;
                 break;

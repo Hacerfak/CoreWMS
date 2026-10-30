@@ -142,9 +142,7 @@ public class BillingEngineService
         return processedCount;
     }
 
-    /// <summary>
     /// Apura as diárias de estoque agrupadas por NF-e de entrada vinculando o DocumentId da ordem.
-    /// </summary>
     public async Task<List<BillingItem>> ExecuteDailyServicesPerInboundOrderAsync(
         BillingCycle cycle,
         List<CustomerTariff> tariffs,
@@ -153,6 +151,7 @@ public class BillingEngineService
         DateTime endUtc)
     {
         var processedItems = new List<BillingItem>();
+        var operationalToday = GetOperationalToday();
 
         foreach (var tariff in tariffs)
         {
@@ -236,26 +235,42 @@ public class BillingEngineService
             {
                 if (entry.TotalQty <= 0 && entry.TotalAmount <= 0) continue;
 
-                var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
-                var extractJson = JsonSerializer.Serialize(entry.ExtractList, jsonOptions);
-
                 var existingItem = cycle.Items.FirstOrDefault(i =>
                     i.BillingServiceId == tariff.BillingServiceId &&
                     i.ChargeDate.Date == dateKey.Date &&
                     i.DocumentNumber == entry.DocNum);
 
+                var isToday = dateKey.Date == operationalToday.Date;
+
                 if (existingItem != null)
                 {
-                    existingItem.UpdateValues(
-                        entry.TotalQty,
-                        entry.TotalAmount,
-                        extractJson,
-                        $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Total Cumulativo do Dia)"
-                    );
-                    processedItems.Add(existingItem);
+                    // REGRA DE OURO: Só permite atualizar o dia corrente!
+                    // Dias anteriores fechados são imutáveis e não devem ser contaminados por saídas futuras.
+                    if (isToday)
+                    {
+                        var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
+                        var extractJson = JsonSerializer.Serialize(entry.ExtractList, jsonOptions);
+
+                        existingItem.UpdateValues(
+                            entry.TotalQty,
+                            entry.TotalAmount,
+                            extractJson,
+                            $"Atualizado em {DateTime.UtcNow:dd/MM/yyyy HH:mm} (Total Cumulativo do Dia)"
+                        );
+                        processedItems.Add(existingItem);
+                    }
+                    else
+                    {
+                        // Dia passado já apurado: preserva intacto
+                        processedItems.Add(existingItem);
+                    }
                 }
                 else
                 {
+                    // Dia passado que estava faltando (ou primeira apuração de hoje): gera o registro
+                    var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
+                    var extractJson = JsonSerializer.Serialize(entry.ExtractList, jsonOptions);
+
                     var newItem = new BillingItem(
                         billingCycleId: cycle.Id,
                         billingServiceId: tariff.BillingServiceId,
@@ -267,7 +282,9 @@ public class BillingEngineService
                         quantityTotal: entry.TotalQty,
                         serviceTotal: entry.TotalAmount,
                         statementDataJson: extractJson,
-                        manualNotes: $"Apuração de diária vinculada à NF-e #{entry.DocNum}"
+                        manualNotes: isToday
+                            ? $"Apuração diária"
+                            : $"Apuração retroativa gerada em {DateTime.UtcNow:dd/MM/yyyy HH:mm}"
                     );
                     _db.BillingItems.Add(newItem);
                     processedItems.Add(newItem);

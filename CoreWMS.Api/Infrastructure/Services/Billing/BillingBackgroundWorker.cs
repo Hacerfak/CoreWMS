@@ -92,9 +92,8 @@ public class BillingBackgroundWorker : BackgroundService
                 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
                 var engine = scope.ServiceProvider.GetRequiredService<BillingEngineService>();
 
-                // Apura as diárias de "ontem" (o dia operacional que acabou de se encerrar)
-                var yesterday = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date.AddDays(-1);
-                var refMonth = yesterday.ToString("MM/yyyy");
+                var today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
+                var refMonth = today.ToString("MM/yyyy");
 
                 var openCycles = await db.BillingCycles
                     .AsNoTracking()
@@ -104,14 +103,15 @@ public class BillingBackgroundWorker : BackgroundService
                     .ToListAsync(ct);
 
                 _logger.LogInformation(
-                    "[BILLING CRON] Processando diárias de {DataRef} para {Count} depositante(s) com ciclo aberto.",
-                    yesterday.ToString("dd/MM/yyyy"), openCycles.Count);
+                "[BILLING CRON] Gerando diárias de {DataRef} para {Count} depositante(s) com ciclo aberto.",
+                today.ToString("dd/MM/yyyy"), openCycles.Count);
 
                 foreach (var cycle in openCycles)
                 {
                     try
                     {
-                        await engine.UpsertDailyChargesAsync(cycle.CompanyId, cycle.CustomerId, yesterday, ct);
+                        // Executa para a data de HOJE (início do dia operacional)
+                        await engine.UpsertDailyChargesAsync(cycle.CompanyId, cycle.CustomerId, today, ct);
                     }
                     catch (Exception ex)
                     {
@@ -119,7 +119,7 @@ public class BillingBackgroundWorker : BackgroundService
                     }
                 }
 
-                _logger.LogInformation("[BILLING CRON] Apuração matutina finalizada com sucesso.");
+                _logger.LogInformation("[BILLING CRON] Apuração finalizada com sucesso.");
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -127,7 +127,7 @@ public class BillingBackgroundWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[BILLING CRON] Erro no agendador matutino. Tentando novamente em 30 minutos.");
+                _logger.LogError(ex, "[BILLING CRON] Erro no agendador. Tentando novamente em 30 minutos.");
                 await Task.Delay(TimeSpan.FromMinutes(30), ct);
             }
         }
