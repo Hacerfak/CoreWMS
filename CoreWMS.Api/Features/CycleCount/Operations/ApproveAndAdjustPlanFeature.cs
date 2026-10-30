@@ -3,9 +3,9 @@ using CoreWMS.Api.Features.CycleCount.Enums;
 using CoreWMS.Api.Features.CycleCount.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,13 +32,13 @@ public class ApproveAndAdjustPlanHandler :
     IRequestHandler<ApplyFiscalAdjustmentCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
     private readonly IHttpContextAccessor _http;
 
-    public ApproveAndAdjustPlanHandler(ApplicationDbContext db, KardexChannel kardex, IHttpContextAccessor http)
+    public ApproveAndAdjustPlanHandler(ApplicationDbContext db, IMediator mediator, IHttpContextAccessor http)
     {
         _db = db;
-        _kardex = kardex;
+        _mediator = mediator;
         _http = http;
     }
 
@@ -179,21 +179,27 @@ public class ApproveAndAdjustPlanHandler :
             var transType = divergence > 0 ? TransactionType.Inventory_Adjustment_In : TransactionType.Inventory_Adjustment_Out;
             var actionMsg = divergence > 0 ? $"AJUSTE FISCAL (SOBRA): Remessa {request.FiscalDocumentNumber}" : $"AJUSTE FISCAL (FALTA): Retorno Simbólico {request.FiscalDocumentNumber}";
 
-            await _kardex.WriteAsync(new Features.Inventory.Entities.InventoryTransaction(
-                task.CycleCountPlan.CompanyId,
-                task.CycleCountPlan.CustomerIds.FirstOrDefault(),
-                task.ProductId,
-                null,
-                task.LocationId,
-                transType,
-                divergence,
-                balance.TotalAvailable,
-                null,
-                actionMsg
+            await _db.SaveChangesAsync(ct);
+
+            // DELEGAÇÃO VIA MEDIATR: Movimento auditado enviado de forma desacoplada
+            await _mediator.Send(new RecordKardexMovementCommand(
+                CustomerId: task.CycleCountPlan.CustomerIds.FirstOrDefault(),
+                ProductId: task.ProductId,
+                HandlingUnitId: null,
+                LocationId: task.LocationId,
+                Type: transType,
+                QuantityChange: divergence,
+                BalanceAfter: balance.TotalAvailable,
+                SourceDocumentId: null,
+                SourceDocumentNumber: actionMsg,
+                CompanyId: task.CycleCountPlan.CompanyId
             ), ct);
         }
+        else
+        {
+            await _db.SaveChangesAsync(ct);
+        }
 
-        await _db.SaveChangesAsync(ct);
         return Results.Ok(new { Message = "Ajuste fiscal efetuado com sucesso." });
     }
 }

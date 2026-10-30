@@ -3,12 +3,8 @@ using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inventory.Operations;
@@ -40,13 +36,13 @@ public class MergeHandlingUnitsHandler : IRequestHandler<MergeHandlingUnitsComma
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
-    public MergeHandlingUnitsHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public MergeHandlingUnitsHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(MergeHandlingUnitsCommand request, CancellationToken ct)
@@ -130,26 +126,51 @@ public class MergeHandlingUnitsHandler : IRequestHandler<MergeHandlingUnitsComma
         if (request.Quantity > sourceHu.CurrentQuantity)
             return Results.BadRequest(new { Message = $"Saldo insuficiente na HU {sourceHu.Lpn}. Disponível: {sourceHu.CurrentQuantity}." });
 
-        // 10. Execução do Agrupamento
+        // 10. Execução do Agrupamento no Domínio
         bool wasFullyConsumed = (request.Quantity == sourceHu.CurrentQuantity);
 
         sourceHu.Consume(request.Quantity);
         destHu.AddQuantity(request.Quantity);
 
-        // Registro no Kardex
-        await _kardex.WriteAsync(new InventoryTransaction(
-            companyId, sourceHu.CustomerId, sourceHu.ProductId, sourceHu.Id, sourceHu.CurrentLocationId,
-            TransactionType.Internal_Move, -request.Quantity, sourceHu.CurrentQuantity,
-            sourceHu.ReceiptDocumentId, $"AGRUPAMENTO: Transferido para HU {destHu.Lpn}"
-        ), ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Results.Conflict(new { Message = "Conflito de concorrência ao agrupar as HUs. Tente novamente." });
+        }
 
-        await _kardex.WriteAsync(new InventoryTransaction(
-            companyId, destHu.CustomerId, destHu.ProductId, destHu.Id, destHu.CurrentLocationId,
-            TransactionType.Internal_Move, request.Quantity, destHu.CurrentQuantity,
-            destHu.ReceiptDocumentId, $"AGRUPAMENTO: Recebido da HU {sourceHu.Lpn}"
-        ), ct);
+        // DELEGAÇÃO VIA MEDIATR: Registo em lote desacoplado no Kardex
+        var kardexMovements = new List<RecordKardexMovementItemDto>
+        {
+            new(
+                CustomerId: sourceHu.CustomerId,
+                ProductId: sourceHu.ProductId,
+                HandlingUnitId: sourceHu.Id,
+                LocationId: sourceHu.CurrentLocationId,
+                Type: TransactionType.Hu_Merge, // <-- Tipo Específico
+                QuantityChange: -request.Quantity,
+                BalanceAfter: sourceHu.CurrentQuantity,
+                SourceDocumentId: sourceHu.ReceiptDocumentId,
+                SourceDocumentNumber: $"Transferido para HU {destHu.Lpn}",
+                CompanyId: companyId
+            ),
+            new(
+                CustomerId: destHu.CustomerId,
+                ProductId: destHu.ProductId,
+                HandlingUnitId: destHu.Id,
+                LocationId: destHu.CurrentLocationId,
+                Type: TransactionType.Hu_Merge, // <-- Tipo Específico
+                QuantityChange: request.Quantity,
+                BalanceAfter: destHu.CurrentQuantity,
+                SourceDocumentId: destHu.ReceiptDocumentId,
+                SourceDocumentNumber: $"Recebido da HU {sourceHu.Lpn}",
+                CompanyId: companyId
+            )
+        };
 
-        await _db.SaveChangesAsync(ct);
+        await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
 
         return Results.Ok(new
         {

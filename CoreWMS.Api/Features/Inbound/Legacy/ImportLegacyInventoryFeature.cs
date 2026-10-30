@@ -1,14 +1,21 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
+using CoreWMS.Api.Features.Products;
 using CoreWMS.Api.Features.Topology.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,13 +27,13 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
-    public ImportLegacyInventoryHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public ImportLegacyInventoryHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(ImportLegacyInventoryCommand request, CancellationToken ct)
@@ -42,7 +49,6 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             .Where(c => c.CompanyId == companyId)
             .ToDictionaryAsync(c => c.Cnpj, c => c.Id, ct);
 
-        // Carrega as localizações incluindo a relação StorageType para validar o StorageRole (Dock, Storage, Quality)
         var locations = await _db.Locations
             .AsNoTracking()
             .Include(l => l.StorageType)
@@ -57,13 +63,11 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         var balances = await _db.InventoryBalances.Where(b => b.CompanyId == companyId).ToListAsync(ct);
         var existingHus = await _db.HandlingUnits.Where(h => h.CompanyId == companyId).Select(h => h.Lpn).ToHashSetAsync(ct);
 
-        // Pre-carregamento dos produtos mestres para fallback de pesos
         var products = await _db.Products
             .AsNoTracking()
             .Where(p => p.CompanyId == companyId)
             .ToDictionaryAsync(p => p.Id, ct);
 
-        // Pre-carregamento das embalagens dos produtos
         var allProductPackagings = await _db.ProductPackagings
             .AsNoTracking()
             .OrderBy(p => p.CreatedAt)
@@ -73,7 +77,6 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             .GroupBy(p => p.ProductId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        // Mapa de memória para manter a mesma embalagem em HUs do mesmo (ProductId, Lote)
         var existingHuBatches = await _db.HandlingUnits
             .AsNoTracking()
             .Where(h => h.CompanyId == companyId && h.Batch != null && h.Batch != "")
@@ -88,6 +91,9 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         int insertedHus = 0;
         var errors = new List<string>();
         var husToInsert = new List<HandlingUnit>();
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
+        var affectedOrders = new HashSet<InboundOrder>();
+        var productsToSyncWeights = new Dictionary<Guid, ProductWeightSyncItemDto>();
 
         for (int i = 1; i < lines.Length; i++)
         {
@@ -106,7 +112,6 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             var isBlocked = !string.IsNullOrWhiteSpace(cols[16].Replace("\"", ""));
             var qualityStatus = isBlocked ? QualityStatus.Quarantine : QualityStatus.Available;
 
-            // Extração dos pesos e valor da planilha
             var pesoLiquidoTotal = cols.Length > 18 ? ParseBrDecimal(cols[18]) : 0m;
             var pesoBrutoTotal = cols.Length > 19 ? ParseBrDecimal(cols[19]) : 0m;
             var valorUnitarioCsv = cols.Length > 20 ? ParseBrDecimal(cols[20]) : 0m;
@@ -125,10 +130,10 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 continue;
             }
 
-            var orderItem = FindOrderItem(openOrders, customerId, nfNumero, nfSerie, sku);
-            if (orderItem == null)
+            var (order, orderItem) = FindOrderAndItem(openOrders, customerId, nfNumero, nfSerie, sku);
+            if (order == null || orderItem == null)
             {
-                errors.Add($"Linha {i + 1}: Item {sku} da NF {nfNumero} (Série {nfSerie}) não encontrado nas importações.");
+                errors.Add($"Linha {i + 1}: Item {sku} da NF {nfNumero} (Série {nfSerie}) não encontrado nas importações em aberto.");
                 continue;
             }
 
@@ -146,16 +151,12 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 continue;
             }
 
-            // REGRA DE SELEÇÃO INTELIGENTE DE EMBALAGEM
             Guid selectedPackagingTypeId;
-
-            // 1. Correspondência exata da quantidade com o fator de conversão
             var exactMatchPack = productPacks.FirstOrDefault(p => p.ConversionFactor == quantity);
 
             if (exactMatchPack != null)
             {
                 selectedPackagingTypeId = exactMatchPack.PackagingTypeId;
-
                 if (cleanLote != null)
                 {
                     assignedPackagingsByBatch[(productId, cleanLote)] = selectedPackagingTypeId;
@@ -163,7 +164,6 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             }
             else if (cleanLote != null)
             {
-                // 2. Quantidade fracionada com Lote
                 if (assignedPackagingsByBatch.TryGetValue((productId, cleanLote), out var batchPackTypeId))
                 {
                     selectedPackagingTypeId = batchPackTypeId;
@@ -176,27 +176,30 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             }
             else
             {
-                // 3. Sem lote e sem correspondência exata
                 selectedPackagingTypeId = productPacks.First().PackagingTypeId;
             }
 
             // CÁLCULO E RESOLUÇÃO DOS PESOS UNITÁRIOS COM FALLBACK MULTICAMADAS
-            // 1º Tenta calcular via rateio da linha legada: peso_total / quantidade
             decimal huUnitNet = (quantity > 0 && pesoLiquidoTotal > 0) ? Math.Round(pesoLiquidoTotal / quantity, 4) : 0m;
             decimal huUnitGross = (quantity > 0 && pesoBrutoTotal > 0) ? Math.Round(pesoBrutoTotal / quantity, 4) : 0m;
 
-            // 2º Fallback para o InboundOrderItem
+            // Se a planilha forneceu pesos válidos, armazena para sincronização no domínio Products
+            if (huUnitNet > 0 || huUnitGross > 0)
+            {
+                decimal validNet = huUnitNet > 0 ? huUnitNet : huUnitGross;
+                decimal validGross = huUnitGross > 0 ? huUnitGross : huUnitNet;
+                productsToSyncWeights[productId] = new ProductWeightSyncItemDto(productId, validNet, validGross);
+            }
+
             if (huUnitNet <= 0 && orderItem.UnitNetWeight > 0) huUnitNet = orderItem.UnitNetWeight;
             if (huUnitGross <= 0 && orderItem.UnitGrossWeight > 0) huUnitGross = orderItem.UnitGrossWeight;
 
-            // 3º Fallback para o cadastro mestre do Produto
             if (products.TryGetValue(productId, out var prodObj))
             {
                 if (huUnitNet <= 0 && prodObj.NetWeight > 0) huUnitNet = prodObj.NetWeight;
                 if (huUnitGross <= 0 && prodObj.GrossWeight > 0) huUnitGross = prodObj.GrossWeight;
             }
 
-            // 4º Fallback para a embalagem selecionada
             var selectedPack = productPacks.FirstOrDefault(p => p.PackagingTypeId == selectedPackagingTypeId);
             if (selectedPack != null && selectedPack.ConversionFactor > 0)
             {
@@ -207,17 +210,14 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                     huUnitNet = Math.Round(selectedPack.NetWeight / selectedPack.ConversionFactor, 4);
             }
 
-            // 5º Consistência: se o bruto continuar zerado mas tiver líquido, assume o líquido
             if (huUnitGross <= 0 && huUnitNet > 0) huUnitGross = huUnitNet;
             if (huUnitNet <= 0 && huUnitGross > 0) huUnitNet = huUnitGross;
 
-            // Atualiza o InboundOrderItem se ainda não possuía pesos gravados
             if (orderItem.UnitNetWeight <= 0 && huUnitNet > 0)
             {
                 orderItem.SetUnitWeights(huUnitNet, huUnitGross);
             }
 
-            // Resolução do valor unitário da remessa
             var finalUnitValue = orderItem.ExpectedUnitValue > 0 ? orderItem.ExpectedUnitValue : valorUnitarioCsv;
 
             var hu = new HandlingUnit(
@@ -233,17 +233,15 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 null,
                 quantity,
                 finalUnitValue,
-                huUnitNet,   // <-- Peso Líquido Unitário
-                huUnitGross  // <-- Peso Bruto Unitário
+                huUnitNet,
+                huUnitGross
             );
 
-            // Registra a HU na Doca
             hu.ReceiveAtDock(locationObj.Id);
             if (qualityStatus != QualityStatus.Available) hu.ChangeQuality(qualityStatus);
 
             var targetRole = locationObj.StorageType?.Role ?? StorageRole.Storage;
 
-            // Se a posição for de Armazenamento ou Qualidade, transita o status da HU para Stored
             if (targetRole != StorageRole.Dock)
             {
                 hu.MoveTo(locationObj.Id);
@@ -252,6 +250,8 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
             husToInsert.Add(hu);
             existingHus.Add(lpn);
             insertedHus++;
+
+            affectedOrders.Add(order);
 
             var balance = balances.FirstOrDefault(b => b.ProductId == productId && b.CustomerId == customerId);
             if (balance == null)
@@ -268,10 +268,18 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
                 balance.AllocateFromDock(quantity, targetRole, qualityStatus);
             }
 
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, customerId, productId, hu.Id, locationObj.Id,
-                TransactionType.Inbound_Receipt, quantity, quantity,
-                orderItem.InboundOrderId, $"MIGRAÇÃO NF {nfNumero}"), ct);
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: customerId,
+                ProductId: productId,
+                HandlingUnitId: hu.Id,
+                LocationId: locationObj.Id,
+                Type: TransactionType.Inbound_Receipt,
+                QuantityChange: quantity,
+                BalanceAfter: quantity,
+                SourceDocumentId: orderItem.InboundOrderId,
+                SourceDocumentNumber: $"MIGRAÇÃO NF {nfNumero}",
+                CompanyId: companyId
+            ));
 
             orderItem.AddReceivedQuantity(quantity);
         }
@@ -279,38 +287,73 @@ public class ImportLegacyInventoryHandler : IRequestHandler<ImportLegacyInventor
         if (husToInsert.Any())
         {
             _db.HandlingUnits.AddRange(husToInsert);
-            foreach (var order in openOrders)
+
+            // FECHAMENTO COMPULSÓRIO DAS ORDENS & LIMPEZA DE EXPECTATIVAS RESIDUAIS
+            foreach (var order in affectedOrders)
             {
-                if (order.Items.All(i => i.Status == InboundOrderItemStatus.Completed))
+                foreach (var item in order.Items)
                 {
-                    order.UpdateStatus(InboundOrderStatus.Completed);
+                    if (item.ProductId.HasValue && order.CustomerId.HasValue)
+                    {
+                        decimal remainingExpected = Math.Max(0m, item.ExpectedQuantity - item.ReceivedQuantity);
+
+                        if (remainingExpected > 0)
+                        {
+                            var bal = balances.FirstOrDefault(b => b.ProductId == item.ProductId.Value && b.CustomerId == order.CustomerId.Value);
+                            bal?.RemoveExpected(remainingExpected);
+                        }
+                    }
+
+                    if (item.Status != InboundOrderItemStatus.Completed)
+                    {
+                        item.UpdateStatus(InboundOrderItemStatus.Completed);
+                    }
                 }
+
+                order.UpdateStatus(InboundOrderStatus.Completed);
             }
+
             await _db.SaveChangesAsync(ct);
+
+            // 1. Gravação desacoplada e em lote no Kardex
+            if (kardexMovements.Any())
+            {
+                await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
+            }
+
+            // 2. DELEGAÇÃO VIA MEDIATR: Atualiza pesos do produto e recalcula embalagens no domínio Products
+            if (productsToSyncWeights.Any())
+            {
+                await _mediator.Send(new SyncProductWeightsCommand(productsToSyncWeights.Values.ToList()), ct);
+            }
         }
 
         return Results.Ok(new
         {
-            Message = "Migração de inventário legada concluída com sucesso.",
+            Message = $"Migração concluída com sucesso. {affectedOrders.Count} ordem(ns) finalizada(s), saldos esperados conciliados e {productsToSyncWeights.Count} produto(s) com pesos e embalagens sincronizados.",
             HusImported = insertedHus,
+            OrdersCompleted = affectedOrders.Count,
+            ProductsUpdated = productsToSyncWeights.Count,
             Errors = errors.Take(50)
         });
     }
 
-    private InboundOrderItem? FindOrderItem(List<InboundOrder> orders, Guid customerId, string nfNumero, string nfSerie, string sku)
+    private (InboundOrder? Order, InboundOrderItem? Item) FindOrderAndItem(
+        List<InboundOrder> orders, Guid customerId, string nfNumero, string nfSerie, string sku)
     {
         foreach (var order in orders.Where(o => o.CustomerId == customerId))
         {
             if (order.AccessKey.Length != 44) continue;
             var serieKey = int.Parse(order.AccessKey.Substring(22, 3)).ToString();
             var nfKey = int.Parse(order.AccessKey.Substring(25, 9)).ToString();
+
             if (serieKey == nfSerie && nfKey == nfNumero)
             {
-                var item = order.Items.FirstOrDefault(i => i.RawSkuCode.ToUpper() == sku.ToUpper() && i.Status != InboundOrderItemStatus.Completed);
-                if (item != null) return item;
+                var item = order.Items.FirstOrDefault(i => i.RawSkuCode.ToUpper() == sku.ToUpper());
+                if (item != null) return (order, item);
             }
         }
-        return null;
+        return (null, null);
     }
 
     private static decimal ParseBrDecimal(string value)

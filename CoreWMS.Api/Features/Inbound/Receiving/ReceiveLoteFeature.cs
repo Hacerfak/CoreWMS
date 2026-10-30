@@ -1,16 +1,21 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreWMS.Api.Features.Billing.Operations;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Infrastructure.Storage;
 using FluentValidation;
 using MediatR;
@@ -46,7 +51,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly IMasterDataCacheService _masterDataCache;
-    private readonly KardexChannel _kardex;
     private readonly IHttpContextAccessor _http;
     private readonly ILocalImageStorageService _imageStorage;
     private readonly IMediator _mediator;
@@ -55,7 +59,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         ApplicationDbContext db,
         ITenantProvider tenant,
         IMasterDataCacheService masterDataCache,
-        KardexChannel kardex,
         IHttpContextAccessor http,
         ILocalImageStorageService imageStorage,
         IMediator mediator)
@@ -63,7 +66,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         _db = db;
         _tenant = tenant;
         _masterDataCache = masterDataCache;
-        _kardex = kardex;
         _http = http;
         _imageStorage = imageStorage;
         _mediator = mediator;
@@ -105,6 +107,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         decimal totalToReceive = 0;
         var husToInsert = new List<HandlingUnit>();
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
         var balance = await GetOrCreateBalanceAsync(companyId, orderItem.InboundOrder.CustomerId!.Value, orderItem.ProductId.Value, ct);
 
         foreach (var vol in request.Volumes)
@@ -225,10 +228,19 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 totalToReceive += vol.QuantityPerVolume;
                 balance.ReceiveToDock(vol.QuantityPerVolume);
 
-                await _kardex.WriteAsync(new InventoryTransaction(
-                    companyId, orderItem.InboundOrder.CustomerId.Value, orderItem.ProductId.Value, hu.Id, vol.TargetLocationId,
-                    TransactionType.Inbound_Receipt, vol.QuantityPerVolume, vol.QuantityPerVolume,
-                    orderItem.InboundOrderId, orderItem.InboundOrder.AccessKey), ct);
+                // Prepara movimento desacoplado para gravação segura após o commit
+                kardexMovements.Add(new RecordKardexMovementItemDto(
+                    CustomerId: orderItem.InboundOrder.CustomerId.Value,
+                    ProductId: orderItem.ProductId.Value,
+                    HandlingUnitId: hu.Id,
+                    LocationId: vol.TargetLocationId,
+                    Type: TransactionType.Inbound_Receipt,
+                    QuantityChange: vol.QuantityPerVolume,
+                    BalanceAfter: vol.QuantityPerVolume,
+                    SourceDocumentId: orderItem.InboundOrderId,
+                    SourceDocumentNumber: orderItem.InboundOrder.AccessKey,
+                    CompanyId: companyId
+                ));
             }
         }
 
@@ -262,9 +274,13 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
         }
 
-        // Localize o bloco de faturamento no final do Handle (substituindo as linhas 350 a 375):
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
+        }
 
-        // Agrupa as HUs geradas por BillingServiceId
+        // DELEGAÇÃO VIA MEDIATR: Faturamento Inbound
         var serviceGroups = new Dictionary<Guid, List<Guid>>();
         int huIndex = 0;
 
@@ -283,7 +299,6 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             }
         }
 
-        // DELEGAÇÃO VIA MEDIATR PARA O MÓDULO BILLING
         if (orderItem.InboundOrder.CustomerId.HasValue && serviceGroups.Any())
         {
             var billingGroups = serviceGroups.Select(kvp => new InboundBillingServiceItemDto(

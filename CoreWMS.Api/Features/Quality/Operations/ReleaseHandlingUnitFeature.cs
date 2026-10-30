@@ -1,9 +1,8 @@
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,13 +25,13 @@ public class ReleaseHandlingUnitHandler : IRequestHandler<ReleaseHandlingUnitCom
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
-    public ReleaseHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public ReleaseHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(ReleaseHandlingUnitCommand request, CancellationToken ct)
@@ -56,15 +55,40 @@ public class ReleaseHandlingUnitHandler : IRequestHandler<ReleaseHandlingUnitCom
         hu.ChangeQuality(QualityStatus.Available);
         balance?.ReleaseFromQuarantine(hu.CurrentQuantity);
 
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
+
         // 3. Devolve para o Endereço Original
         if (qEvent.OriginalLocationId.HasValue && hu.CurrentLocationId != qEvent.OriginalLocationId)
         {
             hu.MoveTo(qEvent.OriginalLocationId.Value);
-            await _kardex.WriteAsync(new InventoryTransaction(companyId, hu.CustomerId, hu.ProductId, hu.Id, qEvent.OriginalLocationId.Value, TransactionType.Internal_Move, 0, hu.CurrentQuantity, null, null), ct);
+
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: hu.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: qEvent.OriginalLocationId.Value,
+                Type: TransactionType.Internal_Move,
+                QuantityChange: 0m,
+                BalanceAfter: hu.CurrentQuantity,
+                SourceDocumentId: hu.ReceiptDocumentId,
+                SourceDocumentNumber: $"DEVOLUÇÃO APÓS INSPEÇÃO PARA POSIÇÃO {qEvent.OriginalLocationId.Value}",
+                CompanyId: companyId
+            ));
         }
 
-        // 4. Kardex
-        await _kardex.WriteAsync(new InventoryTransaction(companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId, TransactionType.Quality_Release, 0, hu.CurrentQuantity, null, null), ct);
+        // 4. Kardex Release
+        kardexMovements.Add(new RecordKardexMovementItemDto(
+            CustomerId: hu.CustomerId,
+            ProductId: hu.ProductId,
+            HandlingUnitId: hu.Id,
+            LocationId: hu.CurrentLocationId,
+            Type: TransactionType.Quality_Release,
+            QuantityChange: 0m,
+            BalanceAfter: hu.CurrentQuantity,
+            SourceDocumentId: hu.ReceiptDocumentId,
+            SourceDocumentNumber: $"LIBERAÇÃO DE QUALIDADE: {request.Notes}",
+            CompanyId: companyId
+        ));
 
         try
         {
@@ -73,6 +97,12 @@ public class ReleaseHandlingUnitHandler : IRequestHandler<ReleaseHandlingUnitCom
         catch (DbUpdateConcurrencyException)
         {
             return Results.Conflict(new { Message = "Conflito de concorrência." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
         return Results.NoContent();

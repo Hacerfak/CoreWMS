@@ -1,10 +1,8 @@
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Topology.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,13 +24,13 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
-    public MoveHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public MoveHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(MoveHandlingUnitCommand request, CancellationToken ct)
@@ -67,8 +65,9 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         if (!hus.Any())
             return Results.NotFound(new { Message = "Nenhuma Unidade de Manuseio encontrada." });
 
-        // TRAVA ESTRITA DE QUALIDADE: Volumes avariados/retidos só podem ir para Posições do tipo Qualidade
+        // Trava estrita de qualidade: Volumes avariados/retidos só podem ir para posições do tipo Qualidade
         var qualityRestrictedHus = hus.Where(h => h.QualityStatus != QualityStatus.Available).ToList();
+
         if (qualityRestrictedHus.Any() && destinationRole != StorageRole.Quality)
         {
             var lpns = string.Join(", ", qualityRestrictedHus.Select(h => h.Lpn));
@@ -79,9 +78,12 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         }
 
         var productIds = hus.Select(h => h.ProductId).Distinct().ToList();
+
         var balances = await _db.InventoryBalances
             .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId))
             .ToListAsync(ct);
+
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
 
         foreach (var hu in hus)
         {
@@ -98,30 +100,44 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
                 balance.AllocateFromDock(hu.CurrentQuantity, destinationRole, hu.QualityStatus);
             }
             // CASO B: Item livre sendo movido para uma Posição de Qualidade (Quarentena Automática)
-            else if (destinationRole == StorageRole.Quality && hu.QualityStatus == QualityStatus.Available)
+            else if (destinationRole == StorageRole.Quality && oldQualityStatus == QualityStatus.Available)
             {
                 hu.ChangeQuality(QualityStatus.Quarantine);
-
                 if (balance != null)
                 {
                     balance.ChangeQualityForStored(hu.CurrentQuantity, QualityStatus.Available, QualityStatus.Quarantine);
                 }
 
-                await _kardex.WriteAsync(new InventoryTransaction(
-                    companyId, hu.CustomerId, hu.ProductId, hu.Id,
-                    destination.Id, TransactionType.Quality_Hold,
-                    0, hu.CurrentQuantity, hu.ReceiptDocumentId,
-                    $"QUARENTENA AUTOMÁTICA: Movimentado para posição de qualidade {destination.FullPath}"), ct);
+                kardexMovements.Add(new RecordKardexMovementItemDto(
+                    CustomerId: hu.CustomerId,
+                    ProductId: hu.ProductId,
+                    HandlingUnitId: hu.Id,
+                    LocationId: destination.Id,
+                    Type: TransactionType.Quality_Hold,
+                    QuantityChange: 0m,
+                    BalanceAfter: hu.CurrentQuantity,
+                    SourceDocumentId: hu.ReceiptDocumentId,
+                    SourceDocumentNumber: $"QUARENTENA AUTOMÁTICA: Movimentado para posição de qualidade {destination.FullPath}",
+                    CompanyId: companyId
+                ));
             }
 
             string actionDescription = destinationRole == StorageRole.Quality
                 ? $"ALOCAÇÃO / RETENÇÃO NA QUALIDADE {destination.FullPath}"
                 : $"MOVIMENTAÇÃO INTERNA PARA {destination.FullPath}";
 
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, hu.CustomerId, hu.ProductId, hu.Id,
-                destination.Id, TransactionType.Internal_Move,
-                0, hu.CurrentQuantity, hu.ReceiptDocumentId, actionDescription), ct);
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: hu.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: destination.Id,
+                Type: TransactionType.Internal_Move,
+                QuantityChange: 0m,
+                BalanceAfter: hu.CurrentQuantity,
+                SourceDocumentId: hu.ReceiptDocumentId,
+                SourceDocumentNumber: actionDescription,
+                CompanyId: companyId
+            ));
         }
 
         try
@@ -131,6 +147,12 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         catch (DbUpdateConcurrencyException)
         {
             return Results.Conflict(new { Message = "Conflito de concorrência ao mover as HUs. Tente novamente." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
         return Results.Ok(new { Message = $"{hus.Count} HU(s) movimentada(s)/alocada(s) para {destination.FullPath} com sucesso." });

@@ -12,7 +12,8 @@ import { DateRangePicker } from '@/components/ui/date-range-picker';
 import {
     Search, Loader2, Download, FileText,
     ArrowUpRight, ArrowDownLeft, RefreshCcw, SlidersHorizontal,
-    ChevronDown, ChevronUp, RotateCcw, MapPin, CheckCircle2, X, Columns
+    ChevronDown, ChevronUp, RotateCcw, MapPin, CheckCircle2, X, Columns,
+    GitMerge, Split
 } from 'lucide-react';
 import { downloadBackendCsv } from '@/lib/exportCsv';
 
@@ -228,31 +229,96 @@ export default function KardexTab() {
         switch (typeStr) {
             case 'Inbound_Receipt':
             case '1':
-                return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-mono text-[10px] flex items-center gap-1 w-fit"><ArrowDownLeft size={12} /> Recebimento / Entrada</Badge>;
+                return (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <ArrowDownLeft size={12} /> Entrada
+                    </Badge>
+                );
             case 'Inventory_Adjustment_In':
             case '2':
-                return <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 font-mono text-[10px] flex items-center gap-1 w-fit"><ArrowDownLeft size={12} /> Ajuste Entrada (+)</Badge>;
+                return (
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <ArrowDownLeft size={12} /> Ajuste Entrada (+)
+                    </Badge>
+                );
             case 'Internal_Move':
             case '3':
-                return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-mono text-[10px] flex items-center gap-1 w-fit"><MapPin size={12} /> Movimentação Interna</Badge>;
+                return (
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <MapPin size={12} /> Movimentação Interna
+                    </Badge>
+                );
             case 'Quality_Hold':
             case '4':
-                return <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-mono text-[10px] flex items-center gap-1 w-fit"><RefreshCcw size={12} /> Retenção Qualidade</Badge>;
+                return (
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <RefreshCcw size={12} /> Retenção Qualidade
+                    </Badge>
+                );
             case 'Quality_Release':
             case '5':
-                return <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 font-mono text-[10px] flex items-center gap-1 w-fit"><CheckCircle2 size={12} /> Liberação Qualidade</Badge>;
+                return (
+                    <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <CheckCircle2 size={12} /> Liberação Qualidade
+                    </Badge>
+                );
+            case 'Outbound_Closed':
             case 'Outbound_FullPallet':
             case '6':
-                return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-[10px] flex items-center gap-1 w-fit"><ArrowUpRight size={12} /> Saída / Palete Fechado</Badge>;
+                return (
+                    <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <ArrowUpRight size={12} /> Saída Fechada
+                    </Badge>
+                );
             case 'Outbound_FullBox':
             case '7':
-                return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-[10px] flex items-center gap-1 w-fit"><ArrowUpRight size={12} /> Saída / Caixa Fechada</Badge>;
+                return (
+                    <Badge className="bg-purple-50 text-purple-700 border-purple-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <ArrowUpRight size={12} /> Saída Fechada
+                    </Badge>
+                );
             case 'Outbound_Fractional':
             case '8':
-                return <Badge className="bg-purple-100 text-purple-800 border-purple-200 font-mono text-[10px] flex items-center gap-1 w-fit"><ArrowUpRight size={12} /> Saída / Fracionado (Picking)</Badge>;
+                return (
+                    <Badge className="bg-orange-100 text-orange-800 border-orange-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <ArrowUpRight size={12} /> Saída Fracionada
+                    </Badge>
+                );
             case 'Inventory_Adjustment_Out':
             case '9':
-                return <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-mono text-[10px] flex items-center gap-1 w-fit"><ArrowUpRight size={12} /> Ajuste Saída (-)</Badge>;
+                return (
+                    <Badge className="bg-rose-100 text-rose-800 border-rose-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <ArrowUpRight size={12} /> Ajuste Saída (-)
+                    </Badge>
+                );
+            case 'Hu_Merge':
+            case '10':
+                return (
+                    <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <GitMerge size={12} /> Agrupamento (Merge)
+                    </Badge>
+                );
+            case 'Hu_Split':
+            case '11':
+                return (
+                    <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <Split size={12} /> Transbordo (Split)
+                    </Badge>
+                );
+            case 'Outbound_Shipment_Revert':
+            case '12':
+                return (
+                    <Badge className="bg-teal-100 text-teal-800 border-teal-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <RotateCcw size={12} /> Estorno Expedição
+                    </Badge>
+                );
+            case 'Inbound_Receipt_Rollback':
+            case '13':
+                return (
+                    <Badge className="bg-red-100 text-red-800 border-red-200 font-mono text-[10px] flex items-center gap-1 w-fit">
+                        <RotateCcw size={12} /> Estorno Recebimento
+                    </Badge>
+                );
             default:
                 return <Badge variant="outline" className="bg-slate-50 text-slate-700 font-mono text-[10px]">{typeStr}</Badge>;
         }

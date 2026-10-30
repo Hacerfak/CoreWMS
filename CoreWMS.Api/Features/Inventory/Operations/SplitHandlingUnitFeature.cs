@@ -1,21 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inventory.Operations;
@@ -44,13 +35,13 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
-    public SplitHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public SplitHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(SplitHandlingUnitCommand request, CancellationToken ct)
@@ -67,7 +58,7 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(sourceHu.CustomerId))
             return Results.Forbid();
 
-        // 1. Status ativo
+        // 1. Validação de status ativo
         if (sourceHu.Status == HuStatus.Consumed || sourceHu.Status == HuStatus.Shipped)
             return Results.BadRequest(new { Message = $"A HU {sourceHu.Lpn} está {sourceHu.Status} e não pode ser transbordada." });
 
@@ -77,7 +68,7 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
 
         decimal totalToTransfer = request.NewHandlingUnits.Sum(x => x.Quantity);
 
-        // 3. REGRA ESTRITA: O transbordo NÃO pode transferir o saldo total da origem
+        // 3. Regra estrita: O transbordo não pode transferir o saldo total da origem
         if (totalToTransfer >= sourceHu.CurrentQuantity)
         {
             return Results.BadRequest(new
@@ -86,14 +77,15 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
             });
         }
 
-        // Subtrai da origem
+        // Subtrai quantidade da origem
         sourceHu.Consume(totalToTransfer);
 
         var createdHus = new List<HandlingUnit>();
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
 
         foreach (var item in request.NewHandlingUnits)
         {
-            // Gera o LPN seguindo rigorosamente o padrão do recebimento (Base36 de 10 caracteres)
+            // Gera o LPN seguindo o padrão Base36 de 10 caracteres
             string newLpn = GenerateShortLpn();
 
             var packagingId = item.PackagingTypeId.HasValue && item.PackagingTypeId.Value != Guid.Empty
@@ -110,14 +102,14 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
                 sourceHu.Batch,
                 sourceHu.ManufactureDate,
                 sourceHu.ExpirationDate,
-                null, // Sem série
+                null,
                 item.Quantity,
                 sourceHu.UnitValue,
                 sourceHu.UnitNetWeight,
                 sourceHu.UnitGrossWeight
             );
 
-            // Herda status físico real (Stored, Received, etc.) e o endereço da HU mãe
+            // Herda status físico real e endereço da HU mãe
             newHu.InheritPhysicalState(sourceHu.Status, sourceHu.CurrentLocationId);
 
             if (sourceHu.QualityStatus != QualityStatus.Available)
@@ -126,22 +118,49 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
             _db.HandlingUnits.Add(newHu);
             createdHus.Add(newHu);
 
-            // Kardex da nova HU
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, newHu.CustomerId, newHu.ProductId, newHu.Id, newHu.CurrentLocationId,
-                TransactionType.Internal_Move, item.Quantity, item.Quantity,
-                newHu.ReceiptDocumentId, $"TRANSBORDO: Gerado a partir da HU {sourceHu.Lpn}"
-            ), ct);
+            // Prepara movimento de entrada da nova HU no Kardex
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: newHu.CustomerId,
+                ProductId: newHu.ProductId,
+                HandlingUnitId: newHu.Id,
+                LocationId: newHu.CurrentLocationId,
+                Type: TransactionType.Hu_Split,
+                QuantityChange: item.Quantity,
+                BalanceAfter: item.Quantity,
+                SourceDocumentId: newHu.ReceiptDocumentId,
+                SourceDocumentNumber: $"Gerado a partir da HU {sourceHu.Lpn}",
+                CompanyId: companyId
+            ));
         }
 
-        // Kardex de saída da origem
-        await _kardex.WriteAsync(new InventoryTransaction(
-            companyId, sourceHu.CustomerId, sourceHu.ProductId, sourceHu.Id, sourceHu.CurrentLocationId,
-            TransactionType.Internal_Move, -totalToTransfer, sourceHu.CurrentQuantity,
-            sourceHu.ReceiptDocumentId, $"TRANSBORDO: {createdHus.Count} nova(s) HU(s) gerada(s)"
-        ), ct);
+        // Prepara movimento de saída da HU de origem no Kardex
+        kardexMovements.Add(new RecordKardexMovementItemDto(
+            CustomerId: sourceHu.CustomerId,
+            ProductId: sourceHu.ProductId,
+            HandlingUnitId: sourceHu.Id,
+            LocationId: sourceHu.CurrentLocationId,
+            Type: TransactionType.Hu_Split,
+            QuantityChange: -totalToTransfer,
+            BalanceAfter: sourceHu.CurrentQuantity,
+            SourceDocumentId: sourceHu.ReceiptDocumentId,
+            SourceDocumentNumber: $"{createdHus.Count} nova(s) HU(s) gerada(s)",
+            CompanyId: companyId
+        ));
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Results.Conflict(new { Message = "Conflito de concorrência ao transbordar a HU. Atualize a tela e tente novamente." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação desacoplada e em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
+        }
 
         return Results.Ok(new
         {
@@ -152,7 +171,6 @@ public class SplitHandlingUnitHandler : IRequestHandler<SplitHandlingUnitCommand
         });
     }
 
-    // ALGORITMO OFICIAL DE LPN BASE36 (IDÊNTICO AO RECEIVELOTEFEATURE)
     private static string GenerateShortLpn()
     {
         var ticks = (DateTime.UtcNow.Ticks - 638000000000000000L) % 2176782336L;

@@ -1,10 +1,11 @@
 using CoreWMS.Api.Features.Billing.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Enums;
+using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Billing;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -25,18 +26,18 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
     private readonly BillingChannel? _billingChannel;
 
     public RollbackInboundOrderHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        KardexChannel kardex,
+        IMediator mediator,
         BillingChannel? billingChannel = null)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
         _billingChannel = billingChannel;
     }
 
@@ -54,10 +55,12 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
             .Where(h => h.CompanyId == companyId && h.ReceiptDocumentId == order.Id)
             .ToListAsync(ct);
 
-        if (generatedHus.Any(h => h.Status == Inventory.Enums.HuStatus.Shipped))
+        if (generatedHus.Any(h => h.Status == HuStatus.Shipped))
             return Results.BadRequest(new { Message = "Estorno bloqueado. Uma ou mais HUs desta ordem já foram expedidas." });
 
-        // 1. Estorno de saldo e movimentações no Kardex
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
+
+        // 1. Estorno de saldo
         foreach (var hu in generatedHus)
         {
             var balance = await _db.InventoryBalances
@@ -68,11 +71,19 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
                 balance.RollbackReceipt(hu.CurrentQuantity, hu.Status, hu.QualityStatus);
             }
 
-            await _kardex.WriteAsync(new Inventory.Entities.InventoryTransaction(
-                companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
-                Inventory.Enums.TransactionType.Inventory_Adjustment_Out,
-                -hu.CurrentQuantity, 0,
-                order.Id, $"ESTORNO NF {order.InvoiceNumber}"), ct);
+            // Prepara estorno contábil no Kardex
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: hu.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: hu.CurrentLocationId,
+                Type: TransactionType.Inbound_Receipt_Rollback,
+                QuantityChange: -hu.CurrentQuantity,
+                BalanceAfter: 0m,
+                SourceDocumentId: order.Id,
+                SourceDocumentNumber: $"NF #{order.InvoiceNumber}",
+                CompanyId: companyId
+            ));
         }
 
         // 2. Remove as HUs físicas geradas
@@ -106,6 +117,12 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
         catch (DbUpdateConcurrencyException)
         {
             return Results.Conflict(new { Message = "Conflito ao processar o estorno. Tente novamente." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
         // 4. RECÁLCULO EM SEGUNDO PLANO DAS DIÁRIAS (Sem as HUs que acabaram de ser excluídas)

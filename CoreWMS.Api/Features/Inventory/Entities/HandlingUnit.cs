@@ -109,16 +109,21 @@ public class HandlingUnit : AuditableEntity
 
     public void Consume(decimal quantityToConsume)
     {
+        if (quantityToConsume <= 0)
+            throw new ArgumentException("A quantidade a ser consumida deve ser maior que zero.", nameof(quantityToConsume));
+
         if (quantityToConsume > CurrentQuantity)
             throw new InvalidOperationException($"Saldo insuficiente na HU {Lpn}. Tentativa: {quantityToConsume}, Disponível: {CurrentQuantity}");
 
         CurrentQuantity -= quantityToConsume;
 
-        if (CurrentQuantity == 0)
+        // Trava contra arredondamento de precisão decimal
+        if (CurrentQuantity <= 0.00000001m)
         {
+            CurrentQuantity = 0m;
             Status = HuStatus.Consumed;
             CurrentLocationId = null;
-            ConsumedAt = DateTime.UtcNow; // Registra a data/hora exata do consumo total
+            ConsumedAt = DateTime.UtcNow; // Registra encerramento da custódia física
         }
 
         UpdatedAt = DateTime.UtcNow;

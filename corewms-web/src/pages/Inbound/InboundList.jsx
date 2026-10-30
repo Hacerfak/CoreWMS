@@ -241,82 +241,91 @@ export default function InboundList() {
                                             {renderStatusBadge(order)}
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
-                                            {order.status === 'Pending' && order.hasPendingReview && (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => navigate(`/inbound/revisao/${order.id}`)}
-                                                    className="bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
-                                                >
-                                                    <Eye className="h-3.5 w-3.5 mr-1" /> Revisar NF-e
-                                                </Button>
-                                            )}
-
-                                            {order.status === 'Pending' && !order.hasPendingReview && (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => navigate(`/inbound/operacao/${order.id}`)}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
-                                                >
-                                                    <Play className="h-3.5 w-3.5 mr-1" /> Iniciar Recebimento
-                                                </Button>
-                                            )}
-
-                                            {order.status === 'Receiving' && (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => navigate(`/inbound/operacao/${order.id}`)}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
-                                                >
-                                                    <PackageCheck className="h-4 w-4 mr-1" /> Conferência
-                                                </Button>
-                                            )}
-
-                                            {order.status === 'Completed' && (
-                                                <div className="inline-flex gap-1">
+                                            <div className="inline-flex items-center gap-1">
+                                                {/* Botão Ver Detalhes - Disponível em qualquer status ativo */}
+                                                {order.status !== 'Canceled' && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         onClick={() => navigate(`/inbound/operacao/${order.id}`)}
-                                                        className="border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-xs"
+                                                        className="border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-xs h-8 text-xs"
                                                     >
                                                         <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" /> Ver Detalhes
                                                     </Button>
+                                                )}
 
+                                                {/* 1. Etapa de Revisão de Itens / Pré-cadastro de SKU */}
+                                                {order.status === 'Pending' && order.hasPendingReview && (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => navigate(`/inbound/revisao/${order.id}`)}
+                                                        className="bg-amber-600 hover:bg-amber-700 text-white shadow-xs h-8 text-xs"
+                                                    >
+                                                        <FileCode2 className="h-3.5 w-3.5 mr-1" /> Revisar NF-e
+                                                    </Button>
+                                                )}
+
+                                                {/* 2. Aguardando Início do Recebimento */}
+                                                {order.status === 'Pending' && !order.hasPendingReview && (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => navigate(`/inbound/operacao/${order.id}`)}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs h-8 text-xs"
+                                                    >
+                                                        <Play className="h-3.5 w-3.5 mr-1" /> Iniciar Recebimento
+                                                    </Button>
+                                                )}
+
+                                                {/* 3. Recebimento em Andamento */}
+                                                {order.status === 'Receiving' && (
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => navigate(`/inbound/operacao/${order.id}`)}
+                                                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs h-8 text-xs"
+                                                    >
+                                                        <PackageCheck className="h-4 w-4 mr-1" /> Conferência
+                                                    </Button>
+                                                )}
+
+                                                {/* 4. Finalizado: Acesso direto às HUs geradas */}
+                                                {order.status === 'Completed' && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
                                                         title="Ver HUs Geradas"
                                                         onClick={() => navigate(`/inbound/operacao/${order.id}/hus`)}
-                                                        className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 shadow-xs"
+                                                        className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 shadow-xs h-8 text-xs"
                                                     >
                                                         <Layers className="h-3.5 w-3.5 mr-1" /> HUs
                                                     </Button>
-                                                </div>
-                                            )}
+                                                )}
 
-                                            {order.status !== 'Completed' && order.status !== 'Canceled' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => setOrderToCancel(order)}
-                                                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                                    title="Cancelar Ordem"
-                                                >
-                                                    <Ban className="h-4 w-4" />
-                                                </Button>
-                                            )}
+                                                {/* Cancelamento */}
+                                                {order.status !== 'Completed' && order.status !== 'Canceled' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setOrderToCancel(order)}
+                                                        className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 h-8 w-8 p-0"
+                                                        title="Cancelar Ordem"
+                                                    >
+                                                        <Ban className="h-4 w-4" />
+                                                    </Button>
+                                                )}
 
-                                            {order.status === 'Canceled' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => setOrderToDelete(order)}
-                                                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                                    title="Excluir Registo da NF-e"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            )}
+                                                {/* Exclusão de Canceladas */}
+                                                {order.status === 'Canceled' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setOrderToDelete(order)}
+                                                        className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 h-8 w-8 p-0"
+                                                        title="Excluir Registro da NF-e"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 );

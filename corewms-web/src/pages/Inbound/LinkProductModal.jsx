@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiProducts, usePostApiProducts } from '@/api/generated/products/products';
 import { usePostApiInboundReviewItemIdLink } from '@/api/generated/inbound/inbound';
 import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
-import { useGetApiCustomers } from '@/api/generated/customers/customers';
+import { useGetApiCustomersId } from '@/api/generated/customers/customers';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Search, Link as LinkIcon, PackageCheck, AlertCircle, Plus, Trash2, Sparkles, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Validation Schema - Inclui a edição do SKU
+// Validation Schema - Edição do SKU e embalagens
 const quickPackagingSchema = z.object({
     packagingTypeId: z.string().min(1, 'Selecione o tipo de embalagem.'),
     conversionFactor: z.coerce.number().min(1, 'Mínimo 1.'),
@@ -42,13 +42,11 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
     const { data: packTypesResponse } = useGetApiPackagingTypes();
     const packagingTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
 
-    // 2. Busca a lista de clientes e filtra o depositante atual para herança de regras
-    const { data: customersResponse } = useGetApiCustomers(
-        { PageSize: 500 },
+    // 2. Consulta pontual das regras do Depositante pelo ID específico do item
+    const { data: customerData, isLoading: isLoadingCustomer } = useGetApiCustomersId(
+        item?.customerId,
         { query: { enabled: open && Boolean(item?.customerId) } }
     );
-    const customersList = customersResponse?.items || (Array.isArray(customersResponse) ? customersResponse : []);
-    const customerData = customersList.find(c => c.id === item?.customerId);
 
     // 3. Busca de produtos existentes no catálogo
     const { data: apiResponse, isLoading: isLoadingProducts } = useGetApiProducts(
@@ -140,7 +138,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
             strictExpiration: customerData?.strictExpiration ?? false,
             tracksSerial: customerData?.tracksSerial ?? false,
             strictSerial: customerData?.strictSerial ?? false,
-            packagings: data.packagings.map((p, idx) => ({
+            packagings: data.packagings.map((p) => ({
                 packagingTypeId: p.packagingTypeId,
                 conversionFactor: p.conversionFactor,
                 barcode: p.barcode || null,
@@ -319,18 +317,33 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                                 <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs flex items-center justify-between text-blue-900">
                                     <div className="flex items-center gap-2">
                                         <ShieldCheck size={16} className="text-blue-600 shrink-0" />
-                                        <span>Regras WMS Herdadas do Depositante ({customerData?.corporateName || 'Carregando...'})</span>
+                                        <span>
+                                            Regras WMS Herdadas do Depositante (
+                                            {isLoadingCustomer
+                                                ? 'Carregando regras...'
+                                                : (customerData?.corporateName || 'Depositante')}
+                                            )
+                                        </span>
                                     </div>
-                                    <div className="flex gap-1">
-                                        {customerData?.tracksBatch && <Badge variant="outline" className="bg-white text-[9px]">Lote</Badge>}
-                                        {customerData?.tracksExpiration && <Badge variant="outline" className="bg-white text-[9px]">Validade</Badge>}
-                                        {customerData?.tracksManufacture && <Badge variant="outline" className="bg-white text-[9px]">Fabricação</Badge>}
-                                        {customerData?.tracksSerial && <Badge variant="outline" className="bg-white text-[9px]">Serial</Badge>}
+                                    <div className="flex items-center gap-1">
+                                        {isLoadingCustomer ? (
+                                            <Loader2 size={13} className="animate-spin text-blue-600" />
+                                        ) : (
+                                            <>
+                                                {customerData?.tracksBatch && <Badge variant="outline" className="bg-white text-[9px]">Lote</Badge>}
+                                                {customerData?.tracksExpiration && <Badge variant="outline" className="bg-white text-[9px]">Validade</Badge>}
+                                                {customerData?.tracksManufacture && <Badge variant="outline" className="bg-white text-[9px]">Fabricação</Badge>}
+                                                {customerData?.tracksSerial && <Badge variant="outline" className="bg-white text-[9px]">Serial</Badge>}
+                                                {!customerData?.tracksBatch && !customerData?.tracksExpiration && !customerData?.tracksManufacture && !customerData?.tracksSerial && (
+                                                    <span className="text-[10px] text-blue-600/70 italic">Sem travas obrigatórias</span>
+                                                )}
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="pt-3 border-t border-slate-100 flex justify-end">
-                                    <Button type="submit" disabled={isBusy} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[150px] text-xs">
+                                    <Button type="submit" disabled={isBusy || isLoadingCustomer} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[150px] text-xs">
                                         {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-2" /> Salvar e Vincular</>}
                                     </Button>
                                 </div>

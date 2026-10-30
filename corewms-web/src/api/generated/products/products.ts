@@ -26,6 +26,7 @@ import type {
 import type {
   CreateProductCommand,
   GetApiProductsParams,
+  SyncProductWeightsCommand,
   UpdateProductCommand
 } from '../model';
 
@@ -496,3 +497,64 @@ export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<
 
 
 
+export const putApiProductsSyncWeights = (
+    syncProductWeightsCommand: SyncProductWeightsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/products/sync-weights`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: syncProductWeightsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiProductsSyncWeightsMutationKey = () => ['putApiProductsSyncWeights'] as const;
+
+export const getPutApiProductsSyncWeightsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiProductsSyncWeights>>, TError,PutApiProductsSyncWeightsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiProductsSyncWeights>>, TError,PutApiProductsSyncWeightsMutationVariables, TContext> => {
+
+const mutationKey = getPutApiProductsSyncWeightsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiProductsSyncWeights>>, PutApiProductsSyncWeightsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  putApiProductsSyncWeights(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiProductsSyncWeightsMutationResult = NonNullable<Awaited<ReturnType<typeof putApiProductsSyncWeights>>>
+    export type PutApiProductsSyncWeightsMutationBody = SyncProductWeightsCommand
+    export type PutApiProductsSyncWeightsMutationError = unknown
+    export type PutApiProductsSyncWeightsMutationVariables = {data: SyncProductWeightsCommand}
+
+    export const usePutApiProductsSyncWeights = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiProductsSyncWeights>>, TError,PutApiProductsSyncWeightsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiProductsSyncWeights>>,
+        TError,
+        PutApiProductsSyncWeightsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiProductsSyncWeightsMutationOptions(options), queryClient);
+    }

@@ -1,21 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Topology.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Inventory.Operations;
@@ -44,16 +34,16 @@ public class RevertOutboundInventoryShipmentHandler : IRequestHandler<RevertOutb
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
     public RevertOutboundInventoryShipmentHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        KardexChannel kardex)
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(RevertOutboundInventoryShipmentCommand request, CancellationToken ct)
@@ -87,6 +77,8 @@ public class RevertOutboundInventoryShipmentHandler : IRequestHandler<RevertOutb
             .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId) && b.CustomerId == request.CustomerId)
             .ToListAsync(ct);
 
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
+
         foreach (var item in request.Items)
         {
             var hu = hus.FirstOrDefault(h => h.Id == item.HandlingUnitId);
@@ -102,22 +94,35 @@ public class RevertOutboundInventoryShipmentHandler : IRequestHandler<RevertOutb
                 balance.RestoreShipped(item.Quantity);
             }
 
-            // C) Lançamento compensatório no Kardex
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId,
-                request.CustomerId,
-                hu.ProductId,
-                hu.Id,
-                targetLocationId,
-                TransactionType.Outbound_FullPallet,
-                item.Quantity,
-                hu.CurrentQuantity,
-                request.OrderId,
-                $"ESTORNO EXPEDIÇÃO - PEDIDO #{request.OrderNumber} (NF-E CANCELADA)"
-            ), ct);
+            // C) Prepara movimento compensatório desacoplado para o Kardex
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: request.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: targetLocationId,
+                Type: TransactionType.Outbound_Shipment_Revert,
+                QuantityChange: item.Quantity,
+                BalanceAfter: hu.CurrentQuantity,
+                SourceDocumentId: request.OrderId,
+                SourceDocumentNumber: $"PEDIDO #{request.OrderNumber} (NF-E CANCELADA)",
+                CompanyId: companyId
+            ));
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Results.Conflict(new { Message = "Conflito de concorrência ao estornar a expedição no inventário. Tente novamente." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
+        }
 
         return Results.Ok(new { Message = "Estoque das HUs, saldos e Kardex restaurados com sucesso." });
     }

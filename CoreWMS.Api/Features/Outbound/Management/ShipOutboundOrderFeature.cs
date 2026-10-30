@@ -1,11 +1,10 @@
 using CoreWMS.Api.Features.Fiscal.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Features.Outbound.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,16 +16,16 @@ public class ShipOutboundOrderHandler : IRequestHandler<ShipOutboundOrderCommand
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
     public ShipOutboundOrderHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        KardexChannel kardex)
+        IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(ShipOutboundOrderCommand request, CancellationToken ct)
@@ -55,6 +54,8 @@ public class ShipOutboundOrderHandler : IRequestHandler<ShipOutboundOrderCommand
             .Where(a => a.OutboundOrderId == order.Id && a.IsPicked)
             .ToListAsync(ct);
 
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
+
         foreach (var alloc in allocations)
         {
             var hu = alloc.HandlingUnit;
@@ -69,19 +70,24 @@ public class ShipOutboundOrderHandler : IRequestHandler<ShipOutboundOrderCommand
                 balance.ShipAllocated(alloc.Quantity);
             }
 
-            // C) Lançamento no Kardex
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId,
-                order.CustomerId,
-                hu.ProductId,
-                hu.Id,
-                order.DockLocationId,
-                TransactionType.Outbound_FullPallet,
-                -alloc.Quantity,
-                hu.CurrentQuantity,
-                order.Id,
-                $"EXPEDIÇÃO NF-E {order.InvoiceNumber} (CHAVE: {order.OrderNumber?[..10]}...)"
-            ), ct);
+            // Classificação direta: Fechada ou Fracionada
+            var transType = alloc.IsFractional
+                ? TransactionType.Outbound_Fractional
+                : TransactionType.Outbound_Closed;
+
+            // C) Prepara movimento desacoplado do Kardex
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: order.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: order.DockLocationId,
+                Type: transType,
+                QuantityChange: -alloc.Quantity,
+                BalanceAfter: hu.CurrentQuantity,
+                SourceDocumentId: order.Id,
+                SourceDocumentNumber: $"EXPEDIÇÃO NF-E {order.InvoiceNumber} (CHAVE: {order.OrderNumber?[..10]}...)",
+                CompanyId: companyId
+            ));
         }
 
         // D) Atualiza o status da Ordem para Expedido
@@ -94,6 +100,12 @@ public class ShipOutboundOrderHandler : IRequestHandler<ShipOutboundOrderCommand
         catch (DbUpdateConcurrencyException)
         {
             return Results.Conflict(new { Message = "Conflito de concorrência ao expedir o pedido." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação em lote no Kardex após o commit no banco
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
         return Results.Ok(new

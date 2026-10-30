@@ -86,13 +86,30 @@ export const extractNfeNumber = (item) => {
     return item.documentNumber || 'Estoque Consolidado';
 };
 
+// Localize a função classifyService em billingUtils.js e substitua por:
 export const classifyService = (item) => {
-    const desc = (item.description || item.serviceName || '').toLowerCase();
+    const rawDesc = (item.description || item.serviceName || '').toLowerCase();
     const docType = (item.documentType || '').toLowerCase();
-    if (desc.includes('ad-valorem') || desc.includes('seguro')) return 'ad_valorem';
-    if (desc.includes('armazenagem') || desc.includes('storage') || desc.includes('estadia') || docType.includes('diária')) return 'storage';
-    if (desc.includes('recebimento') || desc.includes('handling in') || desc.includes('entrada') || docType.includes('entrada')) return 'handling_in';
-    if (desc.includes('expedição') || desc.includes('handling out') || desc.includes('separação') || desc.includes('stretch') || desc.includes('saída') || docType.includes('saída')) return 'handling_out';
+
+    // Remove hífens, sublinhados e espaços para unificar "advalorem", "ad-valorem" e "ad valorem"
+    const cleanDesc = rawDesc.replace(/[\s-_]/g, '');
+
+    if (cleanDesc.includes('advalorem') || rawDesc.includes('seguro') || rawDesc.includes('patrimonial')) {
+        return 'ad_valorem';
+    }
+
+    if (rawDesc.includes('armazenagem') || rawDesc.includes('storage') || rawDesc.includes('estadia') || docType.includes('diária') || docType.includes('diaria')) {
+        return 'storage';
+    }
+
+    if (rawDesc.includes('recebimento') || cleanDesc.includes('handlingin') || rawDesc.includes('entrada') || docType.includes('entrada')) {
+        return 'handling_in';
+    }
+
+    if (rawDesc.includes('expedição') || rawDesc.includes('expedicao') || cleanDesc.includes('handlingout') || rawDesc.includes('separação') || rawDesc.includes('separacao') || rawDesc.includes('stretch') || rawDesc.includes('saída') || rawDesc.includes('saida') || docType.includes('saída')) {
+        return 'handling_out';
+    }
+
     return 'other';
 };
 

@@ -1,9 +1,7 @@
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,18 +24,19 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
 
-    public ChangeQualityHandler(ApplicationDbContext db, ITenantProvider tenant, KardexChannel kardex)
+    public ChangeQualityHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
     }
 
     public async Task<IResult> Handle(ChangeQualityCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+
         var query = _db.HandlingUnits
             .Where(h => h.CompanyId == companyId && request.HandlingUnitIds.Contains(h.Id));
 
@@ -48,15 +47,19 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
         }
 
         var hus = await query.ToListAsync(ct);
+
         if (!hus.Any())
             return Results.NotFound(new { Message = "Nenhuma Unidade de Manuseio (HU) válida foi encontrada." });
 
         var productIds = hus.Select(h => h.ProductId).Distinct().ToList();
+
         var balances = await _db.InventoryBalances
             .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId))
             .ToListAsync(ct);
 
         int updatedCount = 0;
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
+
         foreach (var hu in hus)
         {
             if (hu.QualityStatus == request.NewStatus) continue;
@@ -73,10 +76,24 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
 
             hu.ChangeQuality(request.NewStatus);
 
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, hu.CustomerId, hu.ProductId, hu.Id, hu.CurrentLocationId,
-                request.NewStatus == QualityStatus.Available ? TransactionType.Quality_Release : TransactionType.Quality_Hold,
-                0, hu.CurrentQuantity, null, $"ALTERAÇÃO QUALIDADE ({oldStatus} -> {request.NewStatus}): {request.Reason ?? "Sem observação"}"), ct);
+            var movementType = request.NewStatus == QualityStatus.Available
+                ? TransactionType.Quality_Release
+                : TransactionType.Quality_Hold;
+
+            var reasonText = $"ALTERAÇÃO QUALIDADE ({oldStatus} -> {request.NewStatus}): {request.Reason ?? "Sem observação"}";
+
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: hu.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: hu.CurrentLocationId,
+                Type: movementType,
+                QuantityChange: 0m,
+                BalanceAfter: hu.CurrentQuantity,
+                SourceDocumentId: hu.ReceiptDocumentId,
+                SourceDocumentNumber: reasonText,
+                CompanyId: companyId
+            ));
 
             updatedCount++;
         }
@@ -88,6 +105,12 @@ public class ChangeQualityHandler : IRequestHandler<ChangeQualityCommand, IResul
         catch (DbUpdateConcurrencyException)
         {
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar a qualidade dos itens. Tente novamente." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
         return Results.Ok(new

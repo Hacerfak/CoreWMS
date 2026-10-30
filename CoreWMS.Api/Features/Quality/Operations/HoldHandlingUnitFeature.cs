@@ -1,10 +1,9 @@
 using CoreWMS.Api.Features.Identity.Constants;
-using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Features.Quality.Entities;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Infrastructure.Storage;
 using FluentValidation;
 using MediatR;
@@ -36,18 +35,18 @@ public class HoldHandlingUnitHandler : IRequestHandler<HoldHandlingUnitCommand, 
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
-    private readonly KardexChannel _kardex;
+    private readonly IMediator _mediator;
     private readonly ILocalImageStorageService _imageStorage;
 
     public HoldHandlingUnitHandler(
         ApplicationDbContext db,
         ITenantProvider tenant,
-        KardexChannel kardex,
+        IMediator mediator,
         ILocalImageStorageService imageStorage)
     {
         _db = db;
         _tenant = tenant;
-        _kardex = kardex;
+        _mediator = mediator;
         _imageStorage = imageStorage;
     }
 
@@ -75,7 +74,7 @@ public class HoldHandlingUnitHandler : IRequestHandler<HoldHandlingUnitCommand, 
             .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId))
             .ToListAsync(ct);
 
-        // 1. Processa e comprima as fotos no disco UMA ÚNICA VEZ para o lote
+        // 1. Processa e comprime as fotos no disco UMA ÚNICA VEZ para o lote
         var processedImages = new List<(string FileName, string FilePath, long FileSize)>();
         if (request.Images != null && request.Images.Any())
         {
@@ -90,6 +89,7 @@ public class HoldHandlingUnitHandler : IRequestHandler<HoldHandlingUnitCommand, 
         }
 
         int updatedCount = 0;
+        var kardexMovements = new List<RecordKardexMovementItemDto>();
 
         foreach (var hu in hus)
         {
@@ -98,7 +98,7 @@ public class HoldHandlingUnitHandler : IRequestHandler<HoldHandlingUnitCommand, 
             var oldQualityStatus = hu.QualityStatus;
             var balance = balances.FirstOrDefault(b => b.ProductId == hu.ProductId && b.CustomerId == hu.CustomerId);
 
-            // 2. Cria o Prontuário de Qualidade (QualityEvent) para cada HU reaproveitando os arquivos
+            // 2. Cria o Prontuário de Qualidade (QualityEvent)
             var qualityEvent = new QualityEvent(companyId, hu.Id, hu.CurrentLocationId, request.ReasonId, request.Notes);
 
             foreach (var (fileName, filePath, size) in processedImages)
@@ -120,19 +120,33 @@ public class HoldHandlingUnitHandler : IRequestHandler<HoldHandlingUnitCommand, 
             {
                 hu.MoveTo(request.QualityLocationId.Value);
 
-                await _kardex.WriteAsync(new InventoryTransaction(
-                    companyId, hu.CustomerId, hu.ProductId, hu.Id,
-                    request.QualityLocationId.Value, TransactionType.Internal_Move,
-                    0, hu.CurrentQuantity, hu.ReceiptDocumentId,
-                    $"TRANSPORTE DE AVARIA/QUARENTENA PARA POSIÇÃO {request.QualityLocationId}"), ct);
+                kardexMovements.Add(new RecordKardexMovementItemDto(
+                    CustomerId: hu.CustomerId,
+                    ProductId: hu.ProductId,
+                    HandlingUnitId: hu.Id,
+                    LocationId: request.QualityLocationId.Value,
+                    Type: TransactionType.Internal_Move,
+                    QuantityChange: 0m,
+                    BalanceAfter: hu.CurrentQuantity,
+                    SourceDocumentId: hu.ReceiptDocumentId,
+                    SourceDocumentNumber: $"TRANSPORTE DE AVARIA/QUARENTENA PARA POSIÇÃO {request.QualityLocationId}",
+                    CompanyId: companyId
+                ));
             }
 
-            // 5. Registra auditoria no Kardex
-            await _kardex.WriteAsync(new InventoryTransaction(
-                companyId, hu.CustomerId, hu.ProductId, hu.Id,
-                hu.CurrentLocationId, TransactionType.Quality_Hold,
-                0, hu.CurrentQuantity, hu.ReceiptDocumentId,
-                $"REGISTRO DE BLOQUEIO ({oldQualityStatus} -> {request.NewStatus}): {request.Notes}"), ct);
+            // 5. Registra auditoria de bloqueio no Kardex
+            kardexMovements.Add(new RecordKardexMovementItemDto(
+                CustomerId: hu.CustomerId,
+                ProductId: hu.ProductId,
+                HandlingUnitId: hu.Id,
+                LocationId: hu.CurrentLocationId,
+                Type: TransactionType.Quality_Hold,
+                QuantityChange: 0m,
+                BalanceAfter: hu.CurrentQuantity,
+                SourceDocumentId: hu.ReceiptDocumentId,
+                SourceDocumentNumber: $"REGISTRO DE BLOQUEIO ({oldQualityStatus} -> {request.NewStatus}): {request.Notes}",
+                CompanyId: companyId
+            ));
 
             updatedCount++;
         }
@@ -144,6 +158,12 @@ public class HoldHandlingUnitHandler : IRequestHandler<HoldHandlingUnitCommand, 
         catch (DbUpdateConcurrencyException)
         {
             return Results.Conflict(new { Message = "Conflito de concorrência ao registrar a avaria/bloqueio. Tente novamente." });
+        }
+
+        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
+        if (kardexMovements.Any())
+        {
+            await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
         return Results.Ok(new { Message = $"{updatedCount} HU(s) atualizada(s) para o status '{request.NewStatus}'." });
