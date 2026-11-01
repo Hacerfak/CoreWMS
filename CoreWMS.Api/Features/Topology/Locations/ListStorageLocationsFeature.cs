@@ -34,7 +34,6 @@ public static class ListStorageLocationsEndpoints
     {
         app.MapGet("/api/topology/locations/storage", async (IMediator mediator) => await mediator.Send(new ListStorageLocationsQuery()))
            .WithTags("Topology")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Topology.Manage);
+           .RequireAuthorization();
     }
 }

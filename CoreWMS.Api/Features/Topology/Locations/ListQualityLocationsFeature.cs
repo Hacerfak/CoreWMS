@@ -34,7 +34,6 @@ public static class ListQualityLocationsEndpoints
     {
         app.MapGet("/api/topology/locations/quality", async (IMediator mediator) => await mediator.Send(new ListQualityLocationsQuery()))
            .WithTags("Topology")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Topology.Manage);
+           .RequireAuthorization();
     }
 }
