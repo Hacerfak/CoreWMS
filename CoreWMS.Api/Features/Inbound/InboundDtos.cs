@@ -48,6 +48,7 @@ public record InboundOrderItemDto(
     decimal ReceivedQuantity,
     string Status,
     Guid? LockedByUserId,
+    string? LockedByUserName,
     Guid? DockLocationId,
     string? DockLocationPath,
     string? ExpectedBatch,

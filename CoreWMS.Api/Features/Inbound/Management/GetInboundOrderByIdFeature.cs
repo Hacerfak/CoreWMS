@@ -88,6 +88,21 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
             );
         }
 
+        // 1. Busca os nomes dos operadores que possuem itens em conferência nesta ordem
+        var lockedUserIds = order.Items
+            .Where(i => i.LockedByUserId.HasValue)
+            .Select(i => i.LockedByUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        var usersMap = lockedUserIds.Any()
+            ? await _db.Users
+                .AsNoTracking()
+                .Where(u => lockedUserIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.Name, ct)
+            : new Dictionary<Guid, string>();
+
+        // 2. Projeta os DTOs com o nome do operador
         var itemDtos = order.Items.OrderBy(i => i.LineNumber).Select(i => new InboundOrderItemDto(
             i.Id,
             i.ProductId,
@@ -99,6 +114,7 @@ public class GetInboundOrderByIdHandler : IRequestHandler<GetInboundOrderByIdQue
             i.ReceivedQuantity,
             i.Status.ToString(),
             i.LockedByUserId,
+            i.LockedByUserId.HasValue && usersMap.TryGetValue(i.LockedByUserId.Value, out var operatorName) ? operatorName : null,
             i.DockLocationId,
             i.DockLocation != null ? i.DockLocation.FullPath : null,
             i.ExpectedBatch,
