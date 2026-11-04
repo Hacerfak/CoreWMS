@@ -24,7 +24,7 @@ export default function Login() {
 
     const { register, handleSubmit, formState: { errors } } = useForm({
         resolver: zodResolver(loginSchema),
-        defaultValues: { email: 'master@corewms.com.br', password: '' }
+        defaultValues: { email: '', password: '' }
     });
 
     const { mutate: loginMutation, isPending } = usePostApiIdentityLogin({
