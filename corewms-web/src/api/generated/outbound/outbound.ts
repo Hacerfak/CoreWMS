@@ -1389,6 +1389,125 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiOutboundOrdersIdAllocateMutationOptions(options), queryClient);
     }
+    export const postApiOutboundPickingOrdersOrderIdUndoAllocationId = (
+    orderId: string,
+    allocationId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/picking/orders/${orderId}/undo/${allocationId}`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationKey = () => ['postApiOutboundPickingOrdersOrderIdUndoAllocationId'] as const;
+
+export const getPostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdUndoAllocationId>>, TError,PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdUndoAllocationId>>, TError,PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdUndoAllocationId>>, PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationVariables> = (props) => {
+          const {orderId,allocationId} = props ?? {};
+
+          return  postApiOutboundPickingOrdersOrderIdUndoAllocationId(orderId,allocationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdUndoAllocationId>>>
+
+    export type PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationError = unknown
+    export type PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationVariables = {orderId: string;allocationId: string}
+
+    export const usePostApiOutboundPickingOrdersOrderIdUndoAllocationId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdUndoAllocationId>>, TError,PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdUndoAllocationId>>,
+        TError,
+        PostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundPickingOrdersOrderIdUndoAllocationIdMutationOptions(options), queryClient);
+    }
+    export const postApiOutboundPickingOrdersOrderIdReset = (
+    orderId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/outbound/picking/orders/${orderId}/reset`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiOutboundPickingOrdersOrderIdResetMutationKey = () => ['postApiOutboundPickingOrdersOrderIdReset'] as const;
+
+export const getPostApiOutboundPickingOrdersOrderIdResetMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdReset>>, TError,PostApiOutboundPickingOrdersOrderIdResetMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdReset>>, TError,PostApiOutboundPickingOrdersOrderIdResetMutationVariables, TContext> => {
+
+const mutationKey = getPostApiOutboundPickingOrdersOrderIdResetMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdReset>>, PostApiOutboundPickingOrdersOrderIdResetMutationVariables> = (props) => {
+          const {orderId} = props ?? {};
+
+          return  postApiOutboundPickingOrdersOrderIdReset(orderId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiOutboundPickingOrdersOrderIdResetMutationResult = NonNullable<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdReset>>>
+
+    export type PostApiOutboundPickingOrdersOrderIdResetMutationError = unknown
+    export type PostApiOutboundPickingOrdersOrderIdResetMutationVariables = {orderId: string}
+
+    export const usePostApiOutboundPickingOrdersOrderIdReset = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdReset>>, TError,PostApiOutboundPickingOrdersOrderIdResetMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiOutboundPickingOrdersOrderIdReset>>,
+        TError,
+        PostApiOutboundPickingOrdersOrderIdResetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiOutboundPickingOrdersOrderIdResetMutationOptions(options), queryClient);
+    }
     export const postApiOutboundPackingOrdersOrderIdFinalize = (
     orderId: string,
     finalizeOrderPackingCommand: FinalizeOrderPackingCommand,
