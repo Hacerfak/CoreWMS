@@ -7,9 +7,9 @@
 import type { FiscalDocumentStatus } from './fiscalDocumentStatus';
 
 export type GetApiFiscalDocumentsParams = {
-Search?: string;
-Status?: FiscalDocumentStatus;
-Type?: number;
-Page?: number;
-PageSize?: number;
+  Search?: string;
+  Status?: FiscalDocumentStatus;
+  Type?: number;
+  Page?: number;
+  PageSize?: number;
 };

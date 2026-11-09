@@ -191,7 +191,6 @@ export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiI
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInboundReview<TData = Awaited<ReturnType<typeof getApiInboundReview>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundReview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -637,7 +636,6 @@ export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInbou
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInboundId<TData = Awaited<ReturnType<typeof getApiInboundId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInboundId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -724,7 +722,6 @@ export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound
  params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInbound<TData = Awaited<ReturnType<typeof getApiInbound>>, TError = unknown>(
  params?: GetApiInboundParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInbound>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -806,10 +803,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
+      const formData = postApiInboundLegacyImportBody === undefined ? undefined : (() => {
+const formData = new FormData();
 if(postApiInboundLegacyImportBody?.file !== undefined) {
  formData.append(`file`, postApiInboundLegacyImportBody.file);
  }
+return formData;
+})();
 
       return customInstance<void>(
       {url: `/api/inbound/legacy-import`, method: 'POST',
@@ -871,10 +871,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
+      const formData = postApiInboundImportBody === undefined ? undefined : (() => {
+const formData = new FormData();
 if(postApiInboundImportBody?.files !== undefined) {
  postApiInboundImportBody?.files.forEach(value => formData.append(`files`, value));
  }
+return formData;
+})();
 
       return customInstance<void>(
       {url: `/api/inbound/import`, method: 'POST',

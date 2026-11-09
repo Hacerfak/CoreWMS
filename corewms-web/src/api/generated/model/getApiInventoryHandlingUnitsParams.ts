@@ -6,18 +6,18 @@
  */
 
 export type GetApiInventoryHandlingUnitsParams = {
-CustomerId?: string;
-Sku?: string;
-ProductId?: string;
-ReceiptDocumentId?: string;
-Lpn?: string;
-Batch?: string;
-NfeNumber?: string;
-LocationId?: string;
-Status?: number;
-QualityStatus?: number;
-StartDate?: string;
-EndDate?: string;
-Page?: number;
-PageSize?: number;
+  CustomerId?: string;
+  Sku?: string;
+  ProductId?: string;
+  ReceiptDocumentId?: string;
+  Lpn?: string;
+  Batch?: string;
+  NfeNumber?: string;
+  LocationId?: string;
+  Status?: number;
+  QualityStatus?: number;
+  StartDate?: string;
+  EndDate?: string;
+  Page?: number;
+  PageSize?: number;
 };

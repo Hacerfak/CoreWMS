@@ -321,7 +321,6 @@ export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typ
     params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyZonesWarehouseId<TData = Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError = unknown>(
  warehouseId: string,
     params?: GetApiTopologyZonesWarehouseIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyZonesWarehouseId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
@@ -470,7 +469,6 @@ export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof ge
  params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyWarehouses<TData = Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError = unknown>(
  params?: GetApiTopologyWarehousesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyWarehouses>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -738,7 +736,6 @@ export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof 
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyStorageTypes<TData = Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyStorageTypes>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1127,7 +1124,6 @@ export function useGetApiTopologyLocationsTemplate<TData = Awaited<ReturnType<ty
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyLocationsTemplate<TData = Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsTemplate>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1213,7 +1209,6 @@ export function useGetApiTopologyLocationsByCodeCode<TData = Awaited<ReturnType<
  code: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsByCodeCode>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyLocationsByCodeCode<TData = Awaited<ReturnType<typeof getApiTopologyLocationsByCodeCode>>, TError = unknown>(
  code: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsByCodeCode>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1236,10 +1231,13 @@ export const postApiTopologyLocationsImport = (
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
+      const formData = postApiTopologyLocationsImportBody === undefined ? undefined : (() => {
+const formData = new FormData();
 if(postApiTopologyLocationsImportBody?.file !== undefined) {
  formData.append(`file`, postApiTopologyLocationsImportBody.file);
  }
+return formData;
+})();
 
       return customInstance<void>(
       {url: `/api/topology/locations/import`, method: 'POST',
@@ -1364,7 +1362,6 @@ export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeo
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyLocationsDocks<TData = Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsDocks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1457,7 +1454,6 @@ export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<type
     params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyLocationsZoneId<TData = Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError = unknown>(
  zoneId: string,
     params?: GetApiTopologyLocationsZoneIdParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsZoneId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
@@ -1544,7 +1540,6 @@ export function useGetApiTopologyLocationsQuality<TData = Awaited<ReturnType<typ
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsQuality>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyLocationsQuality<TData = Awaited<ReturnType<typeof getApiTopologyLocationsQuality>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsQuality>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1630,7 +1625,6 @@ export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typ
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiTopologyLocationsStorage<TData = Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiTopologyLocationsStorage>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

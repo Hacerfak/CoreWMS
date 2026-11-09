@@ -6,5 +6,5 @@
  */
 
 export type PostApiYardAppointmentsAppointmentIdMoveToDockParams = {
-dockLocationId: string;
+  dockLocationId: string;
 };

@@ -6,14 +6,14 @@
  */
 
 export type GetApiInventoryKardexParams = {
-CustomerId?: string;
-Sku?: string;
-Lpn?: string;
-Batch?: string;
-NfeNumber?: string;
-ProductId?: string;
-StartDate?: string;
-EndDate?: string;
-Page?: number;
-PageSize?: number;
+  CustomerId?: string;
+  Sku?: string;
+  Lpn?: string;
+  Batch?: string;
+  NfeNumber?: string;
+  ProductId?: string;
+  StartDate?: string;
+  EndDate?: string;
+  Page?: number;
+  PageSize?: number;
 };

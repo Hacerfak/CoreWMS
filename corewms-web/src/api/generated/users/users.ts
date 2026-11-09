@@ -308,7 +308,6 @@ export function useGetApiUsers<TData = Awaited<ReturnType<typeof getApiUsers>>, 
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiUsers>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiUsers<TData = Awaited<ReturnType<typeof getApiUsers>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiUsers>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -515,7 +514,6 @@ export function useGetUserMe<TData = Awaited<ReturnType<typeof getUserMe>>, TErr
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetUserMe<TData = Awaited<ReturnType<typeof getUserMe>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserMe>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -662,7 +660,6 @@ export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermi
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetMyPermissions<TData = Awaited<ReturnType<typeof getMyPermissions>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyPermissions>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

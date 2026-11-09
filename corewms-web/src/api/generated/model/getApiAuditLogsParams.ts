@@ -6,11 +6,11 @@
  */
 
 export type GetApiAuditLogsParams = {
-EntityName?: string;
-EntityId?: string;
-UserId?: string;
-StartDate?: string;
-EndDate?: string;
-Page?: number;
-PageSize?: number;
+  EntityName?: string;
+  EntityId?: string;
+  UserId?: string;
+  StartDate?: string;
+  EndDate?: string;
+  Page?: number;
+  PageSize?: number;
 };

@@ -8,9 +8,9 @@ import type { YardAppointmentStatus } from './yardAppointmentStatus';
 import type { YardAppointmentType } from './yardAppointmentType';
 
 export type GetApiYardAppointmentsParams = {
-startDate?: string;
-endDate?: string;
-status?: YardAppointmentStatus;
-type?: YardAppointmentType;
-search?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: YardAppointmentStatus;
+  type?: YardAppointmentType;
+  search?: string;
 };

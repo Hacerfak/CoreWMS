@@ -183,7 +183,6 @@ export function useGetApiRoles<TData = Awaited<ReturnType<typeof getApiRoles>>, 
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiRoles>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiRoles<TData = Awaited<ReturnType<typeof getApiRoles>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiRoles>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

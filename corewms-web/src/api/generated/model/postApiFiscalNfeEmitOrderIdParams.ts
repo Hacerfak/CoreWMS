@@ -6,5 +6,5 @@
  */
 
 export type PostApiFiscalNfeEmitOrderIdParams = {
-inboundOrderId?: string;
+  inboundOrderId?: string;
 };

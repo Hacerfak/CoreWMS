@@ -118,7 +118,6 @@ export function useGetApiAuditLogs<TData = Awaited<ReturnType<typeof getApiAudit
  params?: GetApiAuditLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogs>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiAuditLogs<TData = Awaited<ReturnType<typeof getApiAuditLogs>>, TError = unknown>(
  params?: GetApiAuditLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiAuditLogs>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

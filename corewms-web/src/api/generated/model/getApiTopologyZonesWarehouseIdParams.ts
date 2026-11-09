@@ -6,5 +6,5 @@
  */
 
 export type GetApiTopologyZonesWarehouseIdParams = {
-palletHeight?: number;
+  palletHeight?: number;
 };

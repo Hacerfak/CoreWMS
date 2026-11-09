@@ -125,7 +125,6 @@ export function useGetApiCompaniesList<TData = Awaited<ReturnType<typeof getApiC
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesList>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCompaniesList<TData = Awaited<ReturnType<typeof getApiCompaniesList>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesList>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -148,7 +147,8 @@ export const postApiCompanies = (
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
+      const formData = postApiCompaniesBody === undefined ? undefined : (() => {
+const formData = new FormData();
 if(postApiCompaniesBody?.certificateFile !== undefined) {
  formData.append(`certificateFile`, postApiCompaniesBody.certificateFile);
  }
@@ -158,6 +158,8 @@ if(postApiCompaniesBody?.certificatePassword !== undefined) {
 if(postApiCompaniesBody?.uf !== undefined) {
  formData.append(`uf`, postApiCompaniesBody.uf);
  }
+return formData;
+})();
 
       return customInstance<void>(
       {url: `/api/companies`, method: 'POST',
@@ -282,7 +284,6 @@ export function useGetApiCompanies<TData = Awaited<ReturnType<typeof getApiCompa
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompanies>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCompanies<TData = Awaited<ReturnType<typeof getApiCompanies>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompanies>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -606,13 +607,16 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
+      const formData = putApiCompaniesIdCertificateBody === undefined ? undefined : (() => {
+const formData = new FormData();
 if(putApiCompaniesIdCertificateBody?.certificateFile !== undefined) {
  formData.append(`certificateFile`, putApiCompaniesIdCertificateBody.certificateFile);
  }
 if(putApiCompaniesIdCertificateBody?.certificatePassword !== undefined) {
  formData.append(`certificatePassword`, putApiCompaniesIdCertificateBody.certificatePassword);
  }
+return formData;
+})();
 
       return customInstance<void>(
       {url: `/api/companies/${id}/certificate`, method: 'PUT',
@@ -737,7 +741,6 @@ export function useGetApiCompaniesCompanyIdGoogleOauthUrl<TData = Awaited<Return
  companyId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCompaniesCompanyIdGoogleOauthUrl<TData = Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError = unknown>(
  companyId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesCompanyIdGoogleOauthUrl>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -824,7 +827,6 @@ export function useGetApiCompaniesGoogleOauthCallback<TData = Awaited<ReturnType
  params: GetApiCompaniesGoogleOauthCallbackParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCompaniesGoogleOauthCallback<TData = Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError = unknown>(
  params: GetApiCompaniesGoogleOauthCallbackParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCompaniesGoogleOauthCallback>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

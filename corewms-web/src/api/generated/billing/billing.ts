@@ -192,7 +192,6 @@ export function useGetApiBillingTariffs<TData = Awaited<ReturnType<typeof getApi
  params?: GetApiBillingTariffsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingTariffs>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiBillingTariffs<TData = Awaited<ReturnType<typeof getApiBillingTariffs>>, TError = unknown>(
  params?: GetApiBillingTariffsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingTariffs>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -398,7 +397,6 @@ export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getAp
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiBillingServices<TData = Awaited<ReturnType<typeof getApiBillingServices>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingServices>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -788,7 +786,6 @@ export function useGetApiBillingCyclesIdStatementHtml<TData = Awaited<ReturnType
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiBillingCyclesIdStatementHtml<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdStatementHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -874,7 +871,6 @@ export function useGetApiBillingCyclesIdExportCsv<TData = Awaited<ReturnType<typ
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiBillingCyclesIdExportCsv<TData = Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesIdExportCsv>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1140,7 +1136,6 @@ export function useGetApiBillingCyclesId<TData = Awaited<ReturnType<typeof getAp
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiBillingCyclesId<TData = Awaited<ReturnType<typeof getApiBillingCyclesId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCyclesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1227,7 +1222,6 @@ export function useGetApiBillingCycles<TData = Awaited<ReturnType<typeof getApiB
  params?: GetApiBillingCyclesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCycles>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiBillingCycles<TData = Awaited<ReturnType<typeof getApiBillingCycles>>, TError = unknown>(
  params?: GetApiBillingCyclesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiBillingCycles>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

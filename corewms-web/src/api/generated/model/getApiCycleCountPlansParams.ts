@@ -6,6 +6,6 @@
  */
 
 export type GetApiCycleCountPlansParams = {
-CustomerId?: string;
-Status?: string;
+  CustomerId?: string;
+  Status?: string;
 };

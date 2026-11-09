@@ -128,7 +128,6 @@ export function useGetApiCycleCountMetrics<TData = Awaited<ReturnType<typeof get
  params?: GetApiCycleCountMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCycleCountMetrics<TData = Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError = unknown>(
  params?: GetApiCycleCountMetricsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountMetrics>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -214,7 +213,6 @@ export function useGetApiCycleCountPlansId<TData = Awaited<ReturnType<typeof get
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCycleCountPlansId<TData = Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlansId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -301,7 +299,6 @@ export function useGetApiCycleCountPlans<TData = Awaited<ReturnType<typeof getAp
  params?: GetApiCycleCountPlansParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlans>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCycleCountPlans<TData = Awaited<ReturnType<typeof getApiCycleCountPlans>>, TError = unknown>(
  params?: GetApiCycleCountPlansParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountPlans>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -448,7 +445,6 @@ export function useGetApiCycleCountTasksOperator<TData = Awaited<ReturnType<type
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCycleCountTasksOperator<TData = Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCycleCountTasksOperator>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

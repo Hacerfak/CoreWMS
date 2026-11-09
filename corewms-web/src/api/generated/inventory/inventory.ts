@@ -137,7 +137,6 @@ export function useGetApiInventoryHandlingUnitsExport<TData = Awaited<ReturnType
  params?: GetApiInventoryHandlingUnitsExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryHandlingUnitsExport<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError = unknown>(
  params?: GetApiInventoryHandlingUnitsExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnitsExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -224,7 +223,6 @@ export function useGetApiInventoryBalancesExport<TData = Awaited<ReturnType<type
  params?: GetApiInventoryBalancesExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryBalancesExport<TData = Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError = unknown>(
  params?: GetApiInventoryBalancesExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalancesExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -311,7 +309,6 @@ export function useGetApiInventoryKardexExport<TData = Awaited<ReturnType<typeof
  params?: GetApiInventoryKardexExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryKardexExport<TData = Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError = unknown>(
  params?: GetApiInventoryKardexExportParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardexExport>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -398,7 +395,6 @@ export function useGetApiInventoryBalances<TData = Awaited<ReturnType<typeof get
  params?: GetApiInventoryBalancesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalances>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryBalances<TData = Awaited<ReturnType<typeof getApiInventoryBalances>>, TError = unknown>(
  params?: GetApiInventoryBalancesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryBalances>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -485,7 +481,6 @@ export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeo
  params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryHandlingUnits<TData = Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError = unknown>(
  params?: GetApiInventoryHandlingUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryHandlingUnits>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -572,7 +567,6 @@ export function useGetApiInventoryKardex<TData = Awaited<ReturnType<typeof getAp
  params?: GetApiInventoryKardexParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardex>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryKardex<TData = Awaited<ReturnType<typeof getApiInventoryKardex>>, TError = unknown>(
  params?: GetApiInventoryKardexParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryKardex>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1146,7 +1140,6 @@ export function useGetApiInventoryPutawaySuggestionsOrderId<TData = Awaited<Retu
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryPutawaySuggestionsOrderId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiInventoryPutawaySuggestionsOrderId<TData = Awaited<ReturnType<typeof getApiInventoryPutawaySuggestionsOrderId>>, TError = unknown>(
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiInventoryPutawaySuggestionsOrderId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

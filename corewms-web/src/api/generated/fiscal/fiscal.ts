@@ -250,7 +250,6 @@ export function useGetApiFiscalRulesId<TData = Awaited<ReturnType<typeof getApiF
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalRulesId<TData = Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -395,7 +394,6 @@ export function useGetApiFiscalDocumentsId<TData = Awaited<ReturnType<typeof get
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalDocumentsId<TData = Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocumentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -547,7 +545,6 @@ export function useGetApiFiscalRulesRuleIdExceptionsExceptionId<TData = Awaited<
     exceptionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalRulesRuleIdExceptionsExceptionId<TData = Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError = unknown>(
  ruleId: string,
     exceptionId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRulesRuleIdExceptionsExceptionId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
@@ -696,7 +693,6 @@ export function useGetApiFiscalDocuments<TData = Awaited<ReturnType<typeof getAp
  params?: GetApiFiscalDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocuments>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalDocuments<TData = Awaited<ReturnType<typeof getApiFiscalDocuments>>, TError = unknown>(
  params?: GetApiFiscalDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalDocuments>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -782,7 +778,6 @@ export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFis
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalRules<TData = Awaited<ReturnType<typeof getApiFiscalRules>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalRules>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -988,7 +983,6 @@ export function useGetApiFiscalNfeDocumentIdXml<TData = Awaited<ReturnType<typeo
  documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdXml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalNfeDocumentIdXml<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdXml>>, TError = unknown>(
  documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdXml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1259,7 +1253,6 @@ export function useGetApiFiscalNfeDocumentIdDanfeHtml<TData = Awaited<ReturnType
  documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalNfeDocumentIdDanfeHtml<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError = unknown>(
  documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdDanfeHtml>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1345,7 +1338,6 @@ export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeo
  documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiFiscalNfeDocumentIdPdf<TData = Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError = unknown>(
  documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiFiscalNfeDocumentIdPdf>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

@@ -7,6 +7,6 @@
 import type { YardAppointmentType } from './yardAppointmentType';
 
 export type PostApiYardAppointmentsAppointmentIdLinkOrderParams = {
-type: YardAppointmentType;
-orderId: string;
+  type: YardAppointmentType;
+  orderId: string;
 };

@@ -6,11 +6,11 @@
  */
 
 export type GetApiOutboundOrdersParams = {
-CustomerId?: string;
-Search?: string;
-Status?: string;
-StartDate?: string;
-EndDate?: string;
-Page?: number;
-PageSize?: number;
+  CustomerId?: string;
+  Search?: string;
+  Status?: string;
+  StartDate?: string;
+  EndDate?: string;
+  Page?: number;
+  PageSize?: number;
 };

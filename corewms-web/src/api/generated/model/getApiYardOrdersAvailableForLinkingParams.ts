@@ -7,5 +7,5 @@
 import type { YardAppointmentType } from './yardAppointmentType';
 
 export type GetApiYardOrdersAvailableForLinkingParams = {
-type: YardAppointmentType;
+  type: YardAppointmentType;
 };

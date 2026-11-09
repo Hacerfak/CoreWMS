@@ -7,11 +7,11 @@
 import type { InboundOrderStatus } from './inboundOrderStatus';
 
 export type GetApiInboundParams = {
-CustomerId?: string;
-Status?: InboundOrderStatus;
-Search?: string;
-StartDate?: string;
-EndDate?: string;
-Page?: number;
-PageSize?: number;
+  CustomerId?: string;
+  Status?: InboundOrderStatus;
+  Search?: string;
+  StartDate?: string;
+  EndDate?: string;
+  Page?: number;
+  PageSize?: number;
 };

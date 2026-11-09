@@ -6,5 +6,5 @@
  */
 
 export type PostApiCustomersConsultSefazCnpjParams = {
-uf: string;
+  uf: string;
 };

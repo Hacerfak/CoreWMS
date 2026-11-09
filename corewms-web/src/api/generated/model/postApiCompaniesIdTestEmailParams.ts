@@ -6,5 +6,5 @@
  */
 
 export type PostApiCompaniesIdTestEmailParams = {
-destinationEmail: string;
+  destinationEmail: string;
 };

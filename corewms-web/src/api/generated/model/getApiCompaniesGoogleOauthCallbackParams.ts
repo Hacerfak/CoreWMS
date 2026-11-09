@@ -6,6 +6,6 @@
  */
 
 export type GetApiCompaniesGoogleOauthCallbackParams = {
-code: string;
-state: string;
+  code: string;
+  state: string;
 };

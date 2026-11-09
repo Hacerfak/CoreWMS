@@ -247,7 +247,6 @@ export function useGetApiCustomers<TData = Awaited<ReturnType<typeof getApiCusto
  params?: GetApiCustomersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomers>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCustomers<TData = Awaited<ReturnType<typeof getApiCustomers>>, TError = unknown>(
  params?: GetApiCustomersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomers>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -392,7 +391,6 @@ export function useGetApiCustomersId<TData = Awaited<ReturnType<typeof getApiCus
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCustomersId<TData = Awaited<ReturnType<typeof getApiCustomersId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -540,7 +538,6 @@ export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getA
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

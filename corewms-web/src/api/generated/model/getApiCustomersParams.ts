@@ -6,9 +6,9 @@
  */
 
 export type GetApiCustomersParams = {
-Search?: string;
-OnlyActive?: boolean;
-Status?: string;
-Page?: number;
-PageSize?: number;
+  Search?: string;
+  OnlyActive?: boolean;
+  Status?: string;
+  Page?: number;
+  PageSize?: number;
 };

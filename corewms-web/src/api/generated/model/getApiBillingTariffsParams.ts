@@ -6,5 +6,5 @@
  */
 
 export type GetApiBillingTariffsParams = {
-CustomerId?: string;
+  CustomerId?: string;
 };

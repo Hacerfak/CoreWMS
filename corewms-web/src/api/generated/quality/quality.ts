@@ -185,7 +185,6 @@ export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApi
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

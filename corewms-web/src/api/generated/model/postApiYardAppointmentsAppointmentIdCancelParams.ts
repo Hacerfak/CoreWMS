@@ -6,5 +6,5 @@
  */
 
 export type PostApiYardAppointmentsAppointmentIdCancelParams = {
-reason?: string;
+  reason?: string;
 };

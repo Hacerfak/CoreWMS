@@ -6,10 +6,10 @@
  */
 
 export type GetApiInventoryBalancesParams = {
-CustomerId?: string;
-Sku?: string;
-NfeNumber?: string;
-ProductId?: string;
-Page?: number;
-PageSize?: number;
+  CustomerId?: string;
+  Sku?: string;
+  NfeNumber?: string;
+  ProductId?: string;
+  Page?: number;
+  PageSize?: number;
 };

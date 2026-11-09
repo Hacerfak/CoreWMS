@@ -113,7 +113,6 @@ export function useGetApiPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof 
  accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiPublicDanfeAccessKey<TData = Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError = unknown>(
  accessKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPublicDanfeAccessKey>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

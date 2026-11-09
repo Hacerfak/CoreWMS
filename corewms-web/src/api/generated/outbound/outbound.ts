@@ -132,7 +132,6 @@ export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundPickingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError = unknown>(
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPickingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -465,7 +464,6 @@ export function useGetApiOutboundOrders<TData = Awaited<ReturnType<typeof getApi
  params?: GetApiOutboundOrdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrders>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundOrders<TData = Awaited<ReturnType<typeof getApiOutboundOrders>>, TError = unknown>(
  params?: GetApiOutboundOrdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrders>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -610,7 +608,6 @@ export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getA
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundOrdersId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -764,7 +761,6 @@ export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Aw
     productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundOrdersOrderIdAvailableStockProductId<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError = unknown>(
  orderId: string,
     productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdAvailableStockProductId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
@@ -858,7 +854,6 @@ export function useGetApiOutboundOrdersOrderIdFiscalPreview<TData = Awaited<Retu
     params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundOrdersOrderIdFiscalPreview<TData = Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError = unknown>(
  orderId: string,
     params?: GetApiOutboundOrdersOrderIdFiscalPreviewParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundOrdersOrderIdFiscalPreview>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
@@ -1184,10 +1179,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
-      const formData = new FormData();
+      const formData = postApiOutboundOrdersImportXmlBody === undefined ? undefined : (() => {
+const formData = new FormData();
 if(postApiOutboundOrdersImportXmlBody?.file !== undefined) {
  formData.append(`file`, postApiOutboundOrdersImportXmlBody.file);
  }
+return formData;
+})();
 
       return customInstance<void>(
       {url: `/api/outbound/orders/import-xml`, method: 'POST',
@@ -1312,7 +1310,6 @@ export function useGetApiOutboundCheckingOrderIdTasks<TData = Awaited<ReturnType
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundCheckingOrderIdTasks<TData = Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError = unknown>(
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundCheckingOrderIdTasks>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1707,7 +1704,6 @@ export function useGetApiOutboundPackingOrdersOrderIdItemsOrderItemId<TData = Aw
     orderItemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPackingOrdersOrderIdItemsOrderItemId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiOutboundPackingOrdersOrderIdItemsOrderItemId<TData = Awaited<ReturnType<typeof getApiOutboundPackingOrdersOrderIdItemsOrderItemId>>, TError = unknown>(
  orderId: string,
     orderItemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiOutboundPackingOrdersOrderIdItemsOrderItemId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}

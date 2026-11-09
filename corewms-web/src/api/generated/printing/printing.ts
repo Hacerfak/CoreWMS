@@ -189,7 +189,6 @@ export function useGetApiPrintingTemplates<TData = Awaited<ReturnType<typeof get
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplates>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiPrintingTemplates<TData = Awaited<ReturnType<typeof getApiPrintingTemplates>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingTemplates>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -761,7 +760,6 @@ export function useGetApiPrintingAgents<TData = Awaited<ReturnType<typeof getApi
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingAgents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiPrintingAgents<TData = Awaited<ReturnType<typeof getApiPrintingAgents>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiPrintingAgents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

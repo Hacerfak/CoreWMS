@@ -6,5 +6,5 @@
  */
 
 export type GetApiCycleCountMetricsParams = {
-CustomerId?: string;
+  CustomerId?: string;
 };

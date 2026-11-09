@@ -186,7 +186,6 @@ export function useGetApiProducts<TData = Awaited<ReturnType<typeof getApiProduc
  params?: GetApiProductsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProducts>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiProducts<TData = Awaited<ReturnType<typeof getApiProducts>>, TError = unknown>(
  params?: GetApiProductsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProducts>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -331,7 +330,6 @@ export function useGetApiProductsId<TData = Awaited<ReturnType<typeof getApiProd
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiProductsId<TData = Awaited<ReturnType<typeof getApiProductsId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -479,7 +477,6 @@ export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<
  productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiProductsProductIdPackagings<TData = Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError = unknown>(
  productId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiProductsProductIdPackagings>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

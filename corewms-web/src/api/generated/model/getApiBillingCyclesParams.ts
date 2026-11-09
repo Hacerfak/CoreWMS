@@ -6,5 +6,5 @@
  */
 
 export type GetApiBillingCyclesParams = {
-CustomerId?: string;
+  CustomerId?: string;
 };

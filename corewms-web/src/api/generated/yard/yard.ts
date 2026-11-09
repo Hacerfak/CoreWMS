@@ -252,7 +252,6 @@ export function useGetApiYardAppointments<TData = Awaited<ReturnType<typeof getA
  params?: GetApiYardAppointmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointments>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiYardAppointments<TData = Awaited<ReturnType<typeof getApiYardAppointments>>, TError = unknown>(
  params?: GetApiYardAppointmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointments>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -456,7 +455,6 @@ export function useGetApiYardAppointmentsId<TData = Awaited<ReturnType<typeof ge
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointmentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiYardAppointmentsId<TData = Awaited<ReturnType<typeof getApiYardAppointmentsId>>, TError = unknown>(
  id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointmentsId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -905,7 +903,6 @@ export function useGetApiYardAppointmentsByOrderOrderId<TData = Awaited<ReturnTy
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointmentsByOrderOrderId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiYardAppointmentsByOrderOrderId<TData = Awaited<ReturnType<typeof getApiYardAppointmentsByOrderOrderId>>, TError = unknown>(
  orderId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointmentsByOrderOrderId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -992,7 +989,6 @@ export function useGetApiYardAppointmentsAvailableForLinking<TData = Awaited<Ret
  params: GetApiYardAppointmentsAvailableForLinkingParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointmentsAvailableForLinking>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiYardAppointmentsAvailableForLinking<TData = Awaited<ReturnType<typeof getApiYardAppointmentsAvailableForLinking>>, TError = unknown>(
  params: GetApiYardAppointmentsAvailableForLinkingParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardAppointmentsAvailableForLinking>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
@@ -1079,7 +1075,6 @@ export function useGetApiYardOrdersAvailableForLinking<TData = Awaited<ReturnTyp
  params: GetApiYardOrdersAvailableForLinkingParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardOrdersAvailableForLinking>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
 export function useGetApiYardOrdersAvailableForLinking<TData = Awaited<ReturnType<typeof getApiYardOrdersAvailableForLinking>>, TError = unknown>(
  params: GetApiYardOrdersAvailableForLinkingParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiYardOrdersAvailableForLinking>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient

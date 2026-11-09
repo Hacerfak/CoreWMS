@@ -6,8 +6,8 @@
  */
 
 export type GetApiProductsParams = {
-Search?: string;
-CustomerId?: string;
-Page?: number;
-PageSize?: number;
+  Search?: string;
+  CustomerId?: string;
+  Page?: number;
+  PageSize?: number;
 };
