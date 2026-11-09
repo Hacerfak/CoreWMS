@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Edit3, Trash2, Loader2, Search, AlertTriangle, Code2 } from 'lucide-react';
+import { Edit3, Trash2, Loader2, Search, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function TabServicos({ services, isLoading, onEdit, reload }) {

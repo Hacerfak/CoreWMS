@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Pencil, Loader2, CheckCircle2, Layers, Scale, Calendar, Barcode } from 'lucide-react';
+import { Pencil, Loader2, CheckCircle2, Scale, Calendar, Barcode } from 'lucide-react';
 import { toast } from 'sonner';
 import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerTime } from '@/components/ui/date-picker-time';

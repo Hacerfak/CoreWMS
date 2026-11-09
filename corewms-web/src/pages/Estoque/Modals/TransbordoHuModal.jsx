@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Split, Loader2, CheckCircle2, Plus, Trash2, AlertCircle, Package } from 'lucide-react';
+import { Split, Loader2, CheckCircle2, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSuccess }) {

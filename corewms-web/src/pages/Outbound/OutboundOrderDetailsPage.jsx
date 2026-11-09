@@ -21,7 +21,7 @@ import {
     ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText,
     UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil,
     ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles, Mail,
-    Plus, ExternalLink, Link2, Clock
+    Plus, ExternalLink, Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';

@@ -4,7 +4,7 @@ import { customInstance } from '@/api/orval-mutator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileCode, X } from 'lucide-react';
+import { UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ImportXmlModal({ open, onOpenChange }) {

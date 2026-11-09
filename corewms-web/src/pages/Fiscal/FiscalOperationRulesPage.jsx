@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ import {
     AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import {
-    Plus, Pencil, Trash2, Search, Filter, FileCode, ChevronDown, ChevronRight, Loader2
+    Plus, Pencil, Trash2, Search, Filter, ChevronDown, ChevronRight, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 

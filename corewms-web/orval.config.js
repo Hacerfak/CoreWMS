@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     corewms: {
         output: {
             mode: 'tags-split',

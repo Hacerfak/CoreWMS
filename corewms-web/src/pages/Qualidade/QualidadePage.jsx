@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
     ShieldAlert, ShieldCheck, AlertTriangle, Search, Loader2,
-    Layers, MapPin, CheckCircle2, Lock, Filter, RefreshCw
+    Layers, MapPin, CheckCircle2, Lock, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 

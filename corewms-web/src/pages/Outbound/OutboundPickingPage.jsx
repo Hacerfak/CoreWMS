@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-    ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2, ArrowRight,
+    ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2,
     Check, Calendar, Tag, ChevronDown, ChevronRight, Receipt
 } from 'lucide-react';
 import { toast } from 'sonner';

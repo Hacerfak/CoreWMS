@@ -11,8 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
-    ArrowLeft, MapPin, CheckCircle2, Loader2, Search,
-    Sparkles, ShieldAlert, Warehouse, Box, RefreshCw, AlertTriangle
+    ArrowLeft, CheckCircle2, Loader2, Search,
+    Sparkles, ShieldAlert, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 

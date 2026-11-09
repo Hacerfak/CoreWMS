@@ -5,10 +5,8 @@ import {
     DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Ban, Loader2, AlertTriangle, FileText, ShieldAlert } from 'lucide-react';
+import { Ban, Loader2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function CancelNfeModal({
@@ -16,7 +14,6 @@ export default function CancelNfeModal({
     onOpenChange,
     orderId,
     documentId,
-    orderNumber,
     accessKey,
     onSuccess
 }) {

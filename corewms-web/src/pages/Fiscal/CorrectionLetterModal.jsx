@@ -5,9 +5,7 @@ import {
     DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { FileSignature, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,7 +14,6 @@ export default function CorrectionLetterModal({
     onOpenChange,
     orderId,
     documentId,
-    orderNumber,
     accessKey,
     onSuccess
 }) {
