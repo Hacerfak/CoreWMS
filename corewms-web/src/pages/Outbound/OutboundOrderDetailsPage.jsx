@@ -354,7 +354,8 @@ export default function OutboundOrderDetailsPage() {
                         </>
                     )}
 
-                    {(order?.status === 'Allocated' || order?.status === 'Picking') && (
+                    {/* Botão de Separação mantido enquanto houver pendência ou status ativo */}
+                    {(order?.status === 'Allocated' || order?.status === 'Picking' || (order?.status === 'Checking' && order?.items?.some(i => i.pickedQuantity < i.expectedQuantity))) && (
                         <Button onClick={() => navigate(`/outbound/picking/${order.id}`)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9">
                             <Box size={15} className="mr-1.5" /> Ir para Coletor
                         </Button>
@@ -366,7 +367,7 @@ export default function OutboundOrderDetailsPage() {
                         </Button>
                     )}
 
-                    {/* BOTÃO CONFERÊNCIA DE SAÍDA */}
+                    {/* Botão de Conferência liberado para operações simultâneas em volumes fechados */}
                     {canGoToChecking && (
                         <Button onClick={() => navigate(`/outbound/conferencia/${order.id}`)} className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-9 shadow-2xs">
                             <PackageCheck size={15} className="mr-1.5" /> Ir para Conferência

@@ -11,8 +11,19 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle
+} from '@/components/ui/alert-dialog';
+import {
     ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2,
-    Check, Calendar, Tag, ChevronDown, ChevronRight, Receipt
+    Check, Calendar, Tag, ChevronDown, ChevronRight, Receipt,
+    RotateCcw, Undo2, ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -41,6 +52,13 @@ export default function OutboundPickingPage() {
     const [scannedLpn, setScannedLpn] = useState('');
     const [pickedQuantity, setPickedQuantity] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isFinalizing, setIsFinalizing] = useState(false);
+
+    // Modais de Confirmação
+    const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+    const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
+    const [huToUndo, setHuToUndo] = useState(null);
+    const [isUndoingHu, setIsUndoingHu] = useState(false);
 
     // SKUs concluídos expandidos
     const [expandedCompletedIds, setExpandedCompletedIds] = useState([]);
@@ -110,6 +128,8 @@ export default function OutboundPickingPage() {
         return activeItem.allocations.filter(a => !a.isPicked);
     }, [activeItem]);
 
+    const isOrderComplete = orderData?.items?.length > 0 && pendingItems.length === 0;
+
     useEffect(() => {
         if (activeItem) {
             const pendingQty = activeItem.expectedQuantity - activeItem.pickedQuantity;
@@ -172,13 +192,78 @@ export default function OutboundPickingPage() {
         }
     };
 
+    // FINALIZAÇÃO EXPLÍCITA DA SEPARAÇÃO
+    const handleConfirmFinalize = async () => {
+        try {
+            setIsFinalizing(true);
+            const res = await customInstance({
+                url: `/api/outbound/picking/orders/${orderId}/finalize`,
+                method: 'POST',
+                data: {
+                    orderId,
+                    handlingServiceId: selectedHandlingServiceId && selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null
+                }
+            });
+
+            toast.success(res?.message || 'Separação finalizada com sucesso!');
+            setIsFinalizeDialogOpen(false);
+
+            if (res?.skippedPacking) {
+                navigate(`/outbound/conferencia/${orderId}`);
+            } else if (res?.orderStatus === 'Packing') {
+                navigate(`/outbound/packing/${orderId}`);
+            } else {
+                navigate('/outbound');
+            }
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao finalizar separação.');
+        } finally {
+            setIsFinalizing(false);
+        }
+    };
+
+    // ESTORNO DE HU INDIVIDUAL
+    const handleConfirmUndoHu = async () => {
+        if (!huToUndo) return;
+        try {
+            setIsUndoingHu(true);
+            await customInstance({
+                url: `/api/outbound/picking/orders/${orderId}/undo/${huToUndo.allocationId}`,
+                method: 'POST'
+            });
+            toast.success(`HU ${huToUndo.lpn} estornada com sucesso!`);
+            setHuToUndo(null);
+            await loadTasks(true);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao estornar HU.');
+        } finally {
+            setIsUndoingHu(false);
+        }
+    };
+
+    // RESET COMPLETO DA SEPARAÇÃO
+    const handleConfirmReset = async () => {
+        try {
+            setIsSubmitting(true);
+            await customInstance({
+                url: `/api/outbound/picking/orders/${orderId}/reset`,
+                method: 'POST'
+            });
+            toast.success('Separação reiniciada com sucesso! Todas as HUs foram liberadas.');
+            setIsResetDialogOpen(false);
+            await loadTasks(false);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao reiniciar separação.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const toggleCompletedExpand = (orderItemId) => {
         setExpandedCompletedIds(prev =>
             prev.includes(orderItemId) ? prev.filter(id => id !== orderItemId) : [...prev, orderItemId]
         );
     };
-
-    const isOrderComplete = orderData?.items?.length > 0 && pendingItems.length === 0;
 
     if (isLoading && !orderData) {
         return (
@@ -191,7 +276,7 @@ export default function OutboundPickingPage() {
 
     return (
         <div className="flex flex-col space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            {/* CABEÇALHO COM SELEÇÃO DO SERVIÇO DE SEPARAÇÃO */}
+            {/* CABEÇALHO */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
                 <div className="flex items-center gap-4">
                     <Button variant="outline" size="sm" onClick={() => navigate('/outbound')} className="bg-white">
@@ -213,7 +298,6 @@ export default function OutboundPickingPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {/* SELETOR DE TARIFA OPERACIONAL DE SEPARAÇÃO */}
                     <div className="flex flex-col space-y-1">
                         <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                             <Receipt className="text-purple-600" size={13} /> Serviço de Separação (Handling Out)
@@ -231,14 +315,23 @@ export default function OutboundPickingPage() {
                         </Select>
                     </div>
 
-                    <div className="pt-4">
+                    <div className="pt-4 flex items-center gap-2">
                         <Button
-                            onClick={() => navigate('/outbound')}
+                            variant="outline"
+                            onClick={() => setIsResetDialogOpen(true)}
+                            className="border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 h-9 text-xs font-semibold"
+                            title="Reiniciar Separação"
+                        >
+                            <RotateCcw size={14} className="mr-1.5 text-slate-400" /> Reiniciar
+                        </Button>
+
+                        <Button
+                            onClick={() => isOrderComplete ? setIsFinalizeDialogOpen(true) : navigate('/outbound')}
                             className={isOrderComplete ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs" : "bg-white text-slate-700 border-slate-200 h-9 text-xs font-semibold"}
                             variant={isOrderComplete ? "default" : "outline"}
                         >
                             {isOrderComplete ? (
-                                <><CheckCircle2 size={16} className="mr-2" /> Concluir e Voltar</>
+                                <><CheckCircle2 size={16} className="mr-2" /> Finalizar Separação</>
                             ) : (
                                 'Salvar e Sair'
                             )}
@@ -247,7 +340,7 @@ export default function OutboundPickingPage() {
                 </div>
             </div>
 
-            {/* BANNER DE SEPARAÇÃO 100% CONCLUÍDA */}
+            {/* BANNER DE SEPARAÇÃO 100% CONCLUÍDA COM AÇÃO EXPLÍCITA */}
             {isOrderComplete && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 text-center space-y-3 shadow-2xs">
                     <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
@@ -255,16 +348,14 @@ export default function OutboundPickingPage() {
                     </div>
                     <h2 className="text-lg font-bold text-slate-900">Todos os SKUs deste pedido foram 100% separados!</h2>
                     <p className="text-xs text-slate-600 max-w-md mx-auto">
-                        {orderData?.status === 'Checking'
-                            ? 'Volumes fechados embalados automaticamente (Auto-Packing). O faturamento operacional foi registrado com sucesso.'
-                            : 'Itens separados. Prossiga para a mesa de conferência/embalagem.'}
+                        Revise os itens e HUs recolhidas abaixo. Para carimbar o término da separação e avançar para a próxima fase, clique no botão de finalização.
                     </p>
-                    <div className="pt-2">
+                    <div className="pt-2 flex justify-center gap-3">
                         <Button
-                            onClick={() => navigate('/outbound')}
+                            onClick={() => setIsFinalizeDialogOpen(true)}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shadow-xs"
                         >
-                            <ArrowLeft size={16} className="mr-2" /> Voltar para a Listagem de Pedidos
+                            <CheckCircle2 size={16} className="mr-2" /> Finalizar Separação do Pedido
                         </Button>
                     </div>
                 </div>
@@ -473,14 +564,14 @@ export default function OutboundPickingPage() {
                 </div>
             )}
 
-            {/* SEÇÃO DE SKUS CONCLUÍDOS */}
+            {/* SEÇÃO DE SKUS TOTALMENTE SEPARADOS COM OPÇÃO DE ESTORNO */}
             {completedItems.length > 0 && (
                 <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
                         <h3 className="text-xs font-bold uppercase text-slate-700 flex items-center gap-1.5">
                             <CheckCircle2 size={15} className="text-emerald-600" /> SKUs Totalmente Separados ({completedItems.length})
                         </h3>
-                        <span className="text-[11px] text-slate-400 font-mono">Expanda para auditar as HUs coletadas</span>
+                        <span className="text-[11px] text-slate-400 font-mono">Expanda para auditar ou estornar HUs</span>
                     </div>
 
                     <div className="space-y-2">
@@ -530,12 +621,13 @@ export default function OutboundPickingPage() {
                                                         <TableHead className="text-xs">Validade</TableHead>
                                                         <TableHead className="text-xs">Embalagem</TableHead>
                                                         <TableHead className="text-right text-xs">Quantidade</TableHead>
+                                                        <TableHead className="text-right text-xs">Ações</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {itemPickedHus.length === 0 ? (
                                                         <TableRow>
-                                                            <TableCell colSpan={6} className="text-center text-xs text-slate-400 italic">
+                                                            <TableCell colSpan={7} className="text-center text-xs text-slate-400 italic">
                                                                 Sem registro de HUs vinculadas.
                                                             </TableCell>
                                                         </TableRow>
@@ -554,6 +646,17 @@ export default function OutboundPickingPage() {
                                                                 <TableCell className="text-right font-bold text-emerald-700">
                                                                     {hu.quantity} {item.baseUnit}
                                                                 </TableCell>
+                                                                <TableCell className="text-right">
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="ghost"
+                                                                        onClick={() => setHuToUndo(hu)}
+                                                                        className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                                                                        title="Estornar separação desta HU"
+                                                                    >
+                                                                        <Undo2 size={13} className="mr-1" /> Estornar
+                                                                    </Button>
+                                                                </TableCell>
                                                             </TableRow>
                                                         ))
                                                     )}
@@ -567,6 +670,95 @@ export default function OutboundPickingPage() {
                     </div>
                 </div>
             )}
+
+            {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO */}
+            <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+                <AlertDialogContent className="bg-white sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-emerald-800">
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Finalizar Separação do Pedido?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                            <span>
+                                Deseja confirmar a finalização física da separação da Ordem <strong className="text-slate-900 font-mono">#{orderData?.orderNumber}</strong>?
+                            </span>
+                            <p className="text-slate-500">
+                                O pedido avançará para a próxima etapa (Conferência se 100% volumes fechados, ou Embalagem/Packing se houver fracionamento).
+                            </p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-2">
+                        <AlertDialogCancel disabled={isFinalizing}>Revisar Mais</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmFinalize}
+                            disabled={isFinalizing}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                        >
+                            {isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Finalização
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* MODAL DE ESTORNO DE HU INDIVIDUAL */}
+            <AlertDialog open={!!huToUndo} onOpenChange={(open) => !open && setHuToUndo(null)}>
+                <AlertDialogContent className="bg-white sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
+                            <Undo2 className="h-5 w-5 text-rose-600" /> Estornar HU Coletada?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                            <span>
+                                Deseja estornar a coleta da HU <strong className="text-slate-900 font-mono">{huToUndo?.lpn}</strong> ({huToUndo?.quantity} un)?
+                            </span>
+                            <p className="text-slate-500">
+                                A etiqueta será devolvida para as sugestões pendentes deste SKU e liberada no armazém.
+                            </p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-2">
+                        <AlertDialogCancel disabled={isUndoingHu}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmUndoHu}
+                            disabled={isUndoingHu}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                        >
+                            {isUndoingHu ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar Estorno
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* MODAL DE RESET GERAL */}
+            <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+                <AlertDialogContent className="bg-white sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
+                            <RotateCcw className="h-5 w-5 text-rose-600" /> Reiniciar Separação Completa?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                            <span>
+                                Deseja cancelar todas as coletas já feitas para a Ordem <strong className="text-slate-900 font-mono">#{orderData?.orderNumber}</strong>?
+                            </span>
+                            <p className="text-slate-500">
+                                Todas as HUs recolhidas retornarão ao estado inicial de reserva (Alocado).
+                            </p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-2">
+                        <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmReset}
+                            disabled={isSubmitting}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                        >
+                            Confirmar Reinício
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

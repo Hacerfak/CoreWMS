@@ -48,6 +48,8 @@ export default function OutboundCheckingPage() {
     const [scannedCode, setScannedCode] = useState('');
     const [scanQuantity, setScanQuantity] = useState('1');
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+    const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = useState(false);
+    const [isFinalizingChecking, setIsFinalizingChecking] = useState(false);
 
     const inputRef = useRef(null);
 
@@ -78,7 +80,7 @@ export default function OutboundCheckingPage() {
             .catch(() => toast.error('Erro ao carregar docas ou detalhes do pedido.'));
     }, [orderId]);
 
-    // 3. Mutações Orval
+    // 3. Mutações
     const { mutate: executeScan, isPending: isScanning } = usePostApiOutboundCheckingScan({
         mutation: {
             onSuccess: (res) => {
@@ -110,6 +112,26 @@ export default function OutboundCheckingPage() {
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao reinicializar conferência.')
         }
     });
+
+    // FINALIZAÇÃO MANUAL DA CONFERÊNCIA
+    const handleConfirmFinalizeChecking = async () => {
+        try {
+            setIsFinalizingChecking(true);
+            const res = await customInstance({
+                url: `/api/outbound/checking/orders/${orderId}/finalize`,
+                method: 'POST',
+                data: { orderId }
+            });
+
+            toast.success(res?.message || 'Conferência finalizada com 0% de divergência! Pedido liberado para expedição.');
+            setIsFinalizeDialogOpen(false);
+            navigate(`/outbound/revisao-fiscal/${orderId}`);
+        } catch (error) {
+            toast.error(error.response?.data?.message || 'Erro ao finalizar conferência.');
+        } finally {
+            setIsFinalizingChecking(false);
+        }
+    };
 
     // Regra de segurança: Bloqueia conferência paralela se houver fracionados pendentes de packing
     const isParallelCheckingBlocked = Boolean(checkingData?.hasFractionalPendingPacking);
@@ -174,7 +196,8 @@ export default function OutboundCheckingPage() {
         );
     }
 
-    const isFullyChecked = checkingData?.isOrderFullyChecked;
+    const isFullyChecked = checkingData?.isOrderFullyChecked && !isParallelCheckingBlocked;
+    const isAlreadyReadyToShip = orderDetails?.status === 'ReadyToShip';
     const percentGlobal = checkingData?.totalExpected > 0
         ? Math.min(100, (checkingData.totalChecked / checkingData.totalExpected) * 100)
         : 0;
@@ -217,13 +240,21 @@ export default function OutboundCheckingPage() {
                         <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-400" /> Reinicializar Conferência
                     </Button>
 
-                    {/* ATALHO EXCLUSIVO PARA AVANÇAR PARA A EXPEDIÇÃO E NOTA FISCAL */}
-                    {isFullyChecked && (
+                    {isFullyChecked && !isAlreadyReadyToShip && (
+                        <Button
+                            onClick={() => setIsFinalizeDialogOpen(true)}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs"
+                        >
+                            <CheckCircle2 size={16} className="mr-1.5" /> Concluir e Liberar Expedição <ArrowRight size={15} className="ml-1" />
+                        </Button>
+                    )}
+
+                    {isAlreadyReadyToShip && (
                         <Button
                             onClick={() => navigate(`/outbound/revisao-fiscal/${orderId}`)}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs"
                         >
-                            <CheckCircle2 size={16} className="mr-1.5" /> Avançar para Expedição & NF-e <ArrowRight size={15} className="ml-1" />
+                            <CheckCircle2 size={16} className="mr-1.5" /> Ir para Revisão Fiscal / NF-e <ArrowRight size={15} className="ml-1" />
                         </Button>
                     )}
                 </div>
@@ -246,7 +277,7 @@ export default function OutboundCheckingPage() {
                 </div>
             )}
 
-            {/* CARD OBRIGATÓRIO DE SELEÇÃO DA DOCA DE CARREGAMENTO */}
+            {/* CARD OBRIGATÓRIO DE SELEÇÃO DA DOCA */}
             <div className={`p-4 rounded-xl border transition-all ${!selectedDockId
                 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-400/20 shadow-xs'
                 : 'bg-white border-slate-200 shadow-2xs'
@@ -298,7 +329,7 @@ export default function OutboundCheckingPage() {
                 </div>
             </div>
 
-            {/* PAINEL DE MÉTRICAS GLOBAIS */}
+            {/* MÉTRICAS GLOBAIS */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex items-center justify-between">
                     <div>
@@ -337,30 +368,28 @@ export default function OutboundCheckingPage() {
                 <Progress value={percentGlobal} className="h-2 bg-slate-100 [&>div]:bg-teal-600" />
             </div>
 
-            {/* BANNER 100% CONFERIDO COM BOTÃO DE EXPEDIÇÃO */}
-            {isFullyChecked && (
+            {/* BANNER 100% CONFERIDO */}
+            {isFullyChecked && !isAlreadyReadyToShip && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-900 shadow-2xs">
                     <div className="flex items-center gap-3">
                         <CheckCircle2 size={24} className="text-emerald-600 shrink-0" />
                         <div>
-                            <strong className="block text-sm font-bold">Conferência 100% Concluída com Sucesso!</strong>
-                            <span>Todos os volumes físicos foram auditados contra o pedido. A ordem foi liberada para revisão tributária e emissão da NF-e.</span>
+                            <strong className="block text-sm font-bold">Conferência Física 100% Validada!</strong>
+                            <span>Revise os volumes na lista abaixo. Clique no botão ao lado para encerrar formalmente a conferência e liberar a expedição fiscal.</span>
                         </div>
                     </div>
                     <Button
-                        onClick={() => navigate(`/outbound/revisao-fiscal/${orderId}`)}
+                        onClick={() => setIsFinalizeDialogOpen(true)}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 shrink-0 shadow-xs"
                     >
-                        Emitir NF-e & Despachar Carga <ArrowRight size={14} className="ml-1.5" />
+                        Concluir e Liberar Expedição <ArrowRight size={14} className="ml-1.5" />
                     </Button>
                 </div>
             )}
 
             {/* ÁREA DE LEITURA (SCANNER) + ITENS */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* COLUNA ESQUERDA: BIPAGEM E ITENS (SKUs) */}
                 <div className="lg:col-span-7 space-y-4">
-                    {/* CARD DO SCANNER */}
                     <Card className="border-teal-200 bg-white shadow-xs">
                         <CardHeader className="p-3 border-b bg-teal-50/50 flex flex-row items-center justify-between">
                             <CardTitle className="text-xs uppercase font-bold text-teal-900 flex items-center gap-1.5">
@@ -486,7 +515,7 @@ export default function OutboundCheckingPage() {
                     </Card>
                 </div>
 
-                {/* COLUNA DIREITA: VOLUMES E TRÍADE DE AUDITORIA */}
+                {/* COLUNA DIREITA: VOLUMES */}
                 <div className="lg:col-span-5 space-y-4">
                     <Card className="border-slate-200/80 bg-white shadow-xs">
                         <CardHeader className="p-3 border-b bg-slate-50/60 flex flex-row items-center justify-between">
@@ -536,7 +565,6 @@ export default function OutboundCheckingPage() {
                                             </div>
                                         </div>
 
-                                        {/* AUDITORIA NOMINAL (TRÍADE) */}
                                         <div className="pt-1.5 border-t border-slate-100 grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-500">
                                             <div>
                                                 <span className="text-slate-400 block uppercase">Separado por:</span>
@@ -556,6 +584,36 @@ export default function OutboundCheckingPage() {
                     </Card>
                 </div>
             </div>
+
+            {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO DA CONFERÊNCIA */}
+            <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+                <AlertDialogContent className="bg-white sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-emerald-800">
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Liberar Expedição do Pedido?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                            <span>
+                                A carga da Ordem <strong className="text-slate-900 font-mono">#{checkingData?.orderNumber}</strong> foi 100% conferida contra os volumes e pedidos com <strong>0% de divergência</strong>.
+                            </span>
+                            <p className="text-slate-500">
+                                Ao confirmar, o status será alterado para <strong>ReadyToShip (Pronto para Expedir)</strong> e o veículo de transporte será posicionado na doca no módulo de Portaria.
+                            </p>
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-2">
+                        <AlertDialogCancel disabled={isFinalizingChecking}>Revisar Mais</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmFinalizeChecking}
+                            disabled={isFinalizingChecking}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                        >
+                            {isFinalizingChecking ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                            Confirmar e Liberar
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* DIÁLOGO CONFIRMAÇÃO RESET */}
             <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>

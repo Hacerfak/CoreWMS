@@ -329,7 +329,16 @@ public class CheckOutboundItemHandler :
             i.ReduceCheckedQuantity(i.CheckedQuantity);
         }
 
-        order.UpdateStatus(OutboundOrderStatus.Checking);
+        // Se a ordem ainda está em separação, ela DEVE continuar como Picking!
+        // Só assume Checking se o picking já foi concluído ou se não estava em Picking.
+        bool hasPendingPicking = order.Items.Any(i => i.PickedQuantity < i.ExpectedQuantity);
+
+        if (!hasPendingPicking && order.Status != OutboundOrderStatus.ReadyToShip)
+        {
+            order.UpdateStatus(OutboundOrderStatus.Checking);
+        }
+        // Se ainda tem picking pendente, mantemos o status atual (Picking) intacto!
+
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { Message = "Toda a conferência do pedido foi resetada.", OrderStatus = order.Status.ToString() });

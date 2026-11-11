@@ -232,11 +232,14 @@ public class PickItemHandler :
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
-        if (order.Status != OutboundOrderStatus.Picking && order.Status != OutboundOrderStatus.Allocated)
+        // Permite separar em Allocated, Picking e Checking (conferência concorrente)
+        if (order.Status != OutboundOrderStatus.Picking &&
+            order.Status != OutboundOrderStatus.Allocated &&
+            order.Status != OutboundOrderStatus.Checking)
         {
             return Results.BadRequest(new
             {
-                Message = $"O pedido está em status '{order.Status}' e não permite finalização de separação."
+                Message = $"O pedido #{order.OrderNumber} está em status '{order.Status}' e não permite separação."
             });
         }
 

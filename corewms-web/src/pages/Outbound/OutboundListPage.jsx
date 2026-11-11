@@ -374,11 +374,13 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {(order.status === 'Allocated' || order.status === 'Picking') && (
+                                            {/* SEPARAÇÃO: Disponível em Allocated, Picking OU Checking (enquanto a separação não estiver finalizada) */}
+                                            {(order.status === 'Allocated' || order.status === 'Picking' || (order.status === 'Checking' && order.items?.some(i => i.pickedQuantity < i.expectedQuantity))) && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => navigate(`/outbound/picking/${order.id}`)}
                                                     className="bg-purple-600 hover:bg-purple-700 text-white shadow-2xs font-medium"
+                                                    title="Separar Pedido"
                                                 >
                                                     <Box className="h-3.5 w-3.5 mr-1" /> Separar
                                                 </Button>
@@ -394,9 +396,7 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {/* Conferência:
-                                                - Sempre disponível quando a ordem atinge 'Checking'
-                                                - Durante 'Picking', disponível apenas se for 100% volumes fechados (sem fracionamento) */}
+                                            {/* CONFERÊNCIA: Disponível quando em Checking OU em Picking de volumes fechados (Cross-docking) */}
                                             {(order.status === 'Checking' || (order.status === 'Picking' && !order.hasFractional)) && (
                                                 <Button
                                                     size="sm"
