@@ -49,6 +49,7 @@ export * from './emitCorrectionLetterCommand';
 export * from './emitOutboundNfeCommand';
 export * from './emitStandaloneNfeCommand';
 export * from './finalizeOrderPackingCommand';
+export * from './finalizeOrderPickingCommand';
 export * from './fiscalDocumentStatus';
 export * from './fiscalDocumentType';
 export * from './fiscalOperationType';
