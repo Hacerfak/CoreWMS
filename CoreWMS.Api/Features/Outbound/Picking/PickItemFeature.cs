@@ -1,8 +1,4 @@
-using System;
-using System.Linq;
 using System.Security.Claims;
-using System.Threading;
-using System.Threading.Tasks;
 using CoreWMS.Api.Features.Billing.Operations;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
@@ -12,10 +8,7 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Picking;
@@ -25,6 +18,11 @@ public record PickItemCommand(
     Guid? OrderItemId,
     string ScannedLpn,
     decimal PickedQuantity,
+    Guid? HandlingServiceId = null
+) : IRequest<IResult>;
+
+public record FinalizeOrderPickingCommand(
+    Guid OrderId,
     Guid? HandlingServiceId = null
 ) : IRequest<IResult>;
 
@@ -38,7 +36,9 @@ public class PickItemCommandValidator : AbstractValidator<PickItemCommand>
     }
 }
 
-public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
+public class PickItemHandler :
+    IRequestHandler<PickItemCommand, IResult>,
+    IRequestHandler<FinalizeOrderPickingCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
@@ -171,7 +171,7 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
         }
         orderItem.AddPickedQuantity(request.PickedQuantity);
 
-        // 3. AUTO-PACKING PARA VOLUMES FECHADOS
+        // 3. AUTO-PACKING PARA VOLUMES FECHADOS (Mantido 100% íntegro)
         bool isFullClosedHu = (request.PickedQuantity == hu.CurrentQuantity);
         if (isFullClosedHu)
         {
@@ -198,42 +198,18 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
             orderItem.AddPackedQuantity(request.PickedQuantity);
         }
 
-        // 4. Avalia transição de status macro
-        bool allPicked = order.Items.All(i => i.PickedQuantity >= i.ExpectedQuantity);
-        bool allPacked = order.Items.All(i => i.PackedQuantity >= i.ExpectedQuantity);
-
-        if (allPicked && allPacked)
-        {
-            order.UpdateStatus(OutboundOrderStatus.Checking);
-        }
-        else if (allPicked)
-        {
-            order.UpdateStatus(OutboundOrderStatus.Packing);
-        }
-        else
+        // 4. ATUALIZAÇÃO SEGURA: Transiciona apenas para 'Picking', sem finalizar automaticamente
+        if (order.Status == OutboundOrderStatus.Allocated)
         {
             order.UpdateStatus(OutboundOrderStatus.Picking);
         }
 
         await _db.SaveChangesAsync(ct);
 
-        // 5. DELEGAÇÃO MODULAR VIA MEDIATR: Se 100% Auto-Packing, cobra a expedição imediatamente
-        if (allPicked && allPacked)
-        {
-            await _mediator.Send(new BillOutboundHandlingCommand(
-                OutboundOrderId: order.Id,
-                OrderNumber: order.OrderNumber,
-                CustomerId: order.CustomerId,
-                HandlingServiceId: request.HandlingServiceId,
-                UsedStretchFilm: false,
-                TriggerType: "Outbound_AutoPacking"
-            ), ct);
-        }
-
         return Results.Ok(new
         {
             Message = $"Recolha de {request.PickedQuantity} do SKU {orderItem.SkuCode} efetuada (LPN: {lpnClean})!" +
-                      (isFullClosedHu ? " [Auto-Packing realizado com sucesso]" : ""),
+                      (isFullClosedHu ? " [Auto-Packing gerado]" : ""),
             OrderItemId = orderItem.Id,
             SkuCode = orderItem.SkuCode,
             PickedQuantity = orderItem.PickedQuantity,
@@ -243,16 +219,92 @@ public class PickItemHandler : IRequestHandler<PickItemCommand, IResult>
             OrderStatus = order.Status.ToString()
         });
     }
+
+    // FINALIZAÇÃO EXPLÍCITA DA SEPARAÇÃO (Invocada pelo botão do coletor)
+    public async Task<IResult> Handle(FinalizeOrderPickingCommand request, CancellationToken ct)
+    {
+        var companyId = _tenant.GetCompanyId();
+
+        var order = await _db.OutboundOrders
+            .Include(o => o.Items).ThenInclude(i => i.Product)
+            .Include(o => o.Volumes)
+            .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
+
+        if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
+
+        if (order.Status != OutboundOrderStatus.Picking && order.Status != OutboundOrderStatus.Allocated)
+        {
+            return Results.BadRequest(new
+            {
+                Message = $"O pedido está em status '{order.Status}' e não permite finalização de separação."
+            });
+        }
+
+        // Validação estrita: Todos os itens foram totalmente recolhidos?
+        var pendingItems = order.Items.Where(i => i.PickedQuantity < i.ExpectedQuantity).ToList();
+        if (pendingItems.Any())
+        {
+            var pendencias = string.Join(", ", pendingItems.Select(i => $"{i.SkuCode} (Faltam {i.ExpectedQuantity - i.PickedQuantity})"));
+            return Results.BadRequest(new
+            {
+                Message = $"Não é possível finalizar a separação. Itens pendentes: {pendencias}."
+            });
+        }
+
+        bool allPacked = order.Items.All(i => i.PackedQuantity >= i.ExpectedQuantity);
+
+        // CASO A: Todos os volumes eram fechados (100% Auto-Packing gerado)
+        if (allPacked)
+        {
+            order.UpdateStatus(OutboundOrderStatus.Checking);
+
+            // Dispara apuração de manuseio do Auto-Packing
+            await _mediator.Send(new BillOutboundHandlingCommand(
+                OutboundOrderId: order.Id,
+                OrderNumber: order.OrderNumber,
+                CustomerId: order.CustomerId,
+                HandlingServiceId: request.HandlingServiceId,
+                UsedStretchFilm: false,
+                TriggerType: "Outbound_AutoPacking"
+            ), ct);
+
+            await _db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                Message = "Separação finalizada! Como todos os volumes são fechados (Auto-Packing), o pedido foi liberado direto para a Conferência de Expedição.",
+                OrderStatus = order.Status.ToString(),
+                SkippedPacking = true
+            });
+        }
+
+        // CASO B: Existem frações que precisam passar pela mesa de Packing
+        order.UpdateStatus(OutboundOrderStatus.Packing);
+        await _db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            Message = "Separação finalizada com sucesso! O pedido foi enviado para a mesa de Embalagem (Packing).",
+            OrderStatus = order.Status.ToString(),
+            SkippedPacking = false
+        });
+    }
 }
 
 public static class OutboundPickingEndpoints
 {
     public static void MapOutboundPickingEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/outbound/picking/scan", async ([FromBody] PickItemCommand cmd, IMediator mediator) =>
+        var group = app.MapGroup("/api/outbound/picking").WithTags("Outbound").RequireAuthorization();
+
+        // Leitura de item/HU
+        group.MapPost("/scan", async ([FromBody] PickItemCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd))
-           .WithTags("Outbound")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Outbound.Manage);
+
+        // Finalização manual do picking
+        group.MapPost("/orders/{orderId:guid}/finalize", async (Guid orderId, [FromBody] FinalizeOrderPickingCommand? cmd, IMediator mediator) =>
+            await mediator.Send((cmd ?? new FinalizeOrderPickingCommand(orderId)) with { OrderId = orderId }))
+            .RequirePermission(Permissions.Outbound.Manage);
     }
 }

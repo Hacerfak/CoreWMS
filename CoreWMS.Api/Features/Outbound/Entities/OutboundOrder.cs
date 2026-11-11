@@ -229,7 +229,7 @@ public class OutboundOrder : AuditableEntity
         RefreshStatusAfterProgress();
     }
 
-    // Máquina de estados que reavalia a ordem após qualquer evento operacional
+    // Máquina de estados: não promove fases automaticamente para frente sem comando explícito
     public void RefreshStatusAfterProgress()
     {
         if (Status == OutboundOrderStatus.Canceled || Status == OutboundOrderStatus.Shipped)
@@ -242,33 +242,28 @@ public class OutboundOrder : AuditableEntity
             return;
         }
 
-        bool allPicked = _items.All(i => i.PickedQuantity >= i.ExpectedQuantity);
-        bool allPacked = _items.All(i => i.PackedQuantity >= i.ExpectedQuantity);
-        bool allChecked = _items.All(i => i.CheckedQuantity >= i.ExpectedQuantity);
-
-        if (allPicked && allPacked && allChecked)
+        // Se estava em ReadyToShip e houve estorno de conferência, regride para Checking
+        if (Status == OutboundOrderStatus.ReadyToShip)
         {
-            Status = OutboundOrderStatus.ReadyToShip;
+            bool allChecked = _items.All(i => i.CheckedQuantity >= i.ExpectedQuantity);
+            if (!allChecked)
+            {
+                Status = OutboundOrderStatus.Checking;
+            }
         }
-        else if (allPicked && allPacked)
+        // Se estava em Checking/Packing e houve estorno de picking, regride para Picking
+        else if (Status == OutboundOrderStatus.Checking || Status == OutboundOrderStatus.Packing)
         {
-            Status = OutboundOrderStatus.Checking;
+            bool allPicked = _items.All(i => i.PickedQuantity >= i.ExpectedQuantity);
+            if (!allPicked)
+            {
+                Status = OutboundOrderStatus.Picking;
+            }
         }
-        else if (allPicked)
-        {
-            Status = OutboundOrderStatus.Packing;
-        }
-        else if (_items.Any(i => i.PickedQuantity > 0))
+        // Início da separação
+        else if (Status == OutboundOrderStatus.Allocated && _items.Any(i => i.PickedQuantity > 0))
         {
             Status = OutboundOrderStatus.Picking;
-        }
-        else if (_items.All(i => i.AllocatedQuantity >= i.ExpectedQuantity))
-        {
-            Status = OutboundOrderStatus.Allocated;
-        }
-        else
-        {
-            Status = OutboundOrderStatus.Pending;
         }
 
         UpdatedAt = DateTime.UtcNow;

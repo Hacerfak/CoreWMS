@@ -1,20 +1,12 @@
-using System;
-using System.Linq;
 using System.Security.Claims;
-using System.Threading;
-using System.Threading.Tasks;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Outbound.Entities;
 using CoreWMS.Api.Features.Outbound.Enums;
-using CoreWMS.Api.Features.Yard.Entities;
 using CoreWMS.Api.Features.Yard.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Outbound.Checking;
@@ -22,27 +14,18 @@ namespace CoreWMS.Api.Features.Outbound.Checking;
 // 1. Escanear Item/HU/Volume
 public record CheckOutboundItemCommand(Guid OrderId, string ScannedCode, decimal? Quantity = null) : IRequest<IResult>;
 
-// 2. Desfazer Leitura Individual
+// 2. Finalização Manual da Conferência (Liberar para Expedição)
+public record FinalizeOrderCheckingCommand(Guid OrderId) : IRequest<IResult>;
+
+// 3. Desfazer Leitura Individual
 public record UndoCheckScanCommand(Guid OrderId, Guid CheckLogId) : IRequest<IResult>;
 
-// 3. Resetar Toda a Conferência da Ordem
+// 4. Resetar Toda a Conferência da Ordem
 public record ResetOrderCheckingCommand(Guid OrderId) : IRequest<IResult>;
-
-public class CheckOutboundItemCommandValidator : AbstractValidator<CheckOutboundItemCommand>
-{
-    public CheckOutboundItemCommandValidator()
-    {
-        RuleFor(x => x.OrderId).NotEmpty().WithMessage("O identificador do pedido é obrigatório.");
-        RuleFor(x => x.ScannedCode).NotEmpty().WithMessage("O código lido é obrigatório.").MaximumLength(100);
-        When(x => x.Quantity.HasValue, () =>
-        {
-            RuleFor(x => x.Quantity!.Value).GreaterThan(0).WithMessage("A quantidade deve ser maior que zero.");
-        });
-    }
-}
 
 public class CheckOutboundItemHandler :
     IRequestHandler<CheckOutboundItemCommand, IResult>,
+    IRequestHandler<FinalizeOrderCheckingCommand, IResult>,
     IRequestHandler<UndoCheckScanCommand, IResult>,
     IRequestHandler<ResetOrderCheckingCommand, IResult>
 {
@@ -73,21 +56,6 @@ public class CheckOutboundItemHandler :
         if (order.Status == OutboundOrderStatus.Canceled || order.Status == OutboundOrderStatus.Shipped)
             return Results.BadRequest(new { Message = "O pedido não se encontra num estado elegível para conferência." });
 
-        // Validação de Segurança Baseada no Indicador Direto "IsFractional"
-        var hasFractionalPendingPacking = await _db.OutboundAllocations
-            .Include(a => a.OutboundOrderItem)
-            .AnyAsync(a => a.OutboundOrderId == order.Id
-                        && a.IsFractional
-                        && a.OutboundOrderItem.Status != OutboundOrderItemStatus.Packed, ct);
-
-        if (hasFractionalPendingPacking && (order.Status == OutboundOrderStatus.Picking || order.Status == OutboundOrderStatus.Packing))
-        {
-            return Results.BadRequest(new
-            {
-                Message = "Este pedido possui itens fracionados pendentes de embalagem. A conferência só é permitida após a finalização do Packing."
-            });
-        }
-
         var codeClean = request.ScannedCode.Trim().ToUpper();
 
         // CASO 1: LPN da HU (Volume Fechado)
@@ -100,7 +68,6 @@ public class CheckOutboundItemHandler :
         {
             if (!allocationByHu.IsPicked)
                 return Results.BadRequest(new { Message = $"A HU {codeClean} ainda não foi recolhida no armazém." });
-
             if (allocationByHu.IsChecked)
                 return Results.BadRequest(new { Message = $"A HU {codeClean} já foi conferida anteriormente por {allocationByHu.CheckedByName}." });
 
@@ -122,18 +89,13 @@ public class CheckOutboundItemHandler :
             );
             _db.OutboundCheckLogs.Add(checkLog);
 
-            order.RefreshStatusAfterProgress();
-
-            // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
-            await PromoteYardAppointmentToDockAsync(order, companyId, ct);
-
+            // Mantém a ordem em Checking durante as bipagens
+            order.UpdateStatus(OutboundOrderStatus.Checking);
             await _db.SaveChangesAsync(ct);
 
             return Results.Ok(new
             {
-                Message = order.Status == OutboundOrderStatus.ReadyToShip
-                    ? $"HU {codeClean} conferida! Conferência 100% concluída para a Ordem #{order.OrderNumber}."
-                    : $"HU {codeClean} conferida com sucesso!",
+                Message = $"HU {codeClean} conferida com sucesso!",
                 OrderItemId = item.Id,
                 SkuCode = item.SkuCode,
                 QuantityCheckedNow = qtyToApply,
@@ -166,31 +128,16 @@ public class CheckOutboundItemHandler :
                     alloc.Quantity, userId, userName, alloc.HandlingUnitId, shippingVol.Id
                 );
                 _db.OutboundCheckLogs.Add(checkLog);
-
-                order.RefreshStatusAfterProgress();
-
-                // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
-                await PromoteYardAppointmentToDockAsync(order, companyId, ct);
-
-                await _db.SaveChangesAsync(ct);
-
-                return Results.Ok(new
-                {
-                    Message = $"Volume {codeClean} conferido com sucesso!",
-                    OrderItemId = item.Id,
-                    SkuCode = item.SkuCode,
-                    TotalChecked = item.CheckedQuantity,
-                    OrderStatus = order.Status.ToString()
-                });
             }
 
-            order.RefreshStatusAfterProgress();
-
-            // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
-            await PromoteYardAppointmentToDockAsync(order, companyId, ct);
-
+            order.UpdateStatus(OutboundOrderStatus.Checking);
             await _db.SaveChangesAsync(ct);
-            return Results.Ok(new { Message = $"Volume de transporte {codeClean} marcado como conferido!", OrderStatus = order.Status.ToString() });
+
+            return Results.Ok(new
+            {
+                Message = $"Volume {codeClean} conferido com sucesso!",
+                OrderStatus = order.Status.ToString()
+            });
         }
 
         // CASO 3: SKU / Código de Barras EAN
@@ -209,9 +156,6 @@ public class CheckOutboundItemHandler :
             if (qtyToAdd > remainingToCheck)
                 return Results.BadRequest(new { Message = $"Quantidade ({qtyToAdd}) excede o saldo pendente de conferência ({remainingToCheck} {targetItem.Product?.BaseUnit ?? "UN"})." });
 
-            if (targetItem.CheckedQuantity + qtyToAdd > targetItem.PickedQuantity)
-                return Results.BadRequest(new { Message = $"Não é possível conferir além do total que já foi separado no armazém ({targetItem.PickedQuantity})." });
-
             targetItem.AddCheckedQuantity(qtyToAdd);
 
             var checkLog = new OutboundCheckLog(
@@ -220,18 +164,12 @@ public class CheckOutboundItemHandler :
             );
             _db.OutboundCheckLogs.Add(checkLog);
 
-            order.RefreshStatusAfterProgress();
-
-            // Gatilho Automático: Promove agendamento da portaria para "Na Doca"
-            await PromoteYardAppointmentToDockAsync(order, companyId, ct);
-
+            order.UpdateStatus(OutboundOrderStatus.Checking);
             await _db.SaveChangesAsync(ct);
 
             return Results.Ok(new
             {
-                Message = order.Status == OutboundOrderStatus.ReadyToShip
-                    ? $"SKU {targetItem.SkuCode} conferido! Ordem #{order.OrderNumber} liberada para expedição."
-                    : $"Conferência de {qtyToAdd} un do SKU {targetItem.SkuCode} registrada!",
+                Message = $"Conferência de {qtyToAdd} un do SKU {targetItem.SkuCode} registrada!",
                 OrderItemId = targetItem.Id,
                 SkuCode = targetItem.SkuCode,
                 QuantityCheckedNow = qtyToAdd,
@@ -243,7 +181,60 @@ public class CheckOutboundItemHandler :
         return Results.BadRequest(new { Message = $"O código lido '{codeClean}' não corresponde a nenhum LPN de HU, Volume ou SKU deste pedido." });
     }
 
-    // Desfaz uma leitura pontual
+    // FINALIZAÇÃO MANUAL DA CONFERÊNCIA
+    public async Task<IResult> Handle(FinalizeOrderCheckingCommand request, CancellationToken ct)
+    {
+        var companyId = _tenant.GetCompanyId();
+
+        var order = await _db.OutboundOrders
+            .Include(o => o.Items).ThenInclude(i => i.Product)
+            .Include(o => o.Volumes)
+            .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
+
+        if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
+
+        if (order.Status != OutboundOrderStatus.Checking)
+        {
+            return Results.BadRequest(new { Message = $"O pedido está em status '{order.Status}' e não pode ser finalizado na conferência." });
+        }
+
+        // 1. Valida se todos os itens bateram 100% com o esperado
+        var uncheckedItems = order.Items.Where(i => i.CheckedQuantity < i.ExpectedQuantity).ToList();
+        if (uncheckedItems.Any())
+        {
+            var pendencias = string.Join(", ", uncheckedItems.Select(i => $"{i.SkuCode} (Faltam {i.ExpectedQuantity - i.CheckedQuantity} {i.Product?.BaseUnit ?? "UN"})"));
+            return Results.BadRequest(new
+            {
+                Message = $"Conferência incompleta. Itens pendentes: {pendencias}."
+            });
+        }
+
+        // 2. Valida se todos os volumes de transporte (se existirem) foram conferidos
+        var uncheckedVolumes = order.Volumes.Where(v => !v.IsChecked).ToList();
+        if (uncheckedVolumes.Any())
+        {
+            var vols = string.Join(", ", uncheckedVolumes.Select(v => v.VolumeLpn));
+            return Results.BadRequest(new
+            {
+                Message = $"Existem volumes de transporte não conferidos na doca: {vols}."
+            });
+        }
+
+        // 3. Promove para ReadyToShip (Apto para Faturamento Fiscal)
+        order.UpdateStatus(OutboundOrderStatus.ReadyToShip);
+
+        // 4. Gatilho Automático: Promove agendamento da portaria para "Na Doca"
+        await PromoteYardAppointmentToDockAsync(order, companyId, ct);
+
+        await _db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            Message = $"Conferência da Ordem #{order.OrderNumber} finalizada com 0% de divergência! Pedido liberado para expedição.",
+            OrderStatus = order.Status.ToString()
+        });
+    }
+
     public async Task<IResult> Handle(UndoCheckScanCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
@@ -273,7 +264,6 @@ public class CheckOutboundItemHandler :
                 .FirstOrDefaultAsync(a => a.OutboundOrderId == order.Id && a.HandlingUnitId == log.HandlingUnitId.Value, ct);
             if (alloc != null)
             {
-                alloc.UpdateQuantity(alloc.Quantity); // Mantém alocação intacta
                 var propIsChecked = typeof(OutboundAllocation).GetProperty("IsChecked");
                 var propCheckedByName = typeof(OutboundAllocation).GetProperty("CheckedByName");
                 var propCheckedAt = typeof(OutboundAllocation).GetProperty("CheckedAt");
@@ -298,13 +288,12 @@ public class CheckOutboundItemHandler :
         }
 
         _db.OutboundCheckLogs.Remove(log);
-        order.RefreshStatusAfterProgress();
+        order.UpdateStatus(OutboundOrderStatus.Checking);
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { Message = "Leitura de conferência desfeita com sucesso!", OrderStatus = order.Status.ToString() });
     }
 
-    // Reseta toda a conferência do pedido
     public async Task<IResult> Handle(ResetOrderCheckingCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
@@ -340,15 +329,12 @@ public class CheckOutboundItemHandler :
             i.ReduceCheckedQuantity(i.CheckedQuantity);
         }
 
-        order.RefreshStatusAfterProgress();
+        order.UpdateStatus(OutboundOrderStatus.Checking);
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { Message = "Toda a conferência do pedido foi resetada.", OrderStatus = order.Status.ToString() });
     }
 
-    // ====================================================================
-    // GATILHO AUTOMÁTICO DE PÁTIO / PORTARIA
-    // ====================================================================
     private async Task PromoteYardAppointmentToDockAsync(OutboundOrder order, Guid companyId, CancellationToken ct)
     {
         var appointment = await _db.YardAppointments
@@ -374,13 +360,21 @@ public static class CheckOutboundItemEndpoints
     {
         var group = app.MapGroup("/api/outbound/checking").WithTags("Outbound").RequireAuthorization();
 
+        // Leitura de conferência
         group.MapPost("/scan", async (CheckOutboundItemCommand cmd, IMediator mediator) => await mediator.Send(cmd))
              .RequirePermission(Permissions.Outbound.Manage);
 
+        // Finalização manual da conferência
+        group.MapPost("/orders/{orderId:guid}/finalize", async (Guid orderId, IMediator mediator) =>
+             await mediator.Send(new FinalizeOrderCheckingCommand(orderId)))
+             .RequirePermission(Permissions.Outbound.Manage);
+
+        // Estorno pontual
         group.MapPost("/orders/{orderId:guid}/undo/{checkLogId:guid}", async (Guid orderId, Guid checkLogId, IMediator mediator) =>
              await mediator.Send(new UndoCheckScanCommand(orderId, checkLogId)))
              .RequirePermission(Permissions.Outbound.Manage);
 
+        // Reset geral da conferência
         group.MapPost("/orders/{orderId:guid}/reset", async (Guid orderId, IMediator mediator) =>
              await mediator.Send(new ResetOrderCheckingCommand(orderId)))
              .RequirePermission(Permissions.Outbound.Manage);

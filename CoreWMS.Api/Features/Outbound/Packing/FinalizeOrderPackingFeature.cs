@@ -183,6 +183,7 @@ public class FinalizeOrderPackingHandler : IRequestHandler<FinalizeOrderPackingC
 
         _db.OutboundVolumes.AddRange(createdShippingVolumes);
         order.StageAtDock(request.DockLocationId);
+        order.UpdateStatus(OutboundOrderStatus.Checking);
 
         await _db.SaveChangesAsync(ct);
 
