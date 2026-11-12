@@ -35,17 +35,24 @@ public class EscalateTaskHandler : IRequestHandler<EscalateTaskCommand, IResult>
         if (task == null)
             return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
-        task.RequestRecount();
-        task.CycleCountPlan.StartCounting();
-
-        await _db.SaveChangesAsync(ct);
-
-        return Results.Ok(new
+        try
         {
-            task.CurrentRound,
-            Status = task.Status.ToString(),
-            Message = $"Recontagem solicitada com sucesso! A tarefa retornou para a Rodada {task.CurrentRound}."
-        });
+            task.RequestRecount(task.CycleCountPlan.MaxRounds);
+            task.CycleCountPlan.ReopenForCounting();
+
+            await _db.SaveChangesAsync(ct);
+
+            return Results.Ok(new
+            {
+                task.CurrentRound,
+                Status = task.Status.ToString(),
+                Message = $"Recontagem solicitada com sucesso! A tarefa retornou para a Rodada {task.CurrentRound}."
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { Message = ex.Message });
+        }
     }
 }
 

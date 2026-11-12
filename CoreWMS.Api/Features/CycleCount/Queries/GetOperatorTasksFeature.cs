@@ -8,18 +8,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.CycleCount.Queries;
 
-public record OperatorTaskDto(
-    Guid Id,
+// DTO 100% CEGO: Expõe apenas o Endereço, Plano, Rodada e Tipo de Armazenagem (Zero informação de SKU/Produto)
+public record BlindOperatorLocationDto(
     Guid PlanId,
     string PlanName,
     Guid LocationId,
     string LocationPath,
-    Guid ProductId,
-    string ProductSku,
-    string ProductDescription,
     int CurrentRound,
     bool IsDynamicStorage,
-    string Status
+    string Status,
+    int PendingTasksCount
 );
 
 public record GetOperatorTasksQuery : IRequest<IResult>;
@@ -46,32 +44,43 @@ public class GetOperatorTasksHandler : IRequestHandler<GetOperatorTasksQuery, IR
         var query = _db.CycleCountTasks.AsNoTracking()
             .Include(t => t.CycleCountPlan)
             .Include(t => t.Location)
-            .Include(t => t.Product)
             .Where(t => t.CycleCountPlan.CompanyId == companyId &&
                         (t.CycleCountPlan.Status == CycleCountPlanStatus.ApprovedForCounting || t.CycleCountPlan.Status == CycleCountPlanStatus.InCounting) &&
                         (t.Status == CycleCountTaskStatus.Pending || t.Status == CycleCountTaskStatus.InCounting));
 
-        // Filtro por Usuário Atribuído (Pool Livre ou Atribuído ao Próprio Usuário)
         query = query.Where(t => !t.AssignedUserId.HasValue || t.AssignedUserId == currentUserId || t.CycleCountPlan.AssignedUserId == currentUserId);
 
-        var tasks = await query
+        var rawTasks = await query
             .OrderBy(t => t.Location.FullPath)
-            .Select(t => new OperatorTaskDto(
+            .Select(t => new
+            {
                 t.Id,
                 t.CycleCountPlanId,
-                t.CycleCountPlan.Name,
+                PlanName = t.CycleCountPlan.Name,
                 t.LocationId,
-                t.Location.FullPath,
-                t.ProductId,
-                t.Product.Sku,
-                t.Product.Description,
+                LocationPath = t.Location.FullPath,
                 t.CurrentRound,
                 t.IsDynamicStorage,
-                t.Status.ToString()
-            ))
+                Status = t.Status.ToString()
+            })
             .ToListAsync(ct);
 
-        return Results.Ok(tasks);
+        var groupedLocations = rawTasks
+            .GroupBy(t => new { t.CycleCountPlanId, t.PlanName, t.LocationId, t.LocationPath, t.IsDynamicStorage })
+            .Select(g => new BlindOperatorLocationDto(
+                g.Key.CycleCountPlanId,
+                g.Key.PlanName,
+                g.Key.LocationId,
+                g.Key.LocationPath,
+                g.Min(x => x.CurrentRound),
+                g.Key.IsDynamicStorage,
+                g.Any(x => x.Status == "InCounting") ? "InCounting" : "Pending",
+                g.Count()
+            ))
+            .OrderBy(x => x.LocationPath)
+            .ToList();
+
+        return Results.Ok(groupedLocations);
     }
 }
 

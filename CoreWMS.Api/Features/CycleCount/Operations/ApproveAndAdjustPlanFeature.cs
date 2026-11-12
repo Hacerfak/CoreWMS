@@ -113,22 +113,22 @@ public class ApproveAndAdjustPlanHandler :
 
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
-        task.MarkAsRecounted();
+        try
+        {
+            task.RequestRecount(task.CycleCountPlan.MaxRounds);
+            task.CycleCountPlan.ReopenForCounting();
+            await _db.SaveChangesAsync(ct);
 
-        var newTask = new CycleCountTask(
-            task.CycleCountPlanId,
-            task.LocationId,
-            task.ProductId,
-            task.ExpectedQuantity,
-            task.IsDynamicStorage,
-            task.CycleCountPlan.AssignedUserId
-        );
-
-        _db.CycleCountTasks.Add(newTask);
-        task.CycleCountPlan.ReopenForCounting();
-
-        await _db.SaveChangesAsync(ct);
-        return Results.Ok(new { Message = "Recontagem solicitada com sucesso!" });
+            return Results.Ok(new
+            {
+                CurrentRound = task.CurrentRound,
+                Message = $"Rodada {task.CurrentRound} liberada para os coletores!"
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { Message = ex.Message });
+        }
     }
 
     public async Task<IResult> Handle(CancelPlanToDraftCommand request, CancellationToken ct)

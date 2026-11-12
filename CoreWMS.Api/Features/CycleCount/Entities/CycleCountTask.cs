@@ -101,7 +101,7 @@ public class CycleCountTask : AuditableEntity
             UserRound3 = userId;
         }
 
-        // É conciliado APENAS se a quantidade bater E não houver divergência de HU
+        // Conciliado APENAS se a quantidade bater E não houver divergência de HU
         if (quantity == ExpectedQuantity && !isHuMismatch)
         {
             Status = CycleCountTaskStatus.Resolved;
@@ -109,33 +109,28 @@ public class CycleCountTask : AuditableEntity
         }
         else
         {
-            if (CurrentRound < maxPlanRounds)
-            {
-                CurrentRound++;
-                CountedQuantity = null;
-                AssignedUserId = null;
-                Status = CycleCountTaskStatus.Pending;
-            }
+            // NUNCA libera a próxima contagem automaticamente: envia para revisão da Gestão
+            Status = CycleCountTaskStatus.CountedWithDivergence;
+
+            if (quantity > ExpectedQuantity)
+                AdjustmentType = AdjustmentType.Surplus_InboundNfe;
+            else if (quantity < ExpectedQuantity)
+                AdjustmentType = AdjustmentType.Shortage_ReturnNfe;
             else
-            {
-                Status = CycleCountTaskStatus.CountedWithDivergence;
-                if (quantity > ExpectedQuantity)
-                    AdjustmentType = AdjustmentType.Surplus_InboundNfe;
-                else if (quantity < ExpectedQuantity)
-                    AdjustmentType = AdjustmentType.Shortage_ReturnNfe;
-                else
-                    AdjustmentType = AdjustmentType.None; // Divergência exclusiva de HU (LPN trocado)
-            }
+                AdjustmentType = AdjustmentType.None; // Divergência exclusiva de HU
         }
 
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void RequestRecount()
+    public void RequestRecount(int maxPlanRounds)
     {
+        if (CurrentRound >= maxPlanRounds)
+            throw new InvalidOperationException($"O limite máximo de {maxPlanRounds} rodada(s) configurado neste plano já foi atingido.");
+
         CurrentRound++;
         CountedQuantity = null;
-        AssignedUserId = null;
+        AssignedUserId = null; // Libera para contagem (ou mantém o AssignedUserId do plano na query)
         Status = CycleCountTaskStatus.Pending;
         AdjustmentType = AdjustmentType.None;
         UpdatedAt = DateTime.UtcNow;
