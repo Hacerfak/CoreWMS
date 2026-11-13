@@ -233,7 +233,12 @@ public class ListQualityEventsHandler :
             q.IsResolved ? q.UpdatedAt : null,
             q.Images
                 .OrderBy(i => i.CreatedAt)
-                .Select(i => new QualityEventImageDetailDto(i.Id, i.FileName, i.FilePath, i.FileSizeBytes, i.CreatedAt))
+                .Select(i => new QualityEventImageDetailDto(
+                    i.Id,
+                    i.FileName,
+                    $"/api/quality/images/{i.Id}",
+                    i.FileSizeBytes,
+                    i.CreatedAt))
                 .ToList()
         );
     }

@@ -17,16 +17,23 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-const resolveImageUrl = (filePath) => {
-    if (!filePath) return '';
-    if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:')) {
-        return filePath;
-    }
+const resolveImageUrl = (img) => {
+    if (!img) return '';
     const base = (
         import.meta.env.VITE_API_URL !== undefined
             ? import.meta.env.VITE_API_URL
             : 'http://localhost:5000'
     ).replace(/\/$/, '');
+
+    if (img.id) {
+        return `${base}/api/quality/images/${img.id}`;
+    }
+
+    const filePath = typeof img === 'string' ? img : img.filePath;
+    if (!filePath) return '';
+    if (filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('data:')) {
+        return filePath;
+    }
     const cleanPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
     return `${base}${cleanPath}`;
 };
@@ -303,7 +310,7 @@ export default function QualityEventDetailsModal({
                                                 </span>
                                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                                     {ev.images.map((img) => {
-                                                        const fullUrl = resolveImageUrl(img.filePath);
+                                                        const fullUrl = resolveImageUrl(img);
                                                         return (
                                                             <button
                                                                 key={img.id}
