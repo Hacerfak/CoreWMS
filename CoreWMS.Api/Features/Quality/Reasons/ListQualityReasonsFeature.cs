@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Quality.Reasons;
 
-public record ListQualityReasonsQuery() : IRequest<IResult>;
+public record ListQualityReasonsQuery(bool? OnlyActive = null) : IRequest<IResult>;
 
 public class ListQualityReasonsHandler : IRequestHandler<ListQualityReasonsQuery, IResult>
 {
@@ -23,9 +23,16 @@ public class ListQualityReasonsHandler : IRequestHandler<ListQualityReasonsQuery
     {
         var companyId = _tenant.GetCompanyId();
 
-        var reasons = await _db.QualityReasons
+        var query = _db.QualityReasons
             .AsNoTracking()
-            .Where(r => r.CompanyId == companyId)
+            .Where(r => r.CompanyId == companyId);
+
+        if (request.OnlyActive == true)
+            query = query.Where(r => r.IsActive);
+
+        var reasons = await query
+            .OrderByDescending(r => r.IsActive)
+            .ThenBy(r => r.Code)
             .Select(r => new QualityReasonDto(r.Id, r.Code, r.Description, r.IsActive))
             .ToListAsync(ct);
 
@@ -37,7 +44,8 @@ public static class ListQualityReasonsEndpoints
 {
     public static void MapListQualityReasonsEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/quality/reasons", async (IMediator mediator) => await mediator.Send(new ListQualityReasonsQuery()))
+        app.MapGet("/api/quality/reasons", async (bool? onlyActive, IMediator mediator) =>
+            await mediator.Send(new ListQualityReasonsQuery(onlyActive)))
            .WithTags("Quality")
            .RequireAuthorization()
            .RequirePermission(Permissions.Inventory.View);
