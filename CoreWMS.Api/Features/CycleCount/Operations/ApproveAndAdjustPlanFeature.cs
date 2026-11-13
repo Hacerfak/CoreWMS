@@ -17,6 +17,7 @@ public record StartTaskCountingCommand(Guid TaskId) : IRequest<IResult>;
 public record CancelTaskCountingCommand(Guid TaskId) : IRequest<IResult>;
 public record RecordPositionCountCommand(Guid TaskId, decimal CountedQuantity) : IRequest<IResult>;
 public record RequestRecountCommand(Guid TaskId) : IRequest<IResult>;
+public record ReleaseLocationNextRoundCommand(Guid PlanId, Guid LocationId) : IRequest<IResult>;
 public record CancelPlanToDraftCommand(Guid PlanId) : IRequest<IResult>;
 public record DeleteCycleCountPlanCommand(Guid PlanId) : IRequest<IResult>;
 public record ApplyFiscalAdjustmentCommand(Guid TaskId, string FiscalDocumentNumber, string? Notes) : IRequest<IResult>;
@@ -27,6 +28,7 @@ public class ApproveAndAdjustPlanHandler :
     IRequestHandler<CancelTaskCountingCommand, IResult>,
     IRequestHandler<RecordPositionCountCommand, IResult>,
     IRequestHandler<RequestRecountCommand, IResult>,
+    IRequestHandler<ReleaseLocationNextRoundCommand, IResult>,
     IRequestHandler<CancelPlanToDraftCommand, IResult>,
     IRequestHandler<DeleteCycleCountPlanCommand, IResult>,
     IRequestHandler<ApplyFiscalAdjustmentCommand, IResult>
@@ -105,30 +107,82 @@ public class ApproveAndAdjustPlanHandler :
         return Results.Ok(new { Message = "Contagem registrada com sucesso." });
     }
 
-    public async Task<IResult> Handle(RequestRecountCommand request, CancellationToken ct)
+    private async Task<IResult> ReleaseNextRoundForLocationAsync(Guid planId, Guid locationId, CancellationToken ct)
     {
-        var task = await _db.CycleCountTasks
-            .Include(t => t.CycleCountPlan)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+        var plan = await _db.CycleCountPlans
+            .Include(p => p.Tasks)
+                .ThenInclude(t => t.Location)
+            .FirstOrDefaultAsync(p => p.Id == planId, ct);
 
-        if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
+        if (plan == null)
+            return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
+
+        var locationTasksQuery = plan.Tasks
+            .Where(t => t.LocationId == locationId && t.Status != CycleCountTaskStatus.Recounted);
+
+        var productIds = plan.ProductIds;
+        bool hasProductFilter = productIds is { Count: > 0 };
+        if (hasProductFilter)
+        {
+            locationTasksQuery = locationTasksQuery.Where(t => productIds!.Contains(t.ProductId));
+        }
+
+        var tasksToReopen = locationTasksQuery.ToList();
+
+        if (!tasksToReopen.Any())
+            return Results.NotFound(new { Message = "Nenhuma tarefa elegível encontrada neste endereço para nova rodada." });
+
+        int nextRound = tasksToReopen.Max(t => t.CurrentRound) + 1;
+
+        if (nextRound > plan.MaxRounds)
+        {
+            return Results.BadRequest(new
+            {
+                Message = $"O limite máximo de {plan.MaxRounds} rodada(s) configurado neste plano já foi atingido para este endereço."
+            });
+        }
 
         try
         {
-            task.RequestRecount(task.CycleCountPlan.MaxRounds);
-            task.CycleCountPlan.ReopenForCounting();
+            foreach (var t in tasksToReopen)
+            {
+                t.ReleaseForNextRound(nextRound, plan.MaxRounds);
+            }
+
+            plan.ReopenForCounting();
             await _db.SaveChangesAsync(ct);
+
+            var locationPath = tasksToReopen.First().Location?.FullPath ?? locationId.ToString();
+            var scopeMsg = hasProductFilter
+                ? $"apenas para o(s) produto(s) filtrado(s) no plano ({tasksToReopen.Count} item(ns))"
+                : $"para todos os itens do endereço ({tasksToReopen.Count} item(ns))";
 
             return Results.Ok(new
             {
-                CurrentRound = task.CurrentRound,
-                Message = $"Rodada {task.CurrentRound} liberada para os coletores!"
+                CurrentRound = nextRound,
+                ReleasedTasksCount = tasksToReopen.Count,
+                Message = $"Rodada {nextRound} liberada no endereço {locationPath} {scopeMsg}!"
             });
         }
         catch (InvalidOperationException ex)
         {
             return Results.BadRequest(new { Message = ex.Message });
         }
+    }
+
+    public async Task<IResult> Handle(ReleaseLocationNextRoundCommand request, CancellationToken ct)
+        => await ReleaseNextRoundForLocationAsync(request.PlanId, request.LocationId, ct);
+
+    public async Task<IResult> Handle(RequestRecountCommand request, CancellationToken ct)
+    {
+        var task = await _db.CycleCountTasks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+
+        if (task == null)
+            return Results.NotFound(new { Message = "Tarefa não encontrada." });
+
+        return await ReleaseNextRoundForLocationAsync(task.CycleCountPlanId, task.LocationId, ct);
     }
 
     public async Task<IResult> Handle(CancelPlanToDraftCommand request, CancellationToken ct)
@@ -236,6 +290,12 @@ public static class ApproveAndAdjustPlanEndpoints
 
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/recount", async (Guid taskId, IMediator mediator) =>
             await mediator.Send(new RequestRecountCommand(taskId)))
+           .WithTags("CycleCount")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Inventory.ManageQuality);
+
+        app.MapPost("/api/cycle-count/locations/{planId:guid}/{locationId:guid}/recount", async (Guid planId, Guid locationId, IMediator mediator) =>
+            await mediator.Send(new ReleaseLocationNextRoundCommand(planId, locationId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
            .RequirePermission(Permissions.Inventory.ManageQuality);

@@ -123,17 +123,22 @@ public class CycleCountTask : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void RequestRecount(int maxPlanRounds)
+    public void ReleaseForNextRound(int targetRound, int maxPlanRounds)
     {
-        if (CurrentRound >= maxPlanRounds)
+        if (targetRound > maxPlanRounds)
             throw new InvalidOperationException($"O limite máximo de {maxPlanRounds} rodada(s) configurado neste plano já foi atingido.");
 
-        CurrentRound++;
+        CurrentRound = targetRound;
         CountedQuantity = null;
-        AssignedUserId = null; // Libera para contagem (ou mantém o AssignedUserId do plano na query)
+        AssignedUserId = null;
         Status = CycleCountTaskStatus.Pending;
         AdjustmentType = AdjustmentType.None;
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void RequestRecount(int maxPlanRounds)
+    {
+        ReleaseForNextRound(CurrentRound + 1, maxPlanRounds);
     }
 
     public void ApplyFiscalAdjustment(string documentNumber, string? notes)

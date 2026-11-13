@@ -1,3 +1,4 @@
+using CoreWMS.Api.Features.CycleCount.Enums;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -30,23 +31,49 @@ public class EscalateTaskHandler : IRequestHandler<EscalateTaskCommand, IResult>
     {
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
+                .ThenInclude(p => p.Tasks)
             .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
 
         if (task == null)
             return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
+        var plan = task.CycleCountPlan;
+        if (plan == null)
+            return Results.NotFound(new { Message = "Plano de contagem não encontrado." });
+
+        var productIds = plan.ProductIds;
+        var locationTasksQuery = plan.Tasks
+            .Where(t => t.LocationId == task.LocationId && t.Status != CycleCountTaskStatus.Recounted);
+
+        bool hasProductFilter = productIds is { Count: > 0 };
+        if (hasProductFilter)
+        {
+            locationTasksQuery = locationTasksQuery.Where(t => productIds.Contains(t.ProductId));
+        }
+
+        var tasksToReopen = locationTasksQuery.ToList();
+
+        if (!tasksToReopen.Any())
+            return Results.NotFound(new { Message = "Nenhuma tarefa elegível encontrada neste endereço para nova rodada." });
+
+        int nextRound = tasksToReopen.Max(t => t.CurrentRound) + 1;
+
         try
         {
-            task.RequestRecount(task.CycleCountPlan.MaxRounds);
-            task.CycleCountPlan.ReopenForCounting();
+            foreach (var t in tasksToReopen)
+            {
+                t.ReleaseForNextRound(nextRound, plan.MaxRounds);
+            }
 
+            plan.ReopenForCounting();
             await _db.SaveChangesAsync(ct);
 
             return Results.Ok(new
             {
-                task.CurrentRound,
-                Status = task.Status.ToString(),
-                Message = $"Recontagem solicitada com sucesso! A tarefa retornou para a Rodada {task.CurrentRound}."
+                CurrentRound = nextRound,
+                ReleasedTasksCount = tasksToReopen.Count,
+                Status = CycleCountTaskStatus.Pending.ToString(),
+                Message = $"Recontagem solicitada com sucesso! Rodada {nextRound} liberada no endereço ({tasksToReopen.Count} item(ns))."
             });
         }
         catch (InvalidOperationException ex)

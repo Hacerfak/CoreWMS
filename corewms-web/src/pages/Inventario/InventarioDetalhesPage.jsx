@@ -43,6 +43,7 @@ export default function InventarioDetalhesPage() {
     const [isCancelPlanModalOpen, setIsCancelPlanModalOpen] = useState(false);
     const [isDeletePlanModalOpen, setIsDeletePlanModalOpen] = useState(false);
     const [isClosePlanModalOpen, setIsClosePlanModalOpen] = useState(false);
+    const [locationRoundToRelease, setLocationRoundToRelease] = useState(null);
 
     const loadPlanDetails = async () => {
         try {
@@ -120,14 +121,22 @@ export default function InventarioDetalhesPage() {
         }
     };
 
-    // Libera explicitamente a próxima rodada (2ª ou 3ª contagem) após revisão da Gestão
-    const handleReleaseNextRound = async (task) => {
+    // Libera explicitamente a próxima rodada (2ª ou 3ª contagem) para o endereço inteiro (respeitando filtros do plano)
+    const handleConfirmReleaseLocationRound = async () => {
+        if (!locationRoundToRelease) return;
+        setIsSubmitting(true);
         try {
-            const res = await customInstance({ url: `/api/cycle-count/tasks/${task.id}/recount`, method: 'POST' });
-            toast.success(res?.message || `Rodada ${task.currentRound + 1} liberada para os coletores!`);
+            const res = await customInstance({
+                url: `/api/cycle-count/locations/${id}/${locationRoundToRelease.locationId}/recount`,
+                method: 'POST'
+            });
+            toast.success(res?.message || `Rodada ${locationRoundToRelease.nextRound} liberada no endereço ${locationRoundToRelease.locationPath}!`);
+            setLocationRoundToRelease(null);
             await loadPlanDetails();
         } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao liberar próxima rodada.');
+            toast.error(err.response?.data?.message || 'Erro ao liberar próxima rodada do endereço.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -180,6 +189,7 @@ export default function InventarioDetalhesPage() {
     const isActivelyBlocked =
         plan.blockMovements &&
         ['ApprovedForCounting', 'InCounting', 'InReview'].includes(String(plan.status));
+    const hasProductFilter = Array.isArray(plan.productIds) && plan.productIds.length > 0;
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -264,7 +274,7 @@ export default function InventarioDetalhesPage() {
                         <BarChart2 size={16} className="text-blue-600" /> Matriz de Conciliação e Liberação de Rodadas
                     </h2>
                     <span className="text-[11px] text-slate-500">
-                        Novas rodadas de recontagem exigem aprovação manual da Gestão após cada contagem.
+                        Novas rodadas são liberadas por endereço, respeitando os filtros de produto do plano.
                     </span>
                 </div>
 
@@ -374,10 +384,16 @@ export default function InventarioDetalhesPage() {
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         {canReleaseNextRound && (
                                                             <Button
-                                                                onClick={() => handleReleaseNextRound(t)}
+                                                                onClick={() =>
+                                                                    setLocationRoundToRelease({
+                                                                        locationId: t.locationId,
+                                                                        locationPath: t.locationPath,
+                                                                        nextRound: t.currentRound + 1
+                                                                    })
+                                                                }
                                                                 size="sm"
                                                                 className="text-xs h-7 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                                                                title={`Liberar ${t.currentRound + 1}ª contagem para os coletores`}
+                                                                title={`Liberar ${t.currentRound + 1}ª contagem no endereço ${t.locationPath}`}
                                                             >
                                                                 <Play size={11} className="mr-1" /> Liberar Rodada {t.currentRound + 1}
                                                             </Button>
@@ -456,6 +472,40 @@ export default function InventarioDetalhesPage() {
                     </Table>
                 </div>
             </div>
+
+            {/* MODAL CONFIRMAÇÃO LIBERAR PRÓXIMA RODADA POR ENDEREÇO */}
+            <AlertDialog open={!!locationRoundToRelease} onOpenChange={(open) => !open && setLocationRoundToRelease(null)}>
+                <AlertDialogContent className="bg-white sm:max-w-md">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                            <Play className="text-blue-600" size={18} />
+                            Liberar Rodada {locationRoundToRelease?.nextRound} no Endereço {locationRoundToRelease?.locationPath}?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                            {hasProductFilter ? (
+                                <span>
+                                    Este plano possui filtro de <strong>produto(s) específico(s)</strong>. A Rodada {locationRoundToRelease?.nextRound} será liberada no endereço <strong className="font-mono text-slate-900">{locationRoundToRelease?.locationPath}</strong> apenas para os SKUs filtrados neste plano.
+                                </span>
+                            ) : (
+                                <span>
+                                    Este plano audita o <strong>endereço completo</strong>. A Rodada {locationRoundToRelease?.nextRound} será liberada para <strong>todos os itens da posição <span className="font-mono text-slate-900">{locationRoundToRelease?.locationPath}</span></strong> para garantir a integridade da contagem cega.
+                                </span>
+                            )}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-2">
+                        <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleConfirmReleaseLocationRound}
+                            disabled={isSubmitting}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                        >
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Confirmar Liberação
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* MODAL TRATAMENTO FISCAL / CONCILIAÇÃO */}
             <Dialog open={!!selectedTaskForFiscal} onOpenChange={(open) => !open && setSelectedTaskForFiscal(null)}>
