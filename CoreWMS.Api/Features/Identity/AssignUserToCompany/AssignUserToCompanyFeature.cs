@@ -8,11 +8,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Identity.Users;
 
-// 1. Request - Atualizado para receber uma lista de depositantes restritos
 public record AssignUserRequest(Guid CompanyId, Guid RoleId, List<Guid>? AllowedCustomerIds);
 public record AssignUserCommand(Guid UserId, Guid CompanyId, Guid RoleId, List<Guid>? AllowedCustomerIds) : IRequest<IResult>;
 
-// 2. Validator
 public class AssignUserCommandValidator : AbstractValidator<AssignUserCommand>
 {
     public AssignUserCommandValidator()
@@ -23,7 +21,6 @@ public class AssignUserCommandValidator : AbstractValidator<AssignUserCommand>
     }
 }
 
-// 3. Handler
 public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
@@ -46,7 +43,6 @@ public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IRe
         if (!await _db.Roles.AnyAsync(r => r.Id == request.RoleId, ct))
             return Results.BadRequest(new { Message = "Perfil não existe." });
 
-        // Validação Inteligente: Se enviou lista de depositantes, garante que todos existem e pertencem a esta empresa
         if (request.AllowedCustomerIds != null && request.AllowedCustomerIds.Any())
         {
             var validCount = await _db.Customers
@@ -56,7 +52,6 @@ public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IRe
                 return Results.BadRequest(new { Message = "Um ou mais depositantes informados são inválidos ou não pertencem a esta empresa." });
         }
 
-        // 1. Lógica do Vínculo de Empresa e Perfil (UserCompanyRole)
         var existingAssignment = await _db.UserCompanyRoles
             .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.CompanyId == request.CompanyId, ct);
 
@@ -67,7 +62,6 @@ public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IRe
 
         _db.UserCompanyRoles.Add(new UserCompanyRole(request.UserId, request.CompanyId, request.RoleId));
 
-        // 2. Lógica da Restrição B2B (UserCustomer) - Só afeta clientes desta empresa
         var currentCustomers = await _db.Set<UserCustomer>()
             .Include(uc => uc.Customer)
             .Where(uc => uc.UserId == request.UserId && uc.Customer.CompanyId == request.CompanyId)
@@ -81,7 +75,8 @@ public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IRe
         if (request.AllowedCustomerIds != null && request.AllowedCustomerIds.Any())
         {
             var newCustomerLinks = request.AllowedCustomerIds
-                .Select(customerId => new UserCustomer(request.UserId, customerId)) // Usando sua entidade real!
+                .Distinct()
+                .Select(customerId => new UserCustomer(request.UserId, customerId))
                 .ToList();
 
             _db.Set<UserCustomer>().AddRange(newCustomerLinks);
@@ -93,21 +88,20 @@ public class AssignUserToCompanyHandler : IRequestHandler<AssignUserCommand, IRe
         return Results.Ok(new
         {
             Message = existingAssignment != null
-            ? "Perfil e vínculos de depositantes atualizados com sucesso!"
-            : "Usuário vinculado com sucesso!"
+                ? "Vínculo de empresa, perfil e depositantes atualizado com sucesso!"
+                : "Usuário vinculado à empresa com sucesso!"
         });
     }
 }
 
-// 4. Endpoint
 public static class AssignUserToCompanyEndpoints
 {
     public static void MapAssignUserToCompanyEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/users/{userId:guid}/companies", async (Guid userId, AssignUserRequest req, IMediator mediator) =>
             await mediator.Send(new AssignUserCommand(userId, req.CompanyId, req.RoleId, req.AllowedCustomerIds)))
-        .WithTags("Users")
-        .RequireAuthorization()
-        .RequirePermission(Permissions.Users.Manage);
+            .WithTags("Users")
+            .RequireAuthorization()
+            .RequirePermission(Permissions.Users.Manage);
     }
 }

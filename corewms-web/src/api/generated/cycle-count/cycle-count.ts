@@ -886,6 +886,66 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getPostApiCycleCountTasksTaskIdRecountMutationOptions(options), queryClient);
     }
+    export const postApiCycleCountLocationsPlanIdLocationIdRecount = (
+    planId: string,
+    locationId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/cycle-count/locations/${planId}/${locationId}/recount`, method: 'POST', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiCycleCountLocationsPlanIdLocationIdRecountMutationKey = () => ['postApiCycleCountLocationsPlanIdLocationIdRecount'] as const;
+
+export const getPostApiCycleCountLocationsPlanIdLocationIdRecountMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountLocationsPlanIdLocationIdRecount>>, TError,PostApiCycleCountLocationsPlanIdLocationIdRecountMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountLocationsPlanIdLocationIdRecount>>, TError,PostApiCycleCountLocationsPlanIdLocationIdRecountMutationVariables, TContext> => {
+
+const mutationKey = getPostApiCycleCountLocationsPlanIdLocationIdRecountMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiCycleCountLocationsPlanIdLocationIdRecount>>, PostApiCycleCountLocationsPlanIdLocationIdRecountMutationVariables> = (props) => {
+          const {planId,locationId} = props ?? {};
+
+          return  postApiCycleCountLocationsPlanIdLocationIdRecount(planId,locationId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiCycleCountLocationsPlanIdLocationIdRecountMutationResult = NonNullable<Awaited<ReturnType<typeof postApiCycleCountLocationsPlanIdLocationIdRecount>>>
+
+    export type PostApiCycleCountLocationsPlanIdLocationIdRecountMutationError = unknown
+    export type PostApiCycleCountLocationsPlanIdLocationIdRecountMutationVariables = {planId: string;locationId: string}
+
+    export const usePostApiCycleCountLocationsPlanIdLocationIdRecount = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiCycleCountLocationsPlanIdLocationIdRecount>>, TError,PostApiCycleCountLocationsPlanIdLocationIdRecountMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiCycleCountLocationsPlanIdLocationIdRecount>>,
+        TError,
+        PostApiCycleCountLocationsPlanIdLocationIdRecountMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiCycleCountLocationsPlanIdLocationIdRecountMutationOptions(options), queryClient);
+    }
     export const postApiCycleCountPlansPlanIdCancel = (
     planId: string,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal

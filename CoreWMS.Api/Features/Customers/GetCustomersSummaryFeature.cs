@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -8,7 +9,11 @@ namespace CoreWMS.Api.Features.Customers;
 
 public record CustomerSummaryDto(Guid Id, string CorporateName, string Cnpj);
 
-public record GetCustomersSummaryQuery : IRequest<IResult>;
+public record GetCustomersSummaryQuery(
+    Guid? CompanyId = null,
+    Guid? UserId = null,
+    bool IsMaster = false
+) : IRequest<IResult>;
 
 public class GetCustomersSummaryHandler : IRequestHandler<GetCustomersSummaryQuery, IResult>
 {
@@ -23,8 +28,27 @@ public class GetCustomersSummaryHandler : IRequestHandler<GetCustomersSummaryQue
 
     public async Task<IResult> Handle(GetCustomersSummaryQuery request, CancellationToken ct)
     {
-        var companyId = _tenant.GetCompanyId();
-        var q = _db.Customers.AsNoTracking().Where(c => c.CompanyId == companyId && c.IsActive);
+        var activeCompanyId = _tenant.GetCompanyId();
+        var targetCompanyId = activeCompanyId;
+
+        if (request.CompanyId.HasValue && request.CompanyId.Value != Guid.Empty && request.CompanyId.Value != activeCompanyId)
+        {
+            if (!request.IsMaster)
+            {
+                bool hasCompanyAccess = request.UserId.HasValue && await _db.UserCompanyRoles
+                    .AsNoTracking()
+                    .AnyAsync(ucr => ucr.UserId == request.UserId.Value && ucr.CompanyId == request.CompanyId.Value, ct);
+
+                if (!hasCompanyAccess)
+                    return Results.Forbid();
+            }
+
+            targetCompanyId = request.CompanyId.Value;
+        }
+
+        var q = _db.Customers
+            .AsNoTracking()
+            .Where(c => c.CompanyId == targetCompanyId && c.IsActive);
 
         if (_tenant.IsPartnerUser())
         {
@@ -45,10 +69,18 @@ public static class GetCustomersSummaryEndpoints
 {
     public static void MapGetCustomersSummaryEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/customers/summary", async (IMediator mediator) =>
-            await mediator.Send(new GetCustomersSummaryQuery()))
-           .WithTags("Customers")
-           .RequireAuthorization()
-           .RequirePermission(Permissions.Customers.View);
+        app.MapGet("/api/customers/summary", async (
+            Guid? companyId,
+            ClaimsPrincipal userPrincipal,
+            IMediator mediator) =>
+        {
+            var isMaster = bool.TryParse(userPrincipal.FindFirst("isMaster")?.Value, out var m) && m;
+            Guid? userId = Guid.TryParse(userPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var uid) ? uid : null;
+
+            return await mediator.Send(new GetCustomersSummaryQuery(companyId, userId, isMaster));
+        })
+        .WithTags("Customers")
+        .RequireAuthorization()
+        .RequirePermission(Permissions.Customers.View);
     }
 }

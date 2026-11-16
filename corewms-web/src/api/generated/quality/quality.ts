@@ -24,10 +24,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BatchReleaseQualityCommand,
   CreateQualityReasonCommand,
   DeleteQualityEventsByHandlingUnitsCommand,
+  GetApiQualityEventsParams,
+  GetApiQualityReasonsParams,
   HoldHandlingUnitCommand,
-  ReleaseHandlingUnitCommand
+  ReleaseHandlingUnitCommand,
+  UpdateQualityReasonCommand
 } from '../model';
 
 import { customInstance } from '../../orval-mutator';
@@ -118,13 +122,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getPostApiQualityReasonsMutationOptions(options), queryClient);
     }
     export const getApiQualityReasons = (
-
+    params?: GetApiQualityReasonsParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/quality/reasons`, method: 'GET', signal
+      {url: `/api/quality/reasons`, method: 'GET',
+        params, signal
     },
       options);
     }
@@ -132,23 +137,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiQualityReasonsQueryKey = () => {
+export const getGetApiQualityReasonsQueryKey = (params?: GetApiQualityReasonsParams,) => {
     return [
-    `/api/quality/reasons`
+    `/api/quality/reasons`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiQualityReasonsQueryOptions = <TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiQualityReasonsQueryOptions = <TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>(params?: GetApiQualityReasonsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiQualityReasonsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiQualityReasonsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiQualityReasons>>> = ({ signal }) => getApiQualityReasons(requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiQualityReasons>>> = ({ signal }) => getApiQualityReasons(params, requestOptions, signal);
 
 
 
@@ -162,7 +167,7 @@ export type GetApiQualityReasonsQueryError = unknown
 
 
 export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>> & Pick<
+ params: undefined |  GetApiQualityReasonsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiQualityReasons>>,
           TError,
@@ -172,7 +177,7 @@ export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApi
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>> & Pick<
+ params?: GetApiQualityReasonsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiQualityReasons>>,
           TError,
@@ -182,15 +187,15 @@ export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApi
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ params?: GetApiQualityReasonsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApiQualityReasons>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ params?: GetApiQualityReasonsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityReasons>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiQualityReasonsQueryOptions(options)
+  const queryOptions = getGetApiQualityReasonsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -202,7 +207,324 @@ export function useGetApiQualityReasons<TData = Awaited<ReturnType<typeof getApi
 
 
 
-export const postApiQualityEventsByHandlingUnitsDelete = (
+export const getApiQualityImagesImageId = (
+    imageId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/images/${imageId}`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiQualityImagesImageIdQueryKey = (imageId: string,) => {
+    return [
+    `/api/quality/images/${imageId}`
+    ] as const;
+    }
+
+
+export const getGetApiQualityImagesImageIdQueryOptions = <TData = Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError = unknown>(imageId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiQualityImagesImageIdQueryKey(imageId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiQualityImagesImageId>>> = ({ signal }) => getApiQualityImagesImageId(imageId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: imageId !== null && imageId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiQualityImagesImageIdQueryResult = NonNullable<Awaited<ReturnType<typeof getApiQualityImagesImageId>>>
+export type GetApiQualityImagesImageIdQueryError = unknown
+
+
+export function useGetApiQualityImagesImageId<TData = Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError = unknown>(
+ imageId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiQualityImagesImageId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiQualityImagesImageId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityImagesImageId<TData = Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError = unknown>(
+ imageId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiQualityImagesImageId>>,
+          TError,
+          Awaited<ReturnType<typeof getApiQualityImagesImageId>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityImagesImageId<TData = Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError = unknown>(
+ imageId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityImagesImageId<TData = Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError = unknown>(
+ imageId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityImagesImageId>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiQualityImagesImageIdQueryOptions(imageId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiQualityEvents = (
+    params?: GetApiQualityEventsParams,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/events`, method: 'GET',
+        params, signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiQualityEventsQueryKey = (params?: GetApiQualityEventsParams,) => {
+    return [
+    `/api/quality/events`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetApiQualityEventsQueryOptions = <TData = Awaited<ReturnType<typeof getApiQualityEvents>>, TError = unknown>(params?: GetApiQualityEventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityEvents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiQualityEventsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiQualityEvents>>> = ({ signal }) => getApiQualityEvents(params, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiQualityEvents>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiQualityEventsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiQualityEvents>>>
+export type GetApiQualityEventsQueryError = unknown
+
+
+export function useGetApiQualityEvents<TData = Awaited<ReturnType<typeof getApiQualityEvents>>, TError = unknown>(
+ params: undefined |  GetApiQualityEventsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityEvents>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiQualityEvents>>,
+          TError,
+          Awaited<ReturnType<typeof getApiQualityEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityEvents<TData = Awaited<ReturnType<typeof getApiQualityEvents>>, TError = unknown>(
+ params?: GetApiQualityEventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityEvents>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiQualityEvents>>,
+          TError,
+          Awaited<ReturnType<typeof getApiQualityEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityEvents<TData = Awaited<ReturnType<typeof getApiQualityEvents>>, TError = unknown>(
+ params?: GetApiQualityEventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityEvents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityEvents<TData = Awaited<ReturnType<typeof getApiQualityEvents>>, TError = unknown>(
+ params?: GetApiQualityEventsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityEvents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiQualityEventsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getApiQualityHandlingUnitsHandlingUnitIdEvents = (
+    handlingUnitId: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/handling-units/${handlingUnitId}/events`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getGetApiQualityHandlingUnitsHandlingUnitIdEventsQueryKey = (handlingUnitId: string,) => {
+    return [
+    `/api/quality/handling-units/${handlingUnitId}/events`
+    ] as const;
+    }
+
+
+export const getGetApiQualityHandlingUnitsHandlingUnitIdEventsQueryOptions = <TData = Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError = unknown>(handlingUnitId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetApiQualityHandlingUnitsHandlingUnitIdEventsQueryKey(handlingUnitId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>> = ({ signal }) => getApiQualityHandlingUnitsHandlingUnitIdEvents(handlingUnitId, requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: handlingUnitId !== null && handlingUnitId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetApiQualityHandlingUnitsHandlingUnitIdEventsQueryResult = NonNullable<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>>
+export type GetApiQualityHandlingUnitsHandlingUnitIdEventsQueryError = unknown
+
+
+export function useGetApiQualityHandlingUnitsHandlingUnitIdEvents<TData = Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError = unknown>(
+ handlingUnitId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>,
+          TError,
+          Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityHandlingUnitsHandlingUnitIdEvents<TData = Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError = unknown>(
+ handlingUnitId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>,
+          TError,
+          Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityHandlingUnitsHandlingUnitIdEvents<TData = Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError = unknown>(
+ handlingUnitId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetApiQualityHandlingUnitsHandlingUnitIdEvents<TData = Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError = unknown>(
+ handlingUnitId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiQualityHandlingUnitsHandlingUnitIdEvents>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetApiQualityHandlingUnitsHandlingUnitIdEventsQueryOptions(handlingUnitId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const postApiQualityReleaseBatch = (
+    batchReleaseQualityCommand: BatchReleaseQualityCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/release-batch`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: batchReleaseQualityCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiQualityReleaseBatchMutationKey = () => ['postApiQualityReleaseBatch'] as const;
+
+export const getPostApiQualityReleaseBatchMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiQualityReleaseBatch>>, TError,PostApiQualityReleaseBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiQualityReleaseBatch>>, TError,PostApiQualityReleaseBatchMutationVariables, TContext> => {
+
+const mutationKey = getPostApiQualityReleaseBatchMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiQualityReleaseBatch>>, PostApiQualityReleaseBatchMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiQualityReleaseBatch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiQualityReleaseBatchMutationResult = NonNullable<Awaited<ReturnType<typeof postApiQualityReleaseBatch>>>
+    export type PostApiQualityReleaseBatchMutationBody = BatchReleaseQualityCommand
+    export type PostApiQualityReleaseBatchMutationError = unknown
+    export type PostApiQualityReleaseBatchMutationVariables = {data: BatchReleaseQualityCommand}
+
+    export const usePostApiQualityReleaseBatch = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiQualityReleaseBatch>>, TError,PostApiQualityReleaseBatchMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiQualityReleaseBatch>>,
+        TError,
+        PostApiQualityReleaseBatchMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiQualityReleaseBatchMutationOptions(options), queryClient);
+    }
+    export const postApiQualityEventsByHandlingUnitsDelete = (
     deleteQualityEventsByHandlingUnitsCommand: DeleteQualityEventsByHandlingUnitsCommand,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
@@ -385,4 +707,184 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiQualityEventsEventIdReleaseMutationOptions(options), queryClient);
+    }
+    export const putApiQualityReasonsId = (
+    id: string,
+    updateQualityReasonCommand: UpdateQualityReasonCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/reasons/${id}`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: updateQualityReasonCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPutApiQualityReasonsIdMutationKey = () => ['putApiQualityReasonsId'] as const;
+
+export const getPutApiQualityReasonsIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiQualityReasonsId>>, TError,PutApiQualityReasonsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof putApiQualityReasonsId>>, TError,PutApiQualityReasonsIdMutationVariables, TContext> => {
+
+const mutationKey = getPutApiQualityReasonsIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putApiQualityReasonsId>>, PutApiQualityReasonsIdMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  putApiQualityReasonsId(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutApiQualityReasonsIdMutationResult = NonNullable<Awaited<ReturnType<typeof putApiQualityReasonsId>>>
+    export type PutApiQualityReasonsIdMutationBody = UpdateQualityReasonCommand
+    export type PutApiQualityReasonsIdMutationError = unknown
+    export type PutApiQualityReasonsIdMutationVariables = {id: string;data: UpdateQualityReasonCommand}
+
+    export const usePutApiQualityReasonsId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putApiQualityReasonsId>>, TError,PutApiQualityReasonsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putApiQualityReasonsId>>,
+        TError,
+        PutApiQualityReasonsIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutApiQualityReasonsIdMutationOptions(options), queryClient);
+    }
+    export const deleteApiQualityReasonsId = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/reasons/${id}`, method: 'DELETE', signal
+    },
+      options);
+    }
+
+
+
+
+export const getDeleteApiQualityReasonsIdMutationKey = () => ['deleteApiQualityReasonsId'] as const;
+
+export const getDeleteApiQualityReasonsIdMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiQualityReasonsId>>, TError,DeleteApiQualityReasonsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteApiQualityReasonsId>>, TError,DeleteApiQualityReasonsIdMutationVariables, TContext> => {
+
+const mutationKey = getDeleteApiQualityReasonsIdMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteApiQualityReasonsId>>, DeleteApiQualityReasonsIdMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteApiQualityReasonsId(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteApiQualityReasonsIdMutationResult = NonNullable<Awaited<ReturnType<typeof deleteApiQualityReasonsId>>>
+
+    export type DeleteApiQualityReasonsIdMutationError = unknown
+    export type DeleteApiQualityReasonsIdMutationVariables = {id: string}
+
+    export const useDeleteApiQualityReasonsId = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteApiQualityReasonsId>>, TError,DeleteApiQualityReasonsIdMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteApiQualityReasonsId>>,
+        TError,
+        DeleteApiQualityReasonsIdMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteApiQualityReasonsIdMutationOptions(options), queryClient);
+    }
+    export const patchApiQualityReasonsIdToggleActive = (
+    id: string,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/quality/reasons/${id}/toggle-active`, method: 'PATCH', signal
+    },
+      options);
+    }
+
+
+
+
+export const getPatchApiQualityReasonsIdToggleActiveMutationKey = () => ['patchApiQualityReasonsIdToggleActive'] as const;
+
+export const getPatchApiQualityReasonsIdToggleActiveMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiQualityReasonsIdToggleActive>>, TError,PatchApiQualityReasonsIdToggleActiveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof patchApiQualityReasonsIdToggleActive>>, TError,PatchApiQualityReasonsIdToggleActiveMutationVariables, TContext> => {
+
+const mutationKey = getPatchApiQualityReasonsIdToggleActiveMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof patchApiQualityReasonsIdToggleActive>>, PatchApiQualityReasonsIdToggleActiveMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  patchApiQualityReasonsIdToggleActive(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PatchApiQualityReasonsIdToggleActiveMutationResult = NonNullable<Awaited<ReturnType<typeof patchApiQualityReasonsIdToggleActive>>>
+
+    export type PatchApiQualityReasonsIdToggleActiveMutationError = unknown
+    export type PatchApiQualityReasonsIdToggleActiveMutationVariables = {id: string}
+
+    export const usePatchApiQualityReasonsIdToggleActive = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof patchApiQualityReasonsIdToggleActive>>, TError,PatchApiQualityReasonsIdToggleActiveMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof patchApiQualityReasonsIdToggleActive>>,
+        TError,
+        PatchApiQualityReasonsIdToggleActiveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPatchApiQualityReasonsIdToggleActiveMutationOptions(options), queryClient);
     }

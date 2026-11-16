@@ -90,7 +90,7 @@ export default function ReviewInbound() {
                                     </TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-bold text-slate-900">{item.expectedQuantity} un</span>
+                                            <span className="font-bold text-slate-900">{item.expectedQuantity}</span>
                                             {item.expectedBatch && <span className="text-[10px] text-slate-500 font-mono">Lote: {item.expectedBatch}</span>}
                                         </div>
                                     </TableCell>

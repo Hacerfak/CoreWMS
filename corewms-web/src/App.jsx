@@ -8,8 +8,10 @@ import SelecaoEmpresa from '@/pages/Login/SelecaoEmpresa';
 import Onboarding from '@/pages/Login/Onboarding';
 import MainLayout from '@/layouts/MainLayout';
 import ClientesList from '@/pages/Clientes/ClientesList';
-import UsuariosList from '@/pages/Usuarios/UsuariosList';
+import UsersList from '@/pages/Usuarios/UsuariosList';
 import PerfisList from '@/pages/Perfis/PerfisList';
+import PerfilFormPage from './pages/Perfis/PerfilPage';
+import UserFormPage from './pages/Usuarios/UsuarioPage';
 import ImpressaoPage from '@/pages/Impressao/ImpressaoPage';
 import AuditoriaPage from '@/pages/Auditoria/AuditoriaPage';
 import EmpresasPage from './pages/Empresas/EmpresasPage';
@@ -161,12 +163,16 @@ export default function App() {
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="users:manage" />}>
-                <Route path="/usuarios" element={<UsuariosList />} />
+                <Route path="/usuarios" element={<UsersList />} />
+                <Route path="/usuarios/novo" element={<UserFormPage />} />
+                <Route path="/usuarios/:id" element={<UserFormPage />} />
                 <Route path="/usuarios/:id/acessos" element={<GerenciarAcessosPage />} />
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="roles:manage" />}>
                 <Route path="/perfis" element={<PerfisList />} />
+                <Route path="/perfis/novo" element={<PerfilFormPage />} />
+                <Route path="/perfis/:id/editar" element={<PerfilFormPage />} />
               </Route>
 
               <Route element={<PermissionGuard requiredPermission="companies:manage" />}>

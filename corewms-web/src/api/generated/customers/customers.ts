@@ -26,6 +26,7 @@ import type {
 import type {
   CreateCustomerCommand,
   GetApiCustomersParams,
+  GetApiCustomersSummaryParams,
   PostApiCustomersConsultSefazCnpjParams,
   UpdateCustomerCommand
 } from '../model';
@@ -471,13 +472,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getPutApiCustomersIdMutationOptions(options), queryClient);
     }
     export const getApiCustomersSummary = (
-
+    params?: GetApiCustomersSummaryParams,
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<void>(
-      {url: `/api/customers/summary`, method: 'GET', signal
+      {url: `/api/customers/summary`, method: 'GET',
+        params, signal
     },
       options);
     }
@@ -485,23 +487,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-export const getGetApiCustomersSummaryQueryKey = () => {
+export const getGetApiCustomersSummaryQueryKey = (params?: GetApiCustomersSummaryParams,) => {
     return [
-    `/api/customers/summary`
+    `/api/customers/summary`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetApiCustomersSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getGetApiCustomersSummaryQueryOptions = <TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>(params?: GetApiCustomersSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetApiCustomersSummaryQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetApiCustomersSummaryQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCustomersSummary>>> = ({ signal }) => getApiCustomersSummary(requestOptions, signal);
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getApiCustomersSummary>>> = ({ signal }) => getApiCustomersSummary(params, requestOptions, signal);
 
 
 
@@ -515,7 +517,7 @@ export type GetApiCustomersSummaryQueryError = unknown
 
 
 export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>> & Pick<
+ params: undefined |  GetApiCustomersSummaryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiCustomersSummary>>,
           TError,
@@ -525,7 +527,7 @@ export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getA
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>> & Pick<
+ params?: GetApiCustomersSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getApiCustomersSummary>>,
           TError,
@@ -535,15 +537,15 @@ export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getA
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ params?: GetApiCustomersSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetApiCustomersSummary<TData = Awaited<ReturnType<typeof getApiCustomersSummary>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ params?: GetApiCustomersSummaryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getApiCustomersSummary>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetApiCustomersSummaryQueryOptions(options)
+  const queryOptions = getGetApiCustomersSummaryQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

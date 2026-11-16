@@ -1,0 +1,337 @@
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useQueryClient } from '@tanstack/react-query';
+import { useGetApiRoles, usePostApiRoles, usePutApiRolesId } from '@/api/generated/roles/roles';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, Shield, Loader2, Save, CheckSquare, Square } from 'lucide-react';
+import { toast } from 'sonner';
+
+// Matriz Completa mapeada de Constants/Permissions.cs
+export const MODULE_PERMISSIONS = [
+    {
+        module: 'Inbound (Recebimento)',
+        permissions: [
+            { id: 'inbound:view', label: 'Visualizar Ordens de Recebimento' },
+            { id: 'inbound:import', label: 'Importar XML de Entrada' },
+            { id: 'inbound:review', label: 'Revisar e Vincular Produtos' },
+            { id: 'inbound:receive', label: 'Operar Recebimento (Coletor)' },
+            { id: 'inbound:manage', label: 'Gerenciar / Cancelar / Estornar' },
+        ]
+    },
+    {
+        module: 'Outbound (Expedição & Packing)',
+        permissions: [
+            { id: 'outbound:view', label: 'Visualizar Pedidos de Saída' },
+            { id: 'outbound:import', label: 'Importar XML / Pedidos de Saída' },
+            { id: 'outbound:manage', label: 'Gerenciar / Alocar / Separar / Expedir' },
+            { id: 'packing:manage', label: 'Operar Empacotamento (Packing)' },
+        ]
+    },
+    {
+        module: 'Estoque, Qualidade & Inventário',
+        permissions: [
+            { id: 'inventory:view', label: 'Visualizar Estoque, Kardex e Contagens' },
+            { id: 'inventory:move', label: 'Movimentar Estoque (HUs / Guarda)' },
+            { id: 'inventory:managequality', label: 'Gerenciar Qualidade, Avarias e Planos de Inventário' },
+            { id: 'inventory:edittraceability', label: 'Editar Rastreabilidade (Lote / Validade)' },
+        ]
+    },
+    {
+        module: 'Portaria & Controle de Pátio',
+        permissions: [
+            { id: 'yard:view', label: 'Visualizar Agenda e Dashboard de Pátio' },
+            { id: 'yard:operate', label: 'Operar Portaria (Check-in, Docas e Check-out)' },
+            { id: 'yard:manage', label: 'Gerenciar Agendamentos, XML e Cancelamentos' },
+        ]
+    },
+    {
+        module: 'Faturamento & Tarifas',
+        permissions: [
+            { id: 'billing:view', label: 'Visualizar Faturamento e Pré-Faturas' },
+            { id: 'billing:manage', label: 'Gerenciar Serviços, Tarifas e Ciclos' },
+        ]
+    },
+    {
+        module: 'Cadastros Base (Depositantes & SKUs)',
+        permissions: [
+            { id: 'customers:view', label: 'Visualizar Clientes / Depositantes' },
+            { id: 'customers:create', label: 'Cadastrar Clientes / Depositantes' },
+            { id: 'customers:edit', label: 'Editar Clientes / Depositantes' },
+            { id: 'customers:delete', label: 'Excluir Clientes / Depositantes' },
+            { id: 'products:view', label: 'Visualizar Produtos / SKUs' },
+            { id: 'products:create', label: 'Cadastrar Produtos / SKUs' },
+            { id: 'products:edit', label: 'Editar Produtos / SKUs' },
+            { id: 'products:delete', label: 'Excluir Produtos / SKUs' },
+        ]
+    },
+    {
+        module: 'Logística & Impressão',
+        permissions: [
+            { id: 'topology:manage', label: 'Gerenciar Armazéns, Zonas e Endereços' },
+            { id: 'printing:manage', label: 'Gerenciar Agentes, Impressoras e Etiquetas ZPL' },
+        ]
+    },
+    {
+        module: 'Segurança, Empresas & Auditoria',
+        permissions: [
+            { id: 'users:manage', label: 'Gerenciar Usuários e Vínculos B2B' },
+            { id: 'roles:manage', label: 'Gerenciar Perfis de Acesso' },
+            { id: 'companies:manage', label: 'Gerenciar Empresas (Multi-Tenant)' },
+            { id: 'audit:view', label: 'Consultar Trilha de Auditoria' },
+            { id: 'profile:update-self', label: 'Permitir Edição do Próprio Perfil' },
+        ]
+    }
+];
+
+const ALL_PERMISSION_IDS = MODULE_PERMISSIONS.flatMap(m => m.permissions.map(p => p.id));
+
+const roleSchema = z.object({
+    name: z.string().min(3, 'O nome do perfil deve ter no mínimo 3 caracteres.'),
+    permissions: z.array(z.string()).min(1, 'Selecione pelo menos uma permissão.')
+});
+
+export default function PerfilFormPage() {
+    const { id } = useParams();
+    const isEdit = Boolean(id);
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
+
+    const { data: roles = [], isLoading: isLoadingRoles } = useGetApiRoles();
+    const currentRole = isEdit ? roles.find(r => r.id === id) : null;
+
+    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+        resolver: zodResolver(roleSchema),
+        defaultValues: { name: '', permissions: [] }
+    });
+
+    const watchedPermissions = watch('permissions') || [];
+
+    useEffect(() => {
+        if (isEdit && currentRole) {
+            reset({
+                name: currentRole.name || '',
+                permissions: currentRole.permissions || []
+            });
+        }
+    }, [isEdit, currentRole, reset]);
+
+    const { mutate: createRole, isPending: isCreating } = usePostApiRoles({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Perfil criado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/roles'] });
+                navigate('/perfis');
+            },
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao criar perfil.')
+        }
+    });
+
+    const { mutate: updateRole, isPending: isUpdating } = usePutApiRolesId({
+        mutation: {
+            onSuccess: () => {
+                toast.success('Perfil atualizado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/roles'] });
+                navigate('/perfis');
+            },
+            onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar perfil.')
+        }
+    });
+
+    const togglePermission = (permId, checked) => {
+        const updated = checked
+            ? [...watchedPermissions, permId]
+            : watchedPermissions.filter(p => p !== permId);
+        setValue('permissions', updated, { shouldValidate: true });
+    };
+
+    const toggleModulePermissions = (group, checked) => {
+        const groupIds = group.permissions.map(p => p.id);
+        const updated = checked
+            ? [...watchedPermissions, ...groupIds.filter(pid => !watchedPermissions.includes(pid))]
+            : watchedPermissions.filter(pid => !groupIds.includes(pid));
+        setValue('permissions', updated, { shouldValidate: true });
+    };
+
+    const handleSelectAllGlobal = (selectAll) => {
+        setValue('permissions', selectAll ? [...ALL_PERMISSION_IDS] : [], { shouldValidate: true });
+    };
+
+    const onSubmit = (data) => {
+        if (isEdit) {
+            updateRole({ id, data });
+        } else {
+            createRole({ data });
+        }
+    };
+
+    const isSaving = isCreating || isUpdating;
+
+    if (isEdit && isLoadingRoles) {
+        return (
+            <div className="h-64 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+        );
+    }
+
+    if (isEdit && !isLoadingRoles && !currentRole) {
+        return (
+            <div className="p-8 text-center space-y-3">
+                <p className="text-sm text-slate-500">Perfil de acesso não encontrado.</p>
+                <Button variant="outline" onClick={() => navigate('/perfis')}>Voltar para Perfis</Button>
+            </div>
+        );
+    }
+
+    return (
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col space-y-6 pb-8 animate-in fade-in duration-300">
+            {/* CABEÇALHO DA PÁGINA DEDICADA */}
+            <div className="flex flex-wrap items-center justify-between bg-white p-5 border border-slate-200/80 rounded-xl shadow-2xs gap-4">
+                <div className="flex items-center gap-3">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => navigate('/perfis')}
+                        className="bg-white"
+                    >
+                        <ArrowLeft size={16} />
+                    </Button>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <Shield className="h-5 w-5 text-blue-600" />
+                            <h1 className="text-xl font-bold text-slate-900">
+                                {isEdit ? `Configurar Perfil: ${currentRole?.name}` : 'Novo Perfil de Acesso'}
+                            </h1>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            Defina o nome do papel e selecione os privilégios concedidos na operação e no portal web.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => navigate('/perfis')}
+                        disabled={isSaving}
+                        className="bg-white h-9 text-xs"
+                    >
+                        Cancelar
+                    </Button>
+                    <Button
+                        type="submit"
+                        disabled={isSaving}
+                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold h-9 text-xs min-w-[150px]"
+                    >
+                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
+                        Salvar Perfil
+                    </Button>
+                </div>
+            </div>
+
+            {/* IDENTIFICAÇÃO DO PERFIL & ATALHOS GLOBAIS */}
+            <div className="bg-white p-5 border border-slate-200/80 rounded-xl shadow-xs flex flex-wrap items-end justify-between gap-4">
+                <div className="space-y-1.5 flex-1 min-w-[260px] max-w-lg">
+                    <Label htmlFor="role-name" className="text-xs font-bold uppercase text-slate-700">
+                        Nome do Perfil *
+                    </Label>
+                    <Input
+                        id="role-name"
+                        placeholder="Ex: Operador de Coletor, Supervisor Logístico, Cliente B2B..."
+                        {...register('name')}
+                        className={`bg-white h-10 text-sm ${errors.name ? 'border-rose-500' : ''}`}
+                    />
+                    {errors.name && <p className="text-xs text-rose-600">{errors.name.message}</p>}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                    <Badge className="bg-blue-50 text-blue-800 border-blue-200 h-9 px-3 text-xs font-mono">
+                        {watchedPermissions.length} de {ALL_PERMISSION_IDS.length} selecionada(s)
+                    </Badge>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSelectAllGlobal(true)}
+                        className="h-9 text-xs bg-white"
+                    >
+                        <CheckSquare size={14} className="mr-1.5 text-emerald-600" /> Marcar Tudo
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSelectAllGlobal(false)}
+                        className="h-9 text-xs bg-white"
+                    >
+                        <Square size={14} className="mr-1.5 text-slate-400" /> Limpar Tudo
+                    </Button>
+                </div>
+            </div>
+
+            {errors.permissions && (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 font-semibold">
+                    {errors.permissions.message}
+                </div>
+            )}
+
+            {/* MATRIZ DE PERMISSÕES POR MÓDULO */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {MODULE_PERMISSIONS.map((group) => {
+                    const groupIds = group.permissions.map(p => p.id);
+                    const isAllSelected = groupIds.every(pid => watchedPermissions.includes(pid));
+
+                    return (
+                        <div key={group.module} className="bg-white rounded-xl border border-slate-200/80 shadow-2xs flex flex-col">
+                            <div className="flex items-center justify-between p-3.5 border-b border-slate-100 bg-slate-50/60 rounded-t-xl">
+                                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                                    {group.module}
+                                </h3>
+                                <label className="flex items-center gap-2 cursor-pointer text-[11px] font-medium text-slate-600">
+                                    <span>Marcar módulo</span>
+                                    <Checkbox
+                                        checked={isAllSelected}
+                                        onCheckedChange={(checked) => toggleModulePermissions(group, checked)}
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="p-3 flex flex-col gap-1.5">
+                                {group.permissions.map((perm) => {
+                                    const isChecked = watchedPermissions.includes(perm.id);
+                                    return (
+                                        <label
+                                            key={perm.id}
+                                            className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${isChecked
+                                                ? 'bg-blue-50/80 border-blue-200 text-blue-950'
+                                                : 'bg-transparent border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Checkbox
+                                                    checked={isChecked}
+                                                    onCheckedChange={(checked) => togglePermission(perm.id, checked)}
+                                                />
+                                                <span>{perm.label}</span>
+                                            </div>
+                                            <span className="font-mono text-[10px] text-slate-400">{perm.id}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </form>
+    );
+}
