@@ -26,28 +26,29 @@ public class PrintHub : Hub<IPrintClient>
         var httpContext = Context.GetHttpContext();
         var apiKey = httpContext?.Request.Headers["X-Api-Key"].ToString();
 
-        if (string.IsNullOrEmpty(apiKey))
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            apiKey = httpContext?.Request.Query["apiKey"].ToString();
+            Context.Abort();
+            return;
         }
 
-        if (!string.IsNullOrEmpty(apiKey))
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var agent = await db.PrintAgents
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ApiKey == apiKey && a.IsActive);
+
+        if (agent == null)
         {
-            // 1. Registra no rastreador para dar o status "Online" no painel
-            _connectionManager.AddConnection(Context.ConnectionId, apiKey);
-
-            // 2. RECUPERA O ERRO: Coloca o Agente de volta no Grupo de impressão de forma assíncrona!
-            using var scope = _serviceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-            var agent = await db.PrintAgents.FirstOrDefaultAsync(a => a.ApiKey == apiKey);
-
-            if (agent != null)
-            {
-                var agentGroup = $"agent:{agent.Name.ToLower()}";
-                await Groups.AddToGroupAsync(Context.ConnectionId, agentGroup);
-            }
+            Context.Abort();
+            return;
         }
+
+        _connectionManager.AddConnection(Context.ConnectionId, apiKey);
+
+        var agentGroup = $"agent:{agent.Name.ToLower()}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, agentGroup);
 
         await base.OnConnectedAsync();
     }

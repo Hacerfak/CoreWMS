@@ -24,7 +24,12 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 
     public string GenerateToken(User user)
     {
-        var secret = _configuration["JwtSettings:Secret"] ?? "SuperSecretKeyThatNeedsToBeAtLeast32BytesLong!";
+        var secret = _configuration["JwtSettings:Secret"];
+        if (string.IsNullOrWhiteSpace(secret) || secret.Length < 32)
+        {
+            throw new InvalidOperationException("Configuração crítica ausente: 'JwtSettings:Secret' deve possuir ao menos 32 caracteres.");
+        }
+
         var issuer = _configuration["JwtSettings:Issuer"] ?? "CoreWMS";
         var audience = _configuration["JwtSettings:Audience"] ?? "CoreWMS.Users";
         var expirationMinutes = _configuration.GetValue<int?>("JwtSettings:ExpirationMinutes") ?? 60;

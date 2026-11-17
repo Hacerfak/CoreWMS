@@ -10,8 +10,9 @@ public class User : AuditableEntity
     public bool IsMaster { get; private set; }
     public string? RefreshToken { get; private set; }
     public DateTime? RefreshTokenExpiryTime { get; private set; }
-
-    // Relação com as empresas e perfis
+    // Controle de bloqueio contra força bruta
+    public int FailedLoginAttempts { get; private set; }
+    public DateTime? LockoutEnd { get; private set; }
     private readonly List<UserCompanyRole> _userCompanyRoles = new();
     public IReadOnlyCollection<UserCompanyRole> UserCompanyRoles => _userCompanyRoles.AsReadOnly();
     public ICollection<UserCustomer> UserCustomers { get; private set; } = new List<UserCustomer>();
@@ -26,17 +27,31 @@ public class User : AuditableEntity
         IsMaster = isMaster;
     }
 
-    // Método para vincular o usuário a um CNPJ com um perfil específico
+    public bool IsLockedOut() => LockoutEnd.HasValue && LockoutEnd.Value > DateTime.UtcNow;
+
+    public void RegisterFailedLogin(int maxAttempts = 5, int lockoutMinutes = 15)
+    {
+        FailedLoginAttempts++;
+        if (FailedLoginAttempts >= maxAttempts)
+        {
+            LockoutEnd = DateTime.UtcNow.AddMinutes(lockoutMinutes);
+        }
+    }
+
+    public void ResetLoginFailures()
+    {
+        FailedLoginAttempts = 0;
+        LockoutEnd = null;
+    }
+
     public void AssignToCompany(Guid companyId, Guid roleId)
     {
-        // Regra de negócio: evitar duplicidade de vínculo no mesmo CNPJ com a mesma Role
         if (!_userCompanyRoles.Any(x => x.CompanyId == companyId && x.RoleId == roleId))
         {
             _userCompanyRoles.Add(new UserCompanyRole(Id, companyId, roleId));
         }
     }
 
-    // Método para atualizar os dados básicos do usuário
     public void UpdateDetails(string name, string email)
     {
         Name = name;
@@ -46,6 +61,7 @@ public class User : AuditableEntity
     public void UpdatePassword(string passwordHash)
     {
         PasswordHash = passwordHash;
+        ResetLoginFailures();
     }
 
     public void SetRefreshToken(string token, DateTime expiryTime)

@@ -6,10 +6,18 @@ namespace CoreWMS.Api.Infrastructure.Security;
 public static class CryptoService
 {
     // Hashing da chave via SHA-256 garante que a chave do AES possua EXATAMENTE 32 bytes (256 bits)
-    private static readonly byte[] Key = SHA256.HashData(Encoding.UTF8.GetBytes(
-        Environment.GetEnvironmentVariable("CryptoSettings__Key")
-        ?? "CoreWMS_AES_256_EncryptionKey_Default_Passphrase_32_Bytes"
-    ));
+    private static readonly byte[] Key = InitializeKey();
+
+    private static byte[] InitializeKey()
+    {
+        var rawKey = Environment.GetEnvironmentVariable("CryptoSettings__Key");
+        if (string.IsNullOrWhiteSpace(rawKey) || rawKey.Length < 32)
+        {
+            throw new InvalidOperationException("Configuração crítica ausente: 'CryptoSettings__Key' deve possuir ao menos 32 caracteres.");
+        }
+
+        return SHA256.HashData(Encoding.UTF8.GetBytes(rawKey));
+    }
 
     public static string Encrypt(string plainText)
     {

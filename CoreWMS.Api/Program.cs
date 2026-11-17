@@ -1,46 +1,46 @@
-using System.Text;
 using System.Data;
-using Npgsql;
+using System.Text;
+using System.Threading.RateLimiting;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Audit;
 using CoreWMS.Api.Infrastructure.Auth;
+using CoreWMS.Api.Infrastructure.Behaviors;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Exceptions;
 using CoreWMS.Api.Infrastructure.Extensions;
-using CoreWMS.Api.Infrastructure.Storage;
-using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
-using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
 using CoreWMS.Api.Infrastructure.Fiscal.Configuration;
+using CoreWMS.Api.Infrastructure.Fiscal.Emissao;
+using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Fiscal.Queries;
 using CoreWMS.Api.Infrastructure.Printing;
 using CoreWMS.Api.Infrastructure.Security;
-using CoreWMS.Api.Infrastructure.Services.Inventory;
 using CoreWMS.Api.Infrastructure.Services.Billing;
 using CoreWMS.Api.Infrastructure.Services.Email;
+using CoreWMS.Api.Infrastructure.Services.Inventory;
+using CoreWMS.Api.Infrastructure.Storage;
+using CoreWMS.Api.Infrastructure.Swagger;
+using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using MongoDB.Driver;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Bson.Serialization.Serializers;
-using FluentValidation;
-using CoreWMS.Api.Infrastructure.Behaviors;
-using CoreWMS.Api.Infrastructure.Exceptions;
-using CoreWMS.Api.Infrastructure.Swagger;
+using MongoDB.Driver;
+using Npgsql;
 
 AppContext.SetSwitch("Npgsql.EnableGSS", false);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Configurações Locais de Ambiente
+// 1. Configurações de Ambiente (appsettings + Variáveis do Docker Compose)
 builder.Configuration
     .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
-    .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 
 BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard));
@@ -48,37 +48,74 @@ BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.Standard
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 
-// 2. Política Estrita de CORS
+// Configuração de Proxy Reverso (Nginx -> Kestrel) para identificar o IP real do cliente
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// 2. Política Estrita de CORS (100% orientada por variável de ambiente Cors__AllowedOrigins)
+var corsOriginsRaw = builder.Configuration["Cors:AllowedOrigins"];
+var configuredOrigins = !string.IsNullOrWhiteSpace(corsOriginsRaw)
+    ? corsOriginsRaw.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+
+var allowedOrigins = configuredOrigins
+    .Select(o => o.Trim().TrimEnd('/'))
+    .Where(o => !string.IsNullOrWhiteSpace(o))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
+if (allowedOrigins.Length == 0)
+    throw new InvalidOperationException("ERRO DE SEGURANÇA: A variável 'Cors__AllowedOrigins' deve conter ao menos uma origem permitida.");
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("CoreWmsCorsPolicy", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://app.corewms.com.br")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
     });
 });
 
-// 3. Otimização de Rate Limiting por Tipo de Operação
+// 3. Rate Limiting Particionado por IP
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    // Login: 5 tentativas/minuto
-    options.AddFixedWindowLimiter("loginPolicy", opt =>
+    options.OnRejected = async (context, token) =>
     {
-        opt.PermitLimit = 5;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            Message = "Muitas tentativas em um curto período. Aguarde 1 minuto e tente novamente."
+        }, token);
+    };
+
+    options.AddPolicy("loginPolicy", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
     });
 
-    // Refresh Token: 10 tentativas/minuto
-    options.AddFixedWindowLimiter("refreshPolicy", opt =>
+    options.AddPolicy("refreshPolicy", httpContext =>
     {
-        opt.PermitLimit = 10;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(clientIp, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 15,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
     });
 });
 
@@ -89,14 +126,14 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
     options.SerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
 });
 
-// 4. Arquitetura de Auditoria Assíncrona via Channel
+// 4. Arquitetura de Auditoria e Faturamento Assíncronos via Channel
 builder.Services.AddSingleton<AuditChannel>();
 builder.Services.AddHostedService<MongoAuditWorker>();
 
 builder.Services.AddSingleton<BillingChannel>();
 builder.Services.AddHostedService<BillingBackgroundWorker>();
 
-// Banco de Dados PostgreSQL
+// Banco de Dados PostgreSQL e MongoDB
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 
@@ -104,38 +141,38 @@ builder.Services.AddSingleton<IMongoClient>(sp =>
     new MongoClient(builder.Configuration.GetConnectionString("MongoDb")));
 
 // Serviços de Segurança e Cache
-builder.Services.AddScoped<JwtTokenGenerator>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddMemoryCache();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IPermissionCacheService, PermissionCacheService>();
 
-// 1. Registra o Tratamento Global de Exceções
+// Tratamento Global de Exceções e Pipeline MediatR
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
-// 2. Registra todos os Validadores do projeto automaticamente
 builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
-// 3. Adiciona o MediatR junto com o Interceptador de Validação
 builder.Services.AddMediatR(cfg =>
 {
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
     cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
 });
 
+// Serviços Fiscais (SEFAZ / NF-e)
 builder.Services.AddSingleton<IZeusConfigurator, ZeusConfigurator>();
 builder.Services.AddScoped<ISefazConsultaCadastroService, SefazConsultaCadastroService>();
 builder.Services.AddScoped<ISefazStatusServicoService, SefazStatusServicoService>();
 builder.Services.AddScoped<ISefazDistDFeService, SefazDistDFeService>();
+builder.Services.AddSingleton<INfeParserService, NfeParserService>();
+builder.Services.AddScoped<NfeBuilderService>();
 
+// Impressão Térmica e E-mail
 builder.Services.AddScoped<IPrintService, PrintService>();
 builder.Services.AddSingleton<IPrintConnectionManager, PrintConnectionManager>();
 builder.Services.AddSingleton<IZplTemplateEngine, ZplTemplateEngine>();
-
 builder.Services.AddScoped<IEmailSenderService, CompanyEmailSenderService>();
 
-// Módulo de Performance e Inventário (Infraestrutura)
+// Performance, Inventário, Armazenamento e Faturamento
 builder.Services.AddSingleton<KardexChannel>();
 builder.Services.AddHostedService<KardexWorker>();
 builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
@@ -143,17 +180,18 @@ builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
 builder.Services.AddHostedService<ImageStorageCleanupWorker>();
 builder.Services.AddScoped<ILocalImageStorageService, LocalImageStorageService>();
 
-builder.Services.AddSingleton<INfeParserService, NfeParserService>();
-builder.Services.AddScoped<NfeBuilderService>();
-
 builder.Services.AddScoped<IDbConnection>(sp =>
     new NpgsqlConnection(builder.Configuration.GetConnectionString("Postgres")));
 
-builder.Services.AddScoped<CoreWMS.Api.Infrastructure.Services.Billing.BillingEngineService>();
+builder.Services.AddScoped<BillingEngineService>();
 
+// Validação de Chaves Críticas na Inicialização
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
-    throw new InvalidOperationException("ERRO DE SEGURANÇA: A chave 'JwtSettings:Secret' deve conter no mínimo 32 caracteres.");
+    throw new InvalidOperationException("ERRO DE SEGURANÇA: A variável 'JwtSettings__Secret' deve conter no mínimo 32 caracteres.");
+
+var jwtIssuer = builder.Configuration["JwtSettings:Issuer"] ?? "CoreWMS";
+var jwtAudience = builder.Configuration["JwtSettings:Audience"] ?? "CoreWMS.Users";
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -164,8 +202,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = "CoreWMS",
-            ValidAudience = "CoreWMS.Users",
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            ClockSkew = TimeSpan.FromMinutes(1),
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
         };
     });
@@ -193,48 +232,42 @@ var app = builder.Build();
 
 await DatabaseSeeder.SeedAsync(app.Services);
 
-var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
-if (!Directory.Exists(uploadsPath))
-{
-    Directory.CreateDirectory(uploadsPath);
-}
+// 1. Cabeçalhos de Proxy Reverso (Sempre primeiro)
+app.UseForwardedHeaders();
 
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
-});
+// 2. Tratamento Global de Exceções
+app.UseExceptionHandler();
 
-// 5. Middleware de Security Headers
+// 3. Security Headers
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Append("X-Frame-Options", "DENY");
-    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
     context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     await next();
 });
 
+// 4. CORS e Rate Limiter
 app.UseCors("CoreWmsCorsPolicy");
 app.UseRateLimiter();
-app.UseStaticFiles();
 
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// 5. Swagger restrito apenas ao ambiente de Desenvolvimento
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CoreWMS API v1");
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "CoreWMS API v1");
+    });
+}
 
+// 6. Autenticação e Autorização
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseExceptionHandler();
 
-// =================================================================================
-// 🔥 MAGIA DO EXTENSION METHOD: Varre as DLLs e injeta todas as rotas (Endpoints)
-// =================================================================================
+// 7. Mapeamento Automático dos Endpoints e SignalR
 app.MapAllEndpoints();
-
-// Hub do SignalR continua sendo mapeado à parte
 app.MapHub<PrintHub>("/hubs/print").AllowAnonymous();
 
 app.Run();

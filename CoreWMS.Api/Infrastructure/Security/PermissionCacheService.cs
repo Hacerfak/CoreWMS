@@ -20,7 +20,7 @@ public class PermissionCacheService : IPermissionCacheService
     public void InvalidateUserCompanyCache(Guid userId, Guid companyId)
     {
         _cache.Remove($"perm:{userId}:{companyId}");
-        _cache.Remove($"user_customers:{userId}");
+        _cache.Remove($"user_customers:{userId}:{companyId}");
     }
 
     public void InvalidateUserAllCompaniesCache(Guid userId)

@@ -43,12 +43,32 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken ct)
     {
         var emailLower = request.Email.Trim().ToLower();
+
         var user = await _db.Users
             .FirstOrDefaultAsync(u => u.Email.ToLower() == emailLower, ct);
 
+        if (user != null && user.IsLockedOut())
+        {
+            var remainingMinutes = Math.Max(1, (int)Math.Ceiling((user.LockoutEnd!.Value - DateTime.UtcNow).TotalMinutes));
+            throw new UnauthorizedAccessException($"Conta temporariamente bloqueada por excesso de tentativas. Tente novamente em {remainingMinutes} minuto(s).");
+        }
+
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
+            if (user != null)
+            {
+                user.RegisterFailedLogin();
+                await _db.SaveChangesAsync(ct);
+            }
+
+            // Atraso fixo reduz enumeração de e-mails por tempo de resposta
+            await Task.Delay(350, ct);
             throw new UnauthorizedAccessException("E-mail ou senha inválidos.");
+        }
+
+        if (user.FailedLoginAttempts > 0 || user.LockoutEnd.HasValue)
+        {
+            user.ResetLoginFailures();
         }
 
         List<CompanyLoginDto> userCompanies;
@@ -56,6 +76,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         {
             userCompanies = await _db.Companies
                 .AsNoTracking()
+                .Where(c => c.IsActive)
                 .Select(c => new CompanyLoginDto(c.Id, c.Cnpj, c.CorporateName))
                 .ToListAsync(ct);
         }
@@ -63,13 +84,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
         {
             userCompanies = await _db.UserCompanyRoles
                 .AsNoTracking()
-                .Where(ucr => ucr.UserId == user.Id)
+                .Where(ucr => ucr.UserId == user.Id && ucr.Company.IsActive)
                 .Select(ucr => new CompanyLoginDto(ucr.Company.Id, ucr.Company.Cnpj, ucr.Company.CorporateName))
                 .Distinct()
                 .ToListAsync(ct);
         }
 
-        // Gera o JWT ultraleve sem poluir o cabeçalho HTTP com coleções
         var token = _jwt.GenerateToken(user);
         var refreshToken = _jwt.GenerateRefreshToken();
 
