@@ -80,7 +80,10 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
             .Include(o => o.Items).ThenInclude(i => i.Product)
             .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.Id == request.OrderId, ct);
 
-        if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
+        if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
+
+        if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
+            return Results.Forbid();
 
         var destState = !string.IsNullOrWhiteSpace(order.DestinationState)
             ? order.DestinationState.Trim().ToUpper()

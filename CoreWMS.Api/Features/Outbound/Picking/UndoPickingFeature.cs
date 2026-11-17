@@ -152,12 +152,12 @@ public static class UndoPickingEndpoints
         group.MapPost("/orders/{orderId:guid}/undo/{allocationId:guid}",
             async (Guid orderId, Guid allocationId, IMediator mediator) =>
                 await mediator.Send(new UndoPickAllocationCommand(orderId, allocationId)))
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Outbound.Pick);
 
         // Reset geral da separação do pedido
         group.MapPost("/orders/{orderId:guid}/reset",
             async (Guid orderId, IMediator mediator) =>
                 await mediator.Send(new ResetOrderPickingCommand(orderId)))
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Outbound.Pick);
     }
 }

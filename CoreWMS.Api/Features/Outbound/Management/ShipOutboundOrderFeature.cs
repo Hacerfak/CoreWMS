@@ -125,6 +125,6 @@ public static class ShipOutboundOrderEndpoints
                 await mediator.Send(new ShipOutboundOrderCommand(orderId)))
            .WithTags("Outbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.Manage);
+           .RequirePermission(Permissions.Outbound.Ship);
     }
 }

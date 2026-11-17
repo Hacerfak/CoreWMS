@@ -51,6 +51,9 @@ public class RollbackInboundOrderHandler : IRequestHandler<RollbackInboundOrderC
 
         if (order == null) return Results.NotFound();
 
+        if (_tenant.IsPartnerUser() && (!order.CustomerId.HasValue || !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId.Value)))
+            return Results.Forbid();
+
         var generatedHus = await _db.HandlingUnits
             .Where(h => h.CompanyId == companyId && h.ReceiptDocumentId == order.Id)
             .ToListAsync(ct);

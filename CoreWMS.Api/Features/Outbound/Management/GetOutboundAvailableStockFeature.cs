@@ -61,6 +61,9 @@ public class GetOutboundAvailableStockHandler : IRequestHandler<GetOutboundAvail
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
 
+        if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
+            return Results.Forbid();
+
         var product = await _db.Products
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == request.ProductId && p.CompanyId == companyId, ct);

@@ -371,21 +371,21 @@ public static class CheckOutboundItemEndpoints
 
         // Leitura de conferência
         group.MapPost("/scan", async (CheckOutboundItemCommand cmd, IMediator mediator) => await mediator.Send(cmd))
-             .RequirePermission(Permissions.Outbound.Manage);
+             .RequirePermission(Permissions.Outbound.Check);
 
         // Finalização manual da conferência
         group.MapPost("/orders/{orderId:guid}/finalize", async (Guid orderId, IMediator mediator) =>
              await mediator.Send(new FinalizeOrderCheckingCommand(orderId)))
-             .RequirePermission(Permissions.Outbound.Manage);
+             .RequirePermission(Permissions.Outbound.Check);
 
         // Estorno pontual
         group.MapPost("/orders/{orderId:guid}/undo/{checkLogId:guid}", async (Guid orderId, Guid checkLogId, IMediator mediator) =>
              await mediator.Send(new UndoCheckScanCommand(orderId, checkLogId)))
-             .RequirePermission(Permissions.Outbound.Manage);
+             .RequirePermission(Permissions.Outbound.Check);
 
         // Reset geral da conferência
         group.MapPost("/orders/{orderId:guid}/reset", async (Guid orderId, IMediator mediator) =>
              await mediator.Send(new ResetOrderCheckingCommand(orderId)))
-             .RequirePermission(Permissions.Outbound.Manage);
+             .RequirePermission(Permissions.Outbound.Check);
     }
 }

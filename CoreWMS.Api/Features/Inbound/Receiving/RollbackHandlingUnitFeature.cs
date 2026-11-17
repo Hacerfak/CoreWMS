@@ -148,6 +148,6 @@ public static class RollbackHandlingUnitEndpoints
             await mediator.Send(cmd))
            .WithTags("Inbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inbound.Receive);
+           .RequirePermission(Permissions.Inbound.Manage);
     }
 }

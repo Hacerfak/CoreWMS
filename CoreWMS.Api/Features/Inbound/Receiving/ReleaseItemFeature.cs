@@ -37,7 +37,12 @@ public class ReleaseItemHandler : IRequestHandler<ReleaseItemCommand, IResult>
         var userIdClaim = _http.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (!Guid.TryParse(userIdClaim, out var userId)) return Results.Unauthorized();
 
-        var isManager = _http.HttpContext!.User.HasClaim(c => c.Type == "Permission" && c.Value == Permissions.Inbound.Manage);
+        var cache = _http.HttpContext!.RequestServices.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+        var isMaster = string.Equals(_http.HttpContext.User.FindFirst("isMaster")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var isManager = isMaster ||
+            (cache.TryGetValue($"perm:{userId}:{companyId}", out var cachedPerms) &&
+             cachedPerms is HashSet<string> userPerms &&
+             userPerms.Contains(Permissions.Inbound.Manage));
 
         var item = await _db.InboundOrderItems
             .FirstOrDefaultAsync(i => i.Id == request.OrderItemId && i.InboundOrder.CompanyId == companyId, ct);

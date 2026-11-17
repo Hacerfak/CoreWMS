@@ -53,11 +53,6 @@ public static class Permissions
         public const string Delete = "products:delete";
     }
 
-    public static class Packing
-    {
-        public const string Manage = "packing:manage";
-    }
-
     public static class Inventory
     {
         public const string View = "inventory:view";
@@ -74,31 +69,61 @@ public static class Permissions
 
     public static class Inbound
     {
-        // Visualização da tela de Inbound e acompanhamento do progresso (Todos)
+        // Consulta de ordens de recebimento, itens e progresso
         public const string View = "inbound:view";
 
-        // Importação de arquivos XML (Gestão/Administração)
+        // Importação de arquivos XML e busca por chave de acesso
         public const string Import = "inbound:import";
 
-        // Revisão de pré-cadastros de produtos gerados pelo XML (Gestão)
+        // Manifestação do Destinatário na SEFAZ (Confirmação, Desconhecimento, Não Realizada)
+        public const string Manifest = "inbound:manifest";
+
+        // Revisão e vínculo de produtos pendentes de cadastro na NF-e
         public const string Review = "inbound:review";
 
-        // Ação de bipar, conferir e dar checkout no carrinho gerando HUs (Operação/Gestão)
+        // Cancelamento de ordens pendentes (antes do recebimento físico)
+        public const string Cancel = "inbound:cancel";
+
+        // Operação de conferência e geração de HUs no coletor
         public const string Receive = "inbound:receive";
 
-        // Cancelamento de ordens, forçar fechamento com falta, estornos (Administração/Gestão)
+        // Supervisão: estornos de HUs/ordens, importação legado e exclusão definitiva
         public const string Manage = "inbound:manage";
     }
 
     public static class Outbound
     {
-        // Visualização da tela de Outbound e acompanhamento do progresso (Todos)
+        // Consulta de pedidos, detalhes, espelho fiscal e saldo disponível
         public const string View = "outbound:view";
 
-        // Importação de arquivos XML (Gestão/Administração)
+        // Criação manual de pedidos de retorno/devolução
+        public const string Create = "outbound:create";
+
+        // Importação de pedidos via XML da NF-e
         public const string Import = "outbound:import";
 
-        // (Administração/Gestão)
+        // Edição de cabeçalho do pedido (antes do picking)
+        public const string Edit = "outbound:edit";
+
+        // Cancelamento de pedidos
+        public const string Cancel = "outbound:cancel";
+
+        // Alocação automática e reserva manual de volumes/itens
+        public const string Allocate = "outbound:allocate";
+
+        // Separação física no coletor (Picking)
+        public const string Pick = "outbound:pick";
+
+        // Embalagem física no coletor (Packing)
+        public const string Pack = "outbound:pack";
+
+        // Conferência física de expedição (Checking)
+        public const string Check = "outbound:check";
+
+        // Baixa física e confirmação de expedição (Ship)
+        public const string Ship = "outbound:ship";
+
+        // Supervisão: estornos (picking/conferência/expedição) e exclusão definitiva
         public const string Manage = "outbound:manage";
     }
 

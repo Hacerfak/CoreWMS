@@ -51,6 +51,6 @@ public static class UpdatePackagingTypeEndpoints
             await mediator.Send(cmd with { Id = id }))
            .WithTags("PackagingTypes")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Packing.Manage);
+           .RequirePermission(Permissions.Products.Edit);
     }
 }

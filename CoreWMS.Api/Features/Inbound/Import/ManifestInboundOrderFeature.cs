@@ -55,6 +55,9 @@ public class ManifestInboundOrderHandler : IRequestHandler<ManifestInboundOrderC
         if (order == null)
             return Results.NotFound(new { Message = "Ordem de recebimento não encontrada." });
 
+        if (_tenant.IsPartnerUser() && (!order.CustomerId.HasValue || !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId.Value)))
+            return Results.Forbid();
+
         if (string.IsNullOrWhiteSpace(order.AccessKey))
             return Results.BadRequest(new { Message = "Esta ordem de recebimento não possui uma chave de acesso de NF-e vinculada." });
 
@@ -106,6 +109,6 @@ public static class ManifestInboundOrderEndpoints
             await mediator.Send(cmd with { InboundOrderId = inboundOrderId }))
            .WithTags("Inbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inbound.Import);
+           .RequirePermission(Permissions.Inbound.Manifest);
     }
 }

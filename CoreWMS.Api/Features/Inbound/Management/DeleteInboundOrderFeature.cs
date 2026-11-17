@@ -30,6 +30,9 @@ public class DeleteInboundOrderHandler : IRequestHandler<DeleteInboundOrderComma
 
         if (order == null) return Results.NotFound();
 
+        if (_tenant.IsPartnerUser() && (!order.CustomerId.HasValue || !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId.Value)))
+            return Results.Forbid();
+
         if (order.Status != InboundOrderStatus.Canceled)
         {
             return Results.BadRequest(new { Message = "Apenas ordens no estado 'Cancelada' podem ser excluídas definitivamente." });

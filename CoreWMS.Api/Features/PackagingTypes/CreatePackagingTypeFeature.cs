@@ -54,6 +54,6 @@ public static class CreatePackagingTypeEndpoints
         app.MapPost("/api/packaging-types", async (CreatePackagingTypeCommand cmd, IMediator mediator) => await mediator.Send(cmd))
            .WithTags("PackagingTypes")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Packing.Manage); // Pode criar uma permissão global específica depois
+           .RequirePermission(Permissions.Products.Create); // Pode criar uma permissão global específica depois
     }
 }

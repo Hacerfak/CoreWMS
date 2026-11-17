@@ -47,6 +47,6 @@ public static class DeletePackagingTypeEndpoints
         app.MapDelete("/api/packaging-types/{id:guid}", async (Guid id, IMediator mediator) => await mediator.Send(new DeletePackagingTypeCommand(id)))
            .WithTags("PackagingTypes")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Packing.Manage);
+           .RequirePermission(Permissions.Products.Delete);
     }
 }

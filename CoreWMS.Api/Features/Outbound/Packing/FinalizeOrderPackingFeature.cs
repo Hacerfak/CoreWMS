@@ -224,6 +224,6 @@ public static class FinalizeOrderPackingEndpoints
             var command = cmd with { OrderId = orderId };
             return await mediator.Send(command);
         })
-        .RequirePermission(Permissions.Outbound.Manage);
+        .RequirePermission(Permissions.Outbound.Pack);
     }
 }

@@ -40,6 +40,10 @@ public class LinkProductToItemHandler : IRequestHandler<LinkProductToItemCommand
             .FirstOrDefaultAsync(i => i.Id == request.ItemId && i.InboundOrder.CompanyId == companyId, ct);
 
         if (item == null) return Results.NotFound(new { Message = "Item da ordem não encontrado." });
+
+        if (_tenant.IsPartnerUser() && (!item.InboundOrder.CustomerId.HasValue || !_tenant.GetAllowedCustomerIds().Contains(item.InboundOrder.CustomerId.Value)))
+            return Results.Forbid();
+
         if (item.Status != InboundOrderItemStatus.Pending_Review) return Results.BadRequest(new { Message = "Este item não está pendente de revisão." });
 
         var product = await _db.Products

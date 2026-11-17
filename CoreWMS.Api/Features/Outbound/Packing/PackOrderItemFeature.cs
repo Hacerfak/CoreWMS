@@ -268,7 +268,7 @@ public static class PackOrderItemEndpoints
             var command = cmd with { OrderId = orderId, OrderItemId = orderItemId };
             return await mediator.Send(command);
         })
-        .RequirePermission(Permissions.Outbound.Manage);
+        .RequirePermission(Permissions.Outbound.Pack);
 
         // Consultar apontamentos existentes do item
         group.MapGet("/orders/{orderId:guid}/items/{orderItemId:guid}", async (

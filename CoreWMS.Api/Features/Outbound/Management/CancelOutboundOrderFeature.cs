@@ -65,6 +65,20 @@ public class CancelOutboundOrderHandler : IRequestHandler<CancelOutboundOrderCom
 
         if (order == null) return Results.NotFound(new { Message = "Pedido de saída não encontrado." });
 
+        if (_tenant.IsPartnerUser())
+        {
+            if (!_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
+                return Results.Forbid();
+
+            if ((int)order.Status > (int)OutboundOrderStatus.Allocated)
+            {
+                return Results.BadRequest(new
+                {
+                    Message = "Não é possível cancelar este pedido pois a separação física já foi iniciada no armazém. Entre em contato com a operação."
+                });
+            }
+        }
+
         if (order.Status == OutboundOrderStatus.Canceled)
             return Results.BadRequest(new { Message = "O pedido já está cancelado." });
 
@@ -162,7 +176,7 @@ public static class CancelOutboundOrderEndpoints
             await mediator.Send(new CancelOutboundOrderCommand(id, req.Reason)))
            .WithTags("Outbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.Manage);
+           .RequirePermission(Permissions.Outbound.Cancel);
 
         app.MapDelete("/api/outbound/orders/{id:guid}/cancel", async (Guid id, [FromBody] CancelOutboundOrderRequest req, IMediator mediator) =>
             await mediator.Send(new CancelOutboundOrderCommand(id, req.Reason)))

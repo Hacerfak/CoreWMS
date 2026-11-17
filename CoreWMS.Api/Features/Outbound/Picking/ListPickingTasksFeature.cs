@@ -131,6 +131,6 @@ public static class ListPickingTasksEndpoints
             await mediator.Send(new ListPickingTasksQuery(orderId)))
            .WithTags("Outbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.Manage);
+           .RequirePermission(Permissions.Outbound.Pick);
     }
 }

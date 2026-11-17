@@ -90,6 +90,17 @@ public class ImportInboundXmlHandler : IRequestHandler<ImportInboundXmlCommand, 
 
                     var customer = existingCustomers.FirstOrDefault(c => c.Cnpj == issuer.Cnpj);
 
+                    // Trava Viseira B2B: parceiro externo só pode importar XML dos seus próprios depositantes já vinculados
+                    if (_tenant.IsPartnerUser())
+                    {
+                        var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+                        if (customer == null || !allowedCustomerIds.Contains(customer.Id))
+                        {
+                            errors.Add($"NF-e {parsedNfe.AccessKey}: Acesso negado. O CNPJ emitente ({issuer.Cnpj}) não está vinculado ao seu usuário.");
+                            continue;
+                        }
+                    }
+
                     // 3. Cadastra ou Atualiza o Depositante
                     if (customer == null)
                     {

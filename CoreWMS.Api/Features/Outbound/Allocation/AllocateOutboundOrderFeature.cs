@@ -148,6 +148,6 @@ public static class OutboundAllocationEndpoints
         app.MapPost("/api/outbound/orders/{id:guid}/allocate", async (Guid id, IMediator mediator) => await mediator.Send(new AllocateOutboundOrderCommand(id)))
            .WithTags("Outbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.Manage);
+           .RequirePermission(Permissions.Outbound.Allocate);
     }
 }

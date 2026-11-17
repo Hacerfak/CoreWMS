@@ -30,6 +30,15 @@ public class CancelInboundOrderHandler : IRequestHandler<CancelInboundOrderComma
 
         if (order == null) return Results.NotFound();
 
+        if (_tenant.IsPartnerUser())
+        {
+            if (!order.CustomerId.HasValue || !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId.Value))
+                return Results.Forbid();
+
+            if (order.Status != InboundOrderStatus.Pending)
+                return Results.BadRequest(new { Message = "Não é possível cancelar uma ordem cuja conferência já foi iniciada." });
+        }
+
         if (order.Items.Any(i => i.Status == InboundOrderItemStatus.Completed || i.ReceivedQuantity > 0))
             return Results.BadRequest(new { Message = "Não é possível cancelar uma ordem que já possui recebimentos parciais ou totais. Estorne as HUs primeiro." });
 
@@ -73,6 +82,6 @@ public static class CancelInboundOrderEndpoints
         app.MapDelete("/api/inbound/{id:guid}/cancel", async (Guid id, IMediator mediator) => await mediator.Send(new CancelInboundOrderCommand(id)))
            .WithTags("Inbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inbound.Manage);
+           .RequirePermission(Permissions.Inbound.Cancel);
     }
 }

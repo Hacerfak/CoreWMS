@@ -165,6 +165,6 @@ public static class UpdateOutboundOrderEndpoints
         })
         .WithTags("Outbound")
         .RequireAuthorization()
-        .RequirePermission(Permissions.Outbound.Manage);
+        .RequirePermission(Permissions.Outbound.Edit);
     }
 }

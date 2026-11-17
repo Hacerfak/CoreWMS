@@ -182,6 +182,6 @@ public static class CreateOutboundOrderEndpoints
         app.MapPost("/api/outbound/orders", async (CreateOutboundOrderCommand cmd, IMediator mediator) => await mediator.Send(cmd))
            .WithTags("Outbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.Manage);
+           .RequirePermission(Permissions.Outbound.Create);
     }
 }

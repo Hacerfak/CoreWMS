@@ -303,11 +303,11 @@ public static class OutboundPickingEndpoints
         // Leitura de item/HU
         group.MapPost("/scan", async ([FromBody] PickItemCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd))
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Outbound.Pick);
 
         // Finalização manual do picking
         group.MapPost("/orders/{orderId:guid}/finalize", async (Guid orderId, [FromBody] FinalizeOrderPickingCommand? cmd, IMediator mediator) =>
             await mediator.Send((cmd ?? new FinalizeOrderPickingCommand(orderId)) with { OrderId = orderId }))
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Outbound.Pick);
     }
 }

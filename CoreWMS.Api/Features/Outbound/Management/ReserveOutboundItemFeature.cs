@@ -41,6 +41,9 @@ public class ReserveClosedVolumesHandler : IRequestHandler<ReserveClosedVolumesC
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
 
+        if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
+            return Results.Forbid();
+
         if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
             return Results.BadRequest(new { Message = "Não é possível adicionar itens após o início da separação (Picking)." });
 
@@ -163,6 +166,9 @@ public class ReserveFractionalHandler : IRequestHandler<ReserveFractionalCommand
             .FirstOrDefaultAsync(o => o.Id == request.OrderId && o.CompanyId == companyId, ct);
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
+
+        if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
+            return Results.Forbid();
 
         if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
             return Results.BadRequest(new { Message = "Não é possível adicionar itens após o início da separação (Picking)." });
@@ -299,6 +305,9 @@ public class RemoveOutboundOrderItemHandler : IRequestHandler<RemoveOutboundOrde
 
         var order = orderItem.OutboundOrder;
 
+        if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
+            return Results.Forbid();
+
         if (order.Status != OutboundOrderStatus.Pending && order.Status != OutboundOrderStatus.Allocated)
             return Results.BadRequest(new { Message = "Não é possível remover itens de um pedido cuja separação já foi iniciada." });
 
@@ -340,16 +349,16 @@ public static class ReserveOutboundItemEndpoints
         app.MapPost("/api/outbound/orders/{orderId:guid}/items/reserve-volumes",
             async (Guid orderId, ReserveClosedVolumesCommand cmd, IMediator mediator) =>
                 await mediator.Send(cmd with { OrderId = orderId }))
-           .WithTags("Outbound").RequireAuthorization().RequirePermission(Permissions.Outbound.Manage);
+           .WithTags("Outbound").RequireAuthorization().RequirePermission(Permissions.Outbound.Allocate);
 
         app.MapPost("/api/outbound/orders/{orderId:guid}/items/reserve-fractional",
             async (Guid orderId, ReserveFractionalCommand cmd, IMediator mediator) =>
                 await mediator.Send(cmd with { OrderId = orderId }))
-           .WithTags("Outbound").RequireAuthorization().RequirePermission(Permissions.Outbound.Manage);
+           .WithTags("Outbound").RequireAuthorization().RequirePermission(Permissions.Outbound.Allocate);
 
         app.MapDelete("/api/outbound/orders/{orderId:guid}/items/{orderItemId:guid}",
             async (Guid orderId, Guid orderItemId, IMediator mediator) =>
                 await mediator.Send(new RemoveOutboundOrderItemCommand(orderId, orderItemId)))
-           .WithTags("Outbound").RequireAuthorization().RequirePermission(Permissions.Outbound.Manage);
+           .WithTags("Outbound").RequireAuthorization().RequirePermission(Permissions.Outbound.Allocate);
     }
 }

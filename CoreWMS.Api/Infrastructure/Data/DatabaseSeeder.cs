@@ -39,6 +39,24 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Yard.View);
             adminRole.AddPermission(Permissions.Yard.Operate);
             adminRole.AddPermission(Permissions.Yard.Manage);
+            adminRole.AddPermission(Permissions.Outbound.View);
+            adminRole.AddPermission(Permissions.Outbound.Create);
+            adminRole.AddPermission(Permissions.Outbound.Import);
+            adminRole.AddPermission(Permissions.Outbound.Edit);
+            adminRole.AddPermission(Permissions.Outbound.Cancel);
+            adminRole.AddPermission(Permissions.Outbound.Allocate);
+            adminRole.AddPermission(Permissions.Outbound.Pick);
+            adminRole.AddPermission(Permissions.Outbound.Pack);
+            adminRole.AddPermission(Permissions.Outbound.Check);
+            adminRole.AddPermission(Permissions.Outbound.Ship);
+            adminRole.AddPermission(Permissions.Outbound.Manage);
+            adminRole.AddPermission(Permissions.Inbound.View);
+            adminRole.AddPermission(Permissions.Inbound.Import);
+            adminRole.AddPermission(Permissions.Inbound.Manifest);
+            adminRole.AddPermission(Permissions.Inbound.Review);
+            adminRole.AddPermission(Permissions.Inbound.Cancel);
+            adminRole.AddPermission(Permissions.Inbound.Receive);
+            adminRole.AddPermission(Permissions.Inbound.Manage);
 
             // --- GERENTE (CRUD Usuários + Vínculos) ---
             var gerenteRole = new Role("Gerente");
@@ -51,12 +69,36 @@ public static class DatabaseSeeder
             gerenteRole.AddPermission(Permissions.Yard.View);
             gerenteRole.AddPermission(Permissions.Yard.Operate);
             gerenteRole.AddPermission(Permissions.Yard.Manage);
+            gerenteRole.AddPermission(Permissions.Outbound.View);
+            gerenteRole.AddPermission(Permissions.Outbound.Create);
+            gerenteRole.AddPermission(Permissions.Outbound.Import);
+            gerenteRole.AddPermission(Permissions.Outbound.Edit);
+            gerenteRole.AddPermission(Permissions.Outbound.Cancel);
+            gerenteRole.AddPermission(Permissions.Outbound.Allocate);
+            gerenteRole.AddPermission(Permissions.Outbound.Pick);
+            gerenteRole.AddPermission(Permissions.Outbound.Pack);
+            gerenteRole.AddPermission(Permissions.Outbound.Check);
+            gerenteRole.AddPermission(Permissions.Outbound.Ship);
+            gerenteRole.AddPermission(Permissions.Outbound.Manage);
+            gerenteRole.AddPermission(Permissions.Inbound.View);
+            gerenteRole.AddPermission(Permissions.Inbound.Import);
+            gerenteRole.AddPermission(Permissions.Inbound.Manifest);
+            gerenteRole.AddPermission(Permissions.Inbound.Review);
+            gerenteRole.AddPermission(Permissions.Inbound.Cancel);
+            gerenteRole.AddPermission(Permissions.Inbound.Receive);
+            gerenteRole.AddPermission(Permissions.Inbound.Manage);
 
             // --- OPERADOR (Apenas atualizar próprio cadastro) ---
             var operadorRole = new Role("Operador");
             operadorRole.AddPermission(Permissions.Profile.UpdateSelf);
             operadorRole.AddPermission(Permissions.Yard.View);
             operadorRole.AddPermission(Permissions.Yard.Operate);
+            operadorRole.AddPermission(Permissions.Outbound.View);
+            operadorRole.AddPermission(Permissions.Outbound.Pick);
+            operadorRole.AddPermission(Permissions.Outbound.Pack);
+            operadorRole.AddPermission(Permissions.Outbound.Check);
+            operadorRole.AddPermission(Permissions.Inbound.View);
+            operadorRole.AddPermission(Permissions.Inbound.Receive);
 
             context.Roles.AddRange(adminRole, gerenteRole, operadorRole);
         }
