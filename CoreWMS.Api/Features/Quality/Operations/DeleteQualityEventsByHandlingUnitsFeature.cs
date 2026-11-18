@@ -95,6 +95,6 @@ public static class DeleteQualityEventsByHandlingUnitsEndpoints
             await mediator.Send(cmd))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.Quality.Manage);
     }
 }

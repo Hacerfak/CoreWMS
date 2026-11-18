@@ -179,6 +179,6 @@ public static class ExportHandlingUnitsEndpoints
             await mediator.Send(query))
            .WithTags("Inventory")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.Inventory.Export);
     }
 }

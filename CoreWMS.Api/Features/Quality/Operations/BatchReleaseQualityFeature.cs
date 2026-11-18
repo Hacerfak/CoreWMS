@@ -199,6 +199,6 @@ public static class BatchReleaseQualityEndpoints
             await mediator.Send(cmd))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.Quality.Release);
     }
 }

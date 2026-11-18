@@ -136,6 +136,6 @@ public static class RevertOutboundInventoryShipmentEndpoints
             await mediator.Send(cmd))
            .WithTags("Inventory")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.Move);
+           .RequirePermission(Permissions.Inventory.Manage);
     }
 }

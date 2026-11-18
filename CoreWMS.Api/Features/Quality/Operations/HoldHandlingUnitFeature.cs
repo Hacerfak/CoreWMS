@@ -177,6 +177,6 @@ public static class HoldHandlingUnitEndpoints
         app.MapPost("/api/quality/hold", async (HoldHandlingUnitCommand cmd, IMediator mediator) => await mediator.Send(cmd))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.Quality.Hold);
     }
 }

@@ -41,12 +41,20 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
         var companyId = _tenant.GetCompanyId();
 
         // 1. Busca todas as HUs da Ordem que estão descarregadas na Doca (HuStatus.Received)
-        var husInDock = await _db.HandlingUnits
+        var husQuery = _db.HandlingUnits
             .AsNoTracking()
             .Include(h => h.Product)
             .Where(h => h.CompanyId == companyId &&
                         h.ReceiptDocumentId == request.OrderId &&
-                        h.Status == HuStatus.Received)
+                        h.Status == HuStatus.Received);
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedIds = _tenant.GetAllowedCustomerIds();
+            husQuery = husQuery.Where(h => allowedIds.Contains(h.CustomerId));
+        }
+
+        var husInDock = await husQuery
             .OrderBy(h => h.Product.Sku)
             .ThenBy(h => h.Batch)
             .ToListAsync(ct);

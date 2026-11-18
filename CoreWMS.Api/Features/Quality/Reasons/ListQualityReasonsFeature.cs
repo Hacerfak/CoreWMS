@@ -48,6 +48,6 @@ public static class ListQualityReasonsEndpoints
             await mediator.Send(new ListQualityReasonsQuery(onlyActive)))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.Quality.View);
     }
 }

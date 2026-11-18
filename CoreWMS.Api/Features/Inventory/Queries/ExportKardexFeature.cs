@@ -144,6 +144,6 @@ public static class ExportKardexEndpoints
             await mediator.Send(query))
            .WithTags("Inventory")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.Inventory.Export);
     }
 }

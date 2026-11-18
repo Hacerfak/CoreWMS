@@ -269,7 +269,7 @@ public static class ListQualityEventsEndpoints
                 pageSize ?? 20)))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.Quality.View);
 
         app.MapGet("/api/quality/handling-units/{handlingUnitId:guid}/events", async (
             Guid handlingUnitId,
@@ -277,6 +277,6 @@ public static class ListQualityEventsEndpoints
             await mediator.Send(new GetHandlingUnitQualityHistoryQuery(handlingUnitId)))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.Quality.View);
     }
 }

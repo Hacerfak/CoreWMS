@@ -113,14 +113,14 @@ public static class ManageQualityReasonsEndpoints
 
         group.MapPut("/{id:guid}", async (Guid id, [FromBody] UpdateQualityReasonCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd with { Id = id }))
-            .RequirePermission(Permissions.Inventory.ManageQuality);
+            .RequirePermission(Permissions.Quality.Manage);
 
         group.MapPatch("/{id:guid}/toggle-active", async (Guid id, IMediator mediator) =>
             await mediator.Send(new ToggleQualityReasonStatusCommand(id)))
-            .RequirePermission(Permissions.Inventory.ManageQuality);
+            .RequirePermission(Permissions.Quality.Manage);
 
         group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
             await mediator.Send(new DeleteQualityReasonCommand(id)))
-            .RequirePermission(Permissions.Inventory.ManageQuality);
+            .RequirePermission(Permissions.Quality.Manage);
     }
 }

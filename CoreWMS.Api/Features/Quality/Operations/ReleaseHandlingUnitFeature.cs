@@ -45,6 +45,9 @@ public class ReleaseHandlingUnitHandler : IRequestHandler<ReleaseHandlingUnitCom
         if (qEvent == null || qEvent.IsResolved)
             return Results.BadRequest(new { Message = "Evento inválido ou já resolvido." });
 
+        if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(qEvent.HandlingUnit.CustomerId))
+            return Results.Forbid();
+
         var hu = qEvent.HandlingUnit;
         var balance = await _db.InventoryBalances.FirstOrDefaultAsync(b => b.ProductId == hu.ProductId && b.CompanyId == companyId, ct);
 
@@ -117,6 +120,6 @@ public static class ReleaseHandlingUnitEndpoints
             await mediator.Send(cmd with { EventId = eventId }))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.Quality.Release);
     }
 }

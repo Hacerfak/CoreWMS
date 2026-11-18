@@ -55,10 +55,41 @@ public static class Permissions
 
     public static class Inventory
     {
+        // Consulta de balanço, unidades de manuseio (HUs) e extrato Kardex
         public const string View = "inventory:view";
+
+        // Exportação de relatórios CSV (Balanço, HUs e Kardex)
+        public const string Export = "inventory:export";
+
+        // Sugestão de guarda (Putaway) e movimentação física entre endereços
         public const string Move = "inventory:move";
-        public const string ManageQuality = "inventory:managequality";
+
+        // Transbordo / desmembramento de HUs (Split)
+        public const string Split = "inventory:split";
+
+        // Agrupamento / consolidação de HUs (Merge)
+        public const string Merge = "inventory:merge";
+
+        // Edição de lote, validade, série, embalagem e pesos (Individual e Lote)
         public const string EditTraceability = "inventory:edittraceability";
+
+        // Supervisão: estornos diretos de saldo, Kardex e reservas
+        public const string Manage = "inventory:manage";
+    }
+
+    public static class Quality
+    {
+        // Consulta de ocorrências de qualidade, histórico da HU e motivos
+        public const string View = "quality:view";
+
+        // Apontamento de avaria, quarentena, divergências, faltas e sobras (Operação e Gestão)
+        public const string Hold = "quality:hold";
+
+        // Liberação técnica individual ou em lote de HUs bloqueadas (Somente Gestão)
+        public const string Release = "quality:release";
+
+        // Cadastro/gestão de motivos de qualidade e exclusão de ocorrências em estornos (Gestão)
+        public const string Manage = "quality:manage";
     }
 
     public static class Billing

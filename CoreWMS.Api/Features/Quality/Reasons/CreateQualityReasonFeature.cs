@@ -53,6 +53,6 @@ public static class CreateQualityReasonEndpoints
         app.MapPost("/api/quality/reasons", async (CreateQualityReasonCommand cmd, IMediator mediator) => await mediator.Send(cmd))
            .WithTags("Quality")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.Quality.Manage);
     }
 }

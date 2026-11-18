@@ -89,6 +89,6 @@ public static class ExportInventoryBalanceEndpoints
             await mediator.Send(query))
            .WithTags("Inventory")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.Inventory.Export);
     }
 }
