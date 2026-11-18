@@ -1,16 +1,12 @@
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inbound.Enums;
 using CoreWMS.Api.Features.Outbound.Enums;
-using CoreWMS.Api.Features.Yard.Entities;
 using CoreWMS.Api.Features.Yard.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Yard;
@@ -83,10 +79,11 @@ public class LinkYardAppointmentHandler :
         _tenant = tenant;
     }
 
-    // A. Vincular Ordem a um Agendamento
+    // A. Vincular Ordem a um Agendamento (Somente Equipe Interna)
     public async Task<IResult> Handle(LinkOrderToAppointmentCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var appointment = await _db.YardAppointments
             .FirstOrDefaultAsync(y => y.Id == request.AppointmentId && y.CompanyId == companyId, ct);
@@ -102,7 +99,6 @@ public class LinkYardAppointmentHandler :
             });
         }
 
-        // Vínculo com Ordem de Entrada
         if (request.Type == YardAppointmentType.Inbound)
         {
             var inboundOrder = await _db.InboundOrders
@@ -117,10 +113,9 @@ public class LinkYardAppointmentHandler :
             if (inboundOrder.YardAppointmentId.HasValue && inboundOrder.YardAppointmentId.Value != appointment.Id)
                 return Results.BadRequest(new { Message = "Esta ordem de entrada já está vinculada a outro agendamento." });
 
-            appointment.LinkInboundOrder(inboundOrder.Id, inboundOrder.InvoiceNumber, inboundOrder.AccessKey);
+            appointment.LinkInboundOrder(inboundOrder.Id, inboundOrder.InvoiceNumber, inboundOrder.AccessKey, inboundOrder.CustomerId);
             inboundOrder.LinkYardAppointment(appointment.Id);
         }
-        // Vínculo com Ordem de Saída
         else if (request.Type == YardAppointmentType.Outbound)
         {
             var outboundOrder = await _db.OutboundOrders
@@ -142,7 +137,8 @@ public class LinkYardAppointmentHandler :
                 outboundOrder.AccessKey,
                 outboundOrder.DockLocationId,
                 outboundOrder.VehiclePlate,
-                outboundOrder.CarrierName
+                outboundOrder.CarrierName,
+                outboundOrder.CustomerId
             );
             outboundOrder.LinkYardAppointment(appointment.Id);
         }
@@ -157,10 +153,11 @@ public class LinkYardAppointmentHandler :
         });
     }
 
-    // B. Desvincular Ordem do Agendamento
+    // B. Desvincular Ordem do Agendamento (Somente Equipe Interna)
     public async Task<IResult> Handle(UnlinkYardAppointmentCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var appointment = await _db.YardAppointments
             .Include(y => y.InboundOrder)
@@ -199,12 +196,20 @@ public class LinkYardAppointmentHandler :
     {
         var companyId = _tenant.GetCompanyId();
 
-        var appointments = await _db.YardAppointments
+        var query = _db.YardAppointments
             .AsNoTracking()
             .Where(y => y.CompanyId == companyId &&
                         y.Type == request.Type &&
                         (y.Status == YardAppointmentStatus.Scheduled || y.Status == YardAppointmentStatus.InYard) &&
-                        (request.Type == YardAppointmentType.Inbound ? y.InboundOrderId == null : y.OutboundOrderId == null))
+                        (request.Type == YardAppointmentType.Inbound ? y.InboundOrderId == null : y.OutboundOrderId == null));
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedIds = _tenant.GetAllowedCustomerIds();
+            query = query.Where(y => y.CustomerId.HasValue && allowedIds.Contains(y.CustomerId.Value));
+        }
+
+        var appointments = await query
             .OrderByDescending(y => y.ScheduledDate)
             .Select(y => new AvailableAppointmentForLinkDto(
                 y.Id,
@@ -227,16 +232,23 @@ public class LinkYardAppointmentHandler :
     public async Task<IResult> Handle(GetAvailableOrdersForLinkQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        var isPartner = _tenant.IsPartnerUser();
+        var allowedIds = isPartner ? _tenant.GetAllowedCustomerIds() : new List<Guid>();
 
         if (request.Type == YardAppointmentType.Inbound)
         {
-            var orders = await _db.InboundOrders
+            var query = _db.InboundOrders
                 .AsNoTracking()
                 .Include(o => o.Customer)
                 .Where(o => o.CompanyId == companyId &&
                             o.YardAppointmentId == null &&
                             o.Status != InboundOrderStatus.Completed &&
-                            o.Status != InboundOrderStatus.Canceled)
+                            o.Status != InboundOrderStatus.Canceled);
+
+            if (isPartner)
+                query = query.Where(o => o.CustomerId.HasValue && allowedIds.Contains(o.CustomerId.Value));
+
+            var orders = await query
                 .OrderByDescending(o => o.CreatedAt)
                 .Select(o => new AvailableOrderForLinkDto(
                     o.Id,
@@ -254,13 +266,18 @@ public class LinkYardAppointmentHandler :
         }
         else
         {
-            var orders = await _db.OutboundOrders
+            var query = _db.OutboundOrders
                 .AsNoTracking()
                 .Include(o => o.Customer)
                 .Where(o => o.CompanyId == companyId &&
                             o.YardAppointmentId == null &&
                             o.Status != OutboundOrderStatus.Shipped &&
-                            o.Status != OutboundOrderStatus.Canceled)
+                            o.Status != OutboundOrderStatus.Canceled);
+
+            if (isPartner)
+                query = query.Where(o => allowedIds.Contains(o.CustomerId));
+
+            var orders = await query
                 .OrderByDescending(o => o.CreatedAt)
                 .Select(o => new AvailableOrderForLinkDto(
                     o.Id,
@@ -285,13 +302,29 @@ public class LinkYardAppointmentHandler :
 
         var y = await _db.YardAppointments
             .AsNoTracking()
+            .Include(x => x.Customer)
             .Include(x => x.DockLocation)
             .Include(x => x.InboundOrder)
+                .ThenInclude(o => o!.Customer)
             .Include(x => x.OutboundOrder)
+                .ThenInclude(o => o!.Customer)
             .FirstOrDefaultAsync(x => (x.OutboundOrderId == request.OrderId || x.InboundOrderId == request.OrderId) && x.CompanyId == companyId, ct);
 
         if (y == null)
             return Results.NotFound(new { Message = "Nenhum agendamento vinculado a esta ordem." });
+
+        var effectiveCustomerId = y.CustomerId ?? y.InboundOrder?.CustomerId ?? y.OutboundOrder?.CustomerId;
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedIds = _tenant.GetAllowedCustomerIds();
+            if (!effectiveCustomerId.HasValue || !allowedIds.Contains(effectiveCustomerId.Value))
+                return Results.Forbid();
+        }
+
+        var customerName = y.Customer?.CorporateName
+            ?? y.InboundOrder?.Customer?.CorporateName
+            ?? y.OutboundOrder?.Customer?.CorporateName;
 
         var dto = new YardAppointmentDto(
             y.Id,
@@ -328,7 +361,9 @@ public class LinkYardAppointmentHandler :
             y.InboundOrderId,
             y.InboundOrder != null ? y.InboundOrder.InvoiceNumber : null,
             y.OutboundOrderId,
-            y.OutboundOrder != null ? y.OutboundOrder.OrderNumber : null
+            y.OutboundOrder != null ? y.OutboundOrder.OrderNumber : null,
+            effectiveCustomerId,
+            customerName
         );
 
         return Results.Ok(dto);
@@ -342,7 +377,6 @@ public static class LinkYardAppointmentEndpoints
     {
         var group = app.MapGroup("/api/yard").WithTags("Yard").RequireAuthorization();
 
-        // Vincular Ordem <-> Agendamento
         group.MapPost("/appointments/{appointmentId:guid}/link-order", async (
             Guid appointmentId,
             [FromQuery] YardAppointmentType type,
@@ -351,19 +385,16 @@ public static class LinkYardAppointmentEndpoints
             await mediator.Send(new LinkOrderToAppointmentCommand(appointmentId, type, orderId)))
             .RequirePermission(Permissions.Yard.Operate);
 
-        // Desvincular Ordem do Agendamento
         group.MapPost("/appointments/{appointmentId:guid}/unlink-order", async (
             Guid appointmentId,
             IMediator mediator) =>
             await mediator.Send(new UnlinkYardAppointmentCommand(appointmentId)))
             .RequirePermission(Permissions.Yard.Operate);
 
-        // Busca o agendamento associado à ordem (Entrada ou Saída)
         group.MapGet("/appointments/by-order/{orderId:guid}", async (Guid orderId, IMediator mediator) =>
             await mediator.Send(new GetYardAppointmentByOrderQuery(orderId)))
             .RequirePermission(Permissions.Yard.View);
 
-        // Listas auxiliares para modais
         group.MapGet("/appointments/available-for-linking", async (
             [FromQuery] YardAppointmentType type,
             IMediator mediator) =>

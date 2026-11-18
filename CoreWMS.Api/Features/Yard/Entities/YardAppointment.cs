@@ -1,4 +1,5 @@
 using CoreWMS.Api.Core.Entities;
+using CoreWMS.Api.Features.Customers.Entities;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Inbound.Entities;
 using CoreWMS.Api.Features.Outbound.Entities;
@@ -12,11 +13,13 @@ public class YardAppointment : AuditableEntity
     public Guid CompanyId { get; private set; }
     public Company Company { get; private set; } = null!;
 
-    public string ReservationCode { get; private set; } = string.Empty; // Ex: AG-261027-A1B2
+    public Guid? CustomerId { get; private set; }
+    public Customer? Customer { get; private set; }
+
+    public string ReservationCode { get; private set; } = string.Empty;
     public YardAppointmentType Type { get; private set; }
     public YardAppointmentStatus Status { get; private set; }
 
-    // Dados do Motorista e Veículo
     public string? DriverName { get; private set; }
     public string? DriverCpf { get; private set; }
     public string? VehiclePlate { get; private set; }
@@ -24,23 +27,19 @@ public class YardAppointment : AuditableEntity
     public string? CarrierName { get; private set; }
     public string? CarrierCnpj { get; private set; }
 
-    // Controle de Tempos e Permanência
     public DateTime ScheduledDate { get; private set; }
-    public DateTime? ArrivedAt { get; private set; }  // Entrada no Pátio (Check-in)
-    public DateTime? DockedAt { get; private set; }   // Encoste na Doca
-    public DateTime? DepartedAt { get; private set; } // Saída da Portaria (Check-out)
+    public DateTime? ArrivedAt { get; private set; }
+    public DateTime? DockedAt { get; private set; }
+    public DateTime? DepartedAt { get; private set; }
 
-    // Doca Física Atribuída (Opcional até encostar)
     public Guid? DockLocationId { get; private set; }
     public Location? DockLocation { get; private set; }
 
-    // Identificadores de Carga / NF-e
     public string? AccessKey { get; private set; }
     public string? InvoiceNumber { get; private set; }
     public string? InvoiceSerie { get; private set; }
     public string? AdditionalNotes { get; private set; }
 
-    // Vínculos Opcionais com as Ordens do WMS
     public Guid? InboundOrderId { get; private set; }
     public InboundOrder? InboundOrder { get; private set; }
 
@@ -65,9 +64,11 @@ public class YardAppointment : AuditableEntity
         string? additionalNotes,
         Guid? dockLocationId = null,
         Guid? inboundOrderId = null,
-        Guid? outboundOrderId = null)
+        Guid? outboundOrderId = null,
+        Guid? customerId = null)
     {
         CompanyId = companyId;
+        CustomerId = customerId;
         Type = type;
         ScheduledDate = scheduledDate.ToUniversalTime();
         VehiclePlate = vehiclePlate?.Trim().ToUpper();
@@ -88,9 +89,11 @@ public class YardAppointment : AuditableEntity
         ReservationCode = $"AG-{DateTime.UtcNow:yyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
     }
 
-    // ====================================================================
-    // MÉTODOS DE TRANSIÇÃO DE ESTADOS E WORKFLOW BIDIRECIONAL
-    // ====================================================================
+    public void SetCustomer(Guid? customerId)
+    {
+        CustomerId = customerId;
+        UpdatedAt = DateTime.UtcNow;
+    }
 
     public void CheckIn(string? plate = null, string? driver = null, string? cpf = null, Guid? dockId = null)
     {
@@ -112,10 +115,8 @@ public class YardAppointment : AuditableEntity
         if (Status == YardAppointmentStatus.Finished || Status == YardAppointmentStatus.Canceled)
             throw new InvalidOperationException($"Agendamento já encerrado com status '{Status}'.");
 
-        // Se ainda estiver agendado, marca a chegada no pátio retroativamente
         ArrivedAt ??= DateTime.UtcNow;
 
-        // Se uma doca foi informada, atualiza; caso contrário, mantém a que já estava
         if (dockLocationId.HasValue && dockLocationId.Value != Guid.Empty)
         {
             DockLocationId = dockLocationId.Value;
@@ -151,18 +152,6 @@ public class YardAppointment : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void LinkInboundOrder(Guid orderId)
-    {
-        InboundOrderId = orderId;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void LinkOutboundOrder(Guid orderId)
-    {
-        OutboundOrderId = orderId;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
     public void UpdateDetails(
         YardAppointmentType type,
         DateTime scheduledDate,
@@ -176,7 +165,8 @@ public class YardAppointment : AuditableEntity
         string? invoiceNumber,
         string? invoiceSerie,
         string? additionalNotes,
-        Guid? dockLocationId)
+        Guid? dockLocationId,
+        Guid? customerId = null)
     {
         Type = type;
         ScheduledDate = scheduledDate.ToUniversalTime();
@@ -191,10 +181,11 @@ public class YardAppointment : AuditableEntity
         InvoiceSerie = invoiceSerie?.Trim();
         AdditionalNotes = additionalNotes?.Trim();
         DockLocationId = dockLocationId;
+        if (customerId.HasValue) CustomerId = customerId;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void LinkInboundOrder(Guid orderId, string? invoiceNumber = null, string? accessKey = null)
+    public void LinkInboundOrder(Guid orderId, string? invoiceNumber = null, string? accessKey = null, Guid? customerId = null)
     {
         if (Status == YardAppointmentStatus.InDock || Status == YardAppointmentStatus.Finished || Status == YardAppointmentStatus.Canceled)
             throw new InvalidOperationException($"Não é possível vincular uma ordem a um agendamento com status '{Status}'.");
@@ -202,6 +193,7 @@ public class YardAppointment : AuditableEntity
         InboundOrderId = orderId;
         OutboundOrderId = null;
         Type = YardAppointmentType.Inbound;
+        if (customerId.HasValue) CustomerId = customerId;
 
         if (!string.IsNullOrWhiteSpace(invoiceNumber)) InvoiceNumber = invoiceNumber.Trim();
         if (!string.IsNullOrWhiteSpace(accessKey)) AccessKey = accessKey.Trim();
@@ -209,7 +201,7 @@ public class YardAppointment : AuditableEntity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void LinkOutboundOrder(Guid orderId, string? orderNumber = null, string? invoiceNumber = null, string? accessKey = null, Guid? dockId = null, string? plate = null, string? carrier = null)
+    public void LinkOutboundOrder(Guid orderId, string? orderNumber = null, string? invoiceNumber = null, string? accessKey = null, Guid? dockId = null, string? plate = null, string? carrier = null, Guid? customerId = null)
     {
         if (Status == YardAppointmentStatus.InDock || Status == YardAppointmentStatus.Finished || Status == YardAppointmentStatus.Canceled)
             throw new InvalidOperationException($"Não é possível vincular uma ordem a um agendamento com status '{Status}'.");
@@ -217,6 +209,7 @@ public class YardAppointment : AuditableEntity
         OutboundOrderId = orderId;
         InboundOrderId = null;
         Type = YardAppointmentType.Outbound;
+        if (customerId.HasValue) CustomerId = customerId;
 
         if (!string.IsNullOrWhiteSpace(invoiceNumber)) InvoiceNumber = invoiceNumber.Trim();
         if (!string.IsNullOrWhiteSpace(accessKey)) AccessKey = accessKey.Trim();

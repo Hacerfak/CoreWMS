@@ -37,6 +37,7 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Customers.Edit);
             adminRole.AddPermission(Permissions.Customers.Delete);
             adminRole.AddPermission(Permissions.Yard.View);
+            adminRole.AddPermission(Permissions.Yard.Schedule);
             adminRole.AddPermission(Permissions.Yard.Operate);
             adminRole.AddPermission(Permissions.Yard.Manage);
             adminRole.AddPermission(Permissions.Outbound.View);
@@ -68,6 +69,11 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Quality.Hold);
             adminRole.AddPermission(Permissions.Quality.Release);
             adminRole.AddPermission(Permissions.Quality.Manage);
+            adminRole.AddPermission(Permissions.CycleCount.View);
+            adminRole.AddPermission(Permissions.CycleCount.Create);
+            adminRole.AddPermission(Permissions.CycleCount.Export);
+            adminRole.AddPermission(Permissions.CycleCount.Count);
+            adminRole.AddPermission(Permissions.CycleCount.Manage);
 
             // --- GERENTE (CRUD Usuários + Vínculos) ---
             var gerenteRole = new Role("Gerente");
@@ -78,6 +84,7 @@ public static class DatabaseSeeder
             gerenteRole.AddPermission(Permissions.Customers.Create);
             gerenteRole.AddPermission(Permissions.Customers.Edit);
             gerenteRole.AddPermission(Permissions.Yard.View);
+            gerenteRole.AddPermission(Permissions.Yard.Schedule);
             gerenteRole.AddPermission(Permissions.Yard.Operate);
             gerenteRole.AddPermission(Permissions.Yard.Manage);
             gerenteRole.AddPermission(Permissions.Outbound.View);
@@ -109,6 +116,11 @@ public static class DatabaseSeeder
             gerenteRole.AddPermission(Permissions.Quality.Hold);
             gerenteRole.AddPermission(Permissions.Quality.Release);
             gerenteRole.AddPermission(Permissions.Quality.Manage);
+            gerenteRole.AddPermission(Permissions.CycleCount.View);
+            gerenteRole.AddPermission(Permissions.CycleCount.Create);
+            gerenteRole.AddPermission(Permissions.CycleCount.Export);
+            gerenteRole.AddPermission(Permissions.CycleCount.Count);
+            gerenteRole.AddPermission(Permissions.CycleCount.Manage);
 
             // --- OPERADOR (Apenas atualizar próprio cadastro) ---
             var operadorRole = new Role("Operador");
@@ -127,6 +139,7 @@ public static class DatabaseSeeder
             operadorRole.AddPermission(Permissions.Inventory.Merge);
             operadorRole.AddPermission(Permissions.Quality.View);
             operadorRole.AddPermission(Permissions.Quality.Hold);
+            operadorRole.AddPermission(Permissions.CycleCount.Count);
 
             context.Roles.AddRange(adminRole, gerenteRole, operadorRole);
         }

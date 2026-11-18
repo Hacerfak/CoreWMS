@@ -29,5 +29,7 @@ public record YardAppointmentDto(
     Guid? InboundOrderId,
     string? InboundOrderNumber,
     Guid? OutboundOrderId,
-    string? OutboundOrderNumber
+    string? OutboundOrderNumber,
+    Guid? CustomerId = null,
+    string? CustomerName = null
 );

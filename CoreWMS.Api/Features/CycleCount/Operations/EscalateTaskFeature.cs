@@ -21,18 +21,23 @@ public class EscalateTaskCommandValidator : AbstractValidator<EscalateTaskComman
 public class EscalateTaskHandler : IRequestHandler<EscalateTaskCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
 
-    public EscalateTaskHandler(ApplicationDbContext db)
+    public EscalateTaskHandler(ApplicationDbContext db, ITenantProvider tenant)
     {
         _db = db;
+        _tenant = tenant;
     }
 
     public async Task<IResult> Handle(EscalateTaskCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
                 .ThenInclude(p => p.Tasks)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null)
             return Results.NotFound(new { Message = "Tarefa não encontrada." });
@@ -48,7 +53,7 @@ public class EscalateTaskHandler : IRequestHandler<EscalateTaskCommand, IResult>
         bool hasProductFilter = productIds is { Count: > 0 };
         if (hasProductFilter)
         {
-            locationTasksQuery = locationTasksQuery.Where(t => productIds.Contains(t.ProductId));
+            locationTasksQuery = locationTasksQuery.Where(t => productIds!.Contains(t.ProductId));
         }
 
         var tasksToReopen = locationTasksQuery.ToList();
@@ -91,6 +96,6 @@ public static class EscalateTaskEndpoints
             await mediator.Send(new EscalateTaskCommand(taskId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
     }
 }

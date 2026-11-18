@@ -25,7 +25,8 @@ public record CreateYardAppointmentCommand(
     Guid? DockLocationId,
     Guid? InboundOrderId,
     Guid? OutboundOrderId,
-    bool DirectCheckIn = false // Se true, já cria no status "No Pátio"
+    bool DirectCheckIn = false,
+    Guid? CustomerId = null
 ) : IRequest<IResult>;
 
 public class CreateYardAppointmentCommandValidator : AbstractValidator<CreateYardAppointmentCommand>
@@ -55,6 +56,65 @@ public class CreateYardAppointmentHandler : IRequestHandler<CreateYardAppointmen
     public async Task<IResult> Handle(CreateYardAppointmentCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        var isPartner = _tenant.IsPartnerUser();
+        var allowedCustomerIds = isPartner ? _tenant.GetAllowedCustomerIds() : new List<Guid>();
+
+        // 1. Trava estrita: Entrada direta no pátio é exclusiva da equipe interna
+        if (isPartner && request.DirectCheckIn)
+        {
+            return Results.Forbid();
+        }
+
+        Guid? effectiveCustomerId = request.CustomerId;
+        Guid? dockLocationId = isPartner ? null : request.DockLocationId;
+
+        // 2. Validação e resolução do depositante para ordens vinculadas ou seleção manual
+        Inbound.Entities.InboundOrder? inboundOrder = null;
+        Outbound.Entities.OutboundOrder? outboundOrder = null;
+
+        if (request.InboundOrderId.HasValue)
+        {
+            inboundOrder = await _db.InboundOrders
+                .FirstOrDefaultAsync(o => o.Id == request.InboundOrderId.Value && o.CompanyId == companyId, ct);
+
+            if (inboundOrder == null)
+                return Results.NotFound(new { Message = "Ordem de entrada não encontrada." });
+
+            if (isPartner && (!inboundOrder.CustomerId.HasValue || !allowedCustomerIds.Contains(inboundOrder.CustomerId.Value)))
+                return Results.Forbid();
+
+            effectiveCustomerId ??= inboundOrder.CustomerId;
+        }
+        else if (request.OutboundOrderId.HasValue)
+        {
+            outboundOrder = await _db.OutboundOrders
+                .FirstOrDefaultAsync(o => o.Id == request.OutboundOrderId.Value && o.CompanyId == companyId, ct);
+
+            if (outboundOrder == null)
+                return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
+
+            if (isPartner && !allowedCustomerIds.Contains(outboundOrder.CustomerId))
+                return Results.Forbid();
+
+            effectiveCustomerId ??= outboundOrder.CustomerId;
+        }
+
+        if (isPartner)
+        {
+            if (effectiveCustomerId.HasValue)
+            {
+                if (!allowedCustomerIds.Contains(effectiveCustomerId.Value))
+                    return Results.Forbid();
+            }
+            else if (allowedCustomerIds.Count == 1)
+            {
+                effectiveCustomerId = allowedCustomerIds[0];
+            }
+            else
+            {
+                return Results.BadRequest(new { Message = "Selecione o depositante para registrar o agendamento programado." });
+            }
+        }
 
         var appointment = new YardAppointment(
             companyId,
@@ -70,28 +130,26 @@ public class CreateYardAppointmentHandler : IRequestHandler<CreateYardAppointmen
             request.InvoiceNumber,
             request.InvoiceSerie,
             request.AdditionalNotes,
-            request.DockLocationId,
+            dockLocationId,
             request.InboundOrderId,
-            request.OutboundOrderId
+            request.OutboundOrderId,
+            effectiveCustomerId
         );
 
-        if (request.DirectCheckIn)
+        if (!isPartner && request.DirectCheckIn)
         {
-            appointment.CheckIn(request.VehiclePlate, request.DriverName, request.DriverCpf, request.DockLocationId);
+            appointment.CheckIn(request.VehiclePlate, request.DriverName, request.DriverCpf, dockLocationId);
         }
 
         _db.YardAppointments.Add(appointment);
 
-        // Se uma ordem já foi vinculada no agendamento, atualiza a chave estrangeira na ordem
-        if (request.InboundOrderId.HasValue)
+        if (inboundOrder != null)
         {
-            var inb = await _db.InboundOrders.FirstOrDefaultAsync(o => o.Id == request.InboundOrderId.Value && o.CompanyId == companyId, ct);
-            inb?.LinkYardAppointment(appointment.Id);
+            inboundOrder.LinkYardAppointment(appointment.Id);
         }
-        else if (request.OutboundOrderId.HasValue)
+        else if (outboundOrder != null)
         {
-            var outb = await _db.OutboundOrders.FirstOrDefaultAsync(o => o.Id == request.OutboundOrderId.Value && o.CompanyId == companyId, ct);
-            outb?.LinkYardAppointment(appointment.Id);
+            outboundOrder.LinkYardAppointment(appointment.Id);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -100,7 +158,7 @@ public class CreateYardAppointmentHandler : IRequestHandler<CreateYardAppointmen
         {
             appointment.Id,
             appointment.ReservationCode,
-            Message = "Agendamento registrado com sucesso!"
+            Message = "Agendamento programado registrado com sucesso!"
         });
     }
 }
@@ -113,6 +171,6 @@ public static class CreateYardAppointmentEndpoints
             await mediator.Send(cmd))
             .WithTags("Yard")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Yard.Manage);
+            .RequirePermission(Permissions.Yard.Schedule);
     }
 }

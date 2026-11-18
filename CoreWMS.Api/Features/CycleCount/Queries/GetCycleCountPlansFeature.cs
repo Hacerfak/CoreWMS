@@ -39,15 +39,19 @@ public class GetCycleCountPlansHandler : IRequestHandler<GetCycleCountPlansQuery
     public async Task<IResult> Handle(GetCycleCountPlansQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        var isPartner = _tenant.IsPartnerUser();
+        var allowedCustomerIds = isPartner ? _tenant.GetAllowedCustomerIds() : new List<Guid>();
 
         var query = _db.CycleCountPlans.AsNoTracking()
             .Include(p => p.Tasks)
+                .ThenInclude(t => t.Product)
             .Where(p => p.CompanyId == companyId);
 
-        if (_tenant.IsPartnerUser())
+        if (isPartner)
         {
-            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
-            query = query.Where(p => p.CustomerIds.Count == 0 || p.CustomerIds.Any(id => allowedCustomerIds.Contains(id)));
+            query = query.Where(p =>
+                p.CustomerIds.Any(id => allowedCustomerIds.Contains(id)) ||
+                (p.CustomerIds.Count == 0 && p.Tasks.Any(t => allowedCustomerIds.Contains(t.Product.CustomerId))));
         }
 
         if (request.CustomerId.HasValue)
@@ -67,11 +71,19 @@ public class GetCycleCountPlansHandler : IRequestHandler<GetCycleCountPlansQuery
 
         var result = rawPlans.Select(p =>
         {
-            string customerNameDisplay = p.CustomerIds.Count switch
+            var visibleCustomerIds = isPartner
+                ? p.CustomerIds.Where(id => allowedCustomerIds.Contains(id)).ToList()
+                : p.CustomerIds;
+
+            var visibleTasks = isPartner
+                ? p.Tasks.Where(t => allowedCustomerIds.Contains(t.Product.CustomerId)).ToList()
+                : p.Tasks.ToList();
+
+            string customerNameDisplay = visibleCustomerIds.Count switch
             {
-                0 => "Todos os Depositantes",
-                1 => customerNames.TryGetValue(p.CustomerIds[0], out var name) ? name : "Depositante Desconhecido",
-                _ => string.Join(", ", p.CustomerIds.Select(id => customerNames.TryGetValue(id, out var n) ? n : "Outro"))
+                0 => isPartner ? "Meus Depositantes" : "Todos os Depositantes",
+                1 => customerNames.TryGetValue(visibleCustomerIds[0], out var name) ? name : "Depositante",
+                _ => string.Join(", ", visibleCustomerIds.Select(id => customerNames.TryGetValue(id, out var n) ? n : "Outro"))
             };
 
             return new CycleCountPlanSummaryDto(
@@ -82,11 +94,11 @@ public class GetCycleCountPlansHandler : IRequestHandler<GetCycleCountPlansQuery
                 p.MaxRounds,
                 p.EnableAdjustments,
                 p.AssignedUserId,
-                p.CustomerIds,
+                visibleCustomerIds,
                 customerNameDisplay,
-                p.Tasks.Count(t => t.Status != CycleCountTaskStatus.Recounted),
-                p.Tasks.Count(t => t.Status == CycleCountTaskStatus.Resolved),
-                p.Tasks.Count(t => t.Status == CycleCountTaskStatus.CountedWithDivergence),
+                visibleTasks.Count(t => t.Status != CycleCountTaskStatus.Recounted),
+                visibleTasks.Count(t => t.Status == CycleCountTaskStatus.Resolved),
+                visibleTasks.Count(t => t.Status == CycleCountTaskStatus.CountedWithDivergence),
                 p.CreatedAt
             );
         }).ToList();
@@ -103,6 +115,6 @@ public static class GetCycleCountPlansEndpoints
             await mediator.Send(query))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.View);
     }
 }

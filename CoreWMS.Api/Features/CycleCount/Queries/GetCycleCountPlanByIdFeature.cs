@@ -76,7 +76,17 @@ public class GetCycleCountPlanByIdHandler : IRequestHandler<GetCycleCountPlanByI
 
         if (plan == null) return Results.NotFound(new { Message = "Plano não encontrado." });
 
-        var userIds = plan.Tasks
+        var isPartner = _tenant.IsPartnerUser();
+        var allowedCustomerIds = isPartner ? _tenant.GetAllowedCustomerIds() : new List<Guid>();
+
+        var filteredTasks = isPartner
+            ? plan.Tasks.Where(t => allowedCustomerIds.Contains(t.Product.CustomerId)).ToList()
+            : plan.Tasks.ToList();
+
+        if (isPartner && !filteredTasks.Any() && !plan.CustomerIds.Any(id => allowedCustomerIds.Contains(id)))
+            return Results.Forbid();
+
+        var userIds = filteredTasks
             .SelectMany(t => new[] { t.UserRound1, t.UserRound2, t.UserRound3 })
             .Where(id => id.HasValue)
             .Select(id => id!.Value)
@@ -87,18 +97,22 @@ public class GetCycleCountPlanByIdHandler : IRequestHandler<GetCycleCountPlanByI
             .Where(u => userIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, u => u.Name, ct);
 
+        var visibleCustomerIds = isPartner
+            ? plan.CustomerIds.Where(id => allowedCustomerIds.Contains(id)).ToList()
+            : plan.CustomerIds;
+
         var customerNames = await _db.Customers.AsNoTracking()
-            .Where(c => plan.CustomerIds.Contains(c.Id))
+            .Where(c => visibleCustomerIds.Contains(c.Id))
             .ToDictionaryAsync(c => c.Id, c => c.CorporateName, ct);
 
-        string customerNameDisplay = plan.CustomerIds.Count switch
+        string customerNameDisplay = visibleCustomerIds.Count switch
         {
-            0 => "Todos os Depositantes",
-            1 => customerNames.TryGetValue(plan.CustomerIds[0], out var name) ? name : "Depositante Desconhecido",
-            _ => string.Join(", ", plan.CustomerIds.Select(id => customerNames.TryGetValue(id, out var n) ? n : "Outro"))
+            0 => isPartner ? "Meus Depositantes" : "Todos os Depositantes",
+            1 => customerNames.TryGetValue(visibleCustomerIds[0], out var name) ? name : "Depositante Desconhecido",
+            _ => string.Join(", ", visibleCustomerIds.Select(id => customerNames.TryGetValue(id, out var n) ? n : "Outro"))
         };
 
-        var tasksDto = plan.Tasks.Select(t => new CycleCountTaskDetailDto(
+        var tasksDto = filteredTasks.Select(t => new CycleCountTaskDetailDto(
             t.Id,
             t.LocationId,
             t.Location.FullPath,
@@ -132,12 +146,12 @@ public class GetCycleCountPlanByIdHandler : IRequestHandler<GetCycleCountPlanByI
             plan.MaxRounds,
             plan.EnableAdjustments,
             plan.AssignedUserId,
-            plan.CustomerIds,
+            visibleCustomerIds,
             plan.ProductIds,
             customerNameDisplay,
-            plan.Tasks.Count(t => t.Status != CycleCountTaskStatus.Recounted),
-            plan.Tasks.Count(t => t.Status == CycleCountTaskStatus.Resolved),
-            plan.Tasks.Count(t => t.Status == CycleCountTaskStatus.CountedWithDivergence),
+            filteredTasks.Count(t => t.Status != CycleCountTaskStatus.Recounted),
+            filteredTasks.Count(t => t.Status == CycleCountTaskStatus.Resolved),
+            filteredTasks.Count(t => t.Status == CycleCountTaskStatus.CountedWithDivergence),
             tasksDto
         );
 
@@ -153,6 +167,6 @@ public static class GetCycleCountPlanByIdEndpoints
             await mediator.Send(new GetCycleCountPlanByIdQuery(id)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.View);
     }
 }

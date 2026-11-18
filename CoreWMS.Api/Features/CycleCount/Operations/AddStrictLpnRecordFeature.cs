@@ -24,16 +24,23 @@ public class AddStrictLpnRecordCommandValidator : AbstractValidator<AddStrictLpn
 public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
     private readonly IHttpContextAccessor _http;
 
-    public AddStrictLpnRecordHandler(ApplicationDbContext db, IHttpContextAccessor http)
+    public AddStrictLpnRecordHandler(ApplicationDbContext db, ITenantProvider tenant, IHttpContextAccessor http)
     {
         _db = db;
+        _tenant = tenant;
         _http = http;
     }
 
     public async Task<IResult> Handle(AddStrictLpnRecordCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+
+        if (_tenant.IsPartnerUser())
+            return Results.Forbid();
+
         var userIdClaim = _http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return Results.Unauthorized();
@@ -41,23 +48,28 @@ public class AddStrictLpnRecordHandler : IRequestHandler<AddStrictLpnRecordComma
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
                 .ThenInclude(p => p.Tasks)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null)
             return Results.NotFound(new { Message = "Tarefa de inventário não encontrada." });
+
+        if (task.CycleCountPlan.Status == CycleCountPlanStatus.Draft)
+            return Results.BadRequest(new { Message = "Este inventário está em Rascunho e aguarda aprovação da Gestão." });
 
         if (task.Status == CycleCountTaskStatus.Resolved)
             return Results.BadRequest(new { Message = "Esta tarefa já foi concluída e conciliada." });
 
         var scannedLpn = request.Lpn.Trim().ToUpper();
 
-        // 1. Verifica se a HU existe e se pertence a este endereço
-        var hu = await _db.HandlingUnits.FirstOrDefaultAsync(h => h.Lpn == scannedLpn, ct);
+        // 1. Verifica se a HU existe na empresa ativa e se pertence a este endereço
+        var hu = await _db.HandlingUnits
+            .AsNoTracking()
+            .FirstOrDefaultAsync(h => h.CompanyId == companyId && h.Lpn == scannedLpn, ct);
 
         // Se a HU não existe ou está fisicamente em outro endereço, registra divergência de HU
         bool isHuMismatch = hu == null || hu.CurrentLocationId != task.LocationId;
 
-        // 2. Registra o apontamento normalmente (Sem dar mensagem de erro para o operador)
+        // 2. Registra o apontamento normalmente (sem bloquear o operador)
         task.CycleCountPlan.StartCounting();
         task.RecordRoundCount(request.CountedQuantity, userId, task.CycleCountPlan.MaxRounds, scannedLpn, isHuMismatch);
         task.CycleCountPlan.CheckCompletion();
@@ -80,6 +92,6 @@ public static class AddStrictLpnRecordEndpoints
             await mediator.Send(cmd with { TaskId = taskId }))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
     }
 }

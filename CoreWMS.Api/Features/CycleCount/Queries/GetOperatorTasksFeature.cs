@@ -38,6 +38,8 @@ public class GetOperatorTasksHandler : IRequestHandler<GetOperatorTasksQuery, IR
     public async Task<IResult> Handle(GetOperatorTasksQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var userIdClaim = _http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         Guid.TryParse(userIdClaim, out var currentUserId);
 
@@ -92,6 +94,6 @@ public static class GetOperatorTasksEndpoints
             await mediator.Send(new GetOperatorTasksQuery()))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
     }
 }

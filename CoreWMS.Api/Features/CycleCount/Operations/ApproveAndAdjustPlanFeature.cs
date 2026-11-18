@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using CoreWMS.Api.Features.CycleCount.Enums;
-using CoreWMS.Api.Features.CycleCount.Entities;
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Inventory.Operations;
@@ -34,12 +33,18 @@ public class ApproveAndAdjustPlanHandler :
     IRequestHandler<ApplyFiscalAdjustmentCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
     private readonly IMediator _mediator;
     private readonly IHttpContextAccessor _http;
 
-    public ApproveAndAdjustPlanHandler(ApplicationDbContext db, IMediator mediator, IHttpContextAccessor http)
+    public ApproveAndAdjustPlanHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IMediator mediator,
+        IHttpContextAccessor http)
     {
         _db = db;
+        _tenant = tenant;
         _mediator = mediator;
         _http = http;
     }
@@ -52,7 +57,10 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(ApproveCycleCountPlanCommand request, CancellationToken ct)
     {
-        var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.PlanId, ct);
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
+        var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.PlanId && p.CompanyId == companyId, ct);
         if (plan == null) return Results.NotFound(new { Message = "Plano não encontrado." });
 
         plan.ApproveForCounting();
@@ -63,12 +71,15 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(StartTaskCountingCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var userId = GetCurrentUserId();
         if (userId == Guid.Empty) return Results.Unauthorized();
 
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
@@ -81,7 +92,12 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(CancelTaskCountingCommand request, CancellationToken ct)
     {
-        var task = await _db.CycleCountTasks.FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
+        var task = await _db.CycleCountTasks
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
+
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
         task.CancelCounting();
@@ -92,11 +108,16 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(RecordPositionCountCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var userId = GetCurrentUserId();
+        if (userId == Guid.Empty) return Results.Unauthorized();
+
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
                 .ThenInclude(p => p.Tasks)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
 
@@ -109,10 +130,13 @@ public class ApproveAndAdjustPlanHandler :
 
     private async Task<IResult> ReleaseNextRoundForLocationAsync(Guid planId, Guid locationId, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var plan = await _db.CycleCountPlans
             .Include(p => p.Tasks)
                 .ThenInclude(t => t.Location)
-            .FirstOrDefaultAsync(p => p.Id == planId, ct);
+            .FirstOrDefaultAsync(p => p.Id == planId && p.CompanyId == companyId, ct);
 
         if (plan == null)
             return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
@@ -175,9 +199,12 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(RequestRecountCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var task = await _db.CycleCountTasks
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null)
             return Results.NotFound(new { Message = "Tarefa não encontrada." });
@@ -187,7 +214,13 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(CancelPlanToDraftCommand request, CancellationToken ct)
     {
-        var plan = await _db.CycleCountPlans.Include(p => p.Tasks).FirstOrDefaultAsync(p => p.Id == request.PlanId, ct);
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
+        var plan = await _db.CycleCountPlans
+            .Include(p => p.Tasks)
+            .FirstOrDefaultAsync(p => p.Id == request.PlanId && p.CompanyId == companyId, ct);
+
         if (plan == null) return Results.NotFound(new { Message = "Plano não encontrado." });
 
         plan.CancelToDraft();
@@ -197,7 +230,12 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(DeleteCycleCountPlanCommand request, CancellationToken ct)
     {
-        var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.PlanId, ct);
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
+        var plan = await _db.CycleCountPlans
+            .FirstOrDefaultAsync(p => p.Id == request.PlanId && p.CompanyId == companyId, ct);
+
         if (plan == null) return Results.NotFound(new { Message = "Plano não encontrado." });
 
         if (plan.Status != CycleCountPlanStatus.Draft)
@@ -210,19 +248,28 @@ public class ApproveAndAdjustPlanHandler :
 
     public async Task<IResult> Handle(ApplyFiscalAdjustmentCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var task = await _db.CycleCountTasks
+            .Include(t => t.Product)
             .Include(t => t.CycleCountPlan)
                 .ThenInclude(p => p.Tasks)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null) return Results.NotFound(new { Message = "Tarefa não encontrada." });
+
+        if (task.Status == CycleCountTaskStatus.Resolved)
+            return Results.BadRequest(new { Message = "Esta tarefa já foi conciliada/ajustada anteriormente." });
+
+        var customerId = task.Product.CustomerId;
 
         task.ApplyFiscalAdjustment(request.FiscalDocumentNumber.Trim(), request.Notes);
         task.CycleCountPlan.CheckCompletion();
 
         var balance = await _db.InventoryBalances
-            .FirstOrDefaultAsync(b => b.CompanyId == task.CycleCountPlan.CompanyId &&
-                                      b.CustomerId == task.CycleCountPlan.CustomerIds.FirstOrDefault() &&
+            .FirstOrDefaultAsync(b => b.CompanyId == companyId &&
+                                      b.CustomerId == customerId &&
                                       b.ProductId == task.ProductId, ct);
 
         if (balance != null)
@@ -231,13 +278,14 @@ public class ApproveAndAdjustPlanHandler :
             balance.AdjustAvailable(divergence);
 
             var transType = divergence > 0 ? TransactionType.Inventory_Adjustment_In : TransactionType.Inventory_Adjustment_Out;
-            var actionMsg = divergence > 0 ? $"AJUSTE FISCAL (SOBRA): Remessa {request.FiscalDocumentNumber}" : $"AJUSTE FISCAL (FALTA): Retorno Simbólico {request.FiscalDocumentNumber}";
+            var actionMsg = divergence > 0
+                ? $"AJUSTE FISCAL (SOBRA): Remessa {request.FiscalDocumentNumber}"
+                : $"AJUSTE FISCAL (FALTA): Retorno Simbólico {request.FiscalDocumentNumber}";
 
             await _db.SaveChangesAsync(ct);
 
-            // DELEGAÇÃO VIA MEDIATR: Movimento auditado enviado de forma desacoplada
             await _mediator.Send(new RecordKardexMovementCommand(
-                CustomerId: task.CycleCountPlan.CustomerIds.FirstOrDefault(),
+                CustomerId: customerId,
                 ProductId: task.ProductId,
                 HandlingUnitId: null,
                 LocationId: task.LocationId,
@@ -246,7 +294,7 @@ public class ApproveAndAdjustPlanHandler :
                 BalanceAfter: balance.TotalAvailable,
                 SourceDocumentId: null,
                 SourceDocumentNumber: actionMsg,
-                CompanyId: task.CycleCountPlan.CompanyId
+                CompanyId: companyId
             ), ct);
         }
         else
@@ -262,60 +310,60 @@ public static class ApproveAndAdjustPlanEndpoints
 {
     public static void MapApproveAndAdjustPlanEndpoints(this IEndpointRouteBuilder app)
     {
-        // Endpoints do Coletor / Operação
+        // Endpoints do Coletor / Operação Interna
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/start", async (Guid taskId, IMediator mediator) =>
             await mediator.Send(new StartTaskCountingCommand(taskId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
 
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/cancel-counting", async (Guid taskId, IMediator mediator) =>
             await mediator.Send(new CancelTaskCountingCommand(taskId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
 
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/record-position", async (Guid taskId, RecordPositionCountCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd with { TaskId = taskId }))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
 
-        // Endpoints da Gestão / Auditoria
+        // Endpoints da Gestão Interna / Auditoria
         app.MapPost("/api/cycle-count/plans/{planId:guid}/approve", async (Guid planId, IMediator mediator) =>
             await mediator.Send(new ApproveCycleCountPlanCommand(planId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
 
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/recount", async (Guid taskId, IMediator mediator) =>
             await mediator.Send(new RequestRecountCommand(taskId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
 
         app.MapPost("/api/cycle-count/locations/{planId:guid}/{locationId:guid}/recount", async (Guid planId, Guid locationId, IMediator mediator) =>
             await mediator.Send(new ReleaseLocationNextRoundCommand(planId, locationId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
 
         app.MapPost("/api/cycle-count/plans/{planId:guid}/cancel", async (Guid planId, IMediator mediator) =>
             await mediator.Send(new CancelPlanToDraftCommand(planId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
 
         app.MapDelete("/api/cycle-count/plans/{planId:guid}", async (Guid planId, IMediator mediator) =>
             await mediator.Send(new DeleteCycleCountPlanCommand(planId)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
 
         app.MapPost("/api/cycle-count/tasks/{taskId:guid}/apply-fiscal-adjustment", async (Guid taskId, ApplyFiscalAdjustmentCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd with { TaskId = taskId }))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
     }
 }

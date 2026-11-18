@@ -1,4 +1,5 @@
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Yard.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
@@ -37,11 +38,16 @@ public class YardCheckinHandler : IRequestHandler<YardCheckinCommand, IResult>
     public async Task<IResult> Handle(YardCheckinCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var cleanTerm = request.CodeOrPlate.Trim().ToUpper();
 
         var appointment = await _db.YardAppointments
-            .FirstOrDefaultAsync(y => y.CompanyId == companyId &&
-                (y.ReservationCode == cleanTerm || (y.VehiclePlate != null && y.VehiclePlate == cleanTerm)), ct);
+            .Where(y => y.CompanyId == companyId &&
+                (y.ReservationCode == cleanTerm || (y.VehiclePlate != null && y.VehiclePlate == cleanTerm)))
+            .OrderByDescending(y => y.Status == YardAppointmentStatus.Scheduled)
+            .ThenByDescending(y => y.ScheduledDate)
+            .FirstOrDefaultAsync(ct);
 
         if (appointment == null)
             return Results.NotFound(new { Message = $"Nenhum agendamento localizado para '{cleanTerm}'." });

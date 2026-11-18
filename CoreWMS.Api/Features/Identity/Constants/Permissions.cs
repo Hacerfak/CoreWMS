@@ -160,13 +160,34 @@ public static class Permissions
 
     public static class Yard
     {
-        // Visualizar agenda e pátio (Todos / Operação)
+        // Visualizar agenda e pátio (Operação, Gestão e Cliente B2B)
         public const string View = "yard:view";
 
-        // Check-in, Check-out e Encostar na Doca (Portaria / Encarregados)
+        // Criar agendamentos programados e importar XML gerando ordem (Gestão e Cliente B2B)
+        public const string Schedule = "yard:schedule";
+
+        // Check-in, Check-out, Encostar na Doca e Vincular Ordens (Somente Equipe Interna)
         public const string Operate = "yard:operate";
 
-        // Criar agendamentos, importar XML, cancelar e excluir (Gestão / Portaria)
+        // Entrada direta no pátio, editar, cancelar e excluir agendamentos (Somente Gestão Interna)
         public const string Manage = "yard:manage";
+    }
+
+    public static class CycleCount
+    {
+        // Visualização de planos de inventário, detalhes das contagens e métricas IRA
+        public const string View = "cyclecount:view";
+
+        // Criar novos planos de inventário (Gestão Interna e Externo - Gestão)
+        public const string Create = "cyclecount:create";
+
+        // Exportação / download de extratos dos planos de inventário
+        public const string Export = "cyclecount:export";
+
+        // Execução de contagens no coletor (planos atribuídos e contagens espontâneas)
+        public const string Count = "cyclecount:count";
+
+        // Gestão completa: criar planos, aprovar, solicitar recontagem, aplicar ajustes e encerrar
+        public const string Manage = "cyclecount:manage";
     }
 }

@@ -48,12 +48,16 @@ public class RecordBlindLocationCountHandler :
 
     public async Task<IResult> Handle(StartLocationCountingCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var userId = GetUserId();
         if (userId == Guid.Empty) return Results.Unauthorized();
 
         var tasks = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
             .Where(t => t.CycleCountPlanId == request.PlanId &&
+                        t.CycleCountPlan.CompanyId == companyId &&
                         t.LocationId == request.LocationId &&
                         (t.Status == CycleCountTaskStatus.Pending || t.Status == CycleCountTaskStatus.InCounting))
             .ToListAsync(ct);
@@ -73,8 +77,12 @@ public class RecordBlindLocationCountHandler :
 
     public async Task<IResult> Handle(CancelLocationCountingCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var tasks = await _db.CycleCountTasks
             .Where(t => t.CycleCountPlanId == request.PlanId &&
+                        t.CycleCountPlan.CompanyId == companyId &&
                         t.LocationId == request.LocationId &&
                         t.Status == CycleCountTaskStatus.InCounting)
             .ToListAsync(ct);
@@ -91,6 +99,8 @@ public class RecordBlindLocationCountHandler :
     public async Task<IResult> Handle(RecordBlindLocationCountCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var userId = GetUserId();
         if (userId == Guid.Empty) return Results.Unauthorized();
 
@@ -100,6 +110,9 @@ public class RecordBlindLocationCountHandler :
 
         if (plan == null)
             return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
+
+        if (plan.Status == CycleCountPlanStatus.Draft || plan.Status == CycleCountPlanStatus.Closed)
+            return Results.BadRequest(new { Message = $"O plano está em status '{plan.Status}' e não aceita registros de contagem." });
 
         var locationTasks = plan.Tasks
             .Where(t => t.LocationId == request.LocationId &&
@@ -179,7 +192,6 @@ public class RecordBlindLocationCountHandler :
             }
             else
             {
-                // Produto era esperado (ou placeholder vazio), mas operador contou 0 (ou marcou Posição Vazia)
                 task.RecordRoundCount(0m, userId, plan.MaxRounds, null, false);
             }
         }
@@ -228,14 +240,14 @@ public static class RecordBlindLocationCountEndpoints
 
         group.MapPost("/{planId:guid}/{locationId:guid}/start", async (Guid planId, Guid locationId, IMediator mediator) =>
             await mediator.Send(new StartLocationCountingCommand(planId, locationId)))
-            .RequirePermission(Permissions.Inventory.View);
+            .RequirePermission(Permissions.CycleCount.Count);
 
         group.MapPost("/{planId:guid}/{locationId:guid}/cancel", async (Guid planId, Guid locationId, IMediator mediator) =>
             await mediator.Send(new CancelLocationCountingCommand(planId, locationId)))
-            .RequirePermission(Permissions.Inventory.View);
+            .RequirePermission(Permissions.CycleCount.Count);
 
         group.MapPost("/{planId:guid}/{locationId:guid}/record", async (Guid planId, Guid locationId, RecordBlindLocationCountCommand cmd, IMediator mediator) =>
             await mediator.Send(cmd with { PlanId = planId, LocationId = locationId }))
-            .RequirePermission(Permissions.Inventory.View);
+            .RequirePermission(Permissions.CycleCount.Count);
     }
 }

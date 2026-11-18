@@ -8,9 +8,6 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Fiscal.NfeParser;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Yard;
@@ -54,12 +51,22 @@ public class CreateYardAppointmentFromXmlHandler : IRequestHandler<CreateYardApp
     public async Task<IResult> Handle(CreateYardAppointmentFromXmlCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        var isPartner = _tenant.IsPartnerUser();
+        var allowedCustomerIds = isPartner ? _tenant.GetAllowedCustomerIds() : new List<Guid>();
+
+        // 1. Trava estrita: Entrada direta no pátio é exclusiva da equipe interna
+        if (isPartner && request.DirectCheckIn)
+        {
+            return Results.Forbid();
+        }
 
         string xmlString;
         try { xmlString = Encoding.UTF8.GetString(request.FileBytes); }
         catch { return Results.BadRequest(new { Message = "Arquivo XML inválido ou corrompido." }); }
 
-        var parsedNfe = _parser.ParseXml(xmlString);
+        NfeParsedData parsedNfe;
+        try { parsedNfe = _parser.ParseXml(xmlString); }
+        catch (Exception ex) { return Results.BadRequest(new { Message = $"Erro ao interpretar o XML da NF-e: {ex.Message}" }); }
 
         string plate = !string.IsNullOrWhiteSpace(request.VehiclePlateOverride)
             ? request.VehiclePlateOverride.Trim().ToUpper()
@@ -70,14 +77,16 @@ public class CreateYardAppointmentFromXmlHandler : IRequestHandler<CreateYardApp
             : (parsedNfe.VehiclePlateState ?? "RS");
 
         DateTime schedule = request.ScheduledDate ?? DateTime.UtcNow;
+        Guid? dockLocationId = isPartner ? null : request.DockLocationId;
 
         Guid? createdInboundId = null;
         Guid? createdOutboundId = null;
+        Guid? resolvedCustomerId = null;
 
-        // 1. FLUXO ENTRADA: Cria a InboundOrder automaticamente
+        // 2. FLUXO ENTRADA: Cria (ou localiza) a InboundOrder vinculada ao depositante
         if (request.Type == YardAppointmentType.Inbound)
         {
-            var importRes = await _mediator.Send(new ImportInboundXmlCommand(new List<string> { xmlString }), ct);
+            await _mediator.Send(new ImportInboundXmlCommand(new List<string> { xmlString }), ct);
 
             var createdInbound = await _db.InboundOrders
                 .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.AccessKey == parsedNfe.AccessKey, ct);
@@ -86,16 +95,27 @@ public class CreateYardAppointmentFromXmlHandler : IRequestHandler<CreateYardApp
             {
                 return Results.BadRequest(new
                 {
-                    Message = "O XML foi processado mas a Ordem de Entrada não pôde ser criada. Verifique se o CNPJ do destinatário da NF-e é idêntico ao da sua empresa cadastrada."
+                    Message = "O XML foi processado mas a Ordem de Entrada não pôde ser criada. Verifique se o CNPJ do destinatário da NF-e pertence ao armazém e se o emitente está autorizado."
                 });
             }
 
+            if (isPartner && (!createdInbound.CustomerId.HasValue || !allowedCustomerIds.Contains(createdInbound.CustomerId.Value)))
+            {
+                return Results.Forbid();
+            }
+
+            if (createdInbound.YardAppointmentId.HasValue)
+            {
+                return Results.BadRequest(new { Message = "Esta Ordem de Entrada já possui um agendamento de portaria vinculado." });
+            }
+
             createdInboundId = createdInbound.Id;
+            resolvedCustomerId = createdInbound.CustomerId;
         }
-        // 2. FLUXO SAÍDA: Cria a OutboundOrder automaticamente
+        // 3. FLUXO SAÍDA: Cria (ou localiza) a OutboundOrder vinculada ao depositante
         else if (request.Type == YardAppointmentType.Outbound)
         {
-            var importRes = await _mediator.Send(new ImportOutboundOrderCommand(request.FileBytes), ct);
+            await _mediator.Send(new ImportOutboundOrderCommand(request.FileBytes), ct);
 
             var createdOutbound = await _db.OutboundOrders
                 .FirstOrDefaultAsync(o => o.CompanyId == companyId && o.AccessKey == parsedNfe.AccessKey, ct);
@@ -104,14 +124,25 @@ public class CreateYardAppointmentFromXmlHandler : IRequestHandler<CreateYardApp
             {
                 return Results.BadRequest(new
                 {
-                    Message = "O XML foi processado mas a Ordem de Saída não pôde ser criada. Verifique se o emitente da NF-e já está cadastrado como cliente depositante nesta empresa."
+                    Message = "O XML foi processado mas a Ordem de Saída não pôde ser criada. Verifique se o emitente da NF-e está cadastrado como depositante e se os SKUs existem."
                 });
             }
 
+            if (isPartner && !allowedCustomerIds.Contains(createdOutbound.CustomerId))
+            {
+                return Results.Forbid();
+            }
+
+            if (createdOutbound.YardAppointmentId.HasValue)
+            {
+                return Results.BadRequest(new { Message = "Este Pedido de Saída já possui um agendamento de portaria vinculado." });
+            }
+
             createdOutboundId = createdOutbound.Id;
+            resolvedCustomerId = createdOutbound.CustomerId;
         }
 
-        // 3. Instancia o Agendamento amarrado à Ordem criada
+        // 4. Instancia o Agendamento Programado amarrado à Ordem e ao Depositante
         var appointment = new YardAppointment(
             companyId,
             request.Type,
@@ -126,19 +157,20 @@ public class CreateYardAppointmentFromXmlHandler : IRequestHandler<CreateYardApp
             invoiceNumber: request.InvoiceNumber ?? parsedNfe.InvoiceNumber,
             invoiceSerie: request.InvoiceSerie ?? parsedNfe.InvoiceSerie,
             additionalNotes: request.AdditionalNotes ?? $"Importado via XML na portaria ({parsedNfe.AccessKey})",
-            dockLocationId: request.DockLocationId,
+            dockLocationId: dockLocationId,
             inboundOrderId: createdInboundId,
-            outboundOrderId: createdOutboundId
+            outboundOrderId: createdOutboundId,
+            customerId: resolvedCustomerId
         );
 
-        if (request.DirectCheckIn)
+        if (!isPartner && request.DirectCheckIn)
         {
-            appointment.CheckIn(plate, request.DriverName, request.DriverCpf, request.DockLocationId);
+            appointment.CheckIn(plate, request.DriverName, request.DriverCpf, dockLocationId);
         }
 
         _db.YardAppointments.Add(appointment);
 
-        // 4. Garante a amarração bidirecional nas ordens
+        // 5. Garante a amarração bidirecional nas ordens
         if (createdInboundId.HasValue)
         {
             var inb = await _db.InboundOrders.FindAsync(new object[] { createdInboundId.Value }, ct);
@@ -159,7 +191,7 @@ public class CreateYardAppointmentFromXmlHandler : IRequestHandler<CreateYardApp
             appointment.AccessKey,
             InboundOrderId = createdInboundId,
             OutboundOrderId = createdOutboundId,
-            Message = "Ordem gerada e agendamento vinculado com sucesso a partir do XML!"
+            Message = "Ordem gerada e agendamento programado vinculado com sucesso a partir do XML!"
         });
     }
 }
@@ -214,7 +246,7 @@ public static class CreateYardAppointmentFromXmlEndpoints
         })
         .WithTags("Yard")
         .RequireAuthorization()
-        .RequirePermission(Permissions.Yard.Manage)
+        .RequirePermission(Permissions.Yard.Schedule)
         .DisableAntiforgery();
     }
 }

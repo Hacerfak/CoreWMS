@@ -4,9 +4,6 @@ using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Yard;
@@ -25,7 +22,8 @@ public record UpdateYardAppointmentCommand(
     string? InvoiceNumber,
     string? InvoiceSerie,
     string? AdditionalNotes,
-    Guid? DockLocationId
+    Guid? DockLocationId,
+    Guid? CustomerId = null
 ) : IRequest<IResult>;
 
 public class UpdateYardAppointmentCommandValidator : AbstractValidator<UpdateYardAppointmentCommand>
@@ -52,6 +50,7 @@ public class UpdateYardAppointmentHandler : IRequestHandler<UpdateYardAppointmen
     public async Task<IResult> Handle(UpdateYardAppointmentCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var appointment = await _db.YardAppointments
             .FirstOrDefaultAsync(y => y.Id == request.Id && y.CompanyId == companyId, ct);
@@ -75,7 +74,8 @@ public class UpdateYardAppointmentHandler : IRequestHandler<UpdateYardAppointmen
             request.InvoiceNumber,
             request.InvoiceSerie,
             request.AdditionalNotes,
-            request.DockLocationId
+            request.DockLocationId,
+            request.CustomerId
         );
 
         await _db.SaveChangesAsync(ct);

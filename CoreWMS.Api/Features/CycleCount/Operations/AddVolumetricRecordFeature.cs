@@ -23,23 +23,31 @@ public class AddVolumetricRecordCommandValidator : AbstractValidator<AddVolumetr
 public class AddVolumetricRecordHandler : IRequestHandler<AddVolumetricRecordCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
     private readonly IHttpContextAccessor _http;
 
-    public AddVolumetricRecordHandler(ApplicationDbContext db, IHttpContextAccessor http)
+    public AddVolumetricRecordHandler(ApplicationDbContext db, ITenantProvider tenant, IHttpContextAccessor http)
     {
         _db = db;
+        _tenant = tenant;
         _http = http;
     }
 
     public async Task<IResult> Handle(AddVolumetricRecordCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+
+        if (_tenant.IsPartnerUser())
+            return Results.Forbid();
+
         var userIdClaim = _http.HttpContext?.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             return Results.Unauthorized();
 
         var task = await _db.CycleCountTasks
             .Include(t => t.CycleCountPlan)
-            .FirstOrDefaultAsync(t => t.Id == request.TaskId, ct);
+                .ThenInclude(p => p.Tasks)
+            .FirstOrDefaultAsync(t => t.Id == request.TaskId && t.CycleCountPlan.CompanyId == companyId, ct);
 
         if (task == null)
             return Results.NotFound(new { Message = "Tarefa de inventário não encontrada." });
@@ -76,6 +84,6 @@ public static class AddVolumetricRecordEndpoints
             await mediator.Send(cmd with { TaskId = taskId }))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
     }
 }

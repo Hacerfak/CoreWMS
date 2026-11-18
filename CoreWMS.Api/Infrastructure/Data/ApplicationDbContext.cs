@@ -856,6 +856,11 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(x => x.CompanyId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            b.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             b.HasOne(x => x.DockLocation)
                 .WithMany()
                 .HasForeignKey(x => x.DockLocationId)

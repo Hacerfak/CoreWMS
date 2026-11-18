@@ -26,12 +26,28 @@ public class GetYardAppointmentByIdHandler : IRequestHandler<GetYardAppointmentB
 
         var y = await _db.YardAppointments
             .AsNoTracking()
+            .Include(x => x.Customer)
             .Include(x => x.DockLocation)
             .Include(x => x.InboundOrder)
+                .ThenInclude(o => o!.Customer)
             .Include(x => x.OutboundOrder)
+                .ThenInclude(o => o!.Customer)
             .FirstOrDefaultAsync(x => x.Id == request.Id && x.CompanyId == companyId, ct);
 
         if (y == null) return Results.NotFound(new { Message = "Agendamento não encontrado." });
+
+        var effectiveCustomerId = y.CustomerId ?? y.InboundOrder?.CustomerId ?? y.OutboundOrder?.CustomerId;
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            if (!effectiveCustomerId.HasValue || !allowedCustomerIds.Contains(effectiveCustomerId.Value))
+                return Results.Forbid();
+        }
+
+        var customerName = y.Customer?.CorporateName
+            ?? y.InboundOrder?.Customer?.CorporateName
+            ?? y.OutboundOrder?.Customer?.CorporateName;
 
         var dto = new YardAppointmentDto(
             y.Id,
@@ -68,7 +84,9 @@ public class GetYardAppointmentByIdHandler : IRequestHandler<GetYardAppointmentB
             y.InboundOrderId,
             y.InboundOrder?.InvoiceNumber,
             y.OutboundOrderId,
-            y.OutboundOrder?.OrderNumber
+            y.OutboundOrder?.OrderNumber,
+            effectiveCustomerId,
+            customerName
         );
 
         return Results.Ok(dto);

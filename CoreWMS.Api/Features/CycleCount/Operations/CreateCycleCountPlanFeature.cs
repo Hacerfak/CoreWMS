@@ -44,6 +44,28 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
     public async Task<IResult> Handle(CreateCycleCountPlanCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        var isPartner = _tenant.IsPartnerUser();
+        var effectiveCustomerIds = request.CustomerIds?.Distinct().ToList() ?? new List<Guid>();
+        var assignedUserId = request.AssignedUserId;
+
+        // Viseira B2B: usuário externo cria plano programado em Rascunho apenas para seus depositantes
+        if (isPartner)
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+
+            if (effectiveCustomerIds.Any())
+            {
+                if (effectiveCustomerIds.Any(cid => !allowedCustomerIds.Contains(cid)))
+                    return Results.Forbid();
+            }
+            else
+            {
+                effectiveCustomerIds = allowedCustomerIds;
+            }
+
+            // Usuário externo não atribui operador interno; plano aguarda revisão/aprovação da gestão
+            assignedUserId = null;
+        }
 
         var plan = new CycleCountPlan(
             companyId,
@@ -51,8 +73,8 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
             request.BlockMovements,
             request.MaxRounds,
             request.EnableAdjustments,
-            request.AssignedUserId,
-            request.CustomerIds,
+            assignedUserId,
+            effectiveCustomerIds,
             request.ProductIds,
             request.LocationIds,
             request.Batch?.Trim()
@@ -60,14 +82,14 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
 
         _db.CycleCountPlans.Add(plan);
 
-        // Snapshot de Saldos por Posição cruzando as listas selecionadas
+        // Snapshot de Saldos por Posição cruzando os filtros
         var huQuery = _db.HandlingUnits.AsNoTracking()
             .Include(h => h.CurrentLocation)
                 .ThenInclude(l => l!.StorageType)
             .Where(h => h.CompanyId == companyId && h.CurrentLocationId.HasValue);
 
-        if (request.CustomerIds != null && request.CustomerIds.Count > 0)
-            huQuery = huQuery.Where(h => request.CustomerIds.Contains(h.CustomerId));
+        if (effectiveCustomerIds.Count > 0)
+            huQuery = huQuery.Where(h => effectiveCustomerIds.Contains(h.CustomerId));
 
         if (request.ProductIds != null && request.ProductIds.Count > 0)
             huQuery = huQuery.Where(h => request.ProductIds.Contains(h.ProductId));
@@ -112,7 +134,7 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
                 item.ProductId,
                 item.ExpectedQty,
                 isDynamic,
-                request.AssignedUserId
+                assignedUserId
             );
 
             _db.CycleCountTasks.Add(task);
@@ -126,7 +148,9 @@ public class CreateCycleCountPlanHandler : IRequestHandler<CreateCycleCountPlanC
             PlanName = plan.Name,
             Status = plan.Status.ToString(),
             TasksGenerated = snapshot.Count,
-            Message = $"Plano criado em Rascunho com {snapshot.Count} posições mapeadas."
+            Message = isPartner
+                ? $"Solicitação de inventário criada em Rascunho com {snapshot.Count} posição(ões), aguardando aprovação da gestão do armazém."
+                : $"Plano criado em Rascunho com {snapshot.Count} posições mapeadas."
         });
     }
 }
@@ -139,6 +163,6 @@ public static class CreateCycleCountPlanEndpoints
             await mediator.Send(cmd))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Create);
     }
 }

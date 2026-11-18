@@ -32,6 +32,7 @@ public class YardMoveToDockHandler : IRequestHandler<YardMoveToDockCommand, IRes
     public async Task<IResult> Handle(YardMoveToDockCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var appointment = await _db.YardAppointments
             .Include(y => y.DockLocation)

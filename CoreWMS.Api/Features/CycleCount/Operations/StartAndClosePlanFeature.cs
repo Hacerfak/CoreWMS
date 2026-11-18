@@ -15,15 +15,22 @@ public class StartAndClosePlanHandler :
     IRequestHandler<CloseCycleCountPlanCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
 
-    public StartAndClosePlanHandler(ApplicationDbContext db)
+    public StartAndClosePlanHandler(ApplicationDbContext db, ITenantProvider tenant)
     {
         _db = db;
+        _tenant = tenant;
     }
 
     public async Task<IResult> Handle(StartCycleCountPlanCommand request, CancellationToken ct)
     {
-        var plan = await _db.CycleCountPlans.FirstOrDefaultAsync(p => p.Id == request.Id, ct);
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
+        var plan = await _db.CycleCountPlans
+            .FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == companyId, ct);
+
         if (plan == null)
             return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
 
@@ -42,9 +49,12 @@ public class StartAndClosePlanHandler :
 
     public async Task<IResult> Handle(CloseCycleCountPlanCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var plan = await _db.CycleCountPlans
             .Include(p => p.Tasks)
-            .FirstOrDefaultAsync(p => p.Id == request.Id, ct);
+            .FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == companyId, ct);
 
         if (plan == null)
             return Results.NotFound(new { Message = "Plano de inventário não encontrado." });
@@ -70,12 +80,12 @@ public static class StartAndClosePlanEndpoints
             await mediator.Send(new StartCycleCountPlanCommand(id)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
 
         app.MapPost("/api/cycle-count/plans/{id:guid}/close", async (Guid id, IMediator mediator) =>
             await mediator.Send(new CloseCycleCountPlanCommand(id)))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.ManageQuality);
+           .RequirePermission(Permissions.CycleCount.Manage);
     }
 }

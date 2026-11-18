@@ -41,6 +41,11 @@ public class CreateSpontaneousCycleCountHandler : IRequestHandler<CreateSpontane
     public async Task<IResult> Handle(CreateSpontaneousCycleCountCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+
+        // Trava estrita: usuários externos não podem iniciar contagem espontânea
+        if (_tenant.IsPartnerUser())
+            return Results.Forbid();
+
         var user = _http.HttpContext?.User;
         var userIdClaim = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
@@ -151,8 +156,6 @@ public class CreateSpontaneousCycleCountHandler : IRequestHandler<CreateSpontane
             }
             else
             {
-                // Endereço vazio no sistema: vincula ao primeiro produto da empresa apenas como âncora de ExpectedQty = 0
-                // (Permite ao operador confirmar posição vazia ou detectar sobra física!)
                 var fallbackProductId = await _db.Products
                     .AsNoTracking()
                     .Where(p => p.CompanyId == companyId)
@@ -189,6 +192,6 @@ public static class CreateSpontaneousCycleCountEndpoints
             await mediator.Send(cmd))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.Count);
     }
 }

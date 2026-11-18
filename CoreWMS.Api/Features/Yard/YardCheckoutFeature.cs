@@ -1,7 +1,6 @@
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
-using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +22,7 @@ public class YardCheckoutHandler : IRequestHandler<YardCheckoutCommand, IResult>
     public async Task<IResult> Handle(YardCheckoutCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var appointment = await _db.YardAppointments
             .FirstOrDefaultAsync(y => y.Id == request.AppointmentId && y.CompanyId == companyId, ct);

@@ -39,19 +39,26 @@ public class GetCycleCountMetricsHandler : IRequestHandler<GetCycleCountMetricsQ
         var plansQuery = _db.CycleCountPlans.AsNoTracking().Where(p => p.CompanyId == companyId);
         var tasksQuery = _db.CycleCountTasks.AsNoTracking().Where(t => t.CycleCountPlan.CompanyId == companyId);
 
-        // Viseira Partner B2B
+        // Viseira Partner B2B: isola planos e tarefas estritamente pelos depositantes vinculados (inclui Draft criados pelo cliente)
         if (_tenant.IsPartnerUser())
         {
             var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
-            plansQuery = plansQuery.Where(p => p.CustomerIds.Count == 0 || p.CustomerIds.Any(id => allowedCustomerIds.Contains(id)));
-            tasksQuery = tasksQuery.Where(t => t.CycleCountPlan.CustomerIds.Count == 0 || t.CycleCountPlan.CustomerIds.Any(id => allowedCustomerIds.Contains(id)));
+
+            plansQuery = plansQuery.Where(p =>
+                p.CustomerIds.Any(id => allowedCustomerIds.Contains(id)) ||
+                (p.CustomerIds.Count == 0 && p.Tasks.Any(t => allowedCustomerIds.Contains(t.Product.CustomerId))));
+
+            tasksQuery = tasksQuery.Where(t => allowedCustomerIds.Contains(t.Product.CustomerId));
         }
 
         // Filtro por Depositante Específico
         if (request.CustomerId.HasValue)
         {
-            plansQuery = plansQuery.Where(p => p.CustomerIds.Count == 0 || p.CustomerIds.Contains(request.CustomerId.Value));
-            tasksQuery = tasksQuery.Where(t => t.CycleCountPlan.CustomerIds.Count == 0 || t.CycleCountPlan.CustomerIds.Contains(request.CustomerId.Value));
+            plansQuery = plansQuery.Where(p =>
+                p.CustomerIds.Contains(request.CustomerId.Value) ||
+                (p.CustomerIds.Count == 0 && p.Tasks.Any(t => t.Product.CustomerId == request.CustomerId.Value)));
+
+            tasksQuery = tasksQuery.Where(t => t.Product.CustomerId == request.CustomerId.Value);
         }
 
         var totalPlans = await plansQuery.CountAsync(ct);
@@ -62,7 +69,6 @@ public class GetCycleCountMetricsHandler : IRequestHandler<GetCycleCountMetricsQ
         var divergentTasks = await tasksQuery.CountAsync(t => t.Status == CycleCountTaskStatus.CountedWithDivergence, ct);
         var pendingFiscal = await tasksQuery.CountAsync(t => t.Status == CycleCountTaskStatus.CountedWithDivergence && string.IsNullOrEmpty(t.FiscalDocumentNumber), ct);
 
-        // Cálculo do IRA (Índice de Acuracidade de Estoque Global)
         decimal iraRate = totalTasks > 0
             ? Math.Round(((decimal)(totalTasks - divergentTasks) / totalTasks) * 100m, 2)
             : 100m;
@@ -99,6 +105,6 @@ public static class GetCycleCountMetricsEndpoints
             await mediator.Send(query))
            .WithTags("CycleCount")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Inventory.View);
+           .RequirePermission(Permissions.CycleCount.View);
     }
 }
