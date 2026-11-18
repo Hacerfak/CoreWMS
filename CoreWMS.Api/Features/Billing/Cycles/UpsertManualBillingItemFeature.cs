@@ -46,6 +46,10 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
     {
         var companyId = _tenant.GetCompanyId();
 
+        // Apontamentos manuais são exclusivos da administração interna
+        if (_tenant.IsPartnerUser())
+            return Results.Forbid();
+
         var cycle = await _db.BillingCycles
             .FirstOrDefaultAsync(c => c.Id == request.CycleId && c.CompanyId == companyId, ct);
 
@@ -53,12 +57,11 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         if (cycle.Status == BillingStatus.Closed)
             return Results.BadRequest(new { Message = "Não é possível alterar o extrato de um ciclo de faturamento já fechado." });
 
-        var service = await _db.BillingServices.FirstOrDefaultAsync(s => s.Id == request.BillingServiceId, ct);
+        var service = await _db.BillingServices
+            .FirstOrDefaultAsync(s => s.Id == request.BillingServiceId && s.CompanyId == companyId, ct);
+
         if (service == null) return Results.BadRequest(new { Message = "Serviço de faturamento inválido." });
 
-        // Determina a data civil da cobrança:
-        // 1. Se informada pelo usuário, usa a data selecionada.
-        // 2. Se omitida, calcula a data local da empresa (ex: America/Sao_Paulo) e não UTC direto.
         DateTime effectiveDate;
         if (request.ChargeDate.HasValue)
         {
@@ -66,11 +69,10 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         }
         else
         {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+            var tz = GetBrasiliaTimeZone();
             effectiveDate = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
         }
 
-        // Salva a data civil sem distorções de fuso
         var normalizedChargeDate = DateTime.SpecifyKind(effectiveDate, DateTimeKind.Utc);
 
         var item = new BillingItem(
@@ -91,5 +93,31 @@ public class UpsertManualBillingItemHandler : IRequestHandler<UpsertManualBillin
         await _db.SaveChangesAsync(ct);
 
         return Results.Ok(new { item.Id, Message = "Lançamento efetuado com sucesso." });
+    }
+
+    private static TimeZoneInfo GetBrasiliaTimeZone()
+    {
+        string[] tzIds = ["America/Sao_Paulo", "E. South America Standard Time"];
+        foreach (var id in tzIds)
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+            catch { }
+        }
+        return TimeZoneInfo.CreateCustomTimeZone("Brasilia", TimeSpan.FromHours(-3), "Brasilia", "Brasilia");
+    }
+}
+
+public static class UpsertManualBillingItemEndpoints
+{
+    public static void MapUpsertManualBillingItemEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/billing/cycles/{cycleId:guid}/items/manual", async (
+            Guid cycleId,
+            UpsertManualBillingItemCommand cmd,
+            IMediator mediator) =>
+            await mediator.Send(cmd with { CycleId = cycleId }))
+           .WithTags("Billing")
+           .RequireAuthorization()
+           .RequirePermission(Permissions.Billing.Manage);
     }
 }

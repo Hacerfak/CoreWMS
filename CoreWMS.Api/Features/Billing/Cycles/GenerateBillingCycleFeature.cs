@@ -39,6 +39,8 @@ public class GenerateBillingCycleHandler : IRequestHandler<GenerateBillingCycleC
     {
         var companyId = _tenant.GetCompanyId();
 
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var cycle = await _db.BillingCycles
             .Include(c => c.Items)
             .FirstOrDefaultAsync(c => c.CompanyId == companyId &&

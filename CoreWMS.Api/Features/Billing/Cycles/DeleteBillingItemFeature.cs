@@ -37,6 +37,8 @@ public class DeleteBillingItemHandler : IRequestHandler<DeleteBillingItemCommand
         if (cycle == null)
             return Results.NotFound(new { Message = "Ciclo de faturamento não encontrado." });
 
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         if (cycle.Status == BillingStatus.Closed)
             return Results.BadRequest(new { Message = "Este ciclo já está fechado e não permite remoção de itens." });
 

@@ -29,6 +29,8 @@ public class CloseBillingCycleHandler : IRequestHandler<CloseBillingCycleCommand
 
         if (cycle == null) return Results.NotFound();
 
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         if (cycle.Status == BillingStatus.Closed)
             return Results.BadRequest(new { Message = "Este ciclo de faturamento já está fechado." });
 

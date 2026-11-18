@@ -94,7 +94,13 @@ public static class Permissions
 
     public static class Billing
     {
+        // Visualizar ciclos de faturamento e detalhes dos lançamentos
         public const string View = "billing:view";
+
+        // Exportar extrato da fatura (HTML/Impressão e CSV)
+        public const string Export = "billing:export";
+
+        // Gestão completa: lançamentos manuais, fechamento/geração de ciclos, serviços e tarifas (Somente Interno)
         public const string Manage = "billing:manage";
     }
 

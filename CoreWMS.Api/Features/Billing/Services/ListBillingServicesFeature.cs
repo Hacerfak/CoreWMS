@@ -22,6 +22,7 @@ public class ListBillingServicesHandler : IRequestHandler<ListBillingServicesQue
     public async Task<IResult> Handle(ListBillingServicesQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var services = await _db.BillingServices
             .AsNoTracking()

@@ -7,9 +7,6 @@ using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CoreWMS.Api.Features.Billing.Queries;
@@ -34,12 +31,19 @@ public class ExportBillingCycleStatementHandler :
     {
         var companyId = _tenant.GetCompanyId();
 
-        var cycle = await _db.BillingCycles.AsNoTracking()
+        var query = _db.BillingCycles.AsNoTracking()
             .Include(c => c.Customer)
             .Include(c => c.Items)
                 .ThenInclude(i => i.BillingService)
-            .Where(c => c.Id == request.Id && c.CompanyId == companyId)
-            .FirstOrDefaultAsync(ct);
+            .Where(c => c.Id == request.Id && c.CompanyId == companyId);
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedIds = _tenant.GetAllowedCustomerIds();
+            query = query.Where(c => allowedIds.Contains(c.CustomerId));
+        }
+
+        var cycle = await query.FirstOrDefaultAsync(ct);
 
         if (cycle == null)
             return Results.NotFound(new { Message = "Ciclo de faturamento não encontrado." });
@@ -58,12 +62,19 @@ public class ExportBillingCycleStatementHandler :
     {
         var companyId = _tenant.GetCompanyId();
 
-        var cycle = await _db.BillingCycles.AsNoTracking()
+        var query = _db.BillingCycles.AsNoTracking()
             .Include(c => c.Customer)
             .Include(c => c.Items)
                 .ThenInclude(i => i.BillingService)
-            .Where(c => c.Id == request.Id && c.CompanyId == companyId)
-            .FirstOrDefaultAsync(ct);
+            .Where(c => c.Id == request.Id && c.CompanyId == companyId);
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedIds = _tenant.GetAllowedCustomerIds();
+            query = query.Where(c => allowedIds.Contains(c.CustomerId));
+        }
+
+        var cycle = await query.FirstOrDefaultAsync(ct);
 
         if (cycle == null)
             return Results.NotFound(new { Message = "Ciclo de faturamento não encontrado." });
@@ -98,13 +109,13 @@ public static class ExportBillingCycleStatementEndpoints
             await mediator.Send(new ExportBillingCycleStatementQuery(id)))
            .WithTags("Billing")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.View);
+           .RequirePermission(Permissions.Billing.Export);
 
         // 2. Exportação Analítica em CSV (Para Tabelas Dinâmicas no Excel)
         app.MapGet("/api/billing/cycles/{id:guid}/export-csv", async (Guid id, IMediator mediator) =>
             await mediator.Send(new ExportBillingCycleCsvQuery(id)))
            .WithTags("Billing")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.View);
+           .RequirePermission(Permissions.Billing.Export);
     }
 }

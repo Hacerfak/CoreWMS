@@ -23,18 +23,14 @@ public class ListCustomerTariffsHandler : IRequestHandler<ListCustomerTariffsQue
     {
         var companyId = _tenant.GetCompanyId();
 
+        if (_tenant.IsPartnerUser())
+            return Results.Forbid();
+
         var query = _db.CustomerTariffs
             .AsNoTracking()
             .Include(t => t.Customer)
             .Include(t => t.BillingService)
             .Where(t => t.CompanyId == companyId);
-
-        // Viseira B2B
-        if (_tenant.IsPartnerUser())
-        {
-            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
-            query = query.Where(t => allowedCustomerIds.Contains(t.CustomerId));
-        }
 
         if (request.CustomerId.HasValue)
         {
@@ -62,6 +58,6 @@ public static class ListCustomerTariffsEndpoints
             await mediator.Send(query))
            .WithTags("Billing")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Billing.View);
+           .RequirePermission(Permissions.Billing.Manage);
     }
 }

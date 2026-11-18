@@ -33,6 +33,7 @@ public class UpdateBillingServiceHandler : IRequestHandler<UpdateBillingServiceC
     public async Task<IResult> Handle(UpdateBillingServiceCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var service = await _db.BillingServices
             .FirstOrDefaultAsync(s => s.Id == request.Id && s.CompanyId == companyId, ct);

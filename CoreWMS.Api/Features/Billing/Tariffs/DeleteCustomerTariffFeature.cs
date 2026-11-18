@@ -22,6 +22,7 @@ public class DeleteCustomerTariffHandler : IRequestHandler<DeleteCustomerTariffC
     public async Task<IResult> Handle(DeleteCustomerTariffCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var tariff = await _db.CustomerTariffs
             .FirstOrDefaultAsync(t => t.Id == request.Id && t.CompanyId == companyId, ct);

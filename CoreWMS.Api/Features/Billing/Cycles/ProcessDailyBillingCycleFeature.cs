@@ -29,6 +29,7 @@ public class ProcessDailyBillingCycleHandler : IRequestHandler<ProcessDailyBilli
     public async Task<IResult> Handle(ProcessDailyBillingCycleCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
         var dateToProcess = request.ExecutionDate.HasValue
         ? BillingEngineService.ToOperationalDate(request.ExecutionDate.Value)
         : BillingEngineService.GetOperationalToday();

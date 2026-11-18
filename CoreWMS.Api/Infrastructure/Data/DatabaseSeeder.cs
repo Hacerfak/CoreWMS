@@ -74,6 +74,9 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.CycleCount.Export);
             adminRole.AddPermission(Permissions.CycleCount.Count);
             adminRole.AddPermission(Permissions.CycleCount.Manage);
+            adminRole.AddPermission(Permissions.Billing.View);
+            adminRole.AddPermission(Permissions.Billing.Export);
+            adminRole.AddPermission(Permissions.Billing.Manage);
 
             // --- GERENTE (CRUD Usuários + Vínculos) ---
             var gerenteRole = new Role("Gerente");

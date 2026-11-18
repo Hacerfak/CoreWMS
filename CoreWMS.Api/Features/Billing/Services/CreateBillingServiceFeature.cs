@@ -31,6 +31,7 @@ public class CreateBillingServiceHandler : IRequestHandler<CreateBillingServiceC
     public async Task<IResult> Handle(CreateBillingServiceCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         if (request.Type == BillingServiceType.Automatic_SQL && string.IsNullOrWhiteSpace(request.SqlTemplate))
             return Results.BadRequest(new { Message = "Serviços automáticos exigem uma query SQL." });
