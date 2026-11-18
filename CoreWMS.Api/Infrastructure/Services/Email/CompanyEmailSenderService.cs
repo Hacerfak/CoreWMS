@@ -1,4 +1,3 @@
-using System.Text;
 using CoreWMS.Api.Features.Identity.Entities;
 using CoreWMS.Api.Features.Identity.Enums;
 using CoreWMS.Api.Infrastructure.Data;
@@ -13,6 +12,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
 using MimeKit;
+using MailKit;
 
 namespace CoreWMS.Api.Infrastructure.Services.Email;
 
@@ -131,7 +131,8 @@ public class CompanyEmailSenderService : IEmailSenderService
         }
 
         _logger.LogInformation("[EMAIL SMTP] Disparando e-mail de {Sender} para {Dest}...", senderEmail, msg.DestinationEmail);
-        await client.SendAsync(mimeMessage, ct);
+        var request = new SendRequest(mimeMessage);
+        await client.SendAsync(request, ct);
         await client.DisconnectAsync(true, ct);
         _logger.LogInformation("[EMAIL SMTP] E-mail enviado com sucesso para {Dest}!", msg.DestinationEmail);
     }

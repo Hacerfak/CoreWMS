@@ -1,5 +1,5 @@
 # Etapa de construção (Build)
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 
 # Copia o arquivo de projeto e restaura as dependências
@@ -11,7 +11,7 @@ COPY . .
 RUN dotnet publish "CoreWMS.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Etapa final (Runtime)
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS final
 WORKDIR /app
 EXPOSE 8080
 
