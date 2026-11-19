@@ -22,6 +22,7 @@ public class DeleteProductHandler : IRequestHandler<DeleteProductCommand, IResul
     public async Task<IResult> Handle(DeleteProductCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == request.Id && p.CompanyId == companyId, ct);
         if (product == null) return Results.NotFound();

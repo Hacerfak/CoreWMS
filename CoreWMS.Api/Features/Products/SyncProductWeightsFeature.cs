@@ -53,6 +53,7 @@ public class SyncProductWeightsHandler : IRequestHandler<SyncProductWeightsComma
     public async Task<IResult> Handle(SyncProductWeightsCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
         var productIds = request.Items.Select(x => x.ProductId).Distinct().ToList();
 
         // 1. Busca os produtos e suas embalagens vinculadas pertencentes à empresa

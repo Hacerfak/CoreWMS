@@ -64,6 +64,7 @@ public class CreateProductHandler : IRequestHandler<CreateProductCommand, IResul
     public async Task<IResult> Handle(CreateProductCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         if (!await _db.Customers.AnyAsync(c => c.Id == request.CustomerId && c.CompanyId == companyId, ct))
             return Results.BadRequest(new { Message = "Depositante inválido ou não pertence a esta empresa." });

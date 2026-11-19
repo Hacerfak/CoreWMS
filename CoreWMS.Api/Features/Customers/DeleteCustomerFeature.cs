@@ -24,6 +24,7 @@ public class DeleteCustomerHandler : IRequestHandler<DeleteCustomerCommand, IRes
     public async Task<IResult> Handle(DeleteCustomerCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.Id && c.CompanyId == companyId, ct);
         if (customer == null) return Results.NotFound();

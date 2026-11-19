@@ -22,6 +22,7 @@ public class ToggleCustomerActiveHandler : IRequestHandler<ToggleCustomerActiveC
     public async Task<IResult> Handle(ToggleCustomerActiveCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
         var customer = await _db.Customers.FirstOrDefaultAsync(c => c.Id == request.Id && c.CompanyId == companyId, ct);
 
         if (customer == null) return Results.NotFound(new { Message = "Cliente não encontrado." });

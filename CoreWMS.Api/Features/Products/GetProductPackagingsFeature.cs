@@ -35,15 +35,19 @@ public class GetProductPackagingsHandler : IRequestHandler<GetProductPackagingsQ
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Validação de pertença do produto ao Tenant
-        var productExists = await _db.Products
+        var productQuery = _db.Products
             .AsNoTracking()
-            .AnyAsync(p => p.Id == request.ProductId && p.CompanyId == companyId, ct);
+            .Where(p => p.Id == request.ProductId && p.CompanyId == companyId);
 
-        if (!productExists)
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            productQuery = productQuery.Where(p => allowedCustomerIds.Contains(p.CustomerId));
+        }
+
+        if (!await productQuery.AnyAsync(ct))
             return Results.NotFound(new { Message = "Produto não encontrado." });
 
-        // 2. Projeção direta e indexada apenas com os dados necessários
         var packagings = await _db.ProductPackagings
             .AsNoTracking()
             .Include(pp => pp.PackagingType)

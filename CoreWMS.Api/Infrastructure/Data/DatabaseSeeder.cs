@@ -80,6 +80,14 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Fiscal.View);
             adminRole.AddPermission(Permissions.Fiscal.Emit);
             adminRole.AddPermission(Permissions.Fiscal.Manage);
+            adminRole.AddPermission(Permissions.Products.View);
+            adminRole.AddPermission(Permissions.Products.Create);
+            adminRole.AddPermission(Permissions.Products.Edit);
+            adminRole.AddPermission(Permissions.Products.Delete);
+            adminRole.AddPermission(Permissions.Customers.View);
+            adminRole.AddPermission(Permissions.Customers.Create);
+            adminRole.AddPermission(Permissions.Customers.Edit);
+            adminRole.AddPermission(Permissions.Customers.Delete);
 
             // --- GERENTE (CRUD Usuários + Vínculos) ---
             var gerenteRole = new Role("Gerente");
@@ -129,6 +137,12 @@ public static class DatabaseSeeder
             gerenteRole.AddPermission(Permissions.CycleCount.Manage);
             gerenteRole.AddPermission(Permissions.Fiscal.View);
             gerenteRole.AddPermission(Permissions.Fiscal.Emit);
+            gerenteRole.AddPermission(Permissions.Products.View);
+            gerenteRole.AddPermission(Permissions.Products.Create);
+            gerenteRole.AddPermission(Permissions.Products.Edit);
+            gerenteRole.AddPermission(Permissions.Customers.View);
+            gerenteRole.AddPermission(Permissions.Customers.Create);
+            gerenteRole.AddPermission(Permissions.Customers.Edit);
 
             // --- OPERADOR (Apenas atualizar próprio cadastro) ---
             var operadorRole = new Role("Operador");

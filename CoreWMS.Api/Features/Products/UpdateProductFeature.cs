@@ -64,6 +64,7 @@ public class UpdateProductHandler : IRequestHandler<UpdateProductCommand, IResul
     public async Task<IResult> Handle(UpdateProductCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var product = await _db.Products
             .Include(p => p.Packagings)

@@ -48,6 +48,7 @@ public class CreateCustomerHandler : IRequestHandler<CreateCustomerCommand, IRes
     public async Task<IResult> Handle(CreateCustomerCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         if (await _db.Customers.AnyAsync(c => c.CompanyId == companyId && c.Cnpj == request.Cnpj, ct))
             return Results.BadRequest(new { Message = "Já existe um cliente com este CNPJ nesta empresa." });
