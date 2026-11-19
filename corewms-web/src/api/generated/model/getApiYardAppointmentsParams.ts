@@ -13,4 +13,5 @@ export type GetApiYardAppointmentsParams = {
   status?: YardAppointmentStatus;
   type?: YardAppointmentType;
   search?: string;
+  customerId?: string;
 };

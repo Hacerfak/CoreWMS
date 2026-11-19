@@ -36,4 +36,6 @@ export interface CreateYardAppointmentCommand {
   /** @nullable */
   outboundOrderId?: string | null;
   directCheckIn?: boolean;
+  /** @nullable */
+  customerId?: string | null;
 }

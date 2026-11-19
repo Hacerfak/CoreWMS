@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,10 @@ export default function ExtratoFaturamentoPage() {
     const { id: cycleId } = useParams();
     const navigate = useNavigate();
 
+    const canViewBilling = useHasPermission('billing:view');
+    const canExportBilling = useHasPermission('billing:export');
+    const canManageBilling = useHasPermission('billing:manage');
+
     const [cycle, setCycle] = useState(null);
     const [services, setServices] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -59,11 +64,15 @@ export default function ExtratoFaturamentoPage() {
     const [isDeletingItem, setIsDeletingItem] = useState(false);
 
     const loadCycleDetails = async () => {
+        if (!canViewBilling) return;
+
         try {
             setIsLoading(true);
             const [cycleRes, servicesRes] = await Promise.all([
                 customInstance({ url: `/api/billing/cycles/${cycleId}`, method: 'GET' }),
-                customInstance({ url: '/api/billing/services', method: 'GET' })
+                canManageBilling
+                    ? customInstance({ url: '/api/billing/services', method: 'GET' })
+                    : Promise.resolve([])
             ]);
             setCycle(cycleRes);
             setServices(Array.isArray(servicesRes) ? servicesRes : []);
@@ -76,10 +85,10 @@ export default function ExtratoFaturamentoPage() {
 
     useEffect(() => {
         if (cycleId) loadCycleDetails();
-    }, [cycleId]);
+    }, [cycleId, canViewBilling, canManageBilling]);
 
     const handlePrintStatement = async () => {
-        if (!cycleId) return;
+        if (!cycleId || !canExportBilling) return;
 
         const printWindow = window.open('', '_blank');
         if (printWindow) {
@@ -116,7 +125,7 @@ export default function ExtratoFaturamentoPage() {
     };
 
     const handleDownloadCsv = async () => {
-        if (!cycleId) return;
+        if (!cycleId || !canExportBilling) return;
         try {
             toast.info('Gerando planilha CSV do extrato...');
             const response = await customInstance({
@@ -145,7 +154,7 @@ export default function ExtratoFaturamentoPage() {
     };
 
     const handleRecalculateCycle = async () => {
-        if (!cycle) return;
+        if (!cycle || !canManageBilling) return;
         try {
             setIsLoading(true);
             await customInstance({
@@ -167,6 +176,7 @@ export default function ExtratoFaturamentoPage() {
     };
 
     const handleCloseCycle = async () => {
+        if (!canManageBilling) return;
         if (!confirm('Deseja realmente encerrar este ciclo de faturamento? O extrato ficará congelado para faturamento.')) return;
         try {
             await customInstance({ url: `/api/billing/cycles/${cycleId}/close`, method: 'POST' });
@@ -179,7 +189,7 @@ export default function ExtratoFaturamentoPage() {
 
     const handleSaveManualItem = async (e) => {
         e.preventDefault();
-        if (!selectedServiceId || !description) return;
+        if (!canManageBilling || !selectedServiceId || !description) return;
 
         try {
             setIsSubmitting(true);
@@ -223,7 +233,7 @@ export default function ExtratoFaturamentoPage() {
     };
 
     const handleConfirmDeleteItem = async () => {
-        if (!itemToDelete) return;
+        if (!itemToDelete || !canManageBilling) return;
         try {
             setIsDeletingItem(true);
             await customInstance({
@@ -496,26 +506,30 @@ export default function ExtratoFaturamentoPage() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                        onClick={handleDownloadCsv}
-                        variant="outline"
-                        size="sm"
-                        className="bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 h-9 font-semibold shadow-2xs"
-                    >
-                        <FileSpreadsheet className="mr-1.5 h-4 w-4 text-emerald-600" />
-                        Exportar
-                    </Button>
-                    <Button
-                        onClick={handlePrintStatement}
-                        variant="outline"
-                        size="sm"
-                        className="bg-white text-slate-700 h-9 font-medium shadow-2xs hover:bg-slate-50"
-                    >
-                        <FileText className="mr-1.5 h-4 w-4 text-blue-600" />
-                        Imprimir
-                    </Button>
+                    {canExportBilling && (
+                        <>
+                            <Button
+                                onClick={handleDownloadCsv}
+                                variant="outline"
+                                size="sm"
+                                className="bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 h-9 font-semibold shadow-2xs"
+                            >
+                                <FileSpreadsheet className="mr-1.5 h-4 w-4 text-emerald-600" />
+                                Exportar
+                            </Button>
+                            <Button
+                                onClick={handlePrintStatement}
+                                variant="outline"
+                                size="sm"
+                                className="bg-white text-slate-700 h-9 font-medium shadow-2xs hover:bg-slate-50"
+                            >
+                                <FileText className="mr-1.5 h-4 w-4 text-blue-600" />
+                                Imprimir
+                            </Button>
+                        </>
+                    )}
 
-                    {isDraft && (
+                    {isDraft && canManageBilling && (
                         <>
                             <Button onClick={handleRecalculateCycle} variant="outline" size="sm" className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 h-9 font-semibold">
                                 <RefreshCw className="mr-1.5 h-4 w-4" /> Recalcular
@@ -655,7 +669,7 @@ export default function ExtratoFaturamentoPage() {
                     toggleServiceExpand={toggleServiceExpand}
                     expandedItemDetailId={expandedItemDetailId}
                     setExpandedItemDetailId={setExpandedItemDetailId}
-                    isDraft={isDraft}
+                    isDraft={isDraft && canManageBilling}
                     setItemToDelete={setItemToDelete}
                 />
             ) : (
@@ -666,168 +680,173 @@ export default function ExtratoFaturamentoPage() {
                 />
             )}
 
-            {/* MODAL DE LANÇAMENTO MANUAL EXTRA */}
-            <Dialog open={isManualModalOpen} onOpenChange={setIsManualModalOpen}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <Plus className="text-emerald-600" size={20} /> Lançamento Extra no Ciclo
-                        </DialogTitle>
-                        <DialogDescription className="text-slate-500 text-xs">
-                            Adicione serviços ad-hoc executados no período (ex.: descarte de paletes, re-etiquetagem, horas extras).
-                        </DialogDescription>
-                    </DialogHeader>
+            {/* MODAIS ADMINISTRATIVOS (SOMENTE GESTÃO INTERNA) */}
+            {canManageBilling && (
+                <>
+                    {/* MODAL DE LANÇAMENTO MANUAL EXTRA */}
+                    <Dialog open={isManualModalOpen} onOpenChange={setIsManualModalOpen}>
+                        <DialogContent className="sm:max-w-md bg-white">
+                            <DialogHeader>
+                                <DialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <Plus className="text-emerald-600" size={20} /> Lançamento Extra no Ciclo
+                                </DialogTitle>
+                                <DialogDescription className="text-slate-500 text-xs">
+                                    Adicione serviços ad-hoc executados no período (ex.: descarte de paletes, re-etiquetagem, horas extras).
+                                </DialogDescription>
+                            </DialogHeader>
 
-                    <form onSubmit={handleSaveManualItem} className="space-y-4 py-2">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-700">Serviço Logístico *</Label>
-                            <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
-                                <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Escolha o serviço..." /></SelectTrigger>
-                                <SelectContent>
-                                    {services.map(s => (
-                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                            <form onSubmit={handleSaveManualItem} className="space-y-4 py-2">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-700">Serviço Logístico *</Label>
+                                    <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                                        <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Escolha o serviço..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {services.map(s => (
+                                                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-700">Descrição / Justificativa *</Label>
-                            <Input
-                                placeholder="Ex: Mão de obra extra para re-etiquetagem"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="bg-white text-xs h-9"
-                                required
-                            />
-                        </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-700">Descrição / Justificativa *</Label>
+                                    <Input
+                                        placeholder="Ex: Mão de obra extra para re-etiquetagem"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        className="bg-white text-xs h-9"
+                                        required
+                                    />
+                                </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-slate-700">Data do Serviço *</Label>
-                                <DatePicker
-                                    date={chargeDate}
-                                    setDate={(d) => setChargeDate(d || new Date())}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700">Data do Serviço *</Label>
+                                        <DatePicker
+                                            date={chargeDate}
+                                            setDate={(d) => setChargeDate(d || new Date())}
+                                            className="h-9"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700">Documento / Ref</Label>
+                                        <Input
+                                            placeholder="Ex: OS 1045 / Avulso"
+                                            value={documentNumber}
+                                            onChange={(e) => setDocumentNumber(e.target.value)}
+                                            className="bg-white text-xs h-9 font-mono"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700">Quantidade Total *</Label>
+                                        <Input
+                                            type="number"
+                                            value={quantity}
+                                            onChange={(e) => setQuantity(Number(e.target.value))}
+                                            className="bg-white font-mono text-xs h-9"
+                                            min="1"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs font-semibold text-slate-700">Valor Total R$ *</Label>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={totalValue}
+                                            onChange={(e) => setTotalValue(Number(e.target.value))}
+                                            className="bg-white font-mono text-xs h-9"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-700">Observações Manuais (Auditoria)</Label>
+                                    <Input
+                                        placeholder="Aprovado por e-mail pelo cliente"
+                                        value={manualNotes}
+                                        onChange={(e) => setManualNotes(e.target.value)}
+                                        className="bg-white text-xs h-9"
+                                    />
+                                </div>
+
+                                <DialogFooter className="pt-3">
+                                    <Button type="button" variant="outline" onClick={() => setIsManualModalOpen(false)} disabled={isSubmitting}>Cancelar</Button>
+                                    <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
+                                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                        Gravar Lançamento
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+                    <Dialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+                        <DialogContent className="sm:max-w-md bg-white">
+                            <DialogHeader>
+                                <DialogTitle className="flex items-center gap-2 text-rose-600 text-base">
+                                    <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão de Cobrança
+                                </DialogTitle>
+                                <DialogDescription className="text-xs text-slate-500">
+                                    Tem certeza de que deseja remover este lançamento do extrato? Caso seja um estorno de recebimento ou expedição, o recálculo poderá ser acionado novamente.
+                                </DialogDescription>
+                            </DialogHeader>
+
+                            {itemToDelete && (
+                                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 font-sans">
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Descrição:</span>
+                                        <strong className="text-slate-800">{itemToDelete.description || itemToDelete.serviceName}</strong>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Documento / Tipo:</span>
+                                        <span className="font-semibold text-slate-700">
+                                            {itemToDelete.documentNumber || itemToDelete.documentType || 'Consolidado'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">Quantidade:</span>
+                                        <span className="font-mono text-slate-700">{itemToDelete.quantityTotal}</span>
+                                    </div>
+                                    <div className="flex justify-between border-t border-slate-200/60 pt-1">
+                                        <span className="text-slate-500">Valor a Estornar:</span>
+                                        <strong className="font-mono text-rose-600">
+                                            {formatCurrency(itemToDelete.serviceTotal || 0)}
+                                        </strong>
+                                    </div>
+                                </div>
+                            )}
+
+                            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setItemToDelete(null)}
+                                    disabled={isDeletingItem}
                                     className="h-9"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-slate-700">Documento / Ref</Label>
-                                <Input
-                                    placeholder="Ex: OS 1045 / Avulso"
-                                    value={documentNumber}
-                                    onChange={(e) => setDocumentNumber(e.target.value)}
-                                    className="bg-white text-xs h-9 font-mono"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-slate-700">Quantidade Total *</Label>
-                                <Input
-                                    type="number"
-                                    value={quantity}
-                                    onChange={(e) => setQuantity(Number(e.target.value))}
-                                    className="bg-white font-mono text-xs h-9"
-                                    min="1"
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-slate-700">Valor Total R$ *</Label>
-                                <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={totalValue}
-                                    onChange={(e) => setTotalValue(Number(e.target.value))}
-                                    className="bg-white font-mono text-xs h-9"
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold text-slate-700">Observações Manuais (Auditoria)</Label>
-                            <Input
-                                placeholder="Aprovado por e-mail pelo cliente"
-                                value={manualNotes}
-                                onChange={(e) => setManualNotes(e.target.value)}
-                                className="bg-white text-xs h-9"
-                            />
-                        </div>
-
-                        <DialogFooter className="pt-3">
-                            <Button type="button" variant="outline" onClick={() => setIsManualModalOpen(false)} disabled={isSubmitting}>Cancelar</Button>
-                            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
-                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                                Gravar Lançamento
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
-
-            {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
-            <Dialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-rose-600 text-base">
-                            <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão de Cobrança
-                        </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            Tem certeza de que deseja remover este lançamento do extrato? Caso seja um estorno de recebimento ou expedição, o recálculo poderá ser acionado novamente.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    {itemToDelete && (
-                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 font-sans">
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Descrição:</span>
-                                <strong className="text-slate-800">{itemToDelete.description || itemToDelete.serviceName}</strong>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Documento / Tipo:</span>
-                                <span className="font-semibold text-slate-700">
-                                    {itemToDelete.documentNumber || itemToDelete.documentType || 'Consolidado'}
-                                </span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Quantidade:</span>
-                                <span className="font-mono text-slate-700">{itemToDelete.quantityTotal}</span>
-                            </div>
-                            <div className="flex justify-between border-t border-slate-200/60 pt-1">
-                                <span className="text-slate-500">Valor a Estornar:</span>
-                                <strong className="font-mono text-rose-600">
-                                    {formatCurrency(itemToDelete.serviceTotal || 0)}
-                                </strong>
-                            </div>
-                        </div>
-                    )}
-
-                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setItemToDelete(null)}
-                            disabled={isDeletingItem}
-                            className="h-9"
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleConfirmDeleteItem}
-                            disabled={isDeletingItem}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9"
-                        >
-                            {isDeletingItem ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
-                            Excluir Lançamento
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={handleConfirmDeleteItem}
+                                    disabled={isDeletingItem}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9"
+                                >
+                                    {isDeletingItem ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+                                    Excluir Lançamento
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </>
+            )}
         </div>
     );
 }

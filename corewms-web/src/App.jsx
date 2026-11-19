@@ -153,15 +153,21 @@ export default function App() {
                 </div>
               } />
 
-              {/* MÓDULO DE PORTARIA & PÁTIO (OPERAÇÃO) */}
+              {/* MÓDULO DE PORTARIA & PÁTIO */}
               <Route element={<PermissionGuard requiredPermission="yard:view" />}>
                 <Route path="/portaria" element={<PortariaPage />} />
               </Route>
 
+              {/* CADASTROS BASE */}
               <Route element={<PermissionGuard requiredPermission="customers:view" />}>
                 <Route path="/clientes" element={<ClientesList />} />
               </Route>
 
+              <Route element={<PermissionGuard requiredPermission="products:view" />}>
+                <Route path="/produtos" element={<ProdutosPage />} />
+              </Route>
+
+              {/* SEGURANÇA, EMPRESAS, IMPRESSÃO, AUDITORIA & TOPOLOGIA */}
               <Route element={<PermissionGuard requiredPermission="users:manage" />}>
                 <Route path="/usuarios" element={<UsersList />} />
                 <Route path="/usuarios/novo" element={<UserFormPage />} />
@@ -191,25 +197,27 @@ export default function App() {
                 <Route path="/topologia" element={<TopologiaPage />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="products:view" />}>
-                <Route path="/produtos" element={<ProdutosPage />} />
-              </Route>
-
+              {/* ESTOQUE */}
               <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
                 <Route path="/estoque" element={<EstoquePage />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
+              {/* INVENTÁRIO CÍCLICO */}
+              <Route element={<PermissionGuard requiredPermission="cyclecount:view" />}>
                 <Route path="/inventario/gestao" element={<InventarioGestaoPage />} />
-                <Route path="/inventario/gestao/novo" element={<NovoInventarioPage />} />
                 <Route path="/inventario/gestao/:id" element={<InventarioDetalhesPage />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="inventory:view" />}>
+              <Route element={<PermissionGuard requiredPermission="cyclecount:create" />}>
+                <Route path="/inventario/gestao/novo" element={<NovoInventarioPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="cyclecount:count" />}>
                 <Route path="/inventario/operacao" element={<InventarioOperacaoPage />} />
                 <Route path="/inventario/operacao/:taskId" element={<ExecucaoContagemPage />} />
               </Route>
 
+              {/* INBOUND (RECEBIMENTO) */}
               <Route element={<PermissionGuard requiredPermission="inbound:view" />}>
                 <Route path="/inbound" element={<InboundList />} />
               </Route>
@@ -223,38 +231,72 @@ export default function App() {
                 <Route path="/inbound/operacao/:id" element={<InboundOperacaoPage />} />
                 <Route path="/inbound/operacao/:orderId/item/:itemId" element={<ConferenciaItemPage />} />
                 <Route path="/inbound/operacao/:id/hus" element={<InboundOrderHusPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="inventory:move" />}>
                 <Route path="/inbound/operacao/:id/alocacao" element={<AlocacaoInteligentePage />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="inventory:manageQuality" />}>
+              {/* CONTROLE DE QUALIDADE */}
+              <Route element={<PermissionGuard requiredPermission="quality:view" />}>
                 <Route path="/qualidade" element={<QualidadePage />} />
               </Route>
 
+              {/* FATURAMENTO */}
               <Route element={<PermissionGuard requiredPermission="billing:view" />}>
                 <Route path="/billing/tarifas-ciclos" element={<TarifasECiclosPage />} />
                 <Route path="/billing/ciclos/:id" element={<ExtratoFaturamentoPage />} />
               </Route>
 
+              {/* OUTBOUND & PACKING */}
               <Route element={<PermissionGuard requiredPermission="outbound:view" />}>
                 <Route path="/outbound" element={<OutboundListPage />} />
                 <Route path="/outbound/detalhes/:id" element={<OutboundOrderDetailsPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="outbound:create" />}>
+                <Route path="/outbound/novo" element={<CreateOutboundOrderPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="outbound:edit" />}>
+                <Route path="/outbound/editar/:id" element={<CreateOutboundOrderPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="outbound:allocate" />}>
+                <Route path="/outbound/ordem/:id/itens" element={<OutboundItemsPanelPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="outbound:pick" />}>
                 <Route path="/outbound/picking/:id" element={<OutboundPickingPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="packing:manage" />}>
                 <Route path="/outbound/packing/:id" element={<OutboundPackingPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="outbound:check" />}>
                 <Route path="/outbound/conferencia/:id" element={<OutboundCheckingPage />} />
               </Route>
 
-              <Route element={<PermissionGuard requiredPermission="outbound:manage" />}>
-                <Route path="/outbound/novo" element={<CreateOutboundOrderPage />} />
-                <Route path="/outbound/editar/:id" element={<CreateOutboundOrderPage />} />
-                <Route path="/outbound/ordem/:id/itens" element={<OutboundItemsPanelPage />} />
+              <Route element={<PermissionGuard requiredPermission={['outbound:ship', 'fiscal:emit']} />}>
                 <Route path="/outbound/revisao-fiscal/:id" element={<OutboundFiscalReviewPage />} />
+              </Route>
+
+              {/* FISCAL & SEFAZ */}
+              <Route element={<PermissionGuard requiredPermission="fiscal:manage" />}>
                 <Route path="/fiscal/regras" element={<FiscalOperationRulesPage />} />
                 <Route path="/fiscal/regras/nova" element={<CreateOrEditFiscalRulePage />} />
                 <Route path="/fiscal/regras/:id" element={<CreateOrEditFiscalRulePage />} />
                 <Route path="/fiscal/regras/:ruleId/excecoes/nova" element={<CreateOrEditRuleExceptionPage />} />
                 <Route path="/fiscal/regras/:ruleId/excecoes/:exceptionId" element={<CreateOrEditRuleExceptionPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="fiscal:view" />}>
                 <Route path="/fiscal/documentos" element={<CompanyFiscalDocumentsPage />} />
                 <Route path="/fiscal/documentos/:id" element={<CompanyFiscalDocumentDetailsPage />} />
+              </Route>
+
+              <Route element={<PermissionGuard requiredPermission="fiscal:emit" />}>
                 <Route path="/fiscal/documentos/novo" element={<CreateStandaloneNfePage />} />
               </Route>
 

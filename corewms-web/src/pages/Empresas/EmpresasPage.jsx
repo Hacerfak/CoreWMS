@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiCompanies } from '@/api/generated/companies/companies';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,18 +12,24 @@ import EmpresaFormModal from './EmpresaFormModal';
 
 export default function EmpresasPage() {
     const queryClient = useQueryClient();
-    const { data: empresasData, isLoading } = useGetApiCompanies();
+    const canManageCompanies = useHasPermission('companies:manage');
+
+    const { data: empresasData, isLoading } = useGetApiCompanies({
+        query: { enabled: canManageCompanies }
+    });
     const empresas = Array.isArray(empresasData) ? empresasData : (empresasData?.items || []);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [empresaSelecionada, setEmpresaSelecionada] = useState(null);
 
     const handleEdit = (empresa) => {
+        if (!canManageCompanies) return;
         setEmpresaSelecionada(empresa);
         setModalOpen(true);
     };
 
     const handleToggleActive = async (id) => {
+        if (!canManageCompanies) return;
         try {
             const res = await customInstance({
                 url: `/api/companies/${id}/toggle-active`,
@@ -36,6 +43,7 @@ export default function EmpresasPage() {
     };
 
     const handleDelete = async (id) => {
+        if (!canManageCompanies) return;
         try {
             await customInstance({
                 url: `/api/companies/${id}`,
@@ -67,14 +75,14 @@ export default function EmpresasPage() {
                                 <TableHead>Ambiente SEFAZ</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Validade Certificado</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
+                                {canManageCompanies && <TableHead className="text-right">Ações</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
-                                <TableRow><TableCell colSpan={6} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
+                                <TableRow><TableCell colSpan={canManageCompanies ? 6 : 5} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
                             ) : empresas.length === 0 ? (
-                                <TableRow><TableCell colSpan={6} className="h-24 text-center text-slate-500">Nenhuma empresa encontrada.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={canManageCompanies ? 6 : 5} className="h-24 text-center text-slate-500">Nenhuma empresa encontrada.</TableCell></TableRow>
                             ) : (
                                 empresas.map((empresa) => {
                                     const isProd = empresa.environment === 1;
@@ -127,29 +135,31 @@ export default function EmpresasPage() {
                                                     </span>
                                                 )}
                                             </TableCell>
-                                            <TableCell className="text-right">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <Button variant="ghost" size="sm" onClick={() => handleEdit(empresa)}>
-                                                        <Edit className="h-4 w-4 mr-1 text-slate-500" /> Editar
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleToggleActive(empresa.id)}
-                                                        className={empresa.isActive ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}
-                                                    >
-                                                        <Power className="h-4 w-4 mr-1" /> {empresa.isActive ? 'Inativar' : 'Ativar'}
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleDelete(empresa.id)}
-                                                        className="text-rose-500 hover:bg-rose-50 p-1.5"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
+                                            {canManageCompanies && (
+                                                <TableCell className="text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <Button variant="ghost" size="sm" onClick={() => handleEdit(empresa)}>
+                                                            <Edit className="h-4 w-4 mr-1 text-slate-500" /> Editar
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleToggleActive(empresa.id)}
+                                                            className={empresa.isActive ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}
+                                                        >
+                                                            <Power className="h-4 w-4 mr-1" /> {empresa.isActive ? 'Inativar' : 'Ativar'}
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleDelete(empresa.id)}
+                                                            className="text-rose-500 hover:bg-rose-50 p-1.5"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     );
                                 })
@@ -159,11 +169,13 @@ export default function EmpresasPage() {
                 </div>
             </div>
 
-            <EmpresaFormModal
-                open={modalOpen}
-                onOpenChange={setModalOpen}
-                empresaToEdit={empresaSelecionada}
-            />
+            {canManageCompanies && (
+                <EmpresaFormModal
+                    open={modalOpen}
+                    onOpenChange={setModalOpen}
+                    empresaToEdit={empresaSelecionada}
+                />
+            )}
         </div>
     );
 }

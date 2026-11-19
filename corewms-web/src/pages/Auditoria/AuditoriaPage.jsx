@@ -3,13 +3,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useGetApiAuditLogs } from '@/api/generated/audit/audit';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import { ScrollText, Search, Loader2, FilterX, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ScrollText, Search, Loader2, FilterX, Eye, ChevronLeft, ChevronRight, ShieldAlert } from 'lucide-react';
 
 const filterSchema = z.object({
     entityName: z.string().optional(),
@@ -17,6 +18,8 @@ const filterSchema = z.object({
 });
 
 export default function AuditoriaPage() {
+    const canViewAudit = useHasPermission('audit:view');
+
     const [page, setPage] = useState(1);
     const pageSize = 20;
 
@@ -40,14 +43,29 @@ export default function AuditoriaPage() {
         defaultValues: { entityName: '', userId: '' }
     });
 
-    const { data: apiResponse, isLoading, isFetching } = useGetApiAuditLogs({
-        ...appliedFilters,
-        Page: page,
-        PageSize: pageSize
-    });
+    const { data: apiResponse, isLoading, isFetching } = useGetApiAuditLogs(
+        {
+            ...appliedFilters,
+            Page: page,
+            PageSize: pageSize
+        },
+        {
+            query: { enabled: canViewAudit }
+        }
+    );
 
     const { items: logs = [], totalCount = 0 } = apiResponse || {};
     const totalPages = Math.ceil(totalCount / pageSize);
+
+    if (!canViewAudit) {
+        return (
+            <div className="bg-white border border-slate-200/60 rounded-xl p-12 h-full shadow-xs flex flex-col items-center justify-center text-center space-y-2">
+                <ShieldAlert className="h-8 w-8 text-amber-500" />
+                <p className="text-sm font-semibold text-slate-800">Acesso Restrito</p>
+                <p className="text-xs text-slate-500">Seu perfil não possui permissão para consultar os registros de auditoria.</p>
+            </div>
+        );
+    }
 
     const onSubmitFilters = (data) => {
         setPage(1);
@@ -66,7 +84,6 @@ export default function AuditoriaPage() {
             toDate.setHours(23, 59, 59, 999);
             endString = toDate.toISOString();
         } else if (dateRange?.from) {
-            // Se o usuário selecionou apenas um dia
             const toDate = new Date(dateRange.from);
             toDate.setHours(23, 59, 59, 999);
             endString = toDate.toISOString();

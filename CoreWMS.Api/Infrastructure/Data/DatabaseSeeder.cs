@@ -31,6 +31,7 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Companies.Manage);
             adminRole.AddPermission(Permissions.Profile.UpdateSelf);
             adminRole.AddPermission(Permissions.Audit.View);
+            adminRole.AddPermission(Permissions.Topology.Manage);
             adminRole.AddPermission(Permissions.Printing.Manage);
             adminRole.AddPermission(Permissions.Customers.View);
             adminRole.AddPermission(Permissions.Customers.Create);

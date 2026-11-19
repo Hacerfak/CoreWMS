@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 import {
     Warehouse, LayoutDashboard, Users, Shield, Building2, Printer,
-    ScrollText, LogOut, ChevronDown, Map, Package, UserCircle, ArrowDownToLine,
+    ScrollText, LogOut, ChevronDown, Map, UserCircle, ArrowDownToLine,
     Boxes, ShieldAlert, Receipt, ClipboardCheck, Truck, Barcode, FileCode, FileText,
     PackageOpen,
     Contact,
@@ -25,7 +25,6 @@ export default function MainLayout() {
 
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-    // Leitura direta do Zustand no topo do componente
     const { user, logout, empresas, companyId, permissions } = useAuthStore();
     const empresaAtual = empresas?.find(e => e.id === companyId);
 
@@ -35,10 +34,12 @@ export default function MainLayout() {
         navigate('/login');
     };
 
-    // Função de verificação conforme as Regras do React
     const hasPermission = (permission) => {
         if (!permission) return true;
         if (user?.isMaster || user?.role === 'ADMIN' || permissions?.includes('*')) return true;
+        if (Array.isArray(permission)) {
+            return permission.some(p => permissions?.includes(p));
+        }
         return permissions?.includes(permission);
     };
 
@@ -61,7 +62,7 @@ export default function MainLayout() {
             items: [
                 { icon: CalendarClock, label: 'Portaria & Pátio', path: '/portaria', permission: 'yard:view' },
                 { icon: ArrowDownToLine, label: 'Recebimento', path: '/inbound', permission: 'inbound:view' },
-                { icon: Barcode, label: 'Inventário', path: '/inventario/operacao', permission: 'inventory:view' },
+                { icon: Barcode, label: 'Inventário', path: '/inventario/operacao', permission: 'cyclecount:count' },
                 { icon: Truck, label: 'Expedição', path: '/outbound', permission: 'outbound:view' },
             ]
         },
@@ -69,9 +70,9 @@ export default function MainLayout() {
             scope: 'Gestão',
             items: [
                 { icon: Boxes, label: 'Estoque e Relatórios', path: '/estoque', permission: 'inventory:view' },
-                { icon: FileText, label: 'Documentos Fiscais', path: '/fiscal/documentos', permission: 'outbound:manage' },
-                { icon: ClipboardCheck, label: 'Gestão de Inventário', path: '/inventario/gestao', permission: 'inventory:manageQuality' },
-                { icon: ShieldAlert, label: 'Controle de Qualidade', path: '/qualidade', permission: 'inventory:manageQuality' },
+                { icon: FileText, label: 'Documentos Fiscais', path: '/fiscal/documentos', permission: 'fiscal:view' },
+                { icon: ClipboardCheck, label: 'Gestão de Inventário', path: '/inventario/gestao', permission: 'cyclecount:view' },
+                { icon: ShieldAlert, label: 'Controle de Qualidade', path: '/qualidade', permission: 'quality:view' },
                 { icon: Map, label: 'Topologia do Armazém', path: '/topologia', permission: 'topology:manage' },
             ]
         },
@@ -88,7 +89,7 @@ export default function MainLayout() {
                 { icon: Shield, label: 'Perfis de Acesso', path: '/perfis', permission: 'roles:manage' },
                 { icon: ScrollText, label: 'Auditoria', path: '/auditoria', permission: 'audit:view' },
                 { icon: Building2, label: 'Empresas', path: '/empresas', permission: 'companies:manage' },
-                { icon: FileCode, label: 'Regras Fiscais', path: '/fiscal/regras', permission: 'outbound:manage' },
+                { icon: FileCode, label: 'Regras Fiscais', path: '/fiscal/regras', permission: 'fiscal:manage' },
                 { icon: Printer, label: 'Impressão', path: '/impressao', permission: 'printing:manage' },
             ]
         }
@@ -135,7 +136,6 @@ export default function MainLayout() {
                         );
                     })}
                 </div>
-                {/* Rodapé da Marca na Barra Lateral */}
                 <div className="p-3.5 border-t border-slate-200/70 flex items-center justify-between text-[11px] text-slate-400">
                     <span className="font-semibold text-slate-600 font-sans">CoreWMS</span>
                     <span className="flex items-center gap-1.5 text-emerald-600 font-semibold font-mono">

@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,8 @@ import { Edit3, Trash2, Loader2, Search, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function TabServicos({ services, isLoading, onEdit, reload }) {
+    const canManageBilling = useHasPermission('billing:manage');
+
     const [searchTerm, setSearchTerm] = useState('');
     const [serviceToDelete, setServiceToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -24,7 +27,7 @@ export default function TabServicos({ services, isLoading, onEdit, reload }) {
     }, [services, searchTerm]);
 
     const handleConfirmDelete = async () => {
-        if (!serviceToDelete) return;
+        if (!serviceToDelete || !canManageBilling) return;
         try {
             setIsDeleting(true);
             await customInstance({ url: `/api/billing/services/${serviceToDelete.id}`, method: 'DELETE' });
@@ -37,6 +40,8 @@ export default function TabServicos({ services, isLoading, onEdit, reload }) {
             setIsDeleting(false);
         }
     };
+
+    const colSpanCount = canManageBilling ? 4 : 3;
 
     return (
         <div className="space-y-3">
@@ -64,19 +69,19 @@ export default function TabServicos({ services, isLoading, onEdit, reload }) {
                             <TableHead>Nome do Serviço</TableHead>
                             <TableHead>Modalidade de Apuração</TableHead>
                             <TableHead>Modelo SQL de Cobrança</TableHead>
-                            <TableHead className="text-right w-24">Ações</TableHead>
+                            {canManageBilling && <TableHead className="text-right w-24">Ações</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-28 text-center text-xs text-slate-500">
+                                <TableCell colSpan={colSpanCount} className="h-28 text-center text-xs text-slate-500">
                                     <Loader2 className="h-5 w-5 animate-spin mx-auto text-purple-600" />
                                 </TableCell>
                             </TableRow>
                         ) : filteredServices.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={4} className="h-28 text-center text-xs text-slate-400 italic">
+                                <TableCell colSpan={colSpanCount} className="h-28 text-center text-xs text-slate-400 italic">
                                     Nenhum serviço logístico cadastrado.
                                 </TableCell>
                             </TableRow>
@@ -103,28 +108,30 @@ export default function TabServicos({ services, isLoading, onEdit, reload }) {
                                             <span className="text-slate-400 italic">Sem query vinculada (Lançamento Direto)</span>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                        <div className="flex items-center justify-end gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => onEdit(s)}
-                                                className="text-blue-600 hover:bg-blue-50 h-8 w-8 p-0"
-                                                title="Editar"
-                                            >
-                                                <Edit3 size={14} />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setServiceToDelete(s)}
-                                                className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0"
-                                                title="Excluir"
-                                            >
-                                                <Trash2 size={14} />
-                                            </Button>
-                                        </div>
-                                    </TableCell>
+                                    {canManageBilling && (
+                                        <TableCell className="text-right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => onEdit(s)}
+                                                    className="text-blue-600 hover:bg-blue-50 h-8 w-8 p-0"
+                                                    title="Editar"
+                                                >
+                                                    <Edit3 size={14} />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setServiceToDelete(s)}
+                                                    className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0"
+                                                    title="Excluir"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             );
                         })}
@@ -133,56 +140,58 @@ export default function TabServicos({ services, isLoading, onEdit, reload }) {
             </Card>
 
             {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
-            <Dialog open={!!serviceToDelete} onOpenChange={(open) => !open && setServiceToDelete(null)}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-rose-600 text-base">
-                            <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão de Serviço
-                        </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            A exclusão será bloqueada pelo sistema caso o serviço possua tarifas ativas vinculadas a depositantes.
-                        </DialogDescription>
-                    </DialogHeader>
+            {canManageBilling && (
+                <Dialog open={!!serviceToDelete} onOpenChange={(open) => !open && setServiceToDelete(null)}>
+                    <DialogContent className="sm:max-w-md bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-rose-600 text-base">
+                                <AlertTriangle className="h-5 w-5" /> Confirmar Exclusão de Serviço
+                            </DialogTitle>
+                            <DialogDescription className="text-xs text-slate-500">
+                                A exclusão será bloqueada pelo sistema caso o serviço possua tarifas ativas vinculadas a depositantes.
+                            </DialogDescription>
+                        </DialogHeader>
 
-                    {serviceToDelete && (
-                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 font-sans">
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Serviço:</span>
-                                <strong className="text-slate-800">{serviceToDelete.name}</strong>
+                        {serviceToDelete && (
+                            <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs space-y-1.5 font-sans">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Serviço:</span>
+                                    <strong className="text-slate-800">{serviceToDelete.name}</strong>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Modalidade:</span>
+                                    <span className="font-semibold text-slate-700">
+                                        {serviceToDelete.type === 'Automatic_Daily' || serviceToDelete.type === 1 ? 'Diário Automático' : 'Operacional por Evento'}
+                                    </span>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Modalidade:</span>
-                                <span className="font-semibold text-slate-700">
-                                    {serviceToDelete.type === 'Automatic_Daily' || serviceToDelete.type === 1 ? 'Diário Automático' : 'Operacional por Evento'}
-                                </span>
-                            </div>
-                        </div>
-                    )}
+                        )}
 
-                    <DialogFooter className="gap-2 sm:gap-0 pt-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setServiceToDelete(null)}
-                            disabled={isDeleting}
-                            className="h-9"
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            onClick={handleConfirmDelete}
-                            disabled={isDeleting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9"
-                        >
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
-                            Excluir Serviço
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setServiceToDelete(null)}
+                                disabled={isDeleting}
+                                className="h-9"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleConfirmDelete}
+                                disabled={isDeleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
+                                Excluir Serviço
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }

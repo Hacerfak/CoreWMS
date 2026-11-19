@@ -32,4 +32,6 @@ export interface UpdateYardAppointmentCommand {
   additionalNotes?: string | null;
   /** @nullable */
   dockLocationId?: string | null;
+  /** @nullable */
+  customerId?: string | null;
 }

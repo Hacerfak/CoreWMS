@@ -9,6 +9,7 @@ import {
     usePutApiCustomersId
 } from '@/api/generated/customers/customers';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -62,16 +63,19 @@ const customerSchema = z.object({
 
 export default function ClienteFormSheet({ open, onOpenChange, clienteId = null }) {
     const queryClient = useQueryClient();
+    const canCreateCustomer = useHasPermission('customers:create');
+    const canEditCustomer = useHasPermission('customers:edit');
+
     const [activeTab, setActiveTab] = useState('dados-gerais');
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const isEditing = !!clienteId;
+    const isReadOnly = isEditing ? !canEditCustomer : !canCreateCustomer;
 
     const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
         resolver: zodResolver(customerSchema),
         defaultValues: { state: 'RS', crt: 1, ieIndicator: 9, defaultPickingStrategy: 1, defaultPickingBaseDate: 1, requiresBlindInbound: true, requiresBlindOutbound: true }
     });
 
-    // Efeito para carregar os dados detalhados por ID sob demanda ao editar
     useEffect(() => {
         if (!open) return;
 
@@ -148,6 +152,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
     });
 
     const handleConsultSefaz = () => {
+        if (!canCreateCustomer) return;
         const cleanCnpj = (watchCnpj || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos.');
         if (!watchState) return toast.warning('Selecione a UF.');
@@ -155,6 +160,8 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
     };
 
     const onSubmit = (data) => {
+        if (isReadOnly) return;
+
         const cleanPayload = {
             ...data,
             cnpj: data.cnpj.replace(/\D/g, ''),
@@ -179,6 +186,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                 </div>
                 <Switch
                     checked={watch(trackField)}
+                    disabled={isReadOnly}
                     onCheckedChange={(v) => {
                         setValue(trackField, v);
                         if (!v) setValue(strictField, false);
@@ -188,7 +196,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
             {watch(trackField) && (
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 ml-2 animate-in slide-in-from-top-2">
                     <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                        <Checkbox checked={watch(strictField)} onCheckedChange={(v) => setValue(strictField, v)} />
+                        <Checkbox
+                            checked={watch(strictField)}
+                            disabled={isReadOnly}
+                            onCheckedChange={(v) => setValue(strictField, v)}
+                        />
                         <span className="text-rose-700">Exigência Fiscal Obrigatória</span>
                     </label>
                 </div>
@@ -201,7 +213,9 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
             <SheetContent className="w-full sm:w-[850px] !max-w-[850px] flex flex-col p-0 bg-white shadow-2xl">
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <SheetTitle className="text-xl font-bold text-slate-900">
-                        {isEditing ? 'Editar Cliente Depositante' : 'Novo Cliente Depositante'}
+                        {isEditing
+                            ? (isReadOnly ? 'Detalhes do Cliente Depositante' : 'Editar Cliente Depositante')
+                            : 'Novo Cliente Depositante'}
                     </SheetTitle>
                     <SheetDescription className="text-slate-500">
                         Configuração de cadastro e contrato (SLA, Regras Fiscais e WMS).
@@ -243,14 +257,14 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                 <Input
                                                     id="cnpj" placeholder="00.000.000/0000-00"
                                                     {...register('cnpj')}
-                                                    disabled={isEditing}
+                                                    disabled={isEditing || isReadOnly}
                                                     className={`bg-white font-mono h-10 ${errors.cnpj ? 'border-rose-500' : ''}`}
                                                 />
                                                 {errors.cnpj && <p className="text-xs text-rose-500">{errors.cnpj.message}</p>}
                                             </div>
                                             <div className="w-28 space-y-1.5">
                                                 <Label className="text-slate-700 font-medium">UF *</Label>
-                                                <Select value={watchState} onValueChange={(val) => setValue('state', val)}>
+                                                <Select value={watchState} onValueChange={(val) => setValue('state', val)} disabled={isReadOnly}>
                                                     <SelectTrigger className={`bg-white h-10 ${errors.state ? 'border-rose-500' : ''}`}>
                                                         <SelectValue placeholder="UF" />
                                                     </SelectTrigger>
@@ -259,40 +273,43 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     </SelectContent>
                                                 </Select>
                                             </div>
-                                            <Button
-                                                type="button" variant="outline"
-                                                onClick={handleConsultSefaz}
-                                                disabled={isSefazPending}
-                                                className="bg-white hover:bg-blue-600 hover:text-white border-blue-200 text-blue-700 font-medium px-6 h-10"
-                                            >
-                                                {isSefazPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                                                SEFAZ
-                                            </Button>
+                                            {!isEditing && canCreateCustomer && (
+                                                <Button
+                                                    type="button" variant="outline"
+                                                    onClick={handleConsultSefaz}
+                                                    disabled={isSefazPending}
+                                                    className="bg-white hover:bg-blue-600 hover:text-white border-blue-200 text-blue-700 font-medium px-6 h-10"
+                                                >
+                                                    {isSefazPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                                                    SEFAZ
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label>Razão Social *</Label>
-                                        <Input {...register('corporateName')} className={`h-10 ${errors.corporateName ? 'border-rose-500' : ''}`} />
+                                        <Input {...register('corporateName')} disabled={isReadOnly} className={`h-10 ${errors.corporateName ? 'border-rose-500' : ''}`} />
                                         {errors.corporateName && <p className="text-xs text-rose-500">{errors.corporateName.message}</p>}
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label>Nome Fantasia</Label>
-                                        <Input {...register('tradeName')} className="h-10" />
+                                        <Input {...register('tradeName')} disabled={isReadOnly} className="h-10" />
                                     </div>
 
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="col-span-2 space-y-1.5">
                                             <Label className="text-slate-900 font-semibold">Regime Tributário (CRT) *</Label>
-                                            <Select value={String(watch('crt'))} onValueChange={(val) => setValue('crt', Number(val))}>
+                                            <Select value={String(watch('crt'))} onValueChange={(val) => setValue('crt', Number(val))} disabled={isReadOnly}>
                                                 <SelectTrigger className={`bg-white h-10 ${errors.crt ? 'border-rose-500' : ''}`}>
                                                     <SelectValue placeholder="Selecione o CRT" />
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     <SelectItem value="1">1 - Simples Nacional</SelectItem>
                                                     <SelectItem value="2">2 - Simples Nac. (Excesso Sublimite)</SelectItem>
-                                                    <SelectItem value="3">3 - Regime Normal (Lucro Pres./Real)</SelectItem>                                                    <SelectItem value="4">4 - Simples Nacional (MEI)</SelectItem>
+                                                    <SelectItem value="3">3 - Regime Normal (Lucro Pres./Real)</SelectItem>
+                                                    <SelectItem value="4">4 - Simples Nacional (MEI)</SelectItem>
                                                 </SelectContent>
                                             </Select>
                                             {errors.crt && <p className="text-xs text-rose-500">{errors.crt.message}</p>}
@@ -300,18 +317,18 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
 
                                         <div className="col-span-1 space-y-1.5">
                                             <Label>CNAE Principal</Label>
-                                            <Input {...register('cnae')} placeholder="Ex: 4930-2/02" className="bg-white font-mono h-10" />
+                                            <Input {...register('cnae')} disabled={isReadOnly} placeholder="Ex: 4930-2/02" className="bg-white font-mono h-10" />
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <Label>Inscrição Estadual (IE)</Label>
-                                            <Input {...register('stateRegistration')} className="h-10" />
+                                            <Input {...register('stateRegistration')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label className="text-slate-900 font-semibold">Indicação IE *</Label>
-                                            <Select value={String(watch('ieIndicator'))} onValueChange={(val) => setValue('ieIndicator', Number(val))}>
+                                            <Select value={String(watch('ieIndicator'))} onValueChange={(val) => setValue('ieIndicator', Number(val))} disabled={isReadOnly}>
                                                 <SelectTrigger className={`bg-white h-10 ${errors.ieIndicator ? 'border-rose-500' : ''}`}>
                                                     <SelectValue />
                                                 </SelectTrigger>
@@ -327,15 +344,15 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="space-y-1.5">
                                             <Label>Inscrição Municipal (IM)</Label>
-                                            <Input {...register('municipalRegistration')} className="h-10" />
+                                            <Input {...register('municipalRegistration')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>E-mail Corporativo</Label>
-                                            <Input type="email" {...register('email')} className="h-10" />
+                                            <Input type="email" {...register('email')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>Telefone / Celular</Label>
-                                            <Input {...register('phone')} placeholder="(00) 00000-0000" className="h-10 font-mono" />
+                                            <Input {...register('phone')} disabled={isReadOnly} placeholder="(00) 00000-0000" className="h-10 font-mono" />
                                         </div>
                                     </div>
                                 </TabsContent>
@@ -345,11 +362,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="space-y-1.5">
                                             <Label>CEP</Label>
-                                            <Input {...register('zipCode')} className="h-10 font-mono" />
+                                            <Input {...register('zipCode')} disabled={isReadOnly} className="h-10 font-mono" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>Estado (UF)</Label>
-                                            <Select value={watchState} onValueChange={(val) => setValue('state', val, { shouldValidate: true })}>
+                                            <Select value={watchState} onValueChange={(val) => setValue('state', val, { shouldValidate: true })} disabled={isReadOnly}>
                                                 <SelectTrigger className={`bg-white h-10 ${errors.state ? 'border-rose-500' : ''}`}>
                                                     <SelectValue placeholder="UF" />
                                                 </SelectTrigger>
@@ -359,34 +376,35 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                             </Select>
                                         </div>
                                         <div className="space-y-1.5">
-                                            <Label>Código IBGE</Label>                                            <Input type="number" {...register('cityCode')} className="h-10 font-mono" />
+                                            <Label>Código IBGE</Label>
+                                            <Input type="number" {...register('cityCode')} disabled={isReadOnly} className="h-10 font-mono" />
                                         </div>
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label>Cidade</Label>
-                                        <Input {...register('cityName')} className="h-10" />
+                                        <Input {...register('cityName')} disabled={isReadOnly} className="h-10" />
                                     </div>
 
                                     <div className="grid grid-cols-4 gap-4">
                                         <div className="col-span-3 space-y-1.5">
                                             <Label>Logradouro / Rua</Label>
-                                            <Input {...register('street')} className="h-10" />
+                                            <Input {...register('street')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>Número</Label>
-                                            <Input {...register('number')} className="h-10" />
+                                            <Input {...register('number')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <Label>Bairro</Label>
-                                            <Input {...register('neighborhood')} className="h-10" />
+                                            <Input {...register('neighborhood')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>Complemento</Label>
-                                            <Input {...register('complement')} className="h-10" />
+                                            <Input {...register('complement')} disabled={isReadOnly} className="h-10" />
                                         </div>
                                     </div>
                                 </TabsContent>
@@ -406,7 +424,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label>Estratégia de Fila</Label>
-                                                <Select value={String(watch('defaultPickingStrategy'))} onValueChange={(val) => setValue('defaultPickingStrategy', Number(val))}>
+                                                <Select value={String(watch('defaultPickingStrategy'))} onValueChange={(val) => setValue('defaultPickingStrategy', Number(val))} disabled={isReadOnly}>
                                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="1">FIFO</SelectItem>
@@ -418,7 +436,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
 
                                             <div className="space-y-2">
                                                 <Label>Data Base Analisada</Label>
-                                                <Select value={String(watch('defaultPickingBaseDate'))} onValueChange={(val) => setValue('defaultPickingBaseDate', Number(val))} disabled={watch('defaultPickingStrategy') == 2}>
+                                                <Select value={String(watch('defaultPickingBaseDate'))} onValueChange={(val) => setValue('defaultPickingBaseDate', Number(val))} disabled={isReadOnly || watch('defaultPickingStrategy') == 2}>
                                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="1">Data de Recebimento</SelectItem>
@@ -438,19 +456,19 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-1.5">
                                                 <Label>Recebimento Máx. Diário (Remessas)</Label>
-                                                <Input type="number" {...register('maxDailyInboundOrders')} className="bg-white" placeholder="Sem limite" />
+                                                <Input type="number" {...register('maxDailyInboundOrders')} disabled={isReadOnly} className="bg-white" placeholder="Sem limite" />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <Label>Expedição Máx. Diária (Pedidos)</Label>
-                                                <Input type="number" {...register('maxDailyOutboundOrders')} className="bg-white" placeholder="Sem limite" />
+                                                <Input type="number" {...register('maxDailyOutboundOrders')} disabled={isReadOnly} className="bg-white" placeholder="Sem limite" />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <Label>Ocupação Mínima Faturada (Volumes)</Label>
-                                                <Input type="number" {...register('minStockVolume')} className="bg-white" placeholder="Sem limite" />
+                                                <Input type="number" {...register('minStockVolume')} disabled={isReadOnly} className="bg-white" placeholder="Sem limite" />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <Label>Ocupação Máxima Permitida (Volumes)</Label>
-                                                <Input type="number" {...register('maxStockVolume')} className="bg-white" placeholder="Sem limite" />
+                                                <Input type="number" {...register('maxStockVolume')} disabled={isReadOnly} className="bg-white" placeholder="Sem limite" />
                                             </div>
                                         </div>
 
@@ -461,7 +479,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     <Label className="text-base text-slate-900">Exige Conferência Cega no Recebimento</Label>
                                                     <p className="text-xs text-slate-500">Operador bipa produtos sem saber a quantidade da NF-e.</p>
                                                 </div>
-                                                <Switch checked={watch('requiresBlindInbound')} onCheckedChange={(val) => setValue('requiresBlindInbound', val)} />
+                                                <Switch checked={watch('requiresBlindInbound')} disabled={isReadOnly} onCheckedChange={(val) => setValue('requiresBlindInbound', val)} />
                                             </div>
 
                                             <div className="flex items-center justify-between">
@@ -469,7 +487,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     <Label className="text-base text-slate-900">Exige Conferência Cega na Expedição</Label>
                                                     <p className="text-xs text-slate-500">Verifica fisicamente a mercadoria antes do carregamento.</p>
                                                 </div>
-                                                <Switch checked={watch('requiresBlindOutbound')} onCheckedChange={(val) => setValue('requiresBlindOutbound', val)} />
+                                                <Switch checked={watch('requiresBlindOutbound')} disabled={isReadOnly} onCheckedChange={(val) => setValue('requiresBlindOutbound', val)} />
                                             </div>
                                         </div>
 
@@ -482,17 +500,21 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     <strong className="text-slate-700">Se inativo:</strong> O sistema agrupa todos os itens expedidos numa única NF-e de retorno (com várias tags refNFe).
                                                 </p>
                                             </div>
-                                            <Switch checked={watch('returnInvoicePerReferencedInvoice')} onCheckedChange={(val) => setValue('returnInvoicePerReferencedInvoice', val)} />
+                                            <Switch checked={watch('returnInvoicePerReferencedInvoice')} disabled={isReadOnly} onCheckedChange={(val) => setValue('returnInvoicePerReferencedInvoice', val)} />
                                         </div>
                                     </div>
                                 </TabsContent>
                             </div>
 
                             <SheetFooter className="p-6 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
-                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-5">Cancelar</Button>
-                                <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[130px] px-6">
-                                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="px-5">
+                                    {isReadOnly ? 'Fechar' : 'Cancelar'}
                                 </Button>
+                                {!isReadOnly && (
+                                    <Button type="submit" disabled={isSaving} className="bg-slate-900 hover:bg-slate-800 text-white min-w-[130px] px-6">
+                                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+                                    </Button>
+                                )}
                             </SheetFooter>
                         </Tabs>
                     </form>

@@ -18,57 +18,98 @@ export const MODULE_PERMISSIONS = [
     {
         module: 'Inbound (Recebimento)',
         permissions: [
-            { id: 'inbound:view', label: 'Visualizar Ordens de Recebimento' },
-            { id: 'inbound:import', label: 'Importar XML de Entrada' },
-            { id: 'inbound:review', label: 'Revisar e Vincular Produtos' },
-            { id: 'inbound:receive', label: 'Operar Recebimento (Coletor)' },
-            { id: 'inbound:manage', label: 'Gerenciar / Cancelar / Estornar' },
+            { id: 'inbound:view', label: 'Visualizar Ordens de Recebimento e Progresso' },
+            { id: 'inbound:import', label: 'Importar XML / Buscar NF-e por Chave de Acesso' },
+            { id: 'inbound:manifest', label: 'Manifestar NF-e na SEFAZ (Ciência / Confirmação / Desconhecimento)' },
+            { id: 'inbound:review', label: 'Revisar e Vincular Produtos Pendentes de Cadastro' },
+            { id: 'inbound:cancel', label: 'Cancelar Ordens Pendentes (Antes do Recebimento)' },
+            { id: 'inbound:receive', label: 'Operar Recebimento Físico (Coletor / Doca)' },
+            { id: 'inbound:manage', label: 'Gerenciar / Estornar HUs ou Ordem / Importar Legado / Excluir' },
         ]
     },
     {
         module: 'Outbound (Expedição & Packing)',
         permissions: [
-            { id: 'outbound:view', label: 'Visualizar Pedidos de Saída' },
-            { id: 'outbound:import', label: 'Importar XML / Pedidos de Saída' },
-            { id: 'outbound:manage', label: 'Gerenciar / Alocar / Separar / Expedir' },
-            { id: 'packing:manage', label: 'Operar Empacotamento (Packing)' },
+            { id: 'outbound:view', label: 'Visualizar Pedidos de Saída, Detalhes e Saldo Disponível' },
+            { id: 'outbound:create', label: 'Criar Pedidos Manuais de Retorno / Devolução' },
+            { id: 'outbound:import', label: 'Importar Pedidos de Saída via XML da NF-e' },
+            { id: 'outbound:edit', label: 'Editar Cabeçalho do Pedido (Antes da Separação)' },
+            { id: 'outbound:cancel', label: 'Cancelar Pedidos de Saída' },
+            { id: 'outbound:allocate', label: 'Alocar Estoque e Reservar Volumes / Frações' },
+            { id: 'outbound:pick', label: 'Executar Separação Física (Picking no Coletor)' },
+            { id: 'outbound:pack', label: 'Operar Mesa de Embalagem (Packing)' },
+            { id: 'outbound:check', label: 'Executar Conferência Física de Expedição (Checking)' },
+            { id: 'outbound:ship', label: 'Confirmar Expedição Física e Baixa de Estoque (Ship)' },
+            { id: 'outbound:manage', label: 'Supervisão: Estornar Picking/Conferência/Expedição e Excluir' },
         ]
     },
     {
-        module: 'Estoque, Qualidade & Inventário',
+        module: 'Estoque & Unidades de Manuseio (HUs)',
         permissions: [
-            { id: 'inventory:view', label: 'Visualizar Estoque, Kardex e Contagens' },
-            { id: 'inventory:move', label: 'Movimentar Estoque (HUs / Guarda)' },
-            { id: 'inventory:managequality', label: 'Gerenciar Qualidade, Avarias e Planos de Inventário' },
-            { id: 'inventory:edittraceability', label: 'Editar Rastreabilidade (Lote / Validade)' },
+            { id: 'inventory:view', label: 'Visualizar Balanço de Estoque, HUs e Extrato Kardex' },
+            { id: 'inventory:export', label: 'Exportar Relatórios CSV (Balanço, HUs e Kardex)' },
+            { id: 'inventory:move', label: 'Sugestão de Guarda (Putaway) e Movimentação Interna' },
+            { id: 'inventory:split', label: 'Realizar Transbordo / Desmembramento de HUs (Split)' },
+            { id: 'inventory:merge', label: 'Agrupar / Consolidar Unidades de Manuseio (Merge)' },
+            { id: 'inventory:edittraceability', label: 'Editar Rastreabilidade, Lote, Validade, Embalagem e Pesos' },
+            { id: 'inventory:manage', label: 'Supervisão: Estornos Diretos de Saldo, Kardex e Reservas' },
+        ]
+    },
+    {
+        module: 'Controle de Qualidade',
+        permissions: [
+            { id: 'quality:view', label: 'Visualizar Ocorrências de Qualidade, Fotos e Histórico' },
+            { id: 'quality:hold', label: 'Apontar Avaria, Quarentena, Divergência, Falta ou Sobra' },
+            { id: 'quality:release', label: 'Liberar Unidades de Manuseio Bloqueadas (Individual / Lote)' },
+            { id: 'quality:manage', label: 'Gerenciar Motivos de Qualidade e Excluir Ocorrências' },
+        ]
+    },
+    {
+        module: 'Inventário Cíclico',
+        permissions: [
+            { id: 'cyclecount:view', label: 'Visualizar Planos de Inventário, Detalhes e Indicador IRA' },
+            { id: 'cyclecount:create', label: 'Criar / Solicitar Planos Programados de Inventário' },
+            { id: 'cyclecount:export', label: 'Baixar Extratos CSV dos Planos de Inventário' },
+            { id: 'cyclecount:count', label: 'Executar Contagens Cegas e Iniciar Contagens Espontâneas' },
+            { id: 'cyclecount:manage', label: 'Aprovar Planos, Solicitar Recontagem, Ajustar Saldo e Encerrar' },
         ]
     },
     {
         module: 'Portaria & Controle de Pátio',
         permissions: [
-            { id: 'yard:view', label: 'Visualizar Agenda e Dashboard de Pátio' },
-            { id: 'yard:operate', label: 'Operar Portaria (Check-in, Docas e Check-out)' },
-            { id: 'yard:manage', label: 'Gerenciar Agendamentos, XML e Cancelamentos' },
+            { id: 'yard:view', label: 'Visualizar Agenda e Dashboard de Pátio / Docas' },
+            { id: 'yard:schedule', label: 'Criar Agendamentos Programados (Manual ou via XML)' },
+            { id: 'yard:operate', label: 'Operar Portaria (Check-in, Encostar na Doca, Vínculo e Check-out)' },
+            { id: 'yard:manage', label: 'Gerenciar Agendamentos (Entrada Direta, Editar, Cancelar e Excluir)' },
+        ]
+    },
+    {
+        module: 'Fiscal & SEFAZ',
+        permissions: [
+            { id: 'fiscal:view', label: 'Consultar NF-es Emitidas, Eventos, DANFE e Baixar XML' },
+            { id: 'fiscal:emit', label: 'Emitir NF-e (Saída/Avulsa), CC-e, Cancelar na SEFAZ e Enviar E-mail' },
+            { id: 'fiscal:manage', label: 'Gerenciar Naturezas de Operação e Exceções Tributárias' },
         ]
     },
     {
         module: 'Faturamento & Tarifas',
         permissions: [
-            { id: 'billing:view', label: 'Visualizar Faturamento e Pré-Faturas' },
-            { id: 'billing:manage', label: 'Gerenciar Serviços, Tarifas e Ciclos' },
+            { id: 'billing:view', label: 'Visualizar Ciclos de Faturamento e Detalhes das Cobranças' },
+            { id: 'billing:export', label: 'Exportar Extrato da Fatura (HTML / Impressão e CSV)' },
+            { id: 'billing:manage', label: 'Gerenciar Serviços, Tarifas, Lançamentos Manuais e Fechar Ciclos' },
         ]
     },
     {
         module: 'Cadastros Base (Depositantes & SKUs)',
         permissions: [
             { id: 'customers:view', label: 'Visualizar Clientes / Depositantes' },
-            { id: 'customers:create', label: 'Cadastrar Clientes / Depositantes' },
-            { id: 'customers:edit', label: 'Editar Clientes / Depositantes' },
-            { id: 'customers:delete', label: 'Excluir Clientes / Depositantes' },
-            { id: 'products:view', label: 'Visualizar Produtos / SKUs' },
-            { id: 'products:create', label: 'Cadastrar Produtos / SKUs' },
-            { id: 'products:edit', label: 'Editar Produtos / SKUs' },
-            { id: 'products:delete', label: 'Excluir Produtos / SKUs' },
+            { id: 'customers:create', label: 'Cadastrar Clientes / Depositantes (com Consulta SEFAZ)' },
+            { id: 'customers:edit', label: 'Editar / Ativar / Inativar Clientes Depositantes' },
+            { id: 'customers:delete', label: 'Excluir / Desativar Clientes Depositantes' },
+            { id: 'products:view', label: 'Visualizar Produtos, SKUs e Tipos de Embalagem' },
+            { id: 'products:create', label: 'Cadastrar Produtos / SKUs e Tipos de Embalagem' },
+            { id: 'products:edit', label: 'Editar Produtos / SKUs e Tipos de Embalagem' },
+            { id: 'products:delete', label: 'Excluir Produtos / SKUs e Tipos de Embalagem' },
         ]
     },
     {
@@ -191,9 +232,9 @@ export default function PerfilFormPage() {
     }
 
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col space-y-6 pb-8 animate-in fade-in duration-300">
-            {/* CABEÇALHO DA PÁGINA DEDICADA */}
-            <div className="flex flex-wrap items-center justify-between bg-white p-5 border border-slate-200/80 rounded-xl shadow-2xs gap-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="relative flex flex-col space-y-6 pb-4 animate-in fade-in duration-300">
+            {/* CABEÇALHO FIXO DA PÁGINA DEDICADA */}
+            <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between bg-white/95 backdrop-blur-xs p-5 border border-slate-200/80 rounded-xl shadow-xs gap-4">
                 <div className="flex items-center gap-3">
                     <Button
                         type="button"
@@ -285,7 +326,7 @@ export default function PerfilFormPage() {
             )}
 
             {/* MATRIZ DE PERMISSÕES POR MÓDULO */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                 {MODULE_PERMISSIONS.map((group) => {
                     const groupIds = group.permissions.map(p => p.id);
                     const isAllSelected = groupIds.every(pid => watchedPermissions.includes(pid));
@@ -296,7 +337,7 @@ export default function PerfilFormPage() {
                                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
                                     {group.module}
                                 </h3>
-                                <label className="flex items-center gap-2 cursor-pointer text-[11px] font-medium text-slate-600">
+                                <label className="relative overflow-hidden flex items-center gap-2 cursor-pointer text-[11px] font-medium text-slate-600">
                                     <span>Marcar módulo</span>
                                     <Checkbox
                                         checked={isAllSelected}
@@ -311,7 +352,7 @@ export default function PerfilFormPage() {
                                     return (
                                         <label
                                             key={perm.id}
-                                            className={`flex items-center justify-between gap-3 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${isChecked
+                                            className={`relative overflow-hidden flex items-center justify-between gap-3 p-2.5 rounded-lg border text-xs font-medium cursor-pointer transition-all ${isChecked
                                                 ? 'bg-blue-50/80 border-blue-200 text-blue-950'
                                                 : 'bg-transparent border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-200'
                                                 }`}

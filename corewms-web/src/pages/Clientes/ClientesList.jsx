@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiCustomers, useDeleteApiCustomersId } from '@/api/generated/customers/customers';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -11,12 +12,17 @@ import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import { Search, Plus, Building, MapPin, Loader2, Edit, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Plus, Building, MapPin, Loader2, Edit, Eye, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import ClienteFormSheet from './ClienteFormSheet';
 
 export default function ClientesList() {
     const queryClient = useQueryClient();
+    const canViewCustomers = useHasPermission('customers:view');
+    const canCreateCustomer = useHasPermission('customers:create');
+    const canEditCustomer = useHasPermission('customers:edit');
+    const canDeleteCustomer = useHasPermission('customers:delete');
+
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('ACTIVE');
     const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -29,7 +35,9 @@ export default function ClientesList() {
         OnlyActive: statusFilter === 'ACTIVE' ? true : statusFilter === 'INACTIVE' ? false : false
     };
 
-    const { data: apiResponse, isLoading } = useGetApiCustomers(queryParams);
+    const { data: apiResponse, isLoading } = useGetApiCustomers(queryParams, {
+        query: { enabled: canViewCustomers }
+    });
     const clientes = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
     const { mutate: deleteCustomer, isPending: isDeleting } = useDeleteApiCustomersId({
@@ -46,6 +54,7 @@ export default function ClientesList() {
     });
 
     const handleToggleActive = async (cliente) => {
+        if (!canEditCustomer) return;
         try {
             const res = await customInstance({
                 url: `/api/customers/${cliente.id}/toggle-active`,
@@ -59,11 +68,12 @@ export default function ClientesList() {
     };
 
     const handleCreate = () => {
+        if (!canCreateCustomer) return;
         setSelectedClienteId(null);
         setIsSheetOpen(true);
     };
 
-    const handleEdit = (cliente) => {
+    const handleOpenDetails = (cliente) => {
         setSelectedClienteId(cliente.id);
         setIsSheetOpen(true);
     };
@@ -75,9 +85,11 @@ export default function ClientesList() {
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">Clientes Depositantes</h1>
                     <p className="text-sm text-slate-500 mt-1">Gerencie os depositantes, contratos SLA e parceiros de negócio.</p>
                 </div>
-                <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs">
-                    <Plus className="mr-2 h-4 w-4" /> Novo Cliente
-                </Button>
+                {canCreateCustomer && (
+                    <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs">
+                        <Plus className="mr-2 h-4 w-4" /> Novo Cliente
+                    </Button>
+                )}
             </div>
 
             <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -160,17 +172,28 @@ export default function ClientesList() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
-                                            <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)} className="text-blue-600 hover:bg-blue-50">
-                                                <Edit className="h-4 w-4 mr-1" /> Editar
-                                            </Button>
-                                            {cliente.isActive ? (
-                                                <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
-                                                    <Trash2 className="h-4 w-4 mr-1" /> Inativar
+                                            {canEditCustomer ? (
+                                                <Button variant="ghost" size="sm" onClick={() => handleOpenDetails(cliente)} className="text-blue-600 hover:bg-blue-50">
+                                                    <Edit className="h-4 w-4 mr-1" /> Editar
                                                 </Button>
                                             ) : (
-                                                <Button variant="ghost" size="sm" onClick={() => handleToggleActive(cliente)} className="text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700">
-                                                    <RotateCcw className="h-4 w-4 mr-1" /> Reativar
+                                                <Button variant="ghost" size="sm" onClick={() => handleOpenDetails(cliente)} className="text-slate-600 hover:bg-slate-100">
+                                                    <Eye className="h-4 w-4 mr-1" /> Visualizar
                                                 </Button>
+                                            )}
+
+                                            {cliente.isActive ? (
+                                                canDeleteCustomer && (
+                                                    <Button variant="ghost" size="sm" onClick={() => setClienteToDelete(cliente)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                                                        <Trash2 className="h-4 w-4 mr-1" /> Inativar
+                                                    </Button>
+                                                )
+                                            ) : (
+                                                canEditCustomer && (
+                                                    <Button variant="ghost" size="sm" onClick={() => handleToggleActive(cliente)} className="text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700">
+                                                        <RotateCcw className="h-4 w-4 mr-1" /> Reativar
+                                                    </Button>
+                                                )
                                             )}
                                         </TableCell>
                                     </TableRow>
@@ -187,26 +210,28 @@ export default function ClientesList() {
                 clienteId={selectedClienteId}
             />
 
-            <AlertDialog open={!!clienteToDelete} onOpenChange={(open) => !open && setClienteToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900">Inativar Cliente Depositante?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-500">
-                            Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>? Ele não aparecerá nas operações ativas até ser restaurado.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => deleteCustomer({ id: clienteToDelete.id })}
-                            disabled={isDeleting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white"
-                        >
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Inativação'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canDeleteCustomer && (
+                <AlertDialog open={!!clienteToDelete} onOpenChange={(open) => !open && setClienteToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-slate-900">Inativar Cliente Depositante?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-500">
+                                Tem certeza que deseja inativar o cliente <strong className="text-slate-800">{clienteToDelete?.corporateName}</strong>? Ele não aparecerá nas operações ativas até ser restaurado.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => deleteCustomer({ id: clienteToDelete.id })}
+                                disabled={isDeleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Inativação'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }
