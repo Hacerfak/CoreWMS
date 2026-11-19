@@ -22,6 +22,7 @@ public class GetRuleExceptionByIdHandler : IRequestHandler<GetRuleExceptionByIdQ
     public async Task<IResult> Handle(GetRuleExceptionByIdQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var exc = await _db.FiscalOperationRuleExceptions
             .AsNoTracking()
@@ -81,6 +82,6 @@ public static class GetRuleExceptionByIdEndpoints
                 await mediator.Send(new GetRuleExceptionByIdQuery(ruleId, exceptionId)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.View);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }

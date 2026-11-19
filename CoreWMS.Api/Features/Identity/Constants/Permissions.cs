@@ -196,4 +196,16 @@ public static class Permissions
         // Gestão completa: criar planos, aprovar, solicitar recontagem, aplicar ajustes e encerrar
         public const string Manage = "cyclecount:manage";
     }
+
+    public static class Fiscal
+    {
+        // Consultar notas emitidas, visualizar/imprimir DANFE, eventos (CC-e/Cancelamento) e baixar XML
+        public const string View = "fiscal:view";
+
+        // Emitir NF-e (Outbound e Avulsa), emitir CC-e, cancelar NF-e na SEFAZ, excluir rejeitadas e enviar e-mail
+        public const string Emit = "fiscal:emit";
+
+        // Cadastrar e gerenciar Naturezas de Operação e Exceções Fiscais
+        public const string Manage = "fiscal:manage";
+    }
 }

@@ -86,8 +86,8 @@ public record EmitStandaloneNfeCommand(
     string? VehiclePlateState = null,
     StandaloneNfePaymentCommand? Payment = null,
     List<string>? ReferencedAccessKeys = null,
-    string? DestinationEmail = null, // E-mail explícito para envio (opcional)
-    Guid? CustomerId = null         // Depositante proprietário da mercadoria (opcional)
+    string? DestinationEmail = null,
+    Guid? CustomerId = null
 ) : IRequest<IResult>;
 
 public class EmitStandaloneNfeCommandValidator : AbstractValidator<EmitStandaloneNfeCommand>
@@ -144,6 +144,7 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
     public async Task<IResult> Handle(EmitStandaloneNfeCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         if (request.Items == null || !request.Items.Any())
             return Results.BadRequest(new { Message = "Informe ao menos um produto para emitir a nota fiscal avulsa." });
@@ -161,7 +162,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
         {
             Guid? customerId = request.CustomerId;
 
-            // Se o CustomerId não foi informado no comando, obtém pelo proprietário do produto
             if (!customerId.HasValue && request.Items.Any())
             {
                 var firstProdId = request.Items.First().ProductId;
@@ -184,7 +184,6 @@ public class EmitStandaloneNfeHandler : IRequestHandler<EmitStandaloneNfeCommand
                 targetCustomerEmail = customer?.Email;
             }
 
-            // Fallback: Verifica se o próprio destinatário da nota é um cliente/depositante cadastrado (por CNPJ ou CPF)
             if (string.IsNullOrWhiteSpace(targetCustomerEmail) && !string.IsNullOrWhiteSpace(request.DestinationCnpjCpf))
             {
                 var cleanDoc = new string(request.DestinationCnpjCpf.Where(char.IsDigit).ToArray());
@@ -391,6 +390,6 @@ public static class EmitStandaloneNfeEndpoints
             await mediator.Send(cmd))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

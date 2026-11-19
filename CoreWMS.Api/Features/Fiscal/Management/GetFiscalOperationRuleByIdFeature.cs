@@ -22,6 +22,7 @@ public class GetFiscalOperationRuleByIdHandler : IRequestHandler<GetFiscalOperat
     public async Task<IResult> Handle(GetFiscalOperationRuleByIdQuery request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var rule = await _db.FiscalOperationRules
             .AsNoTracking()
@@ -45,6 +46,6 @@ public static class GetFiscalOperationRuleByIdEndpoints
             await mediator.Send(new GetFiscalOperationRuleByIdQuery(id)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.View);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }

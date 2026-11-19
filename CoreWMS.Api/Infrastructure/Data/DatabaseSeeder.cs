@@ -77,6 +77,9 @@ public static class DatabaseSeeder
             adminRole.AddPermission(Permissions.Billing.View);
             adminRole.AddPermission(Permissions.Billing.Export);
             adminRole.AddPermission(Permissions.Billing.Manage);
+            adminRole.AddPermission(Permissions.Fiscal.View);
+            adminRole.AddPermission(Permissions.Fiscal.Emit);
+            adminRole.AddPermission(Permissions.Fiscal.Manage);
 
             // --- GERENTE (CRUD Usuários + Vínculos) ---
             var gerenteRole = new Role("Gerente");
@@ -124,6 +127,8 @@ public static class DatabaseSeeder
             gerenteRole.AddPermission(Permissions.CycleCount.Export);
             gerenteRole.AddPermission(Permissions.CycleCount.Count);
             gerenteRole.AddPermission(Permissions.CycleCount.Manage);
+            gerenteRole.AddPermission(Permissions.Fiscal.View);
+            gerenteRole.AddPermission(Permissions.Fiscal.Emit);
 
             // --- OPERADOR (Apenas atualizar próprio cadastro) ---
             var operadorRole = new Role("Operador");

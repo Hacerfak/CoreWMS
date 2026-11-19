@@ -1,5 +1,6 @@
 using System.Text;
 using CoreWMS.Api.Features.Fiscal.Entities;
+using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Services.Email;
@@ -14,6 +15,7 @@ public record SendNfeEmailCommand(Guid DocumentId, string? DestinationEmail = nu
 public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
     private readonly IEmailSenderService _emailSender;
     private readonly IConfiguration _config;
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -21,12 +23,14 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
 
     public SendNfeEmailHandler(
         ApplicationDbContext db,
+        ITenantProvider tenant,
         IEmailSenderService emailSender,
         IConfiguration config,
         IHttpContextAccessor httpContextAccessor,
         ILogger<SendNfeEmailHandler> logger)
     {
         _db = db;
+        _tenant = tenant;
         _emailSender = emailSender;
         _config = config;
         _httpContextAccessor = httpContextAccessor;
@@ -35,11 +39,14 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
 
     public async Task<IResult> Handle(SendNfeEmailCommand request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var doc = await _db.CompanyFiscalDocuments
             .Include(d => d.Company)
             .Include(d => d.OutboundOrder)
                 .ThenInclude(o => o!.Customer)
-            .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
+            .FirstOrDefaultAsync(d => d.Id == request.DocumentId && d.CompanyId == companyId, ct);
 
         if (doc == null)
             return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
@@ -47,7 +54,6 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
         if (string.IsNullOrWhiteSpace(doc.RawXml))
             return Results.BadRequest(new { Message = "XML autorizado não disponível para envio." });
 
-        // Identifica o e-mail destino: manual ou automático do depositante (Customer)
         string destinationEmail = !string.IsNullOrWhiteSpace(request.DestinationEmail)
             ? request.DestinationEmail.Trim()
             : (doc.OutboundOrder?.Customer?.Email?.Trim() ?? string.Empty);
@@ -60,11 +66,11 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
             });
         }
 
-        var companyId = doc.CompanyId != Guid.Empty
+        var effectiveCompanyId = doc.CompanyId != Guid.Empty
             ? doc.CompanyId
             : (doc.OutboundOrder?.CompanyId ?? Guid.Empty);
 
-        if (companyId == Guid.Empty)
+        if (effectiveCompanyId == Guid.Empty)
             return Results.BadRequest(new { Message = "Empresa emitente não identificada." });
 
         var requestHttp = _httpContextAccessor.HttpContext?.Request;
@@ -102,7 +108,7 @@ public class SendNfeEmailHandler : IRequestHandler<SendNfeEmailCommand, IResult>
         try
         {
             await _emailSender.SendAsync(new SendEmailMessage(
-                CompanyId: companyId,
+                CompanyId: effectiveCompanyId,
                 DestinationEmail: destinationEmail,
                 Subject: $"Nota Fiscal Eletrônica - {identificador}",
                 HtmlBody: htmlBody,
@@ -128,6 +134,6 @@ public static class SendNfeEmailEndpoints
             await mediator.Send(new SendNfeEmailCommand(documentId, destinationEmail)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Identity.Constants.Permissions.Outbound.View);
+            .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

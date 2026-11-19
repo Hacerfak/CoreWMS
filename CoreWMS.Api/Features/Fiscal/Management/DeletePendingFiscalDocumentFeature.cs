@@ -32,6 +32,7 @@ public class DeletePendingFiscalDocumentHandler : IRequestHandler<DeletePendingF
     public async Task<IResult> Handle(DeletePendingFiscalDocumentCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var doc = await _db.CompanyFiscalDocuments
             .FirstOrDefaultAsync(d => d.Id == request.Id && d.CompanyId == companyId, ct);
@@ -60,6 +61,6 @@ public static class DeletePendingFiscalDocumentEndpoints
             await mediator.Send(new DeletePendingFiscalDocumentCommand(id)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

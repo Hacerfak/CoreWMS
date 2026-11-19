@@ -50,6 +50,7 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
     public async Task<IResult> Handle(EmitCorrectionLetterCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         // 1. Localiza o documento fiscal autorizado:
         // Primeiro tenta diretamente por DocumentId
@@ -66,7 +67,8 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
                 .Include(d => d.Company)
                 .Include(d => d.OutboundOrder)
                     .ThenInclude(o => o!.Company)
-                .FirstOrDefaultAsync(d => d.OutboundOrderId == request.Id
+                .FirstOrDefaultAsync(d => d.CompanyId == companyId
+                                       && d.OutboundOrderId == request.Id
                                        && (int)d.Type >= 1 && (int)d.Type <= 6
                                        && d.Status == FiscalDocumentStatus.Authorized, ct);
         }
@@ -85,7 +87,8 @@ public class EmitCorrectionLetterHandler : IRequestHandler<EmitCorrectionLetterC
 
         // 2. Determina a sequência do evento (1 a 20) com base na CHAVE DE ACESSO DA NOTA
         var currentSeq = await _db.CompanyFiscalDocuments
-            .CountAsync(d => d.AccessKey == authorizedDoc.AccessKey
+            .CountAsync(d => d.CompanyId == companyId
+                          && d.AccessKey == authorizedDoc.AccessKey
                           && d.Type == FiscalDocumentType.CartaCorrecao
                           && d.Status == FiscalDocumentStatus.Authorized, ct) + 1;
 
@@ -189,6 +192,6 @@ public static class NfeCorrectionLetterEndpoints
             var command = cmd with { Id = id };
             return await mediator.Send(command);
         })
-        .RequirePermission(Permissions.Outbound.Manage);
+        .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

@@ -69,6 +69,20 @@ public class GetCompanyFiscalDocumentsHandler : IRequestHandler<GetCompanyFiscal
             .Include(d => d.OutboundOrder)
             .Where(d => d.CompanyId == companyId && (int)d.Type <= 6);
 
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            var allowedCnpjs = await _db.Customers
+                .AsNoTracking()
+                .Where(c => allowedCustomerIds.Contains(c.Id) && !string.IsNullOrWhiteSpace(c.Cnpj))
+                .Select(c => ">" + c.Cnpj.Trim() + "<")
+                .ToListAsync(ct);
+
+            query = query.Where(d =>
+                (d.OutboundOrder != null && allowedCustomerIds.Contains(d.OutboundOrder.CustomerId)) ||
+                (d.OutboundOrderId == null && d.RawXml != null && allowedCnpjs.Any(tag => d.RawXml.Contains(tag))));
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var s = request.Search.Trim().ToLower();
@@ -182,6 +196,6 @@ public static class GetCompanyFiscalDocumentsEndpoints
             await mediator.Send(query))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.View);
+            .RequirePermission(Permissions.Fiscal.View);
     }
 }

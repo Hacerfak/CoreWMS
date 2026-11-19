@@ -82,6 +82,9 @@ public class GetOutboundFiscalPreviewHandler : IRequestHandler<GetOutboundFiscal
 
         if (order == null) return Results.NotFound(new { Message = "Ordem de saída não encontrada." });
 
+        if (_tenant.IsPartnerUser())
+            return Results.Forbid();
+
         if (_tenant.IsPartnerUser() && !_tenant.GetAllowedCustomerIds().Contains(order.CustomerId))
             return Results.Forbid();
 
@@ -354,6 +357,6 @@ public static class GetOutboundFiscalPreviewEndpoints
                 await mediator.Send(new GetOutboundFiscalPreviewQuery(orderId, fiscalRuleId, inboundOrderIdFilter)))
            .WithTags("Outbound")
            .RequireAuthorization()
-           .RequirePermission(Permissions.Outbound.View);
+           .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

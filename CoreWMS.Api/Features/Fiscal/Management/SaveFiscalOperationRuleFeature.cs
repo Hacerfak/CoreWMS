@@ -69,6 +69,8 @@ public class SaveFiscalOperationRuleHandler : IRequestHandler<SaveFiscalOperatio
     public async Task<IResult> Handle(SaveFiscalOperationRuleCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         Guid savedId;
 
         if (request.Id.HasValue && request.Id.Value != Guid.Empty)
@@ -127,6 +129,6 @@ public static class SaveFiscalOperationRuleEndpoints
             await mediator.Send(cmd))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }

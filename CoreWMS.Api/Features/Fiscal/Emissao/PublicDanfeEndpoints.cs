@@ -25,7 +25,7 @@ public static class PublicDanfeEndpoints
                 .AsNoTracking()
                 .Include(d => d.Company)
                 .Include(d => d.OutboundOrder).ThenInclude(o => o!.Company)
-                .FirstOrDefaultAsync(d => d.AccessKey == cleanKey);
+                .FirstOrDefaultAsync(d => d.AccessKey == cleanKey && (int)d.Type >= 1 && (int)d.Type <= 6);
 
             if (doc == null || string.IsNullOrWhiteSpace(doc.RawXml))
                 return Results.NotFound("Documento fiscal não localizado ou XML autorizado indisponível.");

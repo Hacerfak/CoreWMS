@@ -12,7 +12,6 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using NFe.Classes.Informacoes.Identificacao.Tipos;
 using NFe.Classes.Servicos.Tipos;
 using NFe.Servicos;
@@ -69,6 +68,7 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
     public async Task<IResult> Handle(EmitOutboundNfeCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         // 1. Carrega a ordem com a empresa emitente e as configurações do cliente depositante
         var order = await _db.OutboundOrders
@@ -310,7 +310,6 @@ public class EmitOutboundNfeHandler : IRequestHandler<EmitOutboundNfeCommand, IR
                 if (company.EmailProvider != EmailProviderType.Disabled)
                 {
                     _logger.LogInformation("[NF-E AUTO] Disparando e-mail automático da NF-e {DocumentId} para o depositante...", fiscalDoc.Id);
-                    // Chamada sem informar DestinationEmail: o SendNfeEmailHandler carrega automaticamente o e-mail do Customer
                     await _mediator.Send(new SendNfeEmailCommand(fiscalDoc.Id), ct);
                 }
             }
@@ -364,6 +363,6 @@ public static class NfeEmissionEndpoints
 
             return await mediator.Send(command);
         })
-        .RequirePermission(Permissions.Outbound.Manage);
+        .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

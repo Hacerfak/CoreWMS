@@ -22,6 +22,8 @@ public class ToggleFiscalRuleStatusHandler : IRequestHandler<ToggleFiscalRuleSta
     public async Task<IResult> Handle(ToggleFiscalRuleStatusCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var rule = await _db.FiscalOperationRules
             .FirstOrDefaultAsync(r => r.Id == request.Id && r.CompanyId == companyId, ct);
 
@@ -42,6 +44,6 @@ public static class ToggleFiscalRuleStatusEndpoints
             await mediator.Send(new ToggleFiscalRuleStatusCommand(id)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }

@@ -22,6 +22,7 @@ public class DeleteRuleExceptionHandler : IRequestHandler<DeleteRuleExceptionCom
     public async Task<IResult> Handle(DeleteRuleExceptionCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var exc = await _db.FiscalOperationRuleExceptions
             .Include(e => e.FiscalOperationRule)
@@ -46,6 +47,6 @@ public static class DeleteRuleExceptionEndpoints
             await mediator.Send(new DeleteRuleExceptionCommand(ruleId, exceptionId)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }

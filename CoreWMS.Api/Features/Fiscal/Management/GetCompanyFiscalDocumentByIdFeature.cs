@@ -187,6 +187,26 @@ public class GetCompanyFiscalDocumentByIdHandler : IRequestHandler<GetCompanyFis
         if (doc == null)
             return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
 
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            bool hasAccess = doc.OutboundOrder != null && allowedCustomerIds.Contains(doc.OutboundOrder.CustomerId);
+
+            if (!hasAccess && doc.OutboundOrderId == null && !string.IsNullOrWhiteSpace(doc.RawXml))
+            {
+                var allowedCnpjs = await _db.Customers
+                    .AsNoTracking()
+                    .Where(c => allowedCustomerIds.Contains(c.Id) && !string.IsNullOrWhiteSpace(c.Cnpj))
+                    .Select(c => ">" + c.Cnpj.Trim() + "<")
+                    .ToListAsync(ct);
+
+                hasAccess = allowedCnpjs.Any(tag => doc.RawXml.Contains(tag));
+            }
+
+            if (!hasAccess)
+                return Results.Forbid();
+        }
+
         // Busca os eventos vinculados à mesma chave de acesso
         var linkedEvents = new List<LinkedFiscalEventDto>();
         if (!string.IsNullOrWhiteSpace(doc.AccessKey))
@@ -492,6 +512,6 @@ public static class GetCompanyFiscalDocumentByIdEndpoints
             await mediator.Send(new GetCompanyFiscalDocumentByIdQuery(id)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.View);
+            .RequirePermission(Permissions.Fiscal.View);
     }
 }

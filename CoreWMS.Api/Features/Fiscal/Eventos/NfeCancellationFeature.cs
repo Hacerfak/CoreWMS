@@ -55,6 +55,7 @@ public class CancelNfeHandler : IRequestHandler<CancelNfeCommand, IResult>
     public async Task<IResult> Handle(CancelNfeCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         // 1. Localiza o documento fiscal autorizado:
         // Primeiro tenta localizar diretamente pelo Id do CompanyFiscalDocument (notas avulsas ou chamadas diretas)
@@ -71,7 +72,8 @@ public class CancelNfeHandler : IRequestHandler<CancelNfeCommand, IResult>
                 .Include(d => d.Company)
                 .Include(d => d.OutboundOrder)
                     .ThenInclude(o => o!.Company)
-                .FirstOrDefaultAsync(d => d.OutboundOrderId == request.Id
+                .FirstOrDefaultAsync(d => d.CompanyId == companyId
+                                       && d.OutboundOrderId == request.Id
                                        && (int)d.Type >= 1 && (int)d.Type <= 6
                                        && d.Status == FiscalDocumentStatus.Authorized, ct);
         }
@@ -189,6 +191,6 @@ public static class NfeCancellationEndpoints
             var command = cmd with { Id = id };
             return await mediator.Send(command);
         })
-        .RequirePermission(Permissions.Outbound.Manage);
+        .RequirePermission(Permissions.Fiscal.Emit);
     }
 }

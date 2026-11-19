@@ -67,6 +67,7 @@ public class AddOrUpdateRuleExceptionHandler : IRequestHandler<AddOrUpdateExcept
     public async Task<IResult> Handle(AddOrUpdateExceptionCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
 
         var rule = await _db.FiscalOperationRules
             .Include(r => r.Exceptions)
@@ -131,6 +132,6 @@ public static class AddOrUpdateRuleExceptionEndpoints
             await mediator.Send(cmd with { RuleId = ruleId }))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }

@@ -1,5 +1,6 @@
 using System.Text;
 using CoreWMS.Api.Features.Fiscal.Entities;
+using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
@@ -12,19 +13,61 @@ public record DownloadNfeXmlQuery(Guid DocumentId) : IRequest<IResult>;
 public class DownloadNfeXmlHandler : IRequestHandler<DownloadNfeXmlQuery, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
 
-    public DownloadNfeXmlHandler(ApplicationDbContext db)
+    public DownloadNfeXmlHandler(ApplicationDbContext db, ITenantProvider tenant)
     {
         _db = db;
+        _tenant = tenant;
     }
 
     public async Task<IResult> Handle(DownloadNfeXmlQuery request, CancellationToken ct)
     {
+        var companyId = _tenant.GetCompanyId();
+
         var doc = await _db.CompanyFiscalDocuments
             .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == request.DocumentId, ct);
+            .Include(d => d.OutboundOrder)
+            .FirstOrDefaultAsync(d => d.Id == request.DocumentId && d.CompanyId == companyId, ct);
 
         if (doc == null) return Results.NotFound(new { Message = "Documento fiscal não encontrado." });
+
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            bool hasAccess = doc.OutboundOrder != null && allowedCustomerIds.Contains(doc.OutboundOrder.CustomerId);
+
+            if (!hasAccess)
+            {
+                var xmlToCheck = doc.RawXml;
+                if (doc.Type.IsEvent() && !string.IsNullOrWhiteSpace(doc.AccessKey))
+                {
+                    var parentDoc = await _db.CompanyFiscalDocuments
+                        .AsNoTracking()
+                        .Include(d => d.OutboundOrder)
+                        .FirstOrDefaultAsync(d => d.CompanyId == companyId && d.AccessKey == doc.AccessKey && (int)d.Type <= 6, ct);
+
+                    if (parentDoc?.OutboundOrder != null && allowedCustomerIds.Contains(parentDoc.OutboundOrder.CustomerId))
+                        hasAccess = true;
+                    else
+                        xmlToCheck = parentDoc?.RawXml ?? xmlToCheck;
+                }
+
+                if (!hasAccess && !string.IsNullOrWhiteSpace(xmlToCheck))
+                {
+                    var allowedCnpjs = await _db.Customers
+                        .AsNoTracking()
+                        .Where(c => allowedCustomerIds.Contains(c.Id) && !string.IsNullOrWhiteSpace(c.Cnpj))
+                        .Select(c => ">" + c.Cnpj.Trim() + "<")
+                        .ToListAsync(ct);
+
+                    hasAccess = allowedCnpjs.Any(tag => xmlToCheck.Contains(tag));
+                }
+            }
+
+            if (!hasAccess) return Results.Forbid();
+        }
+
         if (string.IsNullOrWhiteSpace(doc.RawXml)) return Results.BadRequest(new { Message = "O XML não está disponível." });
 
         byte[] xmlBytes = Encoding.UTF8.GetBytes(doc.RawXml);
@@ -47,6 +90,6 @@ public static class DownloadNfeXmlEndpoints
             await mediator.Send(new DownloadNfeXmlQuery(documentId)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Identity.Constants.Permissions.Outbound.View);
+            .RequirePermission(Permissions.Fiscal.View);
     }
 }

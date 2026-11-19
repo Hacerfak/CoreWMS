@@ -22,6 +22,8 @@ public class DeleteFiscalRuleHandler : IRequestHandler<DeleteFiscalRuleCommand, 
     public async Task<IResult> Handle(DeleteFiscalRuleCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
+        if (_tenant.IsPartnerUser()) return Results.Forbid();
+
         var rule = await _db.FiscalOperationRules
             .FirstOrDefaultAsync(r => r.Id == request.Id && r.CompanyId == companyId, ct);
 
@@ -42,6 +44,6 @@ public static class DeleteFiscalRuleEndpoints
             await mediator.Send(new DeleteFiscalRuleCommand(id)))
             .WithTags("Fiscal")
             .RequireAuthorization()
-            .RequirePermission(Permissions.Outbound.Manage);
+            .RequirePermission(Permissions.Fiscal.Manage);
     }
 }
