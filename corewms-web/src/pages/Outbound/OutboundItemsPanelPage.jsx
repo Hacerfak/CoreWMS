@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,13 +57,11 @@ function InboundReceiptGroupHeader({
     return (
         <div className="flex items-center justify-between flex-wrap gap-2.5 w-full">
             <div className="flex items-center gap-2 flex-wrap">
-                {/* 1. DESTAQUE NF-E DE ENTRADA */}
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-600 text-white font-mono font-bold text-xs shadow-2xs">
                     <FileText size={13} className="text-blue-100" />
                     NF-e: {inboundInvoiceNumber || 'SEM NF'}
                 </span>
 
-                {/* 2. DESTAQUE DATA DE ENTRADA */}
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 text-slate-800 font-mono font-semibold text-xs border border-slate-200">
                     <Calendar size={13} className="text-slate-500" />
                     Entrada: {formatDatePtBr(receiptDate)}
@@ -83,7 +82,13 @@ function InboundReceiptGroupHeader({
 }
 
 // Seletor Pesquisável Moderno de Produtos (SKU, EAN ou Descrição)
-function SearchableProductSelect({ value, onChange, products, placeholder = "Pesquise por SKU, EAN/Código de barras ou Descrição..." }) {
+function SearchableProductSelect({
+    value,
+    onChange,
+    products,
+    disabled = false,
+    placeholder = 'Pesquise por SKU, EAN/Código de barras ou Descrição...'
+}) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const containerRef = useRef(null);
@@ -115,9 +120,10 @@ function SearchableProductSelect({ value, onChange, products, placeholder = "Pes
         <div ref={containerRef} className="relative w-full z-40">
             <button
                 type="button"
-                onClick={() => setIsOpen(!isOpen)}
+                disabled={disabled}
+                onClick={() => !disabled && setIsOpen(!isOpen)}
                 className={`w-full h-11 px-3 text-xs bg-white border rounded-xl flex items-center justify-between text-left transition-all focus:outline-none focus:ring-2 focus:ring-orange-500/20 ${value ? 'border-orange-400 font-semibold text-slate-900 shadow-2xs' : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                    }`}
+                    } ${disabled ? 'bg-slate-50 cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
             >
                 <div className="flex items-center gap-2 truncate">
                     {selectedProduct ? (
@@ -138,7 +144,7 @@ function SearchableProductSelect({ value, onChange, products, placeholder = "Pes
                 </div>
 
                 <div className="flex items-center gap-1 shrink-0 ml-2">
-                    {value && (
+                    {value && !disabled && (
                         <X
                             size={14}
                             className="text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
@@ -152,7 +158,7 @@ function SearchableProductSelect({ value, onChange, products, placeholder = "Pes
                 </div>
             </button>
 
-            {isOpen && (
+            {isOpen && !disabled && (
                 <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 p-2 space-y-2 animate-in fade-in duration-150">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -210,11 +216,19 @@ export default function OutboundItemsPanelPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
+    const canViewOutbound = useHasPermission(['outbound:view', 'outbound:allocate']);
+    const canAllocateOutbound = useHasPermission('outbound:allocate');
+    const canManageOutbound = useHasPermission('outbound:manage');
+    const canViewProducts = useHasPermission(['products:view', 'outbound:allocate']);
+    const canRemoveItems = canAllocateOutbound || canManageOutbound;
+
     // Estados da Ordem
     const [order, setOrder] = useState(null);
     const [products, setProducts] = useState([]);
-    const [isLoadingOrder, setIsLoadingOrder] = useState(true);
+    const [isLoadingOrder, setIsLoadingOrder] = useState(Boolean(orderId && canViewOutbound));
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [refreshTick, setRefreshTick] = useState(0);
+    const loadedCustomerIdRef = useRef(null);
 
     // Seletor de Modo e Produto
     const [mode, setMode] = useState('CLOSED_VOLUMES');
@@ -233,79 +247,118 @@ export default function OutboundItemsPanelPage() {
     // Expansão dos SKUs no carrinho inferior
     const [expandedItemIds, setExpandedItemIds] = useState({});
 
-    // Reload da Ordem
-    const loadOrderData = async () => {
-        try {
-            const orderData = await customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' });
-            setOrder(orderData);
-
-            if (orderData?.items) {
-                const initialExpanded = {};
-                orderData.items.forEach(i => {
-                    initialExpanded[i.id] = true;
-                });
-                setExpandedItemIds(initialExpanded);
-            }
-
-            if (orderData?.customerId && products.length === 0) {
-                const productsRes = await customInstance({
-                    url: `/api/products?CustomerId=${orderData.customerId}&PageSize=500`,
-                    method: 'GET'
-                });
-                setProducts(productsRes?.items || []);
-            }
-        } catch {
-            toast.error('Erro ao carregar ordem de saída.');
-        } finally {
-            setIsLoadingOrder(false);
-        }
-    };
-
-    useEffect(() => {
-        if (orderId) loadOrderData();
-    }, [orderId, ]);
-
-    // Reload do Estoque Disponível
-    const loadAvailableStock = async () => {
-        if (!orderId || !selectedProductId) {
-            setAvailableStockData(null);
-            setSelectedHuIds(new Set());
-            setFractionalQuantity('');
-            setHuFilterTerm('');
-            return;
-        }
-
-        try {
+    const triggerReload = () => {
+        if (selectedProductId && canAllocateOutbound) {
             setIsLoadingStock(true);
-            const stockData = await customInstance({
-                url: `/api/outbound/orders/${orderId}/available-stock/${selectedProductId}`,
-                method: 'GET'
-            });
-            setAvailableStockData(stockData);
-            if (stockData?.receiptGroups?.length > 0) {
-                const initialExpand = {};
-                stockData.receiptGroups.forEach((_, idx) => {
-                    initialExpand[idx] = true;
-                });
-                setExpandedGroupIdx(initialExpand);
-            }
-        } catch {
-            toast.error('Erro ao consultar estoque livre.');
-        } finally {
+        }
+        setRefreshTick(t => t + 1);
+    };
+
+    const handleModeChange = (newMode) => {
+        setMode(newMode);
+        setSelectedProductId('');
+        setAvailableStockData(null);
+        setSelectedHuIds(new Set());
+        setFractionalQuantity('');
+        setHuFilterTerm('');
+        setIsLoadingStock(false);
+    };
+
+    const handleProductSelect = (prodId) => {
+        setSelectedProductId(prodId);
+        setSelectedHuIds(new Set());
+        setFractionalQuantity('');
+        setHuFilterTerm('');
+        if (!prodId || !canAllocateOutbound) {
+            setAvailableStockData(null);
             setIsLoadingStock(false);
+        } else {
+            setIsLoadingStock(true);
         }
     };
 
+    // Carga da Ordem e do Catálogo do Depositante
     useEffect(() => {
-        loadAvailableStock();
-    }, [
-	orderId,
-	selectedProductId,
-	
-]);
+        if (!orderId || !canViewOutbound) return;
+
+        let isMounted = true;
+
+        customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
+            .then(async (orderData) => {
+                if (!isMounted) return;
+                setOrder(orderData);
+
+                if (orderData?.items) {
+                    const initialExpanded = {};
+                    orderData.items.forEach(i => {
+                        initialExpanded[i.id] = true;
+                    });
+                    setExpandedItemIds(initialExpanded);
+                }
+
+                if (
+                    orderData?.customerId &&
+                    loadedCustomerIdRef.current !== orderData.customerId &&
+                    canViewProducts
+                ) {
+                    loadedCustomerIdRef.current = orderData.customerId;
+                    const productsRes = await customInstance({
+                        url: `/api/products?CustomerId=${orderData.customerId}&PageSize=500`,
+                        method: 'GET'
+                    });
+                    if (isMounted) {
+                        setProducts(productsRes?.items || []);
+                    }
+                }
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar ordem de saída.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoadingOrder(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canViewOutbound, canViewProducts, refreshTick]);
+
+    // Carga do Estoque Disponível por Produto
+    useEffect(() => {
+        if (!orderId || !selectedProductId || !canAllocateOutbound) return;
+
+        let isMounted = true;
+
+        customInstance({
+            url: `/api/outbound/orders/${orderId}/available-stock/${selectedProductId}`,
+            method: 'GET'
+        })
+            .then((stockData) => {
+                if (!isMounted) return;
+                setAvailableStockData(stockData);
+                if (stockData?.receiptGroups?.length > 0) {
+                    const initialExpand = {};
+                    stockData.receiptGroups.forEach((_, idx) => {
+                        initialExpand[idx] = true;
+                    });
+                    setExpandedGroupIdx(initialExpand);
+                }
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao consultar estoque livre.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoadingStock(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, selectedProductId, canAllocateOutbound, refreshTick]);
 
     // Adição Síncrona de Volumes Fechados
     const handleReserveClosedVolumes = async () => {
+        if (!canAllocateOutbound) return;
         if (selectedHuIds.size === 0) return toast.warning('Selecione ao menos um volume.');
 
         try {
@@ -321,7 +374,7 @@ export default function OutboundItemsPanelPage() {
 
             toast.success(`${selectedHuIds.size} volume(s) reservado(s) na ordem!`);
             setSelectedHuIds(new Set());
-            await Promise.all([loadOrderData(), loadAvailableStock()]);
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao reservar volumes.');
         } finally {
@@ -331,6 +384,7 @@ export default function OutboundItemsPanelPage() {
 
     // Adição Síncrona Fracionada
     const handleReserveFractional = async () => {
+        if (!canAllocateOutbound) return;
         const qtyNum = parseFloat(fractionalQuantity);
         if (isNaN(qtyNum) || qtyNum <= 0) return toast.warning('Informe uma quantidade válida.');
 
@@ -347,7 +401,7 @@ export default function OutboundItemsPanelPage() {
 
             toast.success(`Reserva fracionada de ${qtyNum} ${availableStockData?.baseUnit} efetuada!`);
             setFractionalQuantity('');
-            await Promise.all([loadOrderData(), loadAvailableStock()]);
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao reservar quantidade fracionada.');
         } finally {
@@ -357,6 +411,8 @@ export default function OutboundItemsPanelPage() {
 
     // Remoção Síncrona do Item
     const handleRemoveOrderItem = async (orderItemId) => {
+        if (!canRemoveItems) return;
+
         try {
             setIsActionLoading(true);
             await customInstance({
@@ -365,7 +421,7 @@ export default function OutboundItemsPanelPage() {
             });
 
             toast.success('Item e reservas estornados com sucesso.');
-            await Promise.all([loadOrderData(), loadAvailableStock()]);
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao remover item.');
         } finally {
@@ -374,6 +430,7 @@ export default function OutboundItemsPanelPage() {
     };
 
     const toggleHuSelection = (huId) => {
+        if (!canAllocateOutbound) return;
         setSelectedHuIds(prev => {
             const next = new Set(prev);
             if (next.has(huId)) next.delete(huId);
@@ -383,6 +440,7 @@ export default function OutboundItemsPanelPage() {
     };
 
     const toggleSelectAllInGroup = (group) => {
+        if (!canAllocateOutbound) return;
         const groupHuIds = group.availableHus.map(h => h.handlingUnitId);
         const allSelected = groupHuIds.every(id => selectedHuIds.has(id));
 
@@ -415,22 +473,22 @@ export default function OutboundItemsPanelPage() {
     }, [availableStockData, selectedHuIds]);
 
     // Resumo Agregado dos Itens Gravados na Ordem de Saída
+    const orderItems = order?.items;
     const orderItemsSummary = useMemo(() => {
-        if (!order?.items || order.items.length === 0) {
+        if (!orderItems || orderItems.length === 0) {
             return { totalSkus: 0, totalUnits: 0, totalHus: 0, skuBreakdown: [] };
         }
 
-        const totalSkus = order.items.length;
+        const totalSkus = orderItems.length;
         let totalUnits = 0;
         let totalHus = 0;
 
-        const skuBreakdown = order.items.map(item => {
+        const skuBreakdown = orderItems.map(item => {
             const qty = Number(item.allocatedQuantity) || Number(item.expectedQuantity) || 0;
             totalUnits += qty;
             const itemAllocations = item.allocations || [];
             totalHus += itemAllocations.length;
 
-            // Agrupa alocações do SKU por NF-e de Entrada (Número e Data de Entrada)
             const invoiceGroupsMap = new Map();
             itemAllocations.forEach(alloc => {
                 const invoiceNumber = alloc.inboundInvoiceNumber?.trim() || 'SEM NF';
@@ -462,7 +520,7 @@ export default function OutboundItemsPanelPage() {
         });
 
         return { totalSkus, totalUnits, totalHus, skuBreakdown };
-    }, [order?.items]);
+    }, [orderItems]);
 
     if (isLoadingOrder) {
         return (
@@ -495,252 +553,254 @@ export default function OutboundItemsPanelPage() {
                 </Button>
             </div>
 
-            {/* SELEÇÃO DO MODO & PRODUTO PESQUISÁVEL */}
-            <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs space-y-3.5 relative z-30 overflow-visible">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                    <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                        Modo de Expedição:
-                    </Label>
-                    <span className="text-[11px] text-slate-400">
-                        {mode === 'CLOSED_VOLUMES' ? 'Separação e conferência de paletes/caixas fechadas completas' : 'Separação fracionada com pesagem ou embalagem manual'}
-                    </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 bg-slate-100 p-1 rounded-xl">
-                    <button
-                        type="button"
-                        onClick={() => { setMode('CLOSED_VOLUMES'); setSelectedProductId(''); }}
-                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold transition-all ${mode === 'CLOSED_VOLUMES' ? 'bg-white text-orange-950 shadow-2xs ring-1 ring-slate-200/60' : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                    >
-                        <Box size={16} className="text-orange-600" /> 📦 Volumes Fechados (Paletes/Caixas)
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => { setMode('FRACTIONAL'); setSelectedProductId(''); }}
-                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold transition-all ${mode === 'FRACTIONAL' ? 'bg-white text-purple-950 shadow-2xs ring-1 ring-slate-200/60' : 'text-slate-600 hover:text-slate-900'
-                            }`}
-                    >
-                        <Scissors size={16} className="text-purple-600" /> ✂️ Fracionado (Unidade Base)
-                    </button>
-                </div>
-
-                <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between items-center">
-                        <Label className="text-xs font-bold text-slate-800">Localizar Produto no Catálogo *</Label>
-                        <span className="text-[10px] text-slate-400 font-mono">{products.length} SKU(s) cadastrados</span>
-                    </div>
-                    <SearchableProductSelect
-                        value={selectedProductId}
-                        onChange={setSelectedProductId}
-                        products={products}
-                    />
-                </div>
-            </div>
-
-            {/* PAINEL CENTRAL DE SELEÇÃO E ESTOQUE */}
-            <div className={`overflow-y-auto space-y-3 relative z-10 pr-1 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3 shadow-2xs transition-all duration-200 ${!selectedProductId
-                ? 'h-[220px]'
-                : mode === 'CLOSED_VOLUMES'
-                    ? 'h-[520px]'
-                    : 'h-[220px]'
-                }`}>
-                {isLoadingStock ? (
-                    <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-white border border-slate-200 rounded-xl space-y-2 shadow-2xs">
-                        <Loader2 className="h-7 w-7 animate-spin text-orange-600 mx-auto" />
-                        <p className="text-xs text-slate-600 font-medium">Consultando saldo livre em estoque em tempo real...</p>
-                    </div>
-                ) : !selectedProductId ? (
-                    <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-white border border-dashed border-slate-300 rounded-xl space-y-2 text-slate-400 text-xs">
-                        <Layers size={32} className="mx-auto text-slate-300" />
-                        <p className="font-medium text-slate-600">Nenhum produto selecionado no catálogo</p>
-                        <p className="text-[11px] text-slate-400 max-w-sm">
-                            Selecione um produto no campo acima para carregar as etiquetas LPN, NF-e de entrada, posições, lotes e validades disponíveis no armazém.
-                        </p>
-                    </div>
-                ) : mode === 'CLOSED_VOLUMES' ? (
-                    <div className="space-y-3 pb-2">
-                        {/* BARRA DE FILTRO RÁPIDO DE HU (INCLUINDO POSIÇÃO/ENDEREÇO NO ARMAZÉM) */}
-                        <div className="bg-white p-3 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
-                            <div className="flex items-center gap-2 flex-1 max-w-md">
-                                <Search size={14} className="text-slate-400" />
-                                <Input
-                                    placeholder="Filtrar por código LPN, lote, NF-e ou posição..."
-                                    value={huFilterTerm}
-                                    onChange={(e) => setHuFilterTerm(e.target.value)}
-                                    className="h-8 text-xs bg-slate-50 border-slate-200 font-mono"
-                                />
-                            </div>
-                            <span className="text-xs font-mono text-slate-500">
-                                Estratégia do SKU: <strong className="text-slate-800">{availableStockData?.pickingStrategy || 'FIFO'}</strong>
+            {/* SELEÇÃO DO MODO & PRODUTO PESQUISÁVEL (SOMENTE QUEM PODE ALOCAR) */}
+            {canAllocateOutbound && (
+                <>
+                    <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs space-y-3.5 relative z-30 overflow-visible">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                            <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                                Modo de Expedição:
+                            </Label>
+                            <span className="text-[11px] text-slate-400">
+                                {mode === 'CLOSED_VOLUMES' ? 'Separação e conferência de paletes/caixas fechadas completas' : 'Separação fracionada com pesagem ou embalagem manual'}
                             </span>
                         </div>
 
-                        {availableStockData?.receiptGroups?.map((group, gIdx) => {
-                            const isExpanded = !!expandedGroupIdx[gIdx];
+                        <div className="grid grid-cols-2 gap-3 bg-slate-100 p-1 rounded-xl">
+                            <button
+                                type="button"
+                                onClick={() => handleModeChange('CLOSED_VOLUMES')}
+                                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold transition-all ${mode === 'CLOSED_VOLUMES' ? 'bg-white text-orange-950 shadow-2xs ring-1 ring-slate-200/60' : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                            >
+                                <Box size={16} className="text-orange-600" /> 📦 Volumes Fechados (Paletes/Caixas)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleModeChange('FRACTIONAL')}
+                                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-bold transition-all ${mode === 'FRACTIONAL' ? 'bg-white text-purple-950 shadow-2xs ring-1 ring-slate-200/60' : 'text-slate-600 hover:text-slate-900'
+                                    }`}
+                            >
+                                <Scissors size={16} className="text-purple-600" /> ✂️ Fracionado (Unidade Base)
+                            </button>
+                        </div>
 
-                            const filteredHus = group.availableHus?.filter(h => {
-                                if (!huFilterTerm.trim()) return true;
-                                const t = huFilterTerm.trim().toLowerCase();
-                                return (
-                                    h.lpn?.toLowerCase().includes(t) ||
-                                    (h.batch && h.batch.toLowerCase().includes(t)) ||
-                                    (group.inboundInvoiceNumber && group.inboundInvoiceNumber.toLowerCase().includes(t)) ||
-                                    (h.inboundInvoiceNumber && h.inboundInvoiceNumber.toLowerCase().includes(t)) ||
-                                    (h.locationPath && h.locationPath.toLowerCase().includes(t)) // <-- Filtro por Posição/Endereço
-                                );
-                            }) || [];
-
-                            if (filteredHus.length === 0 && huFilterTerm.trim()) return null;
-
-                            const groupHuIds = filteredHus.map(h => h.handlingUnitId);
-                            const isAllInGroupSelected = groupHuIds.length > 0 && groupHuIds.every(id => selectedHuIds.has(id));
-                            const groupTotalQty = filteredHus.reduce((acc, h) => acc + (Number(h.currentQuantity) || 0), 0);
-
-                            return (
-                                <div key={gIdx} className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-2xs">
-                                    <div className="p-3 bg-slate-50 flex items-center justify-between border-b border-slate-100 gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setExpandedGroupIdx(prev => ({ ...prev, [gIdx]: !prev[gIdx] }))}
-                                            className="text-slate-400 hover:text-slate-600 transition-colors p-0.5 shrink-0"
-                                        >
-                                            {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                        </button>
-
-                                        {/* CABEÇALHO PADRONIZADO: APENAS NOTA E ENTRADA */}
-                                        <div className="flex-1">
-                                            <InboundReceiptGroupHeader
-                                                inboundInvoiceNumber={group.inboundInvoiceNumber || group.receiptNumber}
-                                                receiptDate={group.receiptDate}
-                                                quantityLabel="Disponível na NF"
-                                                quantityValue={groupTotalQty}
-                                                unit={availableStockData.baseUnit}
-                                                action={
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        onClick={() => toggleSelectAllInGroup(group)}
-                                                        className="h-7 text-xs bg-white font-semibold ml-2 shrink-0"
-                                                    >
-                                                        {isAllInGroupSelected ? <CheckSquare size={13} className="mr-1 text-orange-600" /> : <Square size={13} className="mr-1 text-slate-400" />}
-                                                        {isAllInGroupSelected ? 'Desmarcar NF' : 'Selecionar NF'}
-                                                    </Button>
-                                                }
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {isExpanded && (
-                                        <div className="p-2 bg-white overflow-x-auto">
-                                            <Table>
-                                                <TableHeader className="bg-slate-50">
-                                                    <TableRow>
-                                                        <TableHead className="w-10 text-center"></TableHead>
-                                                        <TableHead>LPN / Volume</TableHead>
-                                                        <TableHead className="text-center">Tipo Embalagem</TableHead>
-                                                        <TableHead className="text-right">Quantidade Disponível</TableHead>
-                                                        <TableHead>Lote</TableHead>
-                                                        <TableHead className="text-center">Validade</TableHead>
-                                                        <TableHead className="text-center">Fabricação</TableHead>
-                                                        <TableHead className="text-center">Série</TableHead>
-                                                        <TableHead className="text-right">Posição no Armazém</TableHead>
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {filteredHus.map(hu => {
-                                                        const isChecked = selectedHuIds.has(hu.handlingUnitId);
-                                                        return (
-                                                            <TableRow
-                                                                key={hu.handlingUnitId}
-                                                                onClick={() => toggleHuSelection(hu.handlingUnitId)}
-                                                                className={`cursor-pointer transition-colors ${isChecked ? 'bg-orange-50/70 font-medium' : 'hover:bg-slate-50'}`}
-                                                            >
-                                                                <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={isChecked}
-                                                                        onChange={() => toggleHuSelection(hu.handlingUnitId)}
-                                                                        className="rounded text-orange-600 h-4 w-4"
-                                                                    />
-                                                                </TableCell>
-                                                                <TableCell className="font-mono font-bold text-xs text-slate-900">{hu.lpn}</TableCell>
-                                                                <TableCell className="text-center">
-                                                                    <Badge variant="outline" className="font-mono text-[10px] font-bold bg-white text-slate-800 border-slate-300">
-                                                                        {hu.packagingTypeCode || 'PLT'}
-                                                                    </Badge>
-                                                                </TableCell>
-                                                                <TableCell className="font-mono text-xs font-bold text-emerald-700 text-right">
-                                                                    {Number(hu.currentQuantity).toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-500">{availableStockData.baseUnit}</span>
-                                                                </TableCell>
-                                                                <TableCell className="font-mono text-xs text-slate-800 font-bold">{hu.batch || '-'}</TableCell>
-                                                                <TableCell className="font-mono text-xs text-slate-600 text-center">{formatDatePtBr(hu.expirationDate)}</TableCell>
-                                                                <TableCell className="font-mono text-xs text-slate-500 text-center">{formatDatePtBr(hu.manufactureDate)}</TableCell>
-                                                                <TableCell className="font-mono text-xs text-slate-500 text-center">{hu.serialNumber || '-'}</TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1">
-                                                                        <MapPin size={11} className="text-blue-600" /> {hu.locationPath || 'DOCA'}
-                                                                    </span>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        );
-                                                    })}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-
-                        {/* BARRA FIXA FLUTUANTE DE CONFIRMAÇÃO DE VOLUMES */}
-                        {selectedHuIds.size > 0 && (
-                            <div className="sticky bottom-0 z-20 bg-slate-900/95 backdrop-blur-xs text-white p-3 rounded-xl shadow-xl flex items-center justify-between border border-slate-700 animate-in slide-in-from-bottom-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-semibold">
-                                        <strong className="text-orange-400">{selectedClosedStats.count}</strong> volume(s) marcado(s)
-                                    </span>
-                                    <span className="text-xs text-slate-400 font-mono">
-                                        ({selectedClosedStats.pieces.toLocaleString('pt-BR')} {availableStockData?.baseUnit} selecionados)
-                                    </span>
-                                </div>
-                                <Button onClick={handleReserveClosedVolumes} disabled={isActionLoading} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-8 text-xs shadow-xs">
-                                    {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus size={14} className="mr-1" />} Gravar Reserva
-                                </Button>
+                        <div className="space-y-1.5 pt-1">
+                            <div className="flex justify-between items-center">
+                                <Label className="text-xs font-bold text-slate-800">Localizar Produto no Catálogo *</Label>
+                                <span className="text-[10px] text-slate-400 font-mono">{products.length} SKU(s) cadastrados</span>
                             </div>
-                        )}
+                            <SearchableProductSelect
+                                value={selectedProductId}
+                                onChange={handleProductSelect}
+                                products={products}
+                            />
+                        </div>
                     </div>
-                ) : (
-                    <Card className="h-full border-purple-200 bg-purple-50/40 p-4 flex flex-col justify-center space-y-3 shadow-xs">
-                        <div className="max-w-xl mx-auto w-full space-y-2.5">
-                            <div className="space-y-1">
-                                <Label className="text-xs font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
-                                    <Scissors size={14} className="text-purple-600" /> Informar Quantidade Fracionada ({availableStockData?.baseUnit}) *
-                                </Label>
-                                <p className="text-[11px] text-purple-800/80">
-                                    Saldo livre em estoque para fracionamento: <strong className="font-mono text-purple-950">{(availableStockData?.receiptGroups?.reduce((acc, g) => acc + (g.availableHus?.reduce((hAcc, h) => hAcc + (Number(h.currentQuantity) || 0), 0) || 0), 0) || 0).toLocaleString('pt-BR')} {availableStockData?.baseUnit}</strong>
+
+                    {/* PAINEL CENTRAL DE SELEÇÃO E ESTOQUE */}
+                    <div className={`overflow-y-auto space-y-3 relative z-10 pr-1 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3 shadow-2xs transition-all duration-200 ${!selectedProductId
+                        ? 'h-[220px]'
+                        : mode === 'CLOSED_VOLUMES'
+                            ? 'h-[520px]'
+                            : 'h-[220px]'
+                        }`}>
+                        {isLoadingStock ? (
+                            <div className="h-full flex flex-col items-center justify-center p-8 text-center bg-white border border-slate-200 rounded-xl space-y-2 shadow-2xs">
+                                <Loader2 className="h-7 w-7 animate-spin text-orange-600 mx-auto" />
+                                <p className="text-xs text-slate-600 font-medium">Consultando saldo livre em estoque em tempo real...</p>
+                            </div>
+                        ) : !selectedProductId ? (
+                            <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-white border border-dashed border-slate-300 rounded-xl space-y-2 text-slate-400 text-xs">
+                                <Layers size={32} className="mx-auto text-slate-300" />
+                                <p className="font-medium text-slate-600">Nenhum produto selecionado no catálogo</p>
+                                <p className="text-[11px] text-slate-400 max-w-sm">
+                                    Selecione um produto no campo acima para carregar as etiquetas LPN, NF-e de entrada, posições, lotes e validades disponíveis no armazém.
                                 </p>
                             </div>
-                            <div className="flex gap-3">
-                                <Input
-                                    type="number"
-                                    step="0.0001"
-                                    placeholder={`Ex: 1350 ${availableStockData?.baseUnit}`}
-                                    value={fractionalQuantity}
-                                    onChange={(e) => setFractionalQuantity(e.target.value)}
-                                    className="bg-white font-mono text-sm h-11 border-purple-300 focus:ring-purple-500"
-                                />
-                                <Button onClick={handleReserveFractional} disabled={isActionLoading || !fractionalQuantity} className="bg-purple-700 hover:bg-purple-800 text-white font-bold h-11 px-6 shadow-xs shrink-0">
-                                    {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Plus size={16} className="mr-1.5" />} Reservar Fracionado
-                                </Button>
-                            </div>
-                        </div>
-                    </Card>
-                )}
-            </div>
+                        ) : mode === 'CLOSED_VOLUMES' ? (
+                            <div className="space-y-3 pb-2">
+                                <div className="bg-white p-3 border border-slate-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                                    <div className="flex items-center gap-2 flex-1 max-w-md">
+                                        <Search size={14} className="text-slate-400" />
+                                        <Input
+                                            placeholder="Filtrar por código LPN, lote, NF-e ou posição..."
+                                            value={huFilterTerm}
+                                            onChange={(e) => setHuFilterTerm(e.target.value)}
+                                            className="h-8 text-xs bg-slate-50 border-slate-200 font-mono"
+                                        />
+                                    </div>
+                                    <span className="text-xs font-mono text-slate-500">
+                                        Estratégia do SKU: <strong className="text-slate-800">{availableStockData?.pickingStrategy || 'FIFO'}</strong>
+                                    </span>
+                                </div>
 
-            {/* CARRINHO DA ORDEM (RESERVAS AGRUPADAS POR NF-E DE ENTRADA / SEM VALORES FINANCEIROS) */}
+                                {availableStockData?.receiptGroups?.map((group, gIdx) => {
+                                    const isExpanded = !!expandedGroupIdx[gIdx];
+
+                                    const filteredHus = group.availableHus?.filter(h => {
+                                        if (!huFilterTerm.trim()) return true;
+                                        const t = huFilterTerm.trim().toLowerCase();
+                                        return (
+                                            h.lpn?.toLowerCase().includes(t) ||
+                                            (h.batch && h.batch.toLowerCase().includes(t)) ||
+                                            (group.inboundInvoiceNumber && group.inboundInvoiceNumber.toLowerCase().includes(t)) ||
+                                            (h.inboundInvoiceNumber && h.inboundInvoiceNumber.toLowerCase().includes(t)) ||
+                                            (h.locationPath && h.locationPath.toLowerCase().includes(t))
+                                        );
+                                    }) || [];
+
+                                    if (filteredHus.length === 0 && huFilterTerm.trim()) return null;
+
+                                    const groupHuIds = filteredHus.map(h => h.handlingUnitId);
+                                    const isAllInGroupSelected = groupHuIds.length > 0 && groupHuIds.every(id => selectedHuIds.has(id));
+                                    const groupTotalQty = filteredHus.reduce((acc, h) => acc + (Number(h.currentQuantity) || 0), 0);
+
+                                    return (
+                                        <div key={gIdx} className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-2xs">
+                                            <div className="p-3 bg-slate-50 flex items-center justify-between border-b border-slate-100 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedGroupIdx(prev => ({ ...prev, [gIdx]: !prev[gIdx] }))}
+                                                    className="text-slate-400 hover:text-slate-600 transition-colors p-0.5 shrink-0"
+                                                >
+                                                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                                </button>
+
+                                                <div className="flex-1">
+                                                    <InboundReceiptGroupHeader
+                                                        inboundInvoiceNumber={group.inboundInvoiceNumber || group.receiptNumber}
+                                                        receiptDate={group.receiptDate}
+                                                        quantityLabel="Disponível na NF"
+                                                        quantityValue={groupTotalQty}
+                                                        unit={availableStockData.baseUnit}
+                                                        action={
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => toggleSelectAllInGroup(group)}
+                                                                className="h-7 text-xs bg-white font-semibold ml-2 shrink-0"
+                                                            >
+                                                                {isAllInGroupSelected ? <CheckSquare size={13} className="mr-1 text-orange-600" /> : <Square size={13} className="mr-1 text-slate-400" />}
+                                                                {isAllInGroupSelected ? 'Desmarcar NF' : 'Selecionar NF'}
+                                                            </Button>
+                                                        }
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {isExpanded && (
+                                                <div className="p-2 bg-white overflow-x-auto">
+                                                    <Table>
+                                                        <TableHeader className="bg-slate-50">
+                                                            <TableRow>
+                                                                <TableHead className="w-10 text-center"></TableHead>
+                                                                <TableHead>LPN / Volume</TableHead>
+                                                                <TableHead className="text-center">Tipo Embalagem</TableHead>
+                                                                <TableHead className="text-right">Quantidade Disponível</TableHead>
+                                                                <TableHead>Lote</TableHead>
+                                                                <TableHead className="text-center">Validade</TableHead>
+                                                                <TableHead className="text-center">Fabricação</TableHead>
+                                                                <TableHead className="text-center">Série</TableHead>
+                                                                <TableHead className="text-right">Posição no Armazém</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {filteredHus.map(hu => {
+                                                                const isChecked = selectedHuIds.has(hu.handlingUnitId);
+                                                                return (
+                                                                    <TableRow
+                                                                        key={hu.handlingUnitId}
+                                                                        onClick={() => toggleHuSelection(hu.handlingUnitId)}
+                                                                        className={`cursor-pointer transition-colors ${isChecked ? 'bg-orange-50/70 font-medium' : 'hover:bg-slate-50'}`}
+                                                                    >
+                                                                        <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={isChecked}
+                                                                                onChange={() => toggleHuSelection(hu.handlingUnitId)}
+                                                                                className="rounded text-orange-600 h-4 w-4"
+                                                                            />
+                                                                        </TableCell>
+                                                                        <TableCell className="font-mono font-bold text-xs text-slate-900">{hu.lpn}</TableCell>
+                                                                        <TableCell className="text-center">
+                                                                            <Badge variant="outline" className="font-mono text-[10px] font-bold bg-white text-slate-800 border-slate-300">
+                                                                                {hu.packagingTypeCode || 'PLT'}
+                                                                            </Badge>
+                                                                        </TableCell>
+                                                                        <TableCell className="font-mono text-xs font-bold text-emerald-700 text-right">
+                                                                            {Number(hu.currentQuantity).toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-500">{availableStockData.baseUnit}</span>
+                                                                        </TableCell>
+                                                                        <TableCell className="font-mono text-xs text-slate-800 font-bold">{hu.batch || '-'}</TableCell>
+                                                                        <TableCell className="font-mono text-xs text-slate-600 text-center">{formatDatePtBr(hu.expirationDate)}</TableCell>
+                                                                        <TableCell className="font-mono text-xs text-slate-500 text-center">{formatDatePtBr(hu.manufactureDate)}</TableCell>
+                                                                        <TableCell className="font-mono text-xs text-slate-500 text-center">{hu.serialNumber || '-'}</TableCell>
+                                                                        <TableCell className="text-right">
+                                                                            <span className="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1">
+                                                                                <MapPin size={11} className="text-blue-600" /> {hu.locationPath || 'DOCA'}
+                                                                            </span>
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                );
+                                                            })}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                {/* BARRA FIXA FLUTUANTE DE CONFIRMAÇÃO DE VOLUMES */}
+                                {selectedHuIds.size > 0 && (
+                                    <div className="sticky bottom-0 z-20 bg-slate-900/95 backdrop-blur-xs text-white p-3 rounded-xl shadow-xl flex items-center justify-between border border-slate-700 animate-in slide-in-from-bottom-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-semibold">
+                                                <strong className="text-orange-400">{selectedClosedStats.count}</strong> volume(s) marcado(s)
+                                            </span>
+                                            <span className="text-xs text-slate-400 font-mono">
+                                                ({selectedClosedStats.pieces.toLocaleString('pt-BR')} {availableStockData?.baseUnit} selecionados)
+                                            </span>
+                                        </div>
+                                        <Button onClick={handleReserveClosedVolumes} disabled={isActionLoading} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-8 text-xs shadow-xs">
+                                            {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus size={14} className="mr-1" />} Gravar Reserva
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <Card className="h-full border-purple-200 bg-purple-50/40 p-4 flex flex-col justify-center space-y-3 shadow-xs">
+                                <div className="max-w-xl mx-auto w-full space-y-2.5">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
+                                            <Scissors size={14} className="text-purple-600" /> Informar Quantidade Fracionada ({availableStockData?.baseUnit}) *
+                                        </Label>
+                                        <p className="text-[11px] text-purple-800/80">
+                                            Saldo livre em estoque para fracionamento: <strong className="font-mono text-purple-950">{(availableStockData?.receiptGroups?.reduce((acc, g) => acc + (g.availableHus?.reduce((hAcc, h) => hAcc + (Number(h.currentQuantity) || 0), 0) || 0), 0) || 0).toLocaleString('pt-BR')} {availableStockData?.baseUnit}</strong>
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <Input
+                                            type="number"
+                                            step="0.0001"
+                                            placeholder={`Ex: 1350 ${availableStockData?.baseUnit}`}
+                                            value={fractionalQuantity}
+                                            onChange={(e) => setFractionalQuantity(e.target.value)}
+                                            className="bg-white font-mono text-sm h-11 border-purple-300 focus:ring-purple-500"
+                                        />
+                                        <Button onClick={handleReserveFractional} disabled={isActionLoading || !fractionalQuantity} className="bg-purple-700 hover:bg-purple-800 text-white font-bold h-11 px-6 shadow-xs shrink-0">
+                                            {isActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Plus size={16} className="mr-1.5" />} Reservar Fracionado
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Card>
+                        )}
+                    </div>
+                </>
+            )}
+
+            {/* CARRINHO DA ORDEM (RESERVAS AGRUPADAS POR NF-E DE ENTRADA) */}
             <Card className="border-slate-200/80 shadow-xs bg-white">
                 <CardHeader className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-3">
                     <div className="flex items-center justify-between">
@@ -832,23 +892,24 @@ export default function OutboundItemsPanelPage() {
                                                     </span>
                                                 </div>
 
-                                                {/* STATUS DO ITEM TRADUZIDO */}
                                                 {translateItemStatus(item.status)}
 
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleRemoveOrderItem(item.id);
-                                                    }}
-                                                    disabled={isActionLoading}
-                                                    className="text-slate-400 hover:text-rose-600 p-1 h-7 w-7 shrink-0"
-                                                    title="Estornar reservas deste SKU"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </Button>
+                                                {canRemoveItems && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveOrderItem(item.id);
+                                                        }}
+                                                        disabled={isActionLoading}
+                                                        className="text-slate-400 hover:text-rose-600 p-1 h-7 w-7 shrink-0"
+                                                        title="Estornar reservas deste SKU"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
 
@@ -860,7 +921,6 @@ export default function OutboundItemsPanelPage() {
                                                 ) : (
                                                     item.invoiceGroups.map((invGroup, lIdx) => (
                                                         <div key={lIdx} className="bg-white border border-slate-200/90 rounded-lg p-3 space-y-2">
-                                                            {/* CABEÇALHO PADRONIZADO: APENAS NOTA E DATA DE ENTRADA */}
                                                             <div className="border-b border-slate-100 pb-2">
                                                                 <InboundReceiptGroupHeader
                                                                     inboundInvoiceNumber={invGroup.inboundInvoiceNumber}
@@ -871,7 +931,6 @@ export default function OutboundItemsPanelPage() {
                                                                 />
                                                             </div>
 
-                                                            {/* TABELA DE HUS DA NF-E */}
                                                             <div className="overflow-x-auto">
                                                                 <Table>
                                                                     <TableHeader className="bg-slate-50/70">

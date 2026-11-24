@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,11 +21,14 @@ export default function OutboundPackingPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
+    const canPackOutbound = useHasPermission('packing:manage');
+    const canViewBillingServices = useHasPermission(['billing:manage', 'billing:view']);
+
     const [order, setOrder] = useState(null);
     const [globalPackagingTypes, setGlobalPackagingTypes] = useState([]);
     const [docks, setDocks] = useState([]);
     const [billingServices, setBillingServices] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(orderId && canPackOutbound));
 
     // --- SERVIÇO DE TARIFICAÇÃO DE SEPARAÇÃO (HANDLING OUT) ---
     const [selectedHandlingServiceId, setSelectedHandlingServiceId] = useState('');
@@ -49,59 +53,69 @@ export default function OutboundPackingPage() {
     const [isFinalizing, setIsFinalizing] = useState(false);
 
     // Carregamento inicial da ordem, docas, embalagens e serviços de faturação
-    const loadOrderData = async () => {
-        try {
-            setIsLoading(true);
-            const [orderRes, packTypesRes, docksRes, servicesRes] = await Promise.all([
-                customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' }),
-                customInstance({ url: '/api/packaging-types', method: 'GET' }),
-                customInstance({ url: '/api/topology/locations/docks', method: 'GET' }),
-                customInstance({ url: '/api/billing/services', method: 'GET' })
-            ]);
-
-            const orderData = orderRes?.data || orderRes;
-            setOrder(orderData);
-
-            const packTypes = Array.isArray(packTypesRes) ? packTypesRes : (packTypesRes?.items || []);
-            setGlobalPackagingTypes(packTypes);
-
-            const dockList = Array.isArray(docksRes) ? docksRes : (docksRes?.items || []);
-            setDocks(dockList);
-
-            if (dockList.length > 0 && !selectedDockId) {
-                setSelectedDockId(dockList[0].id);
-            }
-
-            const servicesList = Array.isArray(servicesRes) ? servicesRes : (servicesRes?.items || []);
-            setBillingServices(servicesList);
-
-            // Sugere automaticamente o serviço padrão de Handling Out / Expedição
-            if (servicesList.length > 0 && !selectedHandlingServiceId) {
-                const defaultHandling = servicesList.find(s =>
-                    s.name?.toLowerCase().includes('expedição') ||
-                    s.name?.toLowerCase().includes('handling out') ||
-                    s.name?.toLowerCase().includes('saída')
-                );
-                if (defaultHandling) {
-                    setSelectedHandlingServiceId(defaultHandling.id);
-                }
-            }
-
-            // Seleciona o primeiro SKU pendente
-            if (orderData?.items?.length > 0) {
-                const firstPending = orderData.items.find(i => i.status !== 'Packed' && i.packedQuantity < i.expectedQuantity);
-                setSelectedItemId(firstPending ? firstPending.id : orderData.items[0].id);
-            }
-        } catch {
-            toast.error('Erro ao carregar os dados do pedido para packing.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     useEffect(() => {
-        if (orderId) loadOrderData();
-    }, [orderId, ]);
+        if (!orderId || !canPackOutbound) return;
+
+        let isMounted = true;
+
+        const fetchInitialData = async () => {
+            try {
+                const [orderRes, packTypesRes, docksRes, servicesRes] = await Promise.all([
+                    customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' }),
+                    customInstance({ url: '/api/packaging-types', method: 'GET' }),
+                    customInstance({ url: '/api/topology/locations/docks', method: 'GET' }),
+                    canViewBillingServices
+                        ? customInstance({ url: '/api/billing/services', method: 'GET' }).catch(() => [])
+                        : Promise.resolve([])
+                ]);
+
+                if (!isMounted) return;
+
+                const orderData = orderRes?.data || orderRes;
+                setOrder(orderData);
+
+                const packTypes = Array.isArray(packTypesRes) ? packTypesRes : (packTypesRes?.items || []);
+                setGlobalPackagingTypes(packTypes);
+
+                const dockList = Array.isArray(docksRes) ? docksRes : (docksRes?.items || []);
+                setDocks(dockList);
+
+                if (dockList.length > 0) {
+                    setSelectedDockId(prev => prev || dockList[0].id);
+                }
+
+                const servicesList = Array.isArray(servicesRes) ? servicesRes : (servicesRes?.items || []);
+                setBillingServices(servicesList);
+
+                if (servicesList.length > 0) {
+                    setSelectedHandlingServiceId(prev => {
+                        if (prev) return prev;
+                        const defaultHandling = servicesList.find(s =>
+                            s.name?.toLowerCase().includes('expedição') ||
+                            s.name?.toLowerCase().includes('handling out') ||
+                            s.name?.toLowerCase().includes('saída')
+                        );
+                        return defaultHandling ? defaultHandling.id : '';
+                    });
+                }
+
+                if (orderData?.items?.length > 0) {
+                    const firstPending = orderData.items.find(i => i.status !== 'Packed' && i.packedQuantity < i.expectedQuantity);
+                    setSelectedItemId(firstPending ? firstPending.id : orderData.items[0].id);
+                }
+            } catch {
+                if (isMounted) toast.error('Erro ao carregar os dados do pedido para packing.');
+            } finally {
+                if (isMounted) setIsLoading(false);
+            }
+        };
+
+        fetchInitialData();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canPackOutbound, canViewBillingServices]);
 
     // Item selecionado para trabalho no momento
     const selectedItem = useMemo(() => {
@@ -110,24 +124,29 @@ export default function OutboundPackingPage() {
 
     // Carrega as embalagens registadas no SKU do produto e os apontamentos existentes
     useEffect(() => {
-        if (!selectedItem?.productId || !orderId) return;
+        if (!selectedItem?.productId || !orderId || !canPackOutbound) return;
+
+        let isMounted = true;
 
         const loadItemDetails = async () => {
             try {
                 setIsLoadingItemPacks(true);
 
-                const packsRes = await customInstance({
-                    url: `/api/products/${selectedItem.productId}/packagings`,
-                    method: 'GET'
-                });
+                const [packsRes, currentStatus] = await Promise.all([
+                    customInstance({
+                        url: `/api/products/${selectedItem.productId}/packagings`,
+                        method: 'GET'
+                    }),
+                    customInstance({
+                        url: `/api/outbound/packing/orders/${orderId}/items/${selectedItem.id}`,
+                        method: 'GET'
+                    })
+                ]);
+
+                if (!isMounted) return;
+
                 const availablePacks = Array.isArray(packsRes) ? packsRes : [];
                 setItemPackagings(availablePacks);
-
-                // Consulta se este item já possui apontamentos gravados
-                const currentStatus = await customInstance({
-                    url: `/api/outbound/packing/orders/${orderId}/items/${selectedItem.id}`,
-                    method: 'GET'
-                });
 
                 if (currentStatus?.packs && currentStatus.packs.length > 0) {
                     setCurrentItemPacks(currentStatus.packs.map(p => ({
@@ -157,21 +176,26 @@ export default function OutboundPackingPage() {
                     ]);
                 }
             } catch {
-                toast.error('Erro ao carregar as embalagens do produto.');
+                if (isMounted) toast.error('Erro ao carregar as embalagens do produto.');
             } finally {
-                setIsLoadingItemPacks(false);
+                if (isMounted) setIsLoadingItemPacks(false);
             }
         };
 
         loadItemDetails();
+
+        return () => {
+            isMounted = false;
+        };
     }, [
-	selectedItemId,
-	selectedItem?.productId,
-	orderId,
-	selectedItem.pickedQuantity,
-	globalPackagingTypes,
-	selectedItem.id
-]);
+        selectedItemId,
+        selectedItem?.id,
+        selectedItem?.productId,
+        selectedItem?.pickedQuantity,
+        orderId,
+        globalPackagingTypes,
+        canPackOutbound
+    ]);
 
     // Subtotal de peças do SKU ativo
     const currentPointedTotal = useMemo(() => {
@@ -195,6 +219,7 @@ export default function OutboundPackingPage() {
     }, [order]);
 
     const handleAddPackRow = () => {
+        if (!canPackOutbound) return;
         const defaultPack = itemPackagings[0] || globalPackagingTypes[0];
         setCurrentItemPacks(prev => [
             ...prev,
@@ -207,10 +232,12 @@ export default function OutboundPackingPage() {
     };
 
     const handleRemovePackRow = (idx) => {
+        if (!canPackOutbound) return;
         setCurrentItemPacks(prev => prev.filter((_, i) => i !== idx));
     };
 
     const handlePackRowChange = (idx, field, value) => {
+        if (!canPackOutbound) return;
         setCurrentItemPacks(prev => {
             const updated = [...prev];
             if (field === 'volumeCount') {
@@ -232,9 +259,9 @@ export default function OutboundPackingPage() {
 
     // Gravação do Momento 1 para o SKU selecionado
     const handleSaveItemPacking = async () => {
-        if (!selectedItem) return;
+        if (!selectedItem || !canPackOutbound) return;
 
-        if (!selectedHandlingServiceId) {
+        if (billingServices.length > 0 && !selectedHandlingServiceId) {
             return toast.warning('Selecione o Serviço de Separação / Handling Out para tarifação no faturamento.');
         }
 
@@ -249,7 +276,7 @@ export default function OutboundPackingPage() {
             const payload = {
                 orderId,
                 orderItemId: selectedItem.id,
-                billingServiceId: selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null,
+                billingServiceId: selectedHandlingServiceId && selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null,
                 packs: currentItemPacks.map(p => ({
                     packagingTypeId: p.packagingTypeId,
                     volumeCount: Number(p.volumeCount),
@@ -269,7 +296,6 @@ export default function OutboundPackingPage() {
             const updatedOrder = updatedOrderRes?.data || updatedOrderRes;
             setOrder(updatedOrder);
 
-            // Seleciona automaticamente o próximo SKU pendente
             const nextPending = updatedOrder?.items?.find(i => i.id !== selectedItem.id && i.status !== 'Packed' && i.packedQuantity < i.expectedQuantity);
             if (nextPending) {
                 setSelectedItemId(nextPending.id);
@@ -283,6 +309,7 @@ export default function OutboundPackingPage() {
 
     // --- FUNÇÕES DO MOMENTO 2 (FECHO DE TRANSPORTE) ---
     const handleAddShippingVolumeRow = () => {
+        if (!canPackOutbound) return;
         const defaultPack = globalPackagingTypes[0];
         setShippingVolumes(prev => [
             ...prev,
@@ -295,10 +322,12 @@ export default function OutboundPackingPage() {
     };
 
     const handleRemoveShippingVolumeRow = (idx) => {
+        if (!canPackOutbound) return;
         setShippingVolumes(prev => prev.filter((_, i) => i !== idx));
     };
 
     const handleShippingVolumeChange = (idx, field, value) => {
+        if (!canPackOutbound) return;
         setShippingVolumes(prev => {
             const updated = [...prev];
             if (field === 'volumeCount') {
@@ -313,6 +342,7 @@ export default function OutboundPackingPage() {
 
     const handleFinalizePacking = async (e) => {
         e.preventDefault();
+        if (!canPackOutbound) return;
 
         if (!allItemsPacked) {
             return toast.error('Existem itens com conferência pendente no Momento 1. Complete todos os SKUs antes de finalizar.');
@@ -333,7 +363,7 @@ export default function OutboundPackingPage() {
                 orderId,
                 dockLocationId: selectedDockId,
                 usedStretchFilm: usedStretch,
-                handlingServiceId: selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null,
+                handlingServiceId: selectedHandlingServiceId && selectedHandlingServiceId !== 'none' ? selectedHandlingServiceId : null,
                 shippingVolumes: validVolumes.map(v => ({
                     packagingTypeId: v.packagingTypeId,
                     volumeCount: Number(v.volumeCount),
@@ -365,7 +395,6 @@ export default function OutboundPackingPage() {
         );
     }
 
-    // Se a ordem já foi concluída no packing e já está em conferência, expedida ou cancelada
     const isPastPackingStage = ['Checking', 'ReadyToShip', 'Shipped', 'Canceled'].includes(order?.status);
 
     if (isPastPackingStage) {
@@ -410,26 +439,27 @@ export default function OutboundPackingPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    {/* SELETOR DO SERVIÇO DE SEPARAÇÃO / HANDLING OUT */}
-                    <div className="flex flex-col space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                            <Receipt className="text-orange-600" size={13} /> Serviço de Separação (Handling Out) *
-                        </Label>
-                        <Select value={selectedHandlingServiceId} onValueChange={setSelectedHandlingServiceId}>
-                            <SelectTrigger className={`bg-slate-50 h-9 text-xs w-[260px] ${!selectedHandlingServiceId ? 'border-amber-300' : 'border-slate-200'}`}>
-                                <SelectValue placeholder="Selecione o serviço contratado..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {billingServices.map(s => (
-                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                ))}
-                                <SelectItem value="none">Isento de Tarifa Adicional</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                    {billingServices.length > 0 && (
+                        <div className="flex flex-col space-y-1">
+                            <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                <Receipt className="text-orange-600" size={13} /> Serviço de Separação (Handling Out) *
+                            </Label>
+                            <Select value={selectedHandlingServiceId} onValueChange={setSelectedHandlingServiceId} disabled={!canPackOutbound}>
+                                <SelectTrigger className={`bg-slate-50 h-9 text-xs w-[260px] ${!selectedHandlingServiceId ? 'border-amber-300' : 'border-slate-200'}`}>
+                                    <SelectValue placeholder="Selecione o serviço contratado..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {billingServices.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                    <SelectItem value="none">Isento de Tarifa Adicional</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
-                    <div className="pt-4">
+                    <div className={billingServices.length > 0 ? 'pt-4' : ''}>
                         <Badge className={`text-xs h-9 px-3 flex items-center gap-1.5 ${allItemsPacked ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-amber-100 text-amber-800 border-amber-200'}`}>
                             {allItemsPacked ? <Check size={14} /> : <Layers size={14} />}
                             {allItemsPacked ? 'Momento 1 Pronto (100%)' : `Momento 1: ${packedItemsCount}/${order?.items?.length || 0} OK`}
@@ -555,6 +585,7 @@ export default function OutboundPackingPage() {
                                                                     <Select
                                                                         value={packRow.packagingTypeId}
                                                                         onValueChange={(val) => handlePackRowChange(idx, 'packagingTypeId', val)}
+                                                                        disabled={!canPackOutbound}
                                                                     >
                                                                         <SelectTrigger className="bg-white text-xs h-9">
                                                                             <SelectValue placeholder="Selecione a embalagem..." />
@@ -584,6 +615,7 @@ export default function OutboundPackingPage() {
                                                                         placeholder="Qtd"
                                                                         value={packRow.volumeCount}
                                                                         onChange={(e) => handlePackRowChange(idx, 'volumeCount', e.target.value)}
+                                                                        disabled={!canPackOutbound}
                                                                         className="font-mono text-xs text-center h-9 bg-white"
                                                                     />
                                                                 </TableCell>
@@ -594,6 +626,7 @@ export default function OutboundPackingPage() {
                                                                         step="0.0001"
                                                                         value={packRow.quantityPerVolume}
                                                                         onChange={(e) => handlePackRowChange(idx, 'quantityPerVolume', e.target.value)}
+                                                                        disabled={!canPackOutbound}
                                                                         className="font-mono text-xs text-center h-9 bg-white"
                                                                     />
                                                                 </TableCell>
@@ -603,7 +636,7 @@ export default function OutboundPackingPage() {
                                                                 </TableCell>
 
                                                                 <TableCell className="text-right">
-                                                                    {currentItemPacks.length > 1 && (
+                                                                    {currentItemPacks.length > 1 && canPackOutbound && (
                                                                         <Button
                                                                             type="button"
                                                                             variant="ghost"
@@ -623,15 +656,17 @@ export default function OutboundPackingPage() {
                                         </div>
 
                                         <div className="flex items-center justify-between pt-1">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={handleAddPackRow}
-                                                className="bg-white text-orange-700 border-orange-200 hover:bg-orange-50 text-xs h-8"
-                                            >
-                                                <Plus size={13} className="mr-1" /> Adicionar Outro Tipo de Embalagem
-                                            </Button>
+                                            {canPackOutbound ? (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleAddPackRow}
+                                                    className="bg-white text-orange-700 border-orange-200 hover:bg-orange-50 text-xs h-8"
+                                                >
+                                                    <Plus size={13} className="mr-1" /> Adicionar Outro Tipo de Embalagem
+                                                </Button>
+                                            ) : <span />}
 
                                             <div className="flex items-center gap-4 text-xs font-mono">
                                                 <span>Total Apontado:</span>
@@ -641,21 +676,23 @@ export default function OutboundPackingPage() {
                                             </div>
                                         </div>
 
-                                        <div className="pt-2 border-t border-orange-200 flex justify-end">
-                                            <Button
-                                                type="button"
-                                                onClick={handleSaveItemPacking}
-                                                disabled={isSavingItemPack || !isCurrentItemBalanced}
-                                                className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5 shadow-xs"
-                                            >
-                                                {isSavingItemPack ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                                                ) : (
-                                                    <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                                                )}
-                                                Confirmar Apontamento do SKU {selectedItem.skuCode}
-                                            </Button>
-                                        </div>
+                                        {canPackOutbound && (
+                                            <div className="pt-2 border-t border-orange-200 flex justify-end">
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleSaveItemPacking}
+                                                    disabled={isSavingItemPack || !isCurrentItemBalanced}
+                                                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5 shadow-xs"
+                                                >
+                                                    {isSavingItemPack ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                                                    ) : (
+                                                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                                                    )}
+                                                    Confirmar Apontamento do SKU {selectedItem.skuCode}
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </CardContent>
@@ -698,7 +735,7 @@ export default function OutboundPackingPage() {
                                         <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                                             <Warehouse size={14} className="text-emerald-600" /> Doca de Embarque Destino *
                                         </Label>
-                                        <Select value={selectedDockId} onValueChange={setSelectedDockId}>
+                                        <Select value={selectedDockId} onValueChange={setSelectedDockId} disabled={!canPackOutbound}>
                                             <SelectTrigger className="bg-white text-xs h-10 border-slate-300">
                                                 <SelectValue placeholder="Escolha a doca de staging..." />
                                             </SelectTrigger>
@@ -718,15 +755,17 @@ export default function OutboundPackingPage() {
                                             <Label className="text-xs font-bold text-slate-800">
                                                 Volumes Finais para Despacho (SEFAZ/Transp) *
                                             </Label>
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={handleAddShippingVolumeRow}
-                                                className="text-emerald-700 hover:bg-emerald-50 h-7 text-xs px-2"
-                                            >
-                                                <Plus size={12} className="mr-1" /> Adicionar Volume
-                                            </Button>
+                                            {canPackOutbound && (
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={handleAddShippingVolumeRow}
+                                                    className="text-emerald-700 hover:bg-emerald-50 h-7 text-xs px-2"
+                                                >
+                                                    <Plus size={12} className="mr-1" /> Adicionar Volume
+                                                </Button>
+                                            )}
                                         </div>
 
                                         <div className="space-y-2">
@@ -734,7 +773,7 @@ export default function OutboundPackingPage() {
                                                 <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-[10px] font-bold uppercase text-slate-600 font-mono">Volume #{idx + 1}</span>
-                                                        {shippingVolumes.length > 1 && (
+                                                        {shippingVolumes.length > 1 && canPackOutbound && (
                                                             <Button
                                                                 type="button"
                                                                 variant="ghost"
@@ -753,6 +792,7 @@ export default function OutboundPackingPage() {
                                                             <Select
                                                                 value={volRow.packagingTypeId}
                                                                 onValueChange={(val) => handleShippingVolumeChange(idx, 'packagingTypeId', val)}
+                                                                disabled={!canPackOutbound}
                                                             >
                                                                 <SelectTrigger className="bg-white text-xs h-8">
                                                                     <SelectValue placeholder="Selecione o tipo..." />
@@ -775,6 +815,7 @@ export default function OutboundPackingPage() {
                                                                 placeholder="Qtd"
                                                                 value={volRow.volumeCount}
                                                                 onChange={(e) => handleShippingVolumeChange(idx, 'volumeCount', e.target.value)}
+                                                                disabled={!canPackOutbound}
                                                                 className="font-mono text-xs text-center h-8 bg-white"
                                                             />
                                                         </div>
@@ -788,6 +829,7 @@ export default function OutboundPackingPage() {
                                                             placeholder="Calculado automaticamente se vazio"
                                                             value={volRow.grossWeight}
                                                             onChange={(e) => handleShippingVolumeChange(idx, 'grossWeight', e.target.value)}
+                                                            disabled={!canPackOutbound}
                                                             className="font-mono text-xs h-8 bg-white"
                                                         />
                                                     </div>
@@ -797,10 +839,11 @@ export default function OutboundPackingPage() {
                                     </div>
 
                                     {/* INSUMO FILME STRETCH */}
-                                    <div className="flex items-start space-x-2 pt-3 border-t border-slate-100 bg-slate-50 p-3 rounded-xl border">
+                                    <div className="relative overflow-hidden flex items-start space-x-2 pt-3 border-t border-slate-100 bg-slate-50 p-3 rounded-xl border">
                                         <Checkbox
                                             id="stretch"
                                             checked={usedStretch}
+                                            disabled={!canPackOutbound}
                                             onCheckedChange={setUsedStretch}
                                             className="mt-0.5"
                                         />
@@ -812,22 +855,24 @@ export default function OutboundPackingPage() {
                                         </label>
                                     </div>
 
-                                    {/* BOTÃO FINALIZAR (REDIRECIONA PARA A LISTAGEM) */}
-                                    <Button
-                                        type="submit"
-                                        disabled={isFinalizing || !selectedDockId}
-                                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-sm mt-3"
-                                    >
-                                        {isFinalizing ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin mr-2" /> A Finalizar Packing...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <ShieldCheck className="h-4 w-4 mr-2" /> Concluir Packing e Voltar à Listagem 🚀
-                                            </>
-                                        )}
-                                    </Button>
+                                    {/* BOTÃO FINALIZAR */}
+                                    {canPackOutbound && (
+                                        <Button
+                                            type="submit"
+                                            disabled={isFinalizing || !selectedDockId}
+                                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-sm mt-3"
+                                        >
+                                            {isFinalizing ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> A Finalizar Packing...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ShieldCheck className="h-4 w-4 mr-2" /> Concluir Packing e Voltar à Listagem 🚀
+                                                </>
+                                            )}
+                                        </Button>
+                                    )}
                                 </form>
                             )}
                         </CardContent>

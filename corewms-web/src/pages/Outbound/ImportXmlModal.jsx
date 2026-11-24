@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { UploadCloud, CheckCircle2, Loader2, AlertTriangle, FileCode } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function ImportXmlModal({ open, onOpenChange }) {
+export default function ImportXmlModal({ open, onOpenChange, onSuccess }) {
     const queryClient = useQueryClient();
+    const canImportOutbound = useHasPermission('outbound:import');
     const [file, setFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [errors, setErrors] = useState([]);
@@ -21,7 +23,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
     };
 
     const handleImport = async () => {
-        if (!file) return;
+        if (!file || !canImportOutbound) return;
 
         try {
             setIsUploading(true);
@@ -39,6 +41,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
 
             toast.success(`Pedido NF ${res.orderNumber} importado com sucesso para ${res.destinationName}!`);
             queryClient.invalidateQueries({ queryKey: ['/api/outbound/orders'] });
+            onSuccess?.();
             handleClose();
         } catch (error) {
             const errData = error.response?.data;
@@ -96,7 +99,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                                 id="outbound-xml-upload"
                                 type="file"
                                 accept=".xml"
-                                disabled={isUploading}
+                                disabled={isUploading || !canImportOutbound}
                                 className="hidden"
                                 onChange={handleFileChange}
                             />
@@ -117,14 +120,16 @@ export default function ImportXmlModal({ open, onOpenChange }) {
 
                 <DialogFooter className="border-t pt-3 flex justify-end gap-2">
                     <Button variant="outline" onClick={handleClose} disabled={isUploading}>Cancelar</Button>
-                    <Button
-                        onClick={handleImport}
-                        disabled={!file || isUploading}
-                        className="bg-orange-600 hover:bg-orange-700 text-white font-bold min-w-[140px]"
-                    >
-                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <UploadCloud className="h-4 w-4 mr-1.5" />}
-                        Importar Pedido
-                    </Button>
+                    {canImportOutbound && (
+                        <Button
+                            onClick={handleImport}
+                            disabled={!file || isUploading}
+                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold min-w-[140px]"
+                        >
+                            {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <UploadCloud className="h-4 w-4 mr-1.5" />}
+                            Importar Pedido
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -34,8 +35,26 @@ export default function OutboundOrderDetailsPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
+    const canViewOutbound = useHasPermission('outbound:view');
+    const canEditOutbound = useHasPermission('outbound:edit');
+    const canAllocateOutbound = useHasPermission('outbound:allocate');
+    const canPickOutbound = useHasPermission('outbound:pick');
+    const canPackOutbound = useHasPermission('packing:manage');
+    const canCheckOutbound = useHasPermission('outbound:check');
+    const canShipOrEmitOutbound = useHasPermission(['outbound:ship', 'fiscal:emit']);
+    const canCancelOutbound = useHasPermission('outbound:cancel');
+    const canManageOutbound = useHasPermission('outbound:manage');
+
+    const canViewFiscal = useHasPermission('fiscal:view');
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+
+    const canViewYard = useHasPermission('yard:view');
+    const canOperateYard = useHasPermission('yard:operate');
+    const canCreateYardAppointment = useHasPermission(['yard:schedule', 'yard:manage']);
+
     const [order, setOrder] = useState(null);
-    const [,setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(orderId && canViewOutbound));
+    const [refreshTick, setRefreshTick] = useState(0);
     const [downloadingDocId, setDownloadingDocId] = useState(null);
     const [expandedItemIds, setExpandedItemIds] = useState({});
 
@@ -66,51 +85,63 @@ export default function OutboundOrderDetailsPage() {
     const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
     const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
-    const loadOrderDetails = async () => {
-        try {
-            setIsLoading(true);
-            const res = await customInstance({
-                url: `/api/outbound/orders/${orderId}`,
-                method: 'GET'
-            });
-            const data = res?.data || res;
-
-            // Busca complementar garantida pelo endpoint específico da ordem se não vier no DTO principal
-            if (!data.yardAppointment) {
-                try {
-                    const yardRes = await customInstance({
-                        url: `/api/yard/appointments/by-order/${orderId}`,
-                        method: 'GET'
-                    });
-                    const yardData = yardRes?.data || yardRes;
-                    if (yardData && yardData.id) {
-                        data.yardAppointment = yardData;
-                    }
-                } catch {
-                    // Sem agendamento vinculado
-                }
-            }
-
-            setOrder(data);
-            if (data?.items) {
-                const initialExpanded = {};
-                data.items.forEach(i => {
-                    if (i.allocations && i.allocations.length > 0) {
-                        initialExpanded[i.id] = true;
-                    }
-                });
-                setExpandedItemIds(initialExpanded);
-            }
-        } catch {
-            toast.error('Erro ao carregar detalhes da ordem de saída.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!orderId || !canViewOutbound) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        if (orderId) loadOrderDetails();
-    }, [orderId, ]);
+        if (!orderId || !canViewOutbound) return;
+
+        let isMounted = true;
+
+        customInstance({
+            url: `/api/outbound/orders/${orderId}`,
+            method: 'GET'
+        })
+            .then(async (res) => {
+                if (!isMounted) return;
+                const data = res?.data || res;
+
+                if (!data.yardAppointment) {
+                    try {
+                        const yardRes = await customInstance({
+                            url: `/api/yard/appointments/by-order/${orderId}`,
+                            method: 'GET'
+                        });
+                        const yardData = yardRes?.data || yardRes;
+                        if (yardData && yardData.id) {
+                            data.yardAppointment = yardData;
+                        }
+                    } catch {
+                        // Sem agendamento vinculado
+                    }
+                }
+
+                if (!isMounted) return;
+                setOrder(data);
+                if (data?.items) {
+                    const initialExpanded = {};
+                    data.items.forEach(i => {
+                        if (i.allocations && i.allocations.length > 0) {
+                            initialExpanded[i.id] = true;
+                        }
+                    });
+                    setExpandedItemIds(initialExpanded);
+                }
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar detalhes da ordem de saída.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canViewOutbound, refreshTick]);
 
     const toggleExpandItem = (itemId) => {
         setExpandedItemIds(prev => ({ ...prev, [itemId]: !prev[itemId] }));
@@ -120,11 +151,10 @@ export default function OutboundOrderDetailsPage() {
         return order?.items?.some(i => i.allocations?.some(a => a.isFractional));
     }, [order]);
 
-    // A conferência só pode ocorrer em paralelo se for 100% volumes fechados.
-    // Se houver fracionamento, só abre após atingir o estado 'Checking' (pós-packing).
-    const canGoToChecking = order?.status === 'Checking' || (order?.status === 'Picking' && !hasFractional);
+    const canGoToChecking = canCheckOutbound && (order?.status === 'Checking' || (order?.status === 'Picking' && !hasFractional));
 
     const handleDownloadPdf = async (doc) => {
+        if (!canViewFiscal) return;
         try {
             setDownloadingDocId(doc.id);
             const response = await customInstance({
@@ -151,6 +181,7 @@ export default function OutboundOrderDetailsPage() {
     };
 
     const handleUnlinkAppointment = async (appointmentId) => {
+        if (!canOperateYard) return;
         if (!confirm('Deseja realmente desvincular este agendamento do pedido de saída?')) return;
         try {
             await customInstance({
@@ -158,13 +189,14 @@ export default function OutboundOrderDetailsPage() {
                 method: 'POST'
             });
             toast.success('Agendamento desvinculado com sucesso!');
-            loadOrderDetails();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao desvincular agendamento.');
         }
     };
 
     const handleDownloadXml = async (doc) => {
+        if (!canViewFiscal) return;
         try {
             toast.success('A preparar download do XML...');
             const response = await customInstance({
@@ -187,9 +219,8 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Exclusão de Nota Fiscal Pendente ou Rejeitada
     const handleConfirmDeleteDoc = async () => {
-        if (!docToDelete) return;
+        if (!docToDelete || !canEmitFiscal) return;
         try {
             setIsDeletingDoc(true);
             await customInstance({
@@ -198,7 +229,7 @@ export default function OutboundOrderDetailsPage() {
             });
             toast.success('Documento fiscal removido com sucesso!');
             setDocToDelete(null);
-            loadOrderDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir documento fiscal.');
         } finally {
@@ -206,8 +237,8 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Estorno da Expedição
     const handleConfirmRevertShipment = async () => {
+        if (!canManageOutbound) return;
         try {
             setIsRevertingShipment(true);
             const res = await customInstance({
@@ -218,7 +249,7 @@ export default function OutboundOrderDetailsPage() {
             const data = res?.data || res;
             toast.success(data?.message || 'Expedição estornada com sucesso!');
             setIsRevertOrderDialogOpen(false);
-            loadOrderDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || error.message || 'Erro ao estornar expedição.');
         } finally {
@@ -226,8 +257,8 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Cancelamento do Pedido com Motivo Obrigatório
     const handleCancelOrder = async () => {
+        if (!canCancelOutbound) return;
         if (cancelReason.trim().length < 15) {
             return toast.warning('O motivo do cancelamento deve conter no mínimo 15 caracteres.');
         }
@@ -242,7 +273,7 @@ export default function OutboundOrderDetailsPage() {
             toast.success(data?.message || 'Pedido de saída cancelado com sucesso.');
             setIsCancelOrderDialogOpen(false);
             setCancelReason('');
-            loadOrderDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || error.message || 'Erro ao cancelar pedido.');
         } finally {
@@ -250,8 +281,8 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    // Exclusão Permanente da Ordem
     const handleDeleteOrder = async () => {
+        if (!canManageOutbound) return;
         try {
             setIsDeletingOrder(true);
             const res = await customInstance({
@@ -270,11 +301,13 @@ export default function OutboundOrderDetailsPage() {
     };
 
     const handleOpenCancelModal = (doc) => {
+        if (!canEmitFiscal) return;
         setSelectedDocForCancel(doc);
         setIsCancelModalOpen(true);
     };
 
     const handleOpenCorrectionModal = (doc) => {
+        if (!canEmitFiscal) return;
         setSelectedDocForCorrection(doc);
         setIsCorrectionModalOpen(true);
     };
@@ -302,7 +335,18 @@ export default function OutboundOrderDetailsPage() {
         }
     };
 
-    const canEdit = ['Pending', 'Allocating', 'Allocated'].includes(order?.status);
+    if (isLoading && !order) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] space-y-3">
+                <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
+                <p className="text-xs text-slate-500 font-medium">Carregando detalhes da ordem de saída...</p>
+            </div>
+        );
+    }
+
+    const isInitialStatus = ['Pending', 'Allocating', 'Allocated'].includes(order?.status);
+    const canEditHeader = canEditOutbound && isInitialStatus;
+    const canManageItems = canAllocateOutbound && isInitialStatus;
 
     const nfeOriginalDocs = order?.fiscalDocuments?.filter(doc => {
         const typeNum = Number(doc.type);
@@ -315,9 +359,11 @@ export default function OutboundOrderDetailsPage() {
         return s === 'authorized' || s === '2' || s === 'pending' || s === '1';
     });
 
-    const canManageShippedOrder = order?.status === 'Shipped' && !hasActiveNfe;
-    const canCancelOrder = order?.status !== 'Shipped' && order?.status !== 'Canceled' && !hasActiveNfe;
-    const canDeleteOrder = order?.status === 'Canceled' && (!order?.fiscalDocuments || order.fiscalDocuments.length === 0);
+    const isShippedWithoutActiveNfe = order?.status === 'Shipped' && !hasActiveNfe;
+    const canRevertShippedOrder = canManageOutbound && isShippedWithoutActiveNfe;
+    const canReemitShippedNfe = canEmitFiscal && isShippedWithoutActiveNfe;
+    const canCancelOrder = canCancelOutbound && order?.status !== 'Shipped' && order?.status !== 'Canceled' && !hasActiveNfe;
+    const canDeleteOrder = canManageOutbound && order?.status === 'Canceled' && (!order?.fiscalDocuments || order.fiscalDocuments.length === 0);
 
     const yardAppointment = order?.yardAppointment;
 
@@ -343,25 +389,26 @@ export default function OutboundOrderDetailsPage() {
                 </div>
 
                 <div className="flex gap-2">
-                    {canEdit && (
-                        <>
-                            <Button variant="outline" onClick={() => navigate(`/outbound/editar/${order.id}`)} className="border-slate-300 text-slate-700 bg-white font-medium h-9">
-                                <Pencil size={15} className="mr-1.5 text-slate-500" /> Editar Cabeçalho
-                            </Button>
-                            <Button variant="outline" onClick={() => navigate(`/outbound/ordem/${order.id}/itens`)} className="border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-medium h-9">
-                                <ShoppingCart size={15} className="mr-1.5 text-orange-600" /> Gerenciar Itens
-                            </Button>
-                        </>
+                    {canEditHeader && (
+                        <Button variant="outline" onClick={() => navigate(`/outbound/editar/${order.id}`)} className="border-slate-300 text-slate-700 bg-white font-medium h-9">
+                            <Pencil size={15} className="mr-1.5 text-slate-500" /> Editar Cabeçalho
+                        </Button>
+                    )}
+
+                    {canManageItems && (
+                        <Button variant="outline" onClick={() => navigate(`/outbound/ordem/${order.id}/itens`)} className="border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-medium h-9">
+                            <ShoppingCart size={15} className="mr-1.5 text-orange-600" /> Gerenciar Itens
+                        </Button>
                     )}
 
                     {/* Botão de Separação mantido enquanto houver pendência ou status ativo */}
-                    {(order?.status === 'Allocated' || order?.status === 'Picking' || (order?.status === 'Checking' && order?.items?.some(i => i.pickedQuantity < i.expectedQuantity))) && (
+                    {canPickOutbound && (order?.status === 'Allocated' || order?.status === 'Picking' || (order?.status === 'Checking' && order?.items?.some(i => i.pickedQuantity < i.expectedQuantity))) && (
                         <Button onClick={() => navigate(`/outbound/picking/${order.id}`)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9">
                             <Box size={15} className="mr-1.5" /> Ir para Coletor
                         </Button>
                     )}
 
-                    {order?.status === 'Packing' && (
+                    {canPackOutbound && order?.status === 'Packing' && (
                         <Button onClick={() => navigate(`/outbound/packing/${order.id}`)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
                             <PackageCheck size={15} className="mr-1.5" /> Ir para Packing
                         </Button>
@@ -374,33 +421,33 @@ export default function OutboundOrderDetailsPage() {
                         </Button>
                     )}
 
-                    {order?.status === 'ReadyToShip' && (
+                    {canShipOrEmitOutbound && order?.status === 'ReadyToShip' && (
                         <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
                             <CheckCircle2 size={15} className="mr-1.5" /> Revisar e Expedir
                         </Button>
                     )}
 
-                    {canManageShippedOrder && (
-                        <>
-                            <Button
-                                onClick={() => setIsRevertOrderDialogOpen(true)}
-                                disabled={isRevertingShipment}
-                                variant="outline"
-                                className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold h-9"
-                                title="Restaura os saldos às HUs, Kardex e retorna a ordem para Pronto para Expedir"
-                            >
-                                {isRevertingShipment ? (
-                                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                                ) : (
-                                    <RotateCcw className="h-4 w-4 mr-1.5 text-amber-600" />
-                                )}
-                                Estornar Expedição
-                            </Button>
+                    {canRevertShippedOrder && (
+                        <Button
+                            onClick={() => setIsRevertOrderDialogOpen(true)}
+                            disabled={isRevertingShipment}
+                            variant="outline"
+                            className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold h-9"
+                            title="Restaura os saldos às HUs, Kardex e retorna a ordem para Pronto para Expedir"
+                        >
+                            {isRevertingShipment ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                            ) : (
+                                <RotateCcw className="h-4 w-4 mr-1.5 text-amber-600" />
+                            )}
+                            Estornar Expedição
+                        </Button>
+                    )}
 
-                            <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
-                                <RefreshCw size={15} className="mr-1.5" /> {nfeOriginalDocs.length > 0 ? 'Emitir Nova NF-e' : 'Emitir NF-e'}
-                            </Button>
-                        </>
+                    {canReemitShippedNfe && (
+                        <Button onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
+                            <RefreshCw size={15} className="mr-1.5" /> {nfeOriginalDocs.length > 0 ? 'Emitir Nova NF-e' : 'Emitir NF-e'}
+                        </Button>
                     )}
 
                     {canCancelOrder && (
@@ -707,40 +754,43 @@ export default function OutboundOrderDetailsPage() {
                                                             <div className="flex justify-end gap-1">
                                                                 {isAuthorized && (
                                                                     <>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            onClick={() => handleDownloadXml(doc)}
-                                                                            className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium px-2"
-                                                                            title="Baixar XML"
-                                                                        >
-                                                                            <FileCode size={13} className="mr-1 text-blue-600" /> XML
-                                                                        </Button>
-
-                                                                        <Button
-                                                                            size="sm"
-                                                                            variant="outline"
-                                                                            onClick={() => handleDownloadPdf(doc)}
-                                                                            disabled={downloadingDocId === doc.id}
-                                                                            className={`h-8 text-xs bg-white font-medium px-2 ${isNfeOriginal ? 'text-orange-700 border-orange-200 hover:bg-orange-50' :
-                                                                                doc.type === 'Cancelamento' || doc.type === 7 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
-                                                                                    'text-purple-700 border-purple-200 hover:bg-purple-50'
-                                                                                }`}
-                                                                            title="Baixar PDF Oficial"
-                                                                        >
-                                                                            {downloadingDocId === doc.id ? (
-                                                                                <Loader2 size={13} className="animate-spin" />
-                                                                            ) : (
-                                                                                <>
-                                                                                    <Download size={13} className="mr-1" />
-                                                                                    {isNfeOriginal ? 'DANFE' : doc.type === 'Cancelamento' || doc.type === 7 ? 'Canc.' : 'CC-e'}
-                                                                                </>
-                                                                            )}
-                                                                        </Button>
-
-                                                                        {isNfeOriginal && (
+                                                                        {canViewFiscal && (
                                                                             <>
-                                                                                {/* DISPARO MANUAL DE E-MAIL */}
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    onClick={() => handleDownloadXml(doc)}
+                                                                                    className="h-8 text-xs bg-white text-blue-700 border-blue-200 hover:bg-blue-50 font-medium px-2"
+                                                                                    title="Baixar XML"
+                                                                                >
+                                                                                    <FileCode size={13} className="mr-1 text-blue-600" /> XML
+                                                                                </Button>
+
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    variant="outline"
+                                                                                    onClick={() => handleDownloadPdf(doc)}
+                                                                                    disabled={downloadingDocId === doc.id}
+                                                                                    className={`h-8 text-xs bg-white font-medium px-2 ${isNfeOriginal ? 'text-orange-700 border-orange-200 hover:bg-orange-50' :
+                                                                                        doc.type === 'Cancelamento' || doc.type === 7 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
+                                                                                            'text-purple-700 border-purple-200 hover:bg-purple-50'
+                                                                                        }`}
+                                                                                    title="Baixar PDF Oficial"
+                                                                                >
+                                                                                    {downloadingDocId === doc.id ? (
+                                                                                        <Loader2 size={13} className="animate-spin" />
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            <Download size={13} className="mr-1" />
+                                                                                            {isNfeOriginal ? 'DANFE' : doc.type === 'Cancelamento' || doc.type === 7 ? 'Canc.' : 'CC-e'}
+                                                                                        </>
+                                                                                    )}
+                                                                                </Button>
+                                                                            </>
+                                                                        )}
+
+                                                                        {isNfeOriginal && canEmitFiscal && (
+                                                                            <>
                                                                                 <Button
                                                                                     size="sm"
                                                                                     variant="outline"
@@ -778,7 +828,7 @@ export default function OutboundOrderDetailsPage() {
                                                                     </>
                                                                 )}
 
-                                                                {isPendingOrRejected && (
+                                                                {isPendingOrRejected && canEmitFiscal && (
                                                                     <Button
                                                                         size="sm"
                                                                         variant="outline"
@@ -878,51 +928,61 @@ export default function OutboundOrderDetailsPage() {
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-2 pt-1">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigate('/portaria')}
-                                            className="flex-1 h-8 text-[11px] bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-medium"
-                                        >
-                                            <ExternalLink size={12} className="mr-1.5" /> Abrir Portaria
-                                        </Button>
-                                        {(yardAppointment.status === 1 || yardAppointment.status === 2 || yardAppointment.status === 'Scheduled' || yardAppointment.status === 'InYard') && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => handleUnlinkAppointment(yardAppointment.id)}
-                                                className="h-8 text-[11px] border-rose-200 text-rose-600 hover:bg-rose-50"
-                                                title="Desvincular agendamento"
-                                            >
-                                                Desvincular
-                                            </Button>
-                                        )}
-                                    </div>
+                                    {(canViewYard || (canOperateYard && (yardAppointment.status === 1 || yardAppointment.status === 2 || yardAppointment.status === 'Scheduled' || yardAppointment.status === 'InYard'))) && (
+                                        <div className="flex gap-2 pt-1">
+                                            {canViewYard && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => navigate('/portaria')}
+                                                    className="flex-1 h-8 text-[11px] bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-medium"
+                                                >
+                                                    <ExternalLink size={12} className="mr-1.5" /> Abrir Portaria
+                                                </Button>
+                                            )}
+                                            {canOperateYard && (yardAppointment.status === 1 || yardAppointment.status === 2 || yardAppointment.status === 'Scheduled' || yardAppointment.status === 'InYard') && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleUnlinkAppointment(yardAppointment.id)}
+                                                    className="h-8 text-[11px] border-rose-200 text-rose-600 hover:bg-rose-50"
+                                                    title="Desvincular agendamento"
+                                                >
+                                                    Desvincular
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <div className="space-y-3 py-1">
                                     <p className="text-slate-500 text-[11px]">
                                         Nenhum registo de agendamento ou motorista vinculado a esta ordem de saída.
                                     </p>
-                                    <div className="flex flex-col gap-1.5">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setIsLinkModalOpen(true)}
-                                            className="w-full text-xs border-blue-200 text-blue-800 bg-blue-50 hover:bg-blue-100 font-semibold h-8"
-                                        >
-                                            <Link2 size={13} className="mr-1.5 text-blue-600" /> Vincular Agendamento Existente
-                                        </Button>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setIsNewAppointmentOpen(true)}
-                                            className="w-full text-xs border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-semibold h-8"
-                                        >
-                                            <Plus size={13} className="mr-1.5 text-orange-600" /> Registar Dados de Carga (Portaria)
-                                        </Button>
-                                    </div>
+                                    {(canOperateYard || canCreateYardAppointment) && (
+                                        <div className="flex flex-col gap-1.5">
+                                            {canOperateYard && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setIsLinkModalOpen(true)}
+                                                    className="w-full text-xs border-blue-200 text-blue-800 bg-blue-50 hover:bg-blue-100 font-semibold h-8"
+                                                >
+                                                    <Link2 size={13} className="mr-1.5 text-blue-600" /> Vincular Agendamento Existente
+                                                </Button>
+                                            )}
+                                            {canCreateYardAppointment && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setIsNewAppointmentOpen(true)}
+                                                    className="w-full text-xs border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-semibold h-8"
+                                                >
+                                                    <Plus size={13} className="mr-1.5 text-orange-600" /> Registar Dados de Carga (Portaria)
+                                                </Button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </CardContent>
@@ -1028,207 +1088,221 @@ export default function OutboundOrderDetailsPage() {
             </div>
 
             {/* MODAL AGENDAMENTO DIRETO DE PORTARIA */}
-            <NovoAgendamentoModal
-                open={isNewAppointmentOpen}
-                onOpenChange={setIsNewAppointmentOpen}
-                preSelectedOrderId={order?.id}
-                preSelectedOrderType={2} // 2 = Outbound / Saída
-                preSelectedAccessKey={order?.accessKey}
-                preSelectedInvoice={order?.invoiceNumber || ''}
-                preSelectedPlate={order?.vehiclePlate || ''}
-                preSelectedPlateState={order?.vehiclePlateState || 'RS'}
-                preSelectedCarrier={order?.carrierName || ''}
-                preSelectedDockId={order?.dockLocationId || ''}
-                onSuccess={() => {
-                    setIsNewAppointmentOpen(false);
-                    loadOrderDetails();
-                }}
-            />
+            {canCreateYardAppointment && (
+                <NovoAgendamentoModal
+                    open={isNewAppointmentOpen}
+                    onOpenChange={setIsNewAppointmentOpen}
+                    preSelectedOrderId={order?.id}
+                    preSelectedOrderType={2}
+                    preSelectedAccessKey={order?.accessKey}
+                    preSelectedInvoice={order?.invoiceNumber || ''}
+                    preSelectedPlate={order?.vehiclePlate || ''}
+                    preSelectedPlateState={order?.vehiclePlateState || 'RS'}
+                    preSelectedCarrier={order?.carrierName || ''}
+                    preSelectedDockId={order?.dockLocationId || ''}
+                    onSuccess={() => {
+                        setIsNewAppointmentOpen(false);
+                        triggerReload();
+                    }}
+                />
+            )}
 
             {/* MODAL VINCULAR AGENDAMENTO EXISTENTE */}
-            <VincularAgendamentoModal
-                open={isLinkModalOpen}
-                onOpenChange={setIsLinkModalOpen}
-                orderId={order?.id}
-                orderNumber={order?.orderNumber}
-                orderType={2} // Outbound
-                onSuccess={loadOrderDetails}
-            />
+            {canOperateYard && (
+                <VincularAgendamentoModal
+                    open={isLinkModalOpen}
+                    onOpenChange={setIsLinkModalOpen}
+                    orderId={order?.id}
+                    orderNumber={order?.orderNumber}
+                    orderType={2}
+                    onSuccess={triggerReload}
+                />
+            )}
 
-            {/* MODAL DISPARO MANUAL DE E-MAIL */}
-            <SendNfeEmailModal
-                open={isEmailModalOpen}
-                onOpenChange={setIsEmailModalOpen}
-                document={selectedDocForEmail}
-                defaultEmail={order?.customerEmail || order?.destinationEmail || ''}
-            />
+            {/* MODAIS FISCAIS (EMISSÃO / EVENTOS SEFAZ) */}
+            {canEmitFiscal && (
+                <>
+                    <SendNfeEmailModal
+                        open={isEmailModalOpen}
+                        onOpenChange={setIsEmailModalOpen}
+                        document={selectedDocForEmail}
+                        defaultEmail={order?.customerEmail || order?.destinationEmail || ''}
+                    />
+
+                    <CancelNfeModal
+                        open={isCancelModalOpen}
+                        onOpenChange={setIsCancelModalOpen}
+                        orderId={orderId}
+                        orderNumber={order?.orderNumber}
+                        accessKey={selectedDocForCancel?.accessKey}
+                        onSuccess={triggerReload}
+                    />
+
+                    <CorrectionLetterModal
+                        open={isCorrectionModalOpen}
+                        onOpenChange={setIsCorrectionModalOpen}
+                        orderId={orderId}
+                        orderNumber={order?.orderNumber}
+                        accessKey={selectedDocForCorrection?.accessKey}
+                        onSuccess={triggerReload}
+                    />
+                </>
+            )}
 
             {/* MODAL DE CONFIRMAÇÃO DE ESTORNO DA EXPEDIÇÃO */}
-            <AlertDialog open={isRevertOrderDialogOpen} onOpenChange={setIsRevertOrderDialogOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-amber-800">
-                            <RotateCcw className="h-5 w-5 text-amber-600" /> Estornar Expedição da Ordem?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                Deseja realmente estornar a expedição da Ordem <strong className="text-slate-900 font-mono">#{order?.orderNumber}</strong>?
-                            </span>
-                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-[11px] text-amber-950 space-y-1 mt-2">
-                                <span className="font-bold block uppercase text-[10px] text-amber-900">Esta ação irá:</span>
-                                <ol className="list-decimal list-inside space-y-0.5 text-slate-700">
-                                    <li>Devolver o saldo para as Unidades Logísticas (HUs).</li>
-                                    <li>Restaurar o saldo alocado no stock.</li>
-                                    <li>Registar a movimentação de estorno no Kardex.</li>
-                                    <li>Retornar a ordem para <strong>Pronto para Expedir</strong> (ReadyToShip), permitindo reemitir a nota fiscal ou cancelar o pedido.</li>
-                                </ol>
-                            </div>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isRevertingShipment}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmRevertShipment}
-                            disabled={isRevertingShipment}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
-                        >
-                            {isRevertingShipment ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Estorno
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageOutbound && (
+                <AlertDialog open={isRevertOrderDialogOpen} onOpenChange={setIsRevertOrderDialogOpen}>
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-amber-800">
+                                <RotateCcw className="h-5 w-5 text-amber-600" /> Estornar Expedição da Ordem?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                <span>
+                                    Deseja realmente estornar a expedição da Ordem <strong className="text-slate-900 font-mono">#{order?.orderNumber}</strong>?
+                                </span>
+                                <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-[11px] text-amber-950 space-y-1 mt-2">
+                                    <span className="font-bold block uppercase text-[10px] text-amber-900">Esta ação irá:</span>
+                                    <ol className="list-decimal list-inside space-y-0.5 text-slate-700">
+                                        <li>Devolver o saldo para as Unidades Logísticas (HUs).</li>
+                                        <li>Restaurar o saldo alocado no stock.</li>
+                                        <li>Registar a movimentação de estorno no Kardex.</li>
+                                        <li>Retornar a ordem para <strong>Pronto para Expedir</strong> (ReadyToShip), permitindo reemitir a nota fiscal ou cancelar o pedido.</li>
+                                    </ol>
+                                </div>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="pt-2">
+                            <AlertDialogCancel disabled={isRevertingShipment}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmRevertShipment}
+                                disabled={isRevertingShipment}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                            >
+                                {isRevertingShipment ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Estorno
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE DOCUMENTO PENDENTE/REJEITADO */}
-            <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                            <Trash2 className="h-5 w-5" /> Excluir Documento Fiscal?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Tem certeza de que deseja remover o documento fiscal{' '}
-                            <strong className="text-slate-900 font-mono">#{docToDelete?.id}</strong>?
-                            <br /><br />
-                            Esta ação removerá a nota rejeitada/pendente e permitirá gerar uma nova NF-e sem bloqueios de notas ativas.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeletingDoc}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmDeleteDoc}
-                            disabled={isDeletingDoc}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Exclusão
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canEmitFiscal && (
+                <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                                <Trash2 className="h-5 w-5" /> Excluir Documento Fiscal?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Tem certeza de que deseja remover o documento fiscal{' '}
+                                <strong className="text-slate-900 font-mono">#{docToDelete?.id}</strong>?
+                                <br /><br />
+                                Esta ação removerá a nota rejeitada/pendente e permitirá gerar uma nova NF-e sem bloqueios de notas ativas.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeletingDoc}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmDeleteDoc}
+                                disabled={isDeletingDoc}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Exclusão
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE CONFIRMAÇÃO DE CANCELAMENTO DO PEDIDO COM JUSTIFICATIVA */}
-            <AlertDialog
-                open={isCancelOrderDialogOpen}
-                onOpenChange={(open) => {
-                    if (!open && !isCancelingOrder) {
-                        setIsCancelOrderDialogOpen(false);
-                        setCancelReason('');
-                    }
-                }}
-            >
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
-                            <Ban className="h-5 w-5 text-amber-600" /> Cancelar Pedido de Saída?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-500">
-                            Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{order?.orderNumber}</strong>?
-                            Todas as reservas de stock, alocações de coletor e volumes gerados serão libertados de volta ao armazém.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
+            {canCancelOutbound && (
+                <AlertDialog
+                    open={isCancelOrderDialogOpen}
+                    onOpenChange={(open) => {
+                        if (!open && !isCancelingOrder) {
+                            setIsCancelOrderDialogOpen(false);
+                            setCancelReason('');
+                        }
+                    }}
+                >
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+                                <Ban className="h-5 w-5 text-amber-600" /> Cancelar Pedido de Saída?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-500">
+                                Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{order?.orderNumber}</strong>?
+                                Todas as reservas de stock, alocações de coletor e volumes gerados serão libertados de volta ao armazém.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
 
-                    <div className="space-y-1.5 py-2">
-                        <label className="text-xs font-bold text-slate-700 uppercase">
-                            Motivo do Cancelamento <span className="text-rose-500">*</span>
-                        </label>
-                        <textarea
-                            rows={3}
-                            placeholder="Ex: Cancelamento solicitado pelo comprador devido a alteração de endereço..."
-                            value={cancelReason}
-                            onChange={(e) => setCancelReason(e.target.value)}
-                            disabled={isCancelingOrder}
-                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
-                        />
-                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                            <span>Mínimo 15 caracteres</span>
-                            <span className={cancelReason.trim().length >= 15 ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
-                                {cancelReason.trim().length}/15
-                            </span>
+                        <div className="space-y-1.5 py-2">
+                            <label className="text-xs font-bold text-slate-700 uppercase">
+                                Motivo do Cancelamento <span className="text-rose-500">*</span>
+                            </label>
+                            <textarea
+                                rows={3}
+                                placeholder="Ex: Cancelamento solicitado pelo comprador devido a alteração de endereço..."
+                                value={cancelReason}
+                                onChange={(e) => setCancelReason(e.target.value)}
+                                disabled={isCancelingOrder}
+                                className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
+                            />
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                                <span>Mínimo 15 caracteres</span>
+                                <span className={cancelReason.trim().length >= 15 ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
+                                    {cancelReason.trim().length}/15
+                                </span>
+                            </div>
                         </div>
-                    </div>
 
-                    <AlertDialogFooter>
-                        <AlertDialogCancel
-                            disabled={isCancelingOrder}
-                            onClick={() => {
-                                setIsCancelOrderDialogOpen(false);
-                                setCancelReason('');
-                            }}
-                        >
-                            Voltar
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleCancelOrder}
-                            disabled={isCancelingOrder || cancelReason.trim().length < 15}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
-                        >
-                            {isCancelingOrder ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Cancelamento
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel
+                                disabled={isCancelingOrder}
+                                onClick={() => {
+                                    setIsCancelOrderDialogOpen(false);
+                                    setCancelReason('');
+                                }}
+                            >
+                                Voltar
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleCancelOrder}
+                                disabled={isCancelingOrder || cancelReason.trim().length < 15}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
+                            >
+                                {isCancelingOrder ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Cancelamento
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DA ORDEM */}
-            <AlertDialog open={isDeleteOrderDialogOpen} onOpenChange={setIsDeleteOrderDialogOpen}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Tem certeza que deseja excluir definitivamente a ordem cancelada <strong className="text-slate-800">#{order?.orderNumber}</strong>?
-                            <br /><br />
-                            Esta ação removerá permanentemente o registo e os seus itens do sistema.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeletingOrder}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteOrder} disabled={isDeletingOrder} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
-                            {isDeletingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir Definitivamente'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            {/* MODAL DE CANCELAMENTO DE NF-E (SEFAZ) */}
-            <CancelNfeModal
-                open={isCancelModalOpen}
-                onOpenChange={setIsCancelModalOpen}
-                orderId={orderId}
-                orderNumber={order?.orderNumber}
-                accessKey={selectedDocForCancel?.accessKey}
-                onSuccess={loadOrderDetails}
-            />
-
-            {/* MODAL DE CARTA DE CORREÇÃO (CC-e) */}
-            <CorrectionLetterModal
-                open={isCorrectionModalOpen}
-                onOpenChange={setIsCorrectionModalOpen}
-                orderId={orderId}
-                orderNumber={order?.orderNumber}
-                accessKey={selectedDocForCorrection?.accessKey}
-                onSuccess={loadOrderDetails}
-            />
+            {canManageOutbound && (
+                <AlertDialog open={isDeleteOrderDialogOpen} onOpenChange={setIsDeleteOrderDialogOpen}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Tem certeza que deseja excluir definitivamente a ordem cancelada <strong className="text-slate-800">#{order?.orderNumber}</strong>?
+                                <br /><br />
+                                Esta ação removerá permanentemente o registo e os seus itens do sistema.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeletingOrder}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteOrder} disabled={isDeletingOrder} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
+                                {isDeletingOrder ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir Definitivamente'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

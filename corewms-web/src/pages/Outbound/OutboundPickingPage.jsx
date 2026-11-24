@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -42,15 +43,21 @@ export default function OutboundPickingPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
+    const canPickOutbound = useHasPermission('outbound:pick');
+    const canManageOutbound = useHasPermission('outbound:manage');
+    const canCheckOutbound = useHasPermission('outbound:check');
+    const canPackOutbound = useHasPermission('packing:manage');
+    const canViewBillingServices = useHasPermission(['billing:manage', 'billing:view']);
+
     const [orderData, setOrderData] = useState(null);
     const [billingServices, setBillingServices] = useState([]);
     const [selectedHandlingServiceId, setSelectedHandlingServiceId] = useState('');
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(orderId && canPickOutbound));
     const [selectedItemId, setSelectedItemId] = useState(null);
 
     // Bipagem Rápida
     const [scannedLpn, setScannedLpn] = useState('');
-    const [pickedQuantity, setPickedQuantity] = useState('');
+    const [customPickedQuantity, setCustomPickedQuantity] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isFinalizing, setIsFinalizing] = useState(false);
 
@@ -65,50 +72,86 @@ export default function OutboundPickingPage() {
 
     const lpnInputRef = useRef(null);
 
-    const loadTasks = async (maintainSelection = true) => {
+    const reloadTasks = async (maintainSelection = true) => {
+        if (!orderId || !canPickOutbound) return;
+
         try {
-            setIsLoading(true);
-            const [tasksRes, servicesRes] = await Promise.all([
-                customInstance({ url: `/api/outbound/picking/${orderId}/tasks`, method: 'GET' }),
-                customInstance({ url: '/api/billing/services', method: 'GET' })
-            ]);
+            const tasksRes = await customInstance({
+                url: `/api/outbound/picking/${orderId}/tasks`,
+                method: 'GET'
+            });
 
             setOrderData(tasksRes);
 
-            const servicesList = Array.isArray(servicesRes) ? servicesRes : (servicesRes?.items || []);
-            setBillingServices(servicesList);
-
-            if (servicesList.length > 0 && !selectedHandlingServiceId) {
-                const defaultHandling = servicesList.find(s =>
-                    s.name?.toLowerCase().includes('expedição') ||
-                    s.name?.toLowerCase().includes('handling out') ||
-                    s.name?.toLowerCase().includes('separação') ||
-                    s.name?.toLowerCase().includes('saída')
-                );
-                if (defaultHandling) {
-                    setSelectedHandlingServiceId(defaultHandling.id);
-                }
-            }
-
             if (tasksRes?.items?.length > 0) {
-                const currentItem = tasksRes.items.find(i => i.orderItemId === selectedItemId);
-                const isCurrentComplete = currentItem && currentItem.pickedQuantity >= currentItem.expectedQuantity;
+                setSelectedItemId(prevSelectedId => {
+                    const currentItem = tasksRes.items.find(i => i.orderItemId === prevSelectedId);
+                    const isCurrentComplete = currentItem && currentItem.pickedQuantity >= currentItem.expectedQuantity;
 
-                if (!selectedItemId || (maintainSelection && isCurrentComplete)) {
-                    const firstPending = tasksRes.items.find(i => i.pickedQuantity < i.expectedQuantity);
-                    setSelectedItemId(firstPending ? firstPending.orderItemId : tasksRes.items[0].orderItemId);
-                }
+                    if (!prevSelectedId || (maintainSelection && isCurrentComplete)) {
+                        const firstPending = tasksRes.items.find(i => i.pickedQuantity < i.expectedQuantity);
+                        return firstPending ? firstPending.orderItemId : tasksRes.items[0].orderItemId;
+                    }
+                    return prevSelectedId;
+                });
             }
         } catch {
-            toast.error('Erro ao carregar mapa de separação.');
-        } finally {
-            setIsLoading(false);
+            toast.error('Erro ao atualizar mapa de separação.');
         }
     };
 
     useEffect(() => {
-        if (orderId) loadTasks(false);
-    }, [orderId, ]);
+        if (!orderId || !canPickOutbound) return;
+
+        let isMounted = true;
+
+        Promise.all([
+            customInstance({ url: `/api/outbound/picking/${orderId}/tasks`, method: 'GET' }),
+            canViewBillingServices
+                ? customInstance({ url: '/api/billing/services', method: 'GET' }).catch(() => [])
+                : Promise.resolve([])
+        ])
+            .then(([tasksRes, servicesRes]) => {
+                if (!isMounted) return;
+                setOrderData(tasksRes);
+
+                const servicesList = Array.isArray(servicesRes) ? servicesRes : (servicesRes?.items || []);
+                setBillingServices(servicesList);
+
+                if (servicesList.length > 0) {
+                    setSelectedHandlingServiceId(prev => {
+                        if (prev) return prev;
+                        const defaultHandling = servicesList.find(s =>
+                            s.name?.toLowerCase().includes('expedição') ||
+                            s.name?.toLowerCase().includes('handling out') ||
+                            s.name?.toLowerCase().includes('separação') ||
+                            s.name?.toLowerCase().includes('saída')
+                        );
+                        return defaultHandling ? defaultHandling.id : '';
+                    });
+                }
+
+                if (tasksRes?.items?.length > 0) {
+                    setSelectedItemId(prevSelectedId => {
+                        if (!prevSelectedId) {
+                            const firstPending = tasksRes.items.find(i => i.pickedQuantity < i.expectedQuantity);
+                            return firstPending ? firstPending.orderItemId : tasksRes.items[0].orderItemId;
+                        }
+                        return prevSelectedId;
+                    });
+                }
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar mapa de separação.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canPickOutbound, canViewBillingServices]);
 
     const pendingItems = useMemo(() => {
         return orderData?.items?.filter(i => i.pickedQuantity < i.expectedQuantity) || [];
@@ -128,47 +171,43 @@ export default function OutboundPickingPage() {
         return activeItem.allocations.filter(a => !a.isPicked);
     }, [activeItem]);
 
+    const defaultPickedQuantity = useMemo(() => {
+        if (!activeItem) return '';
+        const pendingQty = activeItem.expectedQuantity - activeItem.pickedQuantity;
+        if (pendingQty <= 0) return '';
+        if (suggestedHus.length > 0) {
+            return Math.min(suggestedHus[0].quantity, pendingQty).toString();
+        }
+        return pendingQty.toString();
+    }, [activeItem, suggestedHus]);
+
+    const effectivePickedQuantity = customPickedQuantity !== null ? customPickedQuantity : defaultPickedQuantity;
+
     const isOrderComplete = orderData?.items?.length > 0 && pendingItems.length === 0;
 
-    useEffect(() => {
-        if (activeItem) {
-            const pendingQty = activeItem.expectedQuantity - activeItem.pickedQuantity;
-            if (suggestedHus.length > 0) {
-                const nextHu = suggestedHus[0];
-                setPickedQuantity(Math.min(nextHu.quantity, pendingQty).toString());
-            } else {
-                setPickedQuantity(pendingQty > 0 ? pendingQty.toString() : '');
-            }
-            setScannedLpn('');
-            if (lpnInputRef.current) {
-                lpnInputRef.current.focus();
-            }
-        }
-    }, [
-	activeItem?.orderItemId,
-	suggestedHus.length,
-	activeItem.expectedQuantity,
-	activeItem.pickedQuantity,
-	activeItem,
-	suggestedHus
-]);
+    const handleSelectPendingItem = (orderItemId) => {
+        setSelectedItemId(orderItemId);
+        setCustomPickedQuantity(null);
+        setScannedLpn('');
+        lpnInputRef.current?.focus();
+    };
 
     const handleQuickSelectHu = (hu) => {
         setScannedLpn(hu.lpn);
         const pendingQty = activeItem.expectedQuantity - activeItem.pickedQuantity;
-        setPickedQuantity(Math.min(hu.quantity, pendingQty).toString());
-        if (lpnInputRef.current) {
-            lpnInputRef.current.focus();
-        }
+        setCustomPickedQuantity(Math.min(hu.quantity, pendingQty).toString());
+        lpnInputRef.current?.focus();
     };
 
     const handleExecuteScan = async (e) => {
         e?.preventDefault();
-        if (!scannedLpn.trim() || !pickedQuantity) {
+        if (!canPickOutbound) return;
+
+        if (!scannedLpn.trim() || !effectivePickedQuantity) {
             return toast.warning('Informe a etiqueta LPN e a quantidade.');
         }
 
-        const qtyNum = parseFloat(pickedQuantity);
+        const qtyNum = parseFloat(effectivePickedQuantity);
         if (isNaN(qtyNum) || qtyNum <= 0) {
             return toast.warning('Informe uma quantidade válida maior que zero.');
         }
@@ -191,7 +230,9 @@ export default function OutboundPickingPage() {
 
             toast.success(res?.message || 'Coleta confirmada!');
             setScannedLpn('');
-            await loadTasks(true);
+            setCustomPickedQuantity(null);
+            await reloadTasks(true);
+            lpnInputRef.current?.focus();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao processar leitura do LPN.');
         } finally {
@@ -201,6 +242,8 @@ export default function OutboundPickingPage() {
 
     // FINALIZAÇÃO EXPLÍCITA DA SEPARAÇÃO
     const handleConfirmFinalize = async () => {
+        if (!canPickOutbound) return;
+
         try {
             setIsFinalizing(true);
             const res = await customInstance({
@@ -215,9 +258,9 @@ export default function OutboundPickingPage() {
             toast.success(res?.message || 'Separação finalizada com sucesso!');
             setIsFinalizeDialogOpen(false);
 
-            if (res?.skippedPacking) {
+            if (res?.skippedPacking && canCheckOutbound) {
                 navigate(`/outbound/conferencia/${orderId}`);
-            } else if (res?.orderStatus === 'Packing') {
+            } else if (res?.orderStatus === 'Packing' && canPackOutbound) {
                 navigate(`/outbound/packing/${orderId}`);
             } else {
                 navigate('/outbound');
@@ -229,9 +272,10 @@ export default function OutboundPickingPage() {
         }
     };
 
-    // ESTORNO DE HU INDIVIDUAL
+    // ESTORNO DE HU INDIVIDUAL (SUPERVISÃO)
     const handleConfirmUndoHu = async () => {
-        if (!huToUndo) return;
+        if (!huToUndo || !canManageOutbound) return;
+
         try {
             setIsUndoingHu(true);
             await customInstance({
@@ -240,7 +284,9 @@ export default function OutboundPickingPage() {
             });
             toast.success(`HU ${huToUndo.lpn} estornada com sucesso!`);
             setHuToUndo(null);
-            await loadTasks(true);
+            setScannedLpn('');
+            setCustomPickedQuantity(null);
+            await reloadTasks(true);
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao estornar HU.');
         } finally {
@@ -248,8 +294,10 @@ export default function OutboundPickingPage() {
         }
     };
 
-    // RESET COMPLETO DA SEPARAÇÃO
+    // RESET COMPLETO DA SEPARAÇÃO (SUPERVISÃO)
     const handleConfirmReset = async () => {
+        if (!canManageOutbound) return;
+
         try {
             setIsSubmitting(true);
             await customInstance({
@@ -258,7 +306,9 @@ export default function OutboundPickingPage() {
             });
             toast.success('Separação reiniciada com sucesso! Todas as HUs foram liberadas.');
             setIsResetDialogOpen(false);
-            await loadTasks(false);
+            setScannedLpn('');
+            setCustomPickedQuantity(null);
+            await reloadTasks(false);
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao reiniciar separação.');
         } finally {
@@ -304,45 +354,51 @@ export default function OutboundPickingPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <div className="flex flex-col space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                            <Receipt className="text-purple-600" size={13} /> Serviço de Separação (Handling Out)
-                        </Label>
-                        <Select value={selectedHandlingServiceId} onValueChange={setSelectedHandlingServiceId}>
-                            <SelectTrigger className="bg-slate-50 h-9 text-xs w-[240px] border-slate-200">
-                                <SelectValue placeholder="Selecione o serviço..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {billingServices.map(s => (
-                                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                                ))}
-                                <SelectItem value="none">Isento de Tarifa</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                    {billingServices.length > 0 && (
+                        <div className="flex flex-col space-y-1">
+                            <Label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                                <Receipt className="text-purple-600" size={13} /> Serviço de Separação (Handling Out)
+                            </Label>
+                            <Select value={selectedHandlingServiceId} onValueChange={setSelectedHandlingServiceId}>
+                                <SelectTrigger className="bg-slate-50 h-9 text-xs w-[240px] border-slate-200">
+                                    <SelectValue placeholder="Selecione o serviço..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {billingServices.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                                    ))}
+                                    <SelectItem value="none">Isento de Tarifa</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
-                    <div className="pt-4 flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsResetDialogOpen(true)}
-                            className="border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 h-9 text-xs font-semibold"
-                            title="Reiniciar Separação"
-                        >
-                            <RotateCcw size={14} className="mr-1.5 text-slate-400" /> Reiniciar
-                        </Button>
+                    <div className={`${billingServices.length > 0 ? 'pt-4' : ''} flex items-center gap-2`}>
+                        {canManageOutbound && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsResetDialogOpen(true)}
+                                className="border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 h-9 text-xs font-semibold"
+                                title="Reiniciar Separação"
+                            >
+                                <RotateCcw size={14} className="mr-1.5 text-slate-400" /> Reiniciar
+                            </Button>
+                        )}
 
-                        <Button
-                            onClick={() => isOrderComplete ? setIsFinalizeDialogOpen(true) : navigate('/outbound')}
-                            className={isOrderComplete ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs" : "bg-white text-slate-700 border-slate-200 h-9 text-xs font-semibold"}
-                            variant={isOrderComplete ? "default" : "outline"}
-                        >
-                            {isOrderComplete ? (
-                                <><CheckCircle2 size={16} className="mr-2" /> Finalizar Separação</>
-                            ) : (
-                                'Salvar e Sair'
-                            )}
-                        </Button>
+                        {canPickOutbound && (
+                            <Button
+                                onClick={() => isOrderComplete ? setIsFinalizeDialogOpen(true) : navigate('/outbound')}
+                                className={isOrderComplete ? 'bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs' : 'bg-white text-slate-700 border-slate-200 h-9 text-xs font-semibold'}
+                                variant={isOrderComplete ? 'default' : 'outline'}
+                            >
+                                {isOrderComplete ? (
+                                    <><CheckCircle2 size={16} className="mr-2" /> Finalizar Separação</>
+                                ) : (
+                                    'Salvar e Sair'
+                                )}
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -357,14 +413,16 @@ export default function OutboundPickingPage() {
                     <p className="text-xs text-slate-600 max-w-md mx-auto">
                         Revise os itens e HUs recolhidas abaixo. Para carimbar o término da separação e avançar para a próxima fase, clique no botão de finalização.
                     </p>
-                    <div className="pt-2 flex justify-center gap-3">
-                        <Button
-                            onClick={() => setIsFinalizeDialogOpen(true)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shadow-xs"
-                        >
-                            <CheckCircle2 size={16} className="mr-2" /> Finalizar Separação do Pedido
-                        </Button>
-                    </div>
+                    {canPickOutbound && (
+                        <div className="pt-2 flex justify-center gap-3">
+                            <Button
+                                onClick={() => setIsFinalizeDialogOpen(true)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shadow-xs"
+                            >
+                                <CheckCircle2 size={16} className="mr-2" /> Finalizar Separação do Pedido
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -388,7 +446,7 @@ export default function OutboundPickingPage() {
                                     return (
                                         <div
                                             key={item.orderItemId}
-                                            onClick={() => setSelectedItemId(item.orderItemId)}
+                                            onClick={() => handleSelectPendingItem(item.orderItemId)}
                                             className={`p-3 rounded-xl border transition-all cursor-pointer ${isSelected
                                                 ? 'border-purple-500 bg-purple-50/60 ring-2 ring-purple-500/20 shadow-xs'
                                                 : 'border-slate-200 bg-white hover:bg-slate-50'
@@ -447,50 +505,52 @@ export default function OutboundPickingPage() {
                             </CardHeader>
 
                             <CardContent className="p-4 space-y-4">
-                                <form onSubmit={handleExecuteScan} className="bg-white p-4 rounded-xl border border-purple-200 shadow-2xs space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                                            <Barcode className="text-purple-600" size={16} /> Leitura da Etiqueta no Armazém
-                                        </span>
-                                        <span className="text-[10px] text-slate-400">Pressione Enter para confirmar</span>
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                                        <div className="sm:col-span-7 space-y-1">
-                                            <Label className="text-xs font-semibold text-slate-700">Código LPN da HU *</Label>
-                                            <Input
-                                                ref={lpnInputRef}
-                                                placeholder="Bipe ou digite o código da HU..."
-                                                value={scannedLpn}
-                                                onChange={(e) => setScannedLpn(e.target.value)}
-                                                autoFocus
-                                                className="bg-white font-mono text-sm h-11 border-purple-300 focus-visible:ring-purple-600"
-                                            />
+                                {canPickOutbound && (
+                                    <form onSubmit={handleExecuteScan} className="bg-white p-4 rounded-xl border border-purple-200 shadow-2xs space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                                <Barcode className="text-purple-600" size={16} /> Leitura da Etiqueta no Armazém
+                                            </span>
+                                            <span className="text-[10px] text-slate-400">Pressione Enter para confirmar</span>
                                         </div>
 
-                                        <div className="sm:col-span-3 space-y-1">
-                                            <Label className="text-xs font-semibold text-slate-700">Qtd ({activeItem.baseUnit}) *</Label>
-                                            <Input
-                                                type="number"
-                                                step="0.0001"
-                                                value={pickedQuantity}
-                                                onFocus={(e) => e.target.select()}
-                                                onChange={(e) => setPickedQuantity(e.target.value)}
-                                                className="bg-white font-mono text-sm h-11 text-center border-purple-300"
-                                            />
-                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                            <div className="sm:col-span-7 space-y-1">
+                                                <Label className="text-xs font-semibold text-slate-700">Código LPN da HU *</Label>
+                                                <Input
+                                                    ref={lpnInputRef}
+                                                    placeholder="Bipe ou digite o código da HU..."
+                                                    value={scannedLpn}
+                                                    onChange={(e) => setScannedLpn(e.target.value)}
+                                                    autoFocus
+                                                    className="bg-white font-mono text-sm h-11 border-purple-300 focus-visible:ring-purple-600"
+                                                />
+                                            </div>
 
-                                        <div className="sm:col-span-2 flex items-end">
-                                            <Button
-                                                type="submit"
-                                                disabled={isSubmitting || !scannedLpn.trim() || !pickedQuantity}
-                                                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11 shadow-xs"
-                                            >
-                                                {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Confirmar'}
-                                            </Button>
+                                            <div className="sm:col-span-3 space-y-1">
+                                                <Label className="text-xs font-semibold text-slate-700">Qtd ({activeItem.baseUnit}) *</Label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.0001"
+                                                    value={effectivePickedQuantity}
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => setCustomPickedQuantity(e.target.value)}
+                                                    className="bg-white font-mono text-sm h-11 text-center border-purple-300"
+                                                />
+                                            </div>
+
+                                            <div className="sm:col-span-2 flex items-end">
+                                                <Button
+                                                    type="submit"
+                                                    disabled={isSubmitting || !scannedLpn.trim() || !effectivePickedQuantity}
+                                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold h-11 shadow-xs"
+                                                >
+                                                    {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Confirmar'}
+                                                </Button>
+                                            </div>
                                         </div>
-                                    </div>
-                                </form>
+                                    </form>
+                                )}
 
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
@@ -550,15 +610,17 @@ export default function OutboundPickingPage() {
                                                             <strong className="text-sm text-slate-900">{hu.quantity} {activeItem.baseUnit}</strong>
                                                         </div>
 
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            onClick={() => handleQuickSelectHu(hu)}
-                                                            variant="outline"
-                                                            className="h-9 px-3 text-xs font-semibold border-purple-200 text-purple-700 hover:bg-purple-50"
-                                                        >
-                                                            <Barcode size={13} className="mr-1.5" /> Bipar esta HU
-                                                        </Button>
+                                                        {canPickOutbound && (
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                onClick={() => handleQuickSelectHu(hu)}
+                                                                variant="outline"
+                                                                className="h-9 px-3 text-xs font-semibold border-purple-200 text-purple-700 hover:bg-purple-50"
+                                                            >
+                                                                <Barcode size={13} className="mr-1.5" /> Bipar esta HU
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -578,13 +640,16 @@ export default function OutboundPickingPage() {
                         <h3 className="text-xs font-bold uppercase text-slate-700 flex items-center gap-1.5">
                             <CheckCircle2 size={15} className="text-emerald-600" /> SKUs Totalmente Separados ({completedItems.length})
                         </h3>
-                        <span className="text-[11px] text-slate-400 font-mono">Expanda para auditar ou estornar HUs</span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                            {canManageOutbound ? 'Expanda para auditar ou estornar HUs' : 'Expanda para auditar HUs coletadas'}
+                        </span>
                     </div>
 
                     <div className="space-y-2">
                         {completedItems.map((item) => {
                             const isExpanded = expandedCompletedIds.includes(item.orderItemId);
                             const itemPickedHus = item.allocations?.filter(a => a.isPicked) || [];
+                            const colSpanCount = canManageOutbound ? 7 : 6;
 
                             return (
                                 <Card key={item.orderItemId} className="border-emerald-200 bg-emerald-50/20 overflow-hidden shadow-2xs">
@@ -628,13 +693,13 @@ export default function OutboundPickingPage() {
                                                         <TableHead className="text-xs">Validade</TableHead>
                                                         <TableHead className="text-xs">Embalagem</TableHead>
                                                         <TableHead className="text-right text-xs">Quantidade</TableHead>
-                                                        <TableHead className="text-right text-xs">Ações</TableHead>
+                                                        {canManageOutbound && <TableHead className="text-right text-xs">Ações</TableHead>}
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {itemPickedHus.length === 0 ? (
                                                         <TableRow>
-                                                            <TableCell colSpan={7} className="text-center text-xs text-slate-400 italic">
+                                                            <TableCell colSpan={colSpanCount} className="text-center text-xs text-slate-400 italic">
                                                                 Sem registro de HUs vinculadas.
                                                             </TableCell>
                                                         </TableRow>
@@ -653,17 +718,19 @@ export default function OutboundPickingPage() {
                                                                 <TableCell className="text-right font-bold text-emerald-700">
                                                                     {hu.quantity} {item.baseUnit}
                                                                 </TableCell>
-                                                                <TableCell className="text-right">
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={() => setHuToUndo(hu)}
-                                                                        className="h-7 text-xs text-rose-600 hover:bg-rose-50"
-                                                                        title="Estornar separação desta HU"
-                                                                    >
-                                                                        <Undo2 size={13} className="mr-1" /> Estornar
-                                                                    </Button>
-                                                                </TableCell>
+                                                                {canManageOutbound && (
+                                                                    <TableCell className="text-right">
+                                                                        <Button
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={() => setHuToUndo(hu)}
+                                                                            className="h-7 text-xs text-rose-600 hover:bg-rose-50"
+                                                                            title="Estornar separação desta HU"
+                                                                        >
+                                                                            <Undo2 size={13} className="mr-1" /> Estornar
+                                                                        </Button>
+                                                                    </TableCell>
+                                                                )}
                                                             </TableRow>
                                                         ))
                                                     )}
@@ -679,93 +746,99 @@ export default function OutboundPickingPage() {
             )}
 
             {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO */}
-            <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-emerald-800">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Finalizar Separação do Pedido?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                Deseja confirmar a finalização física da separação da Ordem <strong className="text-slate-900 font-mono">#{orderData?.orderNumber}</strong>?
-                            </span>
-                            <p className="text-slate-500">
-                                O pedido avançará para a próxima etapa (Conferência se 100% volumes fechados, ou Embalagem/Packing se houver fracionamento).
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isFinalizing}>Revisar Mais</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmFinalize}
-                            disabled={isFinalizing}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                        >
-                            {isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Finalização
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canPickOutbound && (
+                <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-emerald-800">
+                                <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Finalizar Separação do Pedido?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                <span>
+                                    Deseja confirmar a finalização física da separação da Ordem <strong className="text-slate-900 font-mono">#{orderData?.orderNumber}</strong>?
+                                </span>
+                                <p className="text-slate-500">
+                                    O pedido avançará para a próxima etapa (Conferência se 100% volumes fechados, ou Embalagem/Packing se houver fracionamento).
+                                </p>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="pt-2">
+                            <AlertDialogCancel disabled={isFinalizing}>Revisar Mais</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmFinalize}
+                                disabled={isFinalizing}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            >
+                                {isFinalizing ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Finalização
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE ESTORNO DE HU INDIVIDUAL */}
-            <AlertDialog open={!!huToUndo} onOpenChange={(open) => !open && setHuToUndo(null)}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
-                            <Undo2 className="h-5 w-5 text-rose-600" /> Estornar HU Coletada?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                Deseja estornar a coleta da HU <strong className="text-slate-900 font-mono">{huToUndo?.lpn}</strong> ({huToUndo?.quantity} un)?
-                            </span>
-                            <p className="text-slate-500">
-                                A etiqueta será devolvida para as sugestões pendentes deste SKU e liberada no armazém.
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isUndoingHu}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmUndoHu}
-                            disabled={isUndoingHu}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isUndoingHu ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Estorno
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageOutbound && (
+                <AlertDialog open={!!huToUndo} onOpenChange={(open) => !open && setHuToUndo(null)}>
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
+                                <Undo2 className="h-5 w-5 text-rose-600" /> Estornar HU Coletada?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                <span>
+                                    Deseja estornar a coleta da HU <strong className="text-slate-900 font-mono">{huToUndo?.lpn}</strong> ({huToUndo?.quantity} un)?
+                                </span>
+                                <p className="text-slate-500">
+                                    A etiqueta será devolvida para as sugestões pendentes deste SKU e liberada no armazém.
+                                </p>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="pt-2">
+                            <AlertDialogCancel disabled={isUndoingHu}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmUndoHu}
+                                disabled={isUndoingHu}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isUndoingHu ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Estorno
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE RESET GERAL */}
-            <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
-                            <RotateCcw className="h-5 w-5 text-rose-600" /> Reiniciar Separação Completa?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                Deseja cancelar todas as coletas já feitas para a Ordem <strong className="text-slate-900 font-mono">#{orderData?.orderNumber}</strong>?
-                            </span>
-                            <p className="text-slate-500">
-                                Todas as HUs recolhidas retornarão ao estado inicial de reserva (Alocado).
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmReset}
-                            disabled={isSubmitting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            Confirmar Reinício
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageOutbound && (
+                <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
+                                <RotateCcw className="h-5 w-5 text-rose-600" /> Reiniciar Separação Completa?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                <span>
+                                    Deseja cancelar todas as coletas já feitas para a Ordem <strong className="text-slate-900 font-mono">#{orderData?.orderNumber}</strong>?
+                                </span>
+                                <p className="text-slate-500">
+                                    Todas as HUs recolhidas retornarão ao estado inicial de reserva (Alocado).
+                                </p>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="pt-2">
+                            <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmReset}
+                                disabled={isSubmitting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                Confirmar Reinício
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

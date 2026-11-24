@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,11 +20,26 @@ import ImportXmlModal from './ImportXmlModal';
 export default function OutboundListPage() {
     const navigate = useNavigate();
 
+    const canViewOutbound = useHasPermission('outbound:view');
+    const canCreateOutbound = useHasPermission('outbound:create');
+    const canImportOutbound = useHasPermission('outbound:import');
+    const canEditOutbound = useHasPermission('outbound:edit');
+    const canCancelOutbound = useHasPermission('outbound:cancel');
+    const canAllocateOutbound = useHasPermission('outbound:allocate');
+    const canPickOutbound = useHasPermission('outbound:pick');
+    const canPackOutbound = useHasPermission('packing:manage');
+    const canCheckOutbound = useHasPermission('outbound:check');
+    const canShipOrEmitOutbound = useHasPermission(['outbound:ship', 'fiscal:emit']);
+    const canManageOutbound = useHasPermission('outbound:manage');
+    const canViewCustomers = useHasPermission('customers:view');
+
     const [search, setSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
     const [customerFilter, setCustomerFilter] = useState('ALL');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [dateRange, setDateRange] = useState(undefined);
     const [page, setPage] = useState(1);
+    const [refreshTick, setRefreshTick] = useState(0);
     const PAGE_SIZE = 20;
 
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -35,75 +51,108 @@ export default function OutboundListPage() {
     const [orders, setOrders] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(canViewOutbound);
 
-    useEffect(() => {
-        customInstance({ url: '/api/customers/summary', method: 'GET' })
-            .then(res => setCustomers(res || []))
-            .catch(() => toast.error('Erro ao carregar depositantes.'));
-    }, []);
-
-    // Converte as datas selecionadas para o dia civil completo em formato UTC
-    const formattedStartDate = useMemo(() => {
-        if (!dateRange?.from) return undefined;
-        const fromDate = new Date(dateRange.from);
-        fromDate.setHours(0, 0, 0, 0);
-        return fromDate.toISOString();
-    }, [dateRange?.from]);
-
-    const formattedEndDate = useMemo(() => {
-        if (!dateRange?.from) return undefined;
-        const toDate = new Date(dateRange.to || dateRange.from);
-        toDate.setHours(23, 59, 59, 999);
-        return toDate.toISOString();
-    }, [dateRange]);
-
-    const loadOrders = async () => {
-        try {
-            setIsLoading(true);
-            const params = new URLSearchParams();
-            params.append('Page', page);
-            params.append('PageSize', PAGE_SIZE);
-            if (customerFilter !== 'ALL') params.append('CustomerId', customerFilter);
-            if (statusFilter !== 'ALL') params.append('Status', statusFilter);
-            if (search.trim()) params.append('Search', search.trim());
-            if (formattedStartDate) params.append('StartDate', formattedStartDate);
-            if (formattedEndDate) params.append('EndDate', formattedEndDate);
-
-            const res = await customInstance({
-                url: `/api/outbound/orders?${params.toString()}`,
-                method: 'GET'
-            });
-
-            const data = res?.data || res;
-            setOrders(data?.items || []);
-            setTotalCount(data?.totalCount || 0);
-        } catch {
-            toast.error('Erro ao carregar pedidos de saída.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!canViewOutbound) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        loadOrders();
-    }, [
-	page,
-	customerFilter,
-	statusFilter,
-	dateRange,
-	
-]);
+        if (!canViewCustomers) return;
+        let isMounted = true;
+        customInstance({ url: '/api/customers/summary', method: 'GET' })
+            .then(res => { if (isMounted) setCustomers(res || []); })
+            .catch(() => { if (isMounted) toast.error('Erro ao carregar depositantes.'); });
+        return () => { isMounted = false; };
+    }, [canViewCustomers]);
+
+    useEffect(() => {
+        if (!canViewOutbound) return;
+
+        let isMounted = true;
+        const params = new URLSearchParams();
+        params.append('Page', String(page));
+        params.append('PageSize', String(PAGE_SIZE));
+        if (customerFilter !== 'ALL') params.append('CustomerId', customerFilter);
+        if (statusFilter !== 'ALL') params.append('Status', statusFilter);
+        if (appliedSearch.trim()) params.append('Search', appliedSearch.trim());
+
+        if (dateRange?.from) {
+            const fromDate = new Date(dateRange.from);
+            fromDate.setHours(0, 0, 0, 0);
+            params.append('StartDate', fromDate.toISOString());
+
+            const toDate = new Date(dateRange.to || dateRange.from);
+            toDate.setHours(23, 59, 59, 999);
+            params.append('EndDate', toDate.toISOString());
+        }
+
+        customInstance({
+            url: `/api/outbound/orders?${params.toString()}`,
+            method: 'GET'
+        })
+            .then(res => {
+                if (!isMounted) return;
+                const data = res?.data || res;
+                setOrders(data?.items || []);
+                setTotalCount(data?.totalCount || 0);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar pedidos de saída.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [page, customerFilter, statusFilter, appliedSearch, dateRange, canViewOutbound, refreshTick]);
+
+    const handleSearchChange = (value) => {
+        setSearch(value);
+        setAppliedSearch(value);
+        setPage(1);
+        setIsLoading(true);
+    };
+
+    const handleCustomerChange = (value) => {
+        setCustomerFilter(value);
+        setPage(1);
+        setIsLoading(true);
+    };
+
+    const handleStatusChange = (value) => {
+        setStatusFilter(value);
+        setPage(1);
+        setIsLoading(true);
+    };
+
+    const handleDateRangeChange = (range) => {
+        setDateRange(range);
+        setPage(1);
+        setIsLoading(true);
+    };
+
+    const handlePageChange = (newPage) => {
+        setPage(newPage);
+        setIsLoading(true);
+    };
 
     const handleClearFilters = () => {
         setSearch('');
+        setAppliedSearch('');
         setCustomerFilter('ALL');
         setStatusFilter('ALL');
         setDateRange(undefined);
         setPage(1);
+        setIsLoading(true);
     };
 
     const handleAllocateOrder = async (orderId) => {
+        if (!canAllocateOutbound) return;
         try {
             setIsLoading(true);
             const res = await customInstance({
@@ -111,7 +160,7 @@ export default function OutboundListPage() {
                 method: 'POST'
             });
             toast.success(res?.message || 'Stock alocado com sucesso!');
-            loadOrders();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao alocar stock.');
             setIsLoading(false);
@@ -119,7 +168,7 @@ export default function OutboundListPage() {
     };
 
     const handleRevertShipment = async () => {
-        if (!orderToRevert) return;
+        if (!orderToRevert || !canManageOutbound) return;
         try {
             setIsLoading(true);
             const res = await customInstance({
@@ -129,7 +178,7 @@ export default function OutboundListPage() {
             const data = res?.data || res;
             toast.success(data?.message || 'Expedição estornada com sucesso! O stock foi restaurado.');
             setOrderToRevert(null);
-            loadOrders();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || error.message || 'Erro ao estornar expedição.');
             setIsLoading(false);
@@ -137,7 +186,7 @@ export default function OutboundListPage() {
     };
 
     const handleCancelOrder = async () => {
-        if (!orderToCancel || cancelReason.trim().length < 15) {
+        if (!orderToCancel || !canCancelOutbound || cancelReason.trim().length < 15) {
             return toast.warning('O motivo do cancelamento deve conter no mínimo 15 caracteres.');
         }
         try {
@@ -151,7 +200,7 @@ export default function OutboundListPage() {
             toast.success(data?.message || 'Pedido de saída cancelado com sucesso.');
             setOrderToCancel(null);
             setCancelReason('');
-            loadOrders();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao cancelar pedido.');
             setIsLoading(false);
@@ -159,7 +208,7 @@ export default function OutboundListPage() {
     };
 
     const handleDeleteOrder = async () => {
-        if (!orderToDelete) return;
+        if (!orderToDelete || !canManageOutbound) return;
         try {
             setIsLoading(true);
             const res = await customInstance({
@@ -169,7 +218,7 @@ export default function OutboundListPage() {
             const data = res?.data || res;
             toast.success(data?.message || 'Ordem de saída excluída permanentemente.');
             setOrderToDelete(null);
-            loadOrders();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir ordem de saída.');
             setIsLoading(false);
@@ -211,19 +260,23 @@ export default function OutboundListPage() {
                     <p className="text-sm text-slate-500 mt-1">Gestão de ordens de saída, alocação de stock, separação, conferência e expedição.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button
-                        onClick={() => navigate('/outbound/novo')}
-                        variant="outline"
-                        className="border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-medium"
-                    >
-                        <Plus className="mr-2 h-4 w-4 text-orange-600" /> Nova Ordem Manual
-                    </Button>
-                    <Button
-                        onClick={() => setIsImportModalOpen(true)}
-                        className="bg-orange-600 hover:bg-orange-700 text-white shadow-xs font-bold"
-                    >
-                        <Upload className="mr-2 h-4 w-4" /> Importar XML NF-e
-                    </Button>
+                    {canCreateOutbound && (
+                        <Button
+                            onClick={() => navigate('/outbound/novo')}
+                            variant="outline"
+                            className="border-orange-200 text-orange-800 bg-orange-50 hover:bg-orange-100 font-medium"
+                        >
+                            <Plus className="mr-2 h-4 w-4 text-orange-600" /> Nova Ordem Manual
+                        </Button>
+                    )}
+                    {canImportOutbound && (
+                        <Button
+                            onClick={() => setIsImportModalOpen(true)}
+                            className="bg-orange-600 hover:bg-orange-700 text-white shadow-xs font-bold"
+                        >
+                            <Upload className="mr-2 h-4 w-4" /> Importar XML NF-e
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -235,28 +288,30 @@ export default function OutboundListPage() {
                         <Input
                             placeholder="Buscar por Pedido, Cliente ou Destinatário..."
                             value={search}
-                            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            onKeyDown={(e) => e.key === 'Enter' && loadOrders()}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && triggerReload()}
                             className="pl-9 bg-white border-slate-200 text-xs h-9"
                         />
                     </div>
 
-                    <div className="w-[190px]">
-                        <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v); setPage(1); }}>
-                            <SelectTrigger className="bg-white text-xs h-9 border-slate-200">
-                                <SelectValue placeholder="Depositante" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="ALL">Todos os Depositantes</SelectItem>
-                                {customers.map(c => (
-                                    <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    {canViewCustomers && customers.length > 1 && (
+                        <div className="w-[190px]">
+                            <Select value={customerFilter} onValueChange={handleCustomerChange}>
+                                <SelectTrigger className="bg-white text-xs h-9 border-slate-200">
+                                    <SelectValue placeholder="Depositante" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="ALL">Todos os Depositantes</SelectItem>
+                                    {customers.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
 
                     <div className="w-[170px]">
-                        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+                        <Select value={statusFilter} onValueChange={handleStatusChange}>
                             <SelectTrigger className="bg-white text-xs h-9 border-slate-200">
                                 <SelectValue placeholder="Status" />
                             </SelectTrigger>
@@ -277,7 +332,7 @@ export default function OutboundListPage() {
                     <div className="min-w-[250px]">
                         <DateRangePicker
                             date={dateRange}
-                            setDate={(range) => { setDateRange(range); setPage(1); }}
+                            setDate={handleDateRangeChange}
                             className="w-full"
                         />
                     </div>
@@ -315,9 +370,9 @@ export default function OutboundListPage() {
                             ) : orders.length === 0 ? (
                                 <TableRow><TableCell colSpan={8} className="h-28 text-center text-slate-500">Nenhum pedido de saída encontrado.</TableCell></TableRow>
                             ) : orders.map((order) => {
-                                const canRevert = order.status === 'Shipped' && !order.hasActiveFiscalDocuments;
-                                const canCancel = order.status !== 'Shipped' && order.status !== 'Canceled' && !order.hasActiveFiscalDocuments;
-                                const canDelete = order.status === 'Canceled' && !order.hasFiscalDocuments;
+                                const canRevert = canManageOutbound && order.status === 'Shipped' && !order.hasActiveFiscalDocuments;
+                                const canCancel = canCancelOutbound && order.status !== 'Shipped' && order.status !== 'Canceled' && !order.hasActiveFiscalDocuments;
+                                const canDelete = canManageOutbound && order.status === 'Canceled' && !order.hasFiscalDocuments;
 
                                 return (
                                     <TableRow key={order.id} className="hover:bg-slate-50/50 transition-colors">
@@ -358,7 +413,7 @@ export default function OutboundListPage() {
                                         </TableCell>
                                         <TableCell className="text-right space-x-1">
                                             {/* Edição do cabeçalho */}
-                                            {['Pending', 'Allocating', 'Allocated'].includes(order.status) && (
+                                            {canEditOutbound && ['Pending', 'Allocating', 'Allocated'].includes(order.status) && (
                                                 <Button
                                                     size="sm"
                                                     variant="outline"
@@ -370,7 +425,7 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {order.status === 'Pending' && (
+                                            {canAllocateOutbound && order.status === 'Pending' && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => handleAllocateOrder(order.id)}
@@ -380,8 +435,8 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {/* SEPARAÇÃO: Disponível em Allocated, Picking OU Checking (enquanto a separação não estiver finalizada) */}
-                                            {(order.status === 'Allocated' || order.status === 'Picking' || (order.status === 'Checking' && order.items?.some(i => i.pickedQuantity < i.expectedQuantity))) && (
+                                            {/* SEPARAÇÃO */}
+                                            {canPickOutbound && (order.status === 'Allocated' || order.status === 'Picking' || (order.status === 'Checking' && order.items?.some(i => i.pickedQuantity < i.expectedQuantity))) && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => navigate(`/outbound/picking/${order.id}`)}
@@ -392,7 +447,7 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {order.status === 'Packing' && (
+                                            {canPackOutbound && order.status === 'Packing' && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => navigate(`/outbound/packing/${order.id}`)}
@@ -402,8 +457,8 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {/* CONFERÊNCIA: Disponível quando em Checking OU em Picking de volumes fechados (Cross-docking) */}
-                                            {(order.status === 'Checking' || (order.status === 'Picking' && !order.hasFractional)) && (
+                                            {/* CONFERÊNCIA */}
+                                            {canCheckOutbound && (order.status === 'Checking' || (order.status === 'Picking' && !order.hasFractional)) && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => navigate(`/outbound/conferencia/${order.id}`)}
@@ -414,7 +469,7 @@ export default function OutboundListPage() {
                                                 </Button>
                                             )}
 
-                                            {order.status === 'ReadyToShip' && (
+                                            {canShipOrEmitOutbound && order.status === 'ReadyToShip' && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => navigate(`/outbound/revisao-fiscal/${order.id}`)}
@@ -483,116 +538,128 @@ export default function OutboundListPage() {
                             A mostrar {(page - 1) * PAGE_SIZE + 1} a {Math.min(page * PAGE_SIZE, totalCount)} de {totalCount} pedidos
                         </span>
                         <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-7 text-xs bg-white">Anterior</Button>
-                            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages || totalPages === 0} className="h-7 text-xs bg-white">Próxima</Button>
+                            <Button variant="outline" size="sm" onClick={() => handlePageChange(Math.max(1, page - 1))} disabled={page === 1} className="h-7 text-xs bg-white">Anterior</Button>
+                            <Button variant="outline" size="sm" onClick={() => handlePageChange(Math.min(totalPages, page + 1))} disabled={page === totalPages || totalPages === 0} className="h-7 text-xs bg-white">Próxima</Button>
                         </div>
                     </div>
                 )}
             </div>
 
-            <ImportXmlModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+            {canImportOutbound && (
+                <ImportXmlModal
+                    open={isImportModalOpen}
+                    onOpenChange={setIsImportModalOpen}
+                    onSuccess={triggerReload}
+                />
+            )}
 
             {/* DIÁLOGO ESTORNO DE EXPEDIÇÃO */}
-            <AlertDialog open={!!orderToRevert} onOpenChange={(open) => !open && setOrderToRevert(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Estornar Expedição do Pedido?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Deseja estornar a expedição do pedido <strong className="text-slate-800">#{orderToRevert?.orderNumber}</strong>?
-                            <br /><br />
-                            Esta ação irá devolver os saldos consumidos para as Unidades Logísticas (HUs), registar a compensação no Kardex e retornar a ordem para <strong>Pronto para Expedir (ReadyToShip)</strong>.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isLoading}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleRevertShipment} disabled={isLoading} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
-                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Estorno'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageOutbound && (
+                <AlertDialog open={!!orderToRevert} onOpenChange={(open) => !open && setOrderToRevert(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Estornar Expedição do Pedido?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Deseja estornar a expedição do pedido <strong className="text-slate-800">#{orderToRevert?.orderNumber}</strong>?
+                                <br /><br />
+                                Esta ação irá devolver os saldos consumidos para as Unidades Logísticas (HUs), registar a compensação no Kardex e retornar a ordem para <strong>Pronto para Expedir (ReadyToShip)</strong>.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isLoading}>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleRevertShipment} disabled={isLoading} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Estorno'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* DIÁLOGO CANCELAMENTO COM MOTIVO OBRIGATÓRIO */}
-            <AlertDialog
-                open={!!orderToCancel}
-                onOpenChange={(open) => {
-                    if (!open && !isLoading) {
-                        setOrderToCancel(null);
-                        setCancelReason('');
-                    }
-                }}
-            >
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
-                            <Ban className="h-5 w-5 text-amber-600" /> Cancelar Pedido de Saída?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-500 space-y-2">
-                            <span>
-                                Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{orderToCancel?.orderNumber}</strong>? Todas as reservas de estoque e alocações de coletor serão canceladas.
-                            </span>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
+            {canCancelOutbound && (
+                <AlertDialog
+                    open={!!orderToCancel}
+                    onOpenChange={(open) => {
+                        if (!open && !isLoading) {
+                            setOrderToCancel(null);
+                            setCancelReason('');
+                        }
+                    }}
+                >
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+                                <Ban className="h-5 w-5 text-amber-600" /> Cancelar Pedido de Saída?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-500 space-y-2">
+                                <span>
+                                    Deseja cancelar o pedido <strong className="text-slate-800 font-mono">#{orderToCancel?.orderNumber}</strong>? Todas as reservas de estoque e alocações de coletor serão canceladas.
+                                </span>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
 
-                    <div className="space-y-1.5 py-2">
-                        <label className="text-xs font-bold text-slate-700 uppercase">
-                            Motivo do Cancelamento <span className="text-rose-500">*</span>
-                        </label>
-                        <textarea
-                            rows={3}
-                            placeholder="Ex: Cancelado a pedido do cliente via chamado #1234 devido a duplicidade..."
-                            value={cancelReason}
-                            onChange={(e) => setCancelReason(e.target.value)}
-                            disabled={isLoading}
-                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
-                        />
-                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                            <span>Mínimo 15 caracteres</span>
-                            <span className={cancelReason.trim().length >= 15 ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
-                                {cancelReason.trim().length}/15
-                            </span>
+                        <div className="space-y-1.5 py-2">
+                            <label className="text-xs font-bold text-slate-700 uppercase">
+                                Motivo do Cancelamento <span className="text-rose-500">*</span>
+                            </label>
+                            <textarea
+                                rows={3}
+                                placeholder="Ex: Cancelado a pedido do cliente via chamado #1234 devido a duplicidade..."
+                                value={cancelReason}
+                                onChange={(e) => setCancelReason(e.target.value)}
+                                disabled={isLoading}
+                                className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-sans"
+                            />
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                                <span>Mínimo 15 caracteres</span>
+                                <span className={cancelReason.trim().length >= 15 ? 'text-emerald-600 font-bold' : 'text-amber-600'}>
+                                    {cancelReason.trim().length}/15
+                                </span>
+                            </div>
                         </div>
-                    </div>
 
-                    <AlertDialogFooter>
-                        <AlertDialogCancel
-                            disabled={isLoading}
-                            onClick={() => {
-                                setOrderToCancel(null);
-                                setCancelReason('');
-                            }}
-                        >
-                            Voltar
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleCancelOrder}
-                            disabled={isLoading || cancelReason.trim().length < 15}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
-                        >
-                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Cancelamento
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel
+                                disabled={isLoading}
+                                onClick={() => {
+                                    setOrderToCancel(null);
+                                    setCancelReason('');
+                                }}
+                            >
+                                Voltar
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleCancelOrder}
+                                disabled={isLoading || cancelReason.trim().length < 15}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold disabled:opacity-50"
+                            >
+                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Cancelamento
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* DIÁLOGO EXCLUSÃO */}
-            <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Tem a certeza de que deseja excluir definitivamente a ordem <strong className="text-slate-800">#{orderToDelete?.orderNumber}</strong>? Esta ação removerá o registo do sistema de forma permanente.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteOrder} disabled={isLoading} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
-                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir Definitivamente'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageOutbound && (
+                <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Ordem de Saída?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Tem a certeza de que deseja excluir definitivamente a ordem <strong className="text-slate-800">#{orderToDelete?.orderNumber}</strong>? Esta ação removerá o registo do sistema de forma permanente.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDeleteOrder} disabled={isLoading} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
+                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Excluir Definitivamente'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

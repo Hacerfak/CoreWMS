@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     useGetApiOutboundCheckingOrderIdTasks,
     usePostApiOutboundCheckingScan,
@@ -38,6 +39,10 @@ export default function OutboundCheckingPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const canCheckOutbound = useHasPermission('outbound:check');
+    const canManageOutbound = useHasPermission('outbound:manage');
+    const canShipOrEmitOutbound = useHasPermission(['outbound:ship', 'fiscal:emit']);
+
     // Dados complementares da ordem e docas
     const [orderDetails, setOrderDetails] = useState(null);
     const [docks, setDocks] = useState([]);
@@ -55,18 +60,21 @@ export default function OutboundCheckingPage() {
 
     // 1. Consulta em tempo real das tarefas e baldes de conferência
     const { data: checkingData, isLoading: isLoadingTasks } = useGetApiOutboundCheckingOrderIdTasks(orderId, {
-        query: { enabled: !!orderId, refetchInterval: 4000 }
+        query: { enabled: Boolean(orderId && canCheckOutbound), refetchInterval: 4000 }
     });
 
     // 2. Carrega docas disponíveis da topologia e dados mestres da ordem
     useEffect(() => {
-        if (!orderId) return;
+        if (!orderId || !canCheckOutbound) return;
+
+        let isMounted = true;
 
         Promise.all([
             customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' }),
             customInstance({ url: '/api/topology/locations/docks', method: 'GET' })
         ])
             .then(([orderRes, docksRes]) => {
+                if (!isMounted) return;
                 const orderData = orderRes?.data || orderRes;
                 setOrderDetails(orderData);
 
@@ -77,8 +85,14 @@ export default function OutboundCheckingPage() {
                     setSelectedDockId(orderData.dockLocationId);
                 }
             })
-            .catch(() => toast.error('Erro ao carregar docas ou detalhes do pedido.'));
-    }, [orderId]);
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar docas ou detalhes do pedido.');
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canCheckOutbound]);
 
     // 3. Mutações
     const { mutate: executeScan, isPending: isScanning } = usePostApiOutboundCheckingScan({
@@ -115,6 +129,8 @@ export default function OutboundCheckingPage() {
 
     // FINALIZAÇÃO MANUAL DA CONFERÊNCIA
     const handleConfirmFinalizeChecking = async () => {
+        if (!canCheckOutbound) return;
+
         try {
             setIsFinalizingChecking(true);
             const res = await customInstance({
@@ -125,7 +141,7 @@ export default function OutboundCheckingPage() {
 
             toast.success(res?.message || 'Conferência finalizada com 0% de divergência! Pedido liberado para expedição.');
             setIsFinalizeDialogOpen(false);
-            navigate(`/outbound/revisao-fiscal/${orderId}`);
+            navigate(canShipOrEmitOutbound ? `/outbound/revisao-fiscal/${orderId}` : '/outbound');
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao finalizar conferência.');
         } finally {
@@ -138,13 +154,15 @@ export default function OutboundCheckingPage() {
 
     // Foco automático no leitor ao carregar e após seleções
     useEffect(() => {
-        if (selectedDockId && !isParallelCheckingBlocked && inputRef.current) {
+        if (selectedDockId && !isParallelCheckingBlocked && canCheckOutbound && inputRef.current) {
             inputRef.current.focus();
         }
-    }, [selectedDockId, isParallelCheckingBlocked, isLoadingTasks]);
+    }, [selectedDockId, isParallelCheckingBlocked, canCheckOutbound, isLoadingTasks]);
 
     // Grava a doca de embarque se ainda não estiver vinculada
     const handleAssignDock = async (dockId) => {
+        if (!canCheckOutbound) return;
+
         setSelectedDockId(dockId);
         try {
             setIsSavingDock(true);
@@ -165,6 +183,7 @@ export default function OutboundCheckingPage() {
 
     const handleScanSubmit = (e) => {
         e.preventDefault();
+        if (!canCheckOutbound) return;
 
         if (isParallelCheckingBlocked) {
             return toast.error('Conferência bloqueada: este pedido possui itens fracionados aguardando a conclusão do packing.');
@@ -231,16 +250,18 @@ export default function OutboundCheckingPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <Button
-                        variant="outline"
-                        onClick={() => setIsResetDialogOpen(true)}
-                        disabled={isResetting || checkingData?.totalChecked === 0}
-                        className="border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 text-xs h-9"
-                    >
-                        <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-400" /> Reinicializar Conferência
-                    </Button>
+                    {canManageOutbound && (
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsResetDialogOpen(true)}
+                            disabled={isResetting || checkingData?.totalChecked === 0}
+                            className="border-slate-200 text-slate-600 hover:text-rose-600 hover:bg-rose-50 text-xs h-9"
+                        >
+                            <RotateCcw className="h-3.5 w-3.5 mr-1 text-slate-400" /> Reinicializar Conferência
+                        </Button>
+                    )}
 
-                    {isFullyChecked && !isAlreadyReadyToShip && (
+                    {canCheckOutbound && isFullyChecked && !isAlreadyReadyToShip && (
                         <Button
                             onClick={() => setIsFinalizeDialogOpen(true)}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs"
@@ -249,7 +270,7 @@ export default function OutboundCheckingPage() {
                         </Button>
                     )}
 
-                    {isAlreadyReadyToShip && (
+                    {isAlreadyReadyToShip && canShipOrEmitOutbound && (
                         <Button
                             onClick={() => navigate(`/outbound/revisao-fiscal/${orderId}`)}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shadow-xs"
@@ -311,7 +332,7 @@ export default function OutboundCheckingPage() {
                         <Select
                             value={selectedDockId}
                             onValueChange={handleAssignDock}
-                            disabled={isSavingDock}
+                            disabled={isSavingDock || !canCheckOutbound}
                         >
                             <SelectTrigger className={`h-10 text-xs bg-white font-mono font-bold ${!selectedDockId ? 'border-amber-400 focus:ring-amber-400' : 'border-slate-300'}`}>
                                 <SelectValue placeholder="Selecione a Doca de Saída..." />
@@ -369,7 +390,7 @@ export default function OutboundCheckingPage() {
             </div>
 
             {/* BANNER 100% CONFERIDO */}
-            {isFullyChecked && !isAlreadyReadyToShip && (
+            {canCheckOutbound && isFullyChecked && !isAlreadyReadyToShip && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-emerald-900 shadow-2xs">
                     <div className="flex items-center gap-3">
                         <CheckCircle2 size={24} className="text-emerald-600 shrink-0" />
@@ -390,72 +411,74 @@ export default function OutboundCheckingPage() {
             {/* ÁREA DE LEITURA (SCANNER) + ITENS */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                 <div className="lg:col-span-7 space-y-4">
-                    <Card className="border-teal-200 bg-white shadow-xs">
-                        <CardHeader className="p-3 border-b bg-teal-50/50 flex flex-row items-center justify-between">
-                            <CardTitle className="text-xs uppercase font-bold text-teal-900 flex items-center gap-1.5">
-                                <Barcode size={16} className="text-teal-600" /> Leitura / Bipagem de Volumes e Peças
-                            </CardTitle>
-                            <span className="text-[10px] text-slate-400 font-mono">LPN / Volume / SKU</span>
-                        </CardHeader>
-                        <CardContent className="p-4 space-y-3">
-                            {!selectedDockId ? (
-                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center gap-2">
-                                    <AlertCircle size={16} className="text-amber-600 shrink-0" />
-                                    <span>Selecione a doca no painel acima para habilitar o leitor de conferência.</span>
-                                </div>
-                            ) : isParallelCheckingBlocked ? (
-                                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center gap-2">
-                                    <Lock size={16} className="text-amber-600 shrink-0" />
-                                    <span>Leitor bloqueado: conclua o packing dos itens fracionados para liberar a conferência.</span>
-                                </div>
-                            ) : null}
-
-                            <form onSubmit={handleScanSubmit} className="space-y-3">
-                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                                    <div className="sm:col-span-8 space-y-1">
-                                        <Label className="text-xs font-semibold text-slate-700">Código de Barras / LPN / Volume *</Label>
-                                        <Input
-                                            ref={inputRef}
-                                            placeholder={
-                                                isParallelCheckingBlocked
-                                                    ? "Conferência bloqueada até o fim do packing..."
-                                                    : !selectedDockId
-                                                        ? "Aguardando seleção de doca..."
-                                                        : "Bipe o LPN da HU, Volume VOL-... ou Código do SKU..."
-                                            }
-                                            value={scannedCode}
-                                            onChange={(e) => setScannedCode(e.target.value)}
-                                            disabled={isScanning || isFullyChecked || !selectedDockId || isParallelCheckingBlocked}
-                                            autoFocus={!!selectedDockId && !isParallelCheckingBlocked}
-                                            className="bg-white font-mono text-sm h-11 border-teal-300 focus-visible:ring-teal-500 font-bold disabled:bg-slate-50 disabled:text-slate-400"
-                                        />
+                    {canCheckOutbound && (
+                        <Card className="border-teal-200 bg-white shadow-xs">
+                            <CardHeader className="p-3 border-b bg-teal-50/50 flex flex-row items-center justify-between">
+                                <CardTitle className="text-xs uppercase font-bold text-teal-900 flex items-center gap-1.5">
+                                    <Barcode size={16} className="text-teal-600" /> Leitura / Bipagem de Volumes e Peças
+                                </CardTitle>
+                                <span className="text-[10px] text-slate-400 font-mono">LPN / Volume / SKU</span>
+                            </CardHeader>
+                            <CardContent className="p-4 space-y-3">
+                                {!selectedDockId ? (
+                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center gap-2">
+                                        <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                                        <span>Selecione a doca no painel acima para habilitar o leitor de conferência.</span>
                                     </div>
+                                ) : isParallelCheckingBlocked ? (
+                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center gap-2">
+                                        <Lock size={16} className="text-amber-600 shrink-0" />
+                                        <span>Leitor bloqueado: conclua o packing dos itens fracionados para liberar a conferência.</span>
+                                    </div>
+                                ) : null}
 
-                                    <div className="sm:col-span-4 space-y-1">
-                                        <Label className="text-xs font-semibold text-slate-700">Qtd (Avulsos)</Label>
-                                        <div className="flex gap-2">
+                                <form onSubmit={handleScanSubmit} className="space-y-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                        <div className="sm:col-span-8 space-y-1">
+                                            <Label className="text-xs font-semibold text-slate-700">Código de Barras / LPN / Volume *</Label>
                                             <Input
-                                                type="number"
-                                                step="0.0001"
-                                                value={scanQuantity}
-                                                onFocus={(e) => e.target.select()}
-                                                onChange={(e) => setScanQuantity(e.target.value)}
+                                                ref={inputRef}
+                                                placeholder={
+                                                    isParallelCheckingBlocked
+                                                        ? 'Conferência bloqueada até o fim do packing...'
+                                                        : !selectedDockId
+                                                            ? 'Aguardando seleção de doca...'
+                                                            : 'Bipe o LPN da HU, Volume VOL-... ou Código do SKU...'
+                                                }
+                                                value={scannedCode}
+                                                onChange={(e) => setScannedCode(e.target.value)}
                                                 disabled={isScanning || isFullyChecked || !selectedDockId || isParallelCheckingBlocked}
-                                                className="bg-white font-mono text-sm h-11 text-center border-teal-300 w-24 disabled:bg-slate-50 disabled:text-slate-400"
+                                                autoFocus={Boolean(selectedDockId && !isParallelCheckingBlocked)}
+                                                className="bg-white font-mono text-sm h-11 border-teal-300 focus-visible:ring-teal-500 font-bold disabled:bg-slate-50 disabled:text-slate-400"
                                             />
-                                            <Button
-                                                type="submit"
-                                                disabled={isScanning || !scannedCode.trim() || isFullyChecked || !selectedDockId || isParallelCheckingBlocked}
-                                                className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-11 flex-1 shadow-xs"
-                                            >
-                                                {isScanning ? <Loader2 size={16} className="animate-spin" /> : 'Conferir'}
-                                            </Button>
+                                        </div>
+
+                                        <div className="sm:col-span-4 space-y-1">
+                                            <Label className="text-xs font-semibold text-slate-700">Qtd (Avulsos)</Label>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    type="number"
+                                                    step="0.0001"
+                                                    value={scanQuantity}
+                                                    onFocus={(e) => e.target.select()}
+                                                    onChange={(e) => setScanQuantity(e.target.value)}
+                                                    disabled={isScanning || isFullyChecked || !selectedDockId || isParallelCheckingBlocked}
+                                                    className="bg-white font-mono text-sm h-11 text-center border-teal-300 w-24 disabled:bg-slate-50 disabled:text-slate-400"
+                                                />
+                                                <Button
+                                                    type="submit"
+                                                    disabled={isScanning || !scannedCode.trim() || isFullyChecked || !selectedDockId || isParallelCheckingBlocked}
+                                                    className="bg-teal-600 hover:bg-teal-700 text-white font-bold h-11 flex-1 shadow-xs"
+                                                >
+                                                    {isScanning ? <Loader2 size={16} className="animate-spin" /> : 'Conferir'}
+                                                </Button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </form>
-                        </CardContent>
-                    </Card>
+                                </form>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     {/* TABELA DE ITENS (SKUs) */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
@@ -586,64 +609,68 @@ export default function OutboundCheckingPage() {
             </div>
 
             {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO DA CONFERÊNCIA */}
-            <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-emerald-800">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Liberar Expedição do Pedido?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                A carga da Ordem <strong className="text-slate-900 font-mono">#{checkingData?.orderNumber}</strong> foi 100% conferida contra os volumes e pedidos com <strong>0% de divergência</strong>.
-                            </span>
-                            <p className="text-slate-500">
-                                Ao confirmar, o status será alterado para <strong>ReadyToShip (Pronto para Expedir)</strong> e o veículo de transporte será posicionado na doca no módulo de Portaria.
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isFinalizingChecking}>Revisar Mais</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmFinalizeChecking}
-                            disabled={isFinalizingChecking}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                        >
-                            {isFinalizingChecking ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar e Liberar
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canCheckOutbound && (
+                <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-emerald-800">
+                                <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Liberar Expedição do Pedido?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                <span>
+                                    A carga da Ordem <strong className="text-slate-900 font-mono">#{checkingData?.orderNumber}</strong> foi 100% conferida contra os volumes e pedidos com <strong>0% de divergência</strong>.
+                                </span>
+                                <p className="text-slate-500">
+                                    Ao confirmar, o status será alterado para <strong>ReadyToShip (Pronto para Expedir)</strong> e o veículo de transporte será posicionado na doca no módulo de Portaria.
+                                </p>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter className="pt-2">
+                            <AlertDialogCancel disabled={isFinalizingChecking}>Revisar Mais</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmFinalizeChecking}
+                                disabled={isFinalizingChecking}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            >
+                                {isFinalizingChecking ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar e Liberar
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* DIÁLOGO CONFIRMAÇÃO RESET */}
-            <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
-                            <RotateCcw className="h-5 w-5 text-rose-600" /> Reinicializar Conferência da Ordem?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                Deseja reinicializar todos os apontamentos de conferência da Ordem <strong className="text-slate-900 font-mono">#{checkingData?.orderNumber}</strong>?
-                            </span>
-                            <p className="text-slate-500">
-                                As separações físicas (picking) e volumes gerados no packing serão preservados. Apenas os baldes de conferência voltarão a zero para nova contagem.
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => resetChecking({ orderId })}
-                            disabled={isResetting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isResetting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Reinicialização
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageOutbound && (
+                <AlertDialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+                    <AlertDialogContent className="bg-white sm:max-w-md">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-700">
+                                <RotateCcw className="h-5 w-5 text-rose-600" /> Reinicializar Conferência da Ordem?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                <span>
+                                    Deseja reinicializar todos os apontamentos de conferência da Ordem <strong className="text-slate-900 font-mono">#{checkingData?.orderNumber}</strong>?
+                                </span>
+                                <p className="text-slate-500">
+                                    As separações físicas (picking) e volumes gerados no packing serão preservados. Apenas os baldes de conferência voltarão a zero para nova contagem.
+                                </p>
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isResetting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => resetChecking({ orderId })}
+                                disabled={isResetting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isResetting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Reinicialização
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -19,7 +20,11 @@ export default function OutboundFiscalReviewPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
-    const [isLoading, setIsLoading] = useState(true);
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+    const canShipOutbound = useHasPermission('outbound:ship');
+    const canAccessPage = canEmitFiscal || canShipOutbound;
+
+    const [isLoading, setIsLoading] = useState(Boolean(orderId && canAccessPage));
     const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [previewData, setPreviewData] = useState(null);
@@ -32,39 +37,49 @@ export default function OutboundFiscalReviewPage() {
     const [tpImp, setTpImp] = useState('1');
     const [additionalNotes, setAdditionalNotes] = useState('');
 
-    const loadInitialData = async () => {
-        try {
-            setIsLoading(true);
-            const [previewRes, orderRes] = await Promise.all([
-                customInstance({ url: `/api/outbound/orders/${orderId}/fiscal-preview`, method: 'GET' }),
-                customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
-            ]);
-
-            const preview = previewRes?.data || previewRes;
-            const orderData = orderRes?.data || orderRes;
-
-            setPreviewData(preview);
-            setIsAlreadyShipped(orderData?.status === 'Shipped');
-
-            const defaultRuleId = preview.defaultFiscalRuleId || preview.fiscalRules?.[0]?.id || '';
-            setFiscalRuleId(defaultRuleId);
-            setIndFinal(preview.defaultIndFinal?.toString() || '0');
-            setIndPres(preview.defaultIndPres?.toString() || '9');
-            setTpImp(preview.defaultTpImp?.toString() || '1');
-            setAdditionalNotes(preview.additionalNotes || '');
-        } catch (err) {
-            toast.error(err.response?.data?.message || 'Erro ao carregar dados do espelho fiscal.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     useEffect(() => {
-        if (orderId) loadInitialData();
-    }, [orderId, ]);
+        if (!orderId || !canAccessPage) return;
+
+        let isMounted = true;
+
+        Promise.all([
+            customInstance({ url: `/api/outbound/orders/${orderId}/fiscal-preview`, method: 'GET' }),
+            customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
+        ])
+            .then(([previewRes, orderRes]) => {
+                if (!isMounted) return;
+
+                const preview = previewRes?.data || previewRes;
+                const orderData = orderRes?.data || orderRes;
+
+                setPreviewData(preview);
+                setIsAlreadyShipped(orderData?.status === 'Shipped');
+
+                const defaultRuleId = preview.defaultFiscalRuleId || preview.fiscalRules?.[0]?.id || '';
+                setFiscalRuleId(defaultRuleId);
+                setIndFinal(preview.defaultIndFinal?.toString() || '0');
+                setIndPres(preview.defaultIndPres?.toString() || '9');
+                setTpImp(preview.defaultTpImp?.toString() || '1');
+                setAdditionalNotes(preview.additionalNotes || '');
+            })
+            .catch((err) => {
+                if (isMounted) {
+                    toast.error(err.response?.data?.message || 'Erro ao carregar dados do espelho fiscal.');
+                }
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canAccessPage]);
 
     // Recalcula o espelho de itens em tempo real ao selecionar outra Natureza
     const handleFiscalRuleChange = async (newRuleId) => {
+        if (!canEmitFiscal) return;
+
         setFiscalRuleId(newRuleId);
         try {
             setIsRefreshingPreview(true);
@@ -85,7 +100,10 @@ export default function OutboundFiscalReviewPage() {
     const handleConfirmShipment = async (e) => {
         e.preventDefault();
 
-        if (!fiscalRuleId) {
+        if (isAlreadyShipped && !canEmitFiscal) return;
+        if (!isAlreadyShipped && !canEmitFiscal && !canShipOutbound) return;
+
+        if (canEmitFiscal && !fiscalRuleId) {
             toast.error('Selecione uma Natureza de Operação para prosseguir.');
             return;
         }
@@ -93,37 +111,39 @@ export default function OutboundFiscalReviewPage() {
         try {
             setIsSubmitting(true);
 
-            // PASSO 1: Emitir e Autorizar a(s) NF-e(s) na SEFAZ
-            const emitPayload = {
-                orderId,
-                fiscalRuleId,
-                customIndFinal: Number(indFinal),
-                customIndPres: Number(indPres),
-                customTpImp: Number(tpImp),
-                customAdditionalNotes: additionalNotes
-            };
+            // PASSO 1: Emitir e Autorizar a(s) NF-e(s) na SEFAZ (se o perfil possuir fiscal:emit)
+            if (canEmitFiscal) {
+                const emitPayload = {
+                    orderId,
+                    fiscalRuleId,
+                    customIndFinal: Number(indFinal),
+                    customIndPres: Number(indPres),
+                    customTpImp: Number(tpImp),
+                    customAdditionalNotes: additionalNotes
+                };
 
-            const emitRes = await customInstance({
-                url: `/api/fiscal/nfe/emit/${orderId}`,
-                method: 'POST',
-                data: emitPayload
-            });
+                const emitRes = await customInstance({
+                    url: `/api/fiscal/nfe/emit/${orderId}`,
+                    method: 'POST',
+                    data: emitPayload
+                });
 
-            const emitData = emitRes?.data || emitRes;
+                const emitData = emitRes?.data || emitRes;
 
-            if (emitRes?.status && emitRes.status >= 400) {
-                throw new Error(emitData?.message || 'Falha na autorização da NF-e junto à SEFAZ.');
+                if (emitRes?.status && emitRes.status >= 400) {
+                    throw new Error(emitData?.message || 'Falha na autorização da NF-e junto à SEFAZ.');
+                }
+
+                const invoicesCount = emitData?.invoices?.length || 1;
+                if (invoicesCount > 1) {
+                    toast.success(`${invoicesCount} NF-es autorizadas com sucesso na SEFAZ (desmembradas por NF de Remessa)!`);
+                } else {
+                    toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
+                }
             }
 
-            const invoicesCount = emitData?.invoices?.length || 1;
-            if (invoicesCount > 1) {
-                toast.success(`${invoicesCount} NF-es autorizadas com sucesso na SEFAZ (desmembradas por NF de Remessa)!`);
-            } else {
-                toast.success(emitData?.message || 'NF-e Autorizada com sucesso na SEFAZ!');
-            }
-
-            // PASSO 2: Finaliza a expedição física no WMS apenas se o pedido ainda não tiver sido expedido
-            if (!isAlreadyShipped) {
+            // PASSO 2: Finaliza a expedição física no WMS se ainda não tiver sido expedido e possuir outbound:ship
+            if (!isAlreadyShipped && canShipOutbound) {
                 const shipRes = await customInstance({
                     url: `/api/outbound/orders/${orderId}/ship`,
                     method: 'POST'
@@ -157,6 +177,26 @@ export default function OutboundFiscalReviewPage() {
     }
 
     const isMultipleNfes = (previewData?.suggestedNfeCount || 1) > 1;
+    const canExecutePrimaryAction = isAlreadyShipped ? canEmitFiscal : (canEmitFiscal || canShipOutbound);
+
+    const getPrimaryButtonLabel = () => {
+        if (isAlreadyShipped) {
+            return isMultipleNfes
+                ? `Transmitir ${previewData.suggestedNfeCount} Novas NF-es`
+                : 'Transmitir Nova NF-e à SEFAZ';
+        }
+        if (canEmitFiscal && canShipOutbound) {
+            return isMultipleNfes
+                ? `Autorizar ${previewData.suggestedNfeCount} NF-es & Expedir`
+                : 'Autorizar & Expedir';
+        }
+        if (canEmitFiscal) {
+            return isMultipleNfes
+                ? `Autorizar ${previewData.suggestedNfeCount} NF-es na SEFAZ`
+                : 'Autorizar NF-e na SEFAZ';
+        }
+        return 'Confirmar Expedição Física';
+    };
 
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -192,19 +232,18 @@ export default function OutboundFiscalReviewPage() {
                     <Button variant="outline" onClick={() => navigate('/outbound')} disabled={isSubmitting}>
                         Cancelar
                     </Button>
-                    <Button onClick={handleConfirmShipment} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5">
-                        {isSubmitting ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : isAlreadyShipped ? (
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                        ) : (
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                        )}
-                        {isAlreadyShipped
-                            ? (isMultipleNfes ? `Transmitir ${previewData.suggestedNfeCount} Novas NF-es` : 'Transmitir Nova NF-e à SEFAZ')
-                            : (isMultipleNfes ? `Autorizar ${previewData.suggestedNfeCount} NF-es & Expedir` : 'Autorizar & Expedir')
-                        }
-                    </Button>
+                    {canExecutePrimaryAction && (
+                        <Button onClick={handleConfirmShipment} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5">
+                            {isSubmitting ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : isAlreadyShipped ? (
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                            ) : (
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                            )}
+                            {getPrimaryButtonLabel()}
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -244,7 +283,7 @@ export default function OutboundFiscalReviewPage() {
                                     <Label className="text-xs font-semibold text-slate-800">Natureza de Operação Selecionada *</Label>
                                     <span className="text-[10px] text-slate-400">Determina a matriz de impostos e exceções dos itens</span>
                                 </div>
-                                <Select value={fiscalRuleId} onValueChange={handleFiscalRuleChange}>
+                                <Select value={fiscalRuleId} onValueChange={handleFiscalRuleChange} disabled={!canEmitFiscal}>
                                     <SelectTrigger className="text-xs bg-white font-bold h-9">
                                         <SelectValue placeholder="Selecione a Natureza da Operação" />
                                     </SelectTrigger>
@@ -261,7 +300,7 @@ export default function OutboundFiscalReviewPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold text-slate-700">Consumidor Final (indFinal) *</Label>
-                                    <Select value={indFinal} onValueChange={setIndFinal}>
+                                    <Select value={indFinal} onValueChange={setIndFinal} disabled={!canEmitFiscal}>
                                         <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="0">0 - Normal / Não Consumidor Final</SelectItem>
@@ -272,7 +311,7 @@ export default function OutboundFiscalReviewPage() {
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold text-slate-700">Presença Comprador (indPres) *</Label>
-                                    <Select value={indPres} onValueChange={setIndPres}>
+                                    <Select value={indPres} onValueChange={setIndPres} disabled={!canEmitFiscal}>
                                         <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="0">0 - Não se aplica</SelectItem>
@@ -285,7 +324,7 @@ export default function OutboundFiscalReviewPage() {
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold text-slate-700">Orientação DANFE (tpImp) *</Label>
-                                    <Select value={tpImp} onValueChange={setTpImp}>
+                                    <Select value={tpImp} onValueChange={setTpImp} disabled={!canEmitFiscal}>
                                         <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="1">1 - Retrato</SelectItem>
@@ -300,6 +339,7 @@ export default function OutboundFiscalReviewPage() {
                                 <Input
                                     value={additionalNotes}
                                     onChange={(e) => setAdditionalNotes(e.target.value)}
+                                    disabled={!canEmitFiscal}
                                     placeholder="Ex: Ref. Pedido de Compra #1234. Operação amparada por..."
                                     className="text-xs bg-white font-mono h-9"
                                 />

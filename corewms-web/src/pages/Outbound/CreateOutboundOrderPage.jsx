@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,8 +40,7 @@ const outboundOrderHeaderSchema = z.object({
     additionalNotes: z.string().optional().nullable()
 });
 
-// Componente Moderno de Seleção Pesquisável de Depositante
-function SearchableCustomerSelect({ value, onChange, customers, disabled = false, error = false, placeholder = "Selecione o Depositante..." }) {
+function SearchableCustomerSelect({ value, onChange, customers, disabled = false, error = false, placeholder = 'Selecione o Depositante...' }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const containerRef = useRef(null);
@@ -141,13 +141,21 @@ export default function CreateOutboundOrderPage() {
     const navigate = useNavigate();
     const isEditMode = !!orderId;
 
-    const [isLoading, setIsLoading] = useState(false);
+    const canViewOutbound = useHasPermission('outbound:view');
+    const canCreateOutbound = useHasPermission('outbound:create');
+    const canEditOutbound = useHasPermission('outbound:edit');
+    const canAllocateOutbound = useHasPermission('outbound:allocate');
+    const canViewCustomers = useHasPermission('customers:view');
+    const canConsultSefaz = useHasPermission('customers:create');
+
+    const isReadOnly = isEditMode ? !canEditOutbound : !canCreateOutbound;
+
+    const [isLoading, setIsLoading] = useState(Boolean(isEditMode && canViewOutbound));
     const [isSaving, setIsSaving] = useState(false);
     const [isConsultingCarrierSefaz, setIsConsultingCarrierSefaz] = useState(false);
-
     const [customers, setCustomers] = useState([]);
 
-    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { register, handleSubmit, setValue, control, reset, formState: { errors } } = useForm({
         resolver: zodResolver(outboundOrderHeaderSchema),
         defaultValues: {
             customerId: '',
@@ -170,55 +178,83 @@ export default function CreateOutboundOrderPage() {
         }
     });
 
-    const selectedCustomerId = watch('customerId');
-    const expectedShipDate = watch('expectedShipDate');
-    const carrierCnpjCpf = watch('carrierCnpjCpf');
-    const carrierState = watch('carrierState');
-    const freightModality = watch('freightModality');
+    const watchedValues = useWatch({ control });
+    const selectedCustomerId = watchedValues.customerId || '';
+    const expectedShipDate = watchedValues.expectedShipDate || '';
+    const carrierCnpjCpf = watchedValues.carrierCnpjCpf || '';
+    const carrierState = watchedValues.carrierState || 'RS';
+    const vehiclePlateState = watchedValues.vehiclePlateState || 'RS';
+    const freightModality = watchedValues.freightModality ?? 9;
     const isSemFrete = Number(freightModality) === 9;
 
     useEffect(() => {
+        if (!canViewCustomers) return;
+
+        let isMounted = true;
         customInstance({ url: '/api/customers/summary', method: 'GET' })
-            .then(res => setCustomers(res || []))
-            .catch(() => toast.error('Erro ao carregar depositantes.'));
-    }, []);
+            .then(res => {
+                if (!isMounted) return;
+                const list = Array.isArray(res) ? res : [];
+                setCustomers(list);
+                if (!isEditMode && list.length === 1) {
+                    setValue('customerId', list[0].id, { shouldValidate: true });
+                }
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar depositantes.');
+            });
 
-    // Carrega dados no modo de Edição
+        return () => {
+            isMounted = false;
+        };
+    }, [canViewCustomers, isEditMode, setValue]);
+
     useEffect(() => {
-        if (isEditMode) {
-            setIsLoading(true);
-            customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
-                .then(order => {
-                    const formattedDate = order.expectedShipDate
-                        ? new Date(order.expectedShipDate).toISOString().split('T')[0]
-                        : '';
+        if (!isEditMode || !canViewOutbound) return;
 
-                    reset({
-                        customerId: order.customerId || '',
-                        expectedShipDate: formattedDate,
-                        orderNumber: order.orderNumber || '',
-                        invoiceNumber: order.invoiceNumber || '',
-                        invoiceSerie: order.invoiceSerie || '',
-                        accessKey: order.accessKey || '',
-                        isReturnToCustomer: true,
-                        carrierCnpjCpf: order.carrierCnpjCpf || '',
-                        carrierName: order.carrierName || '',
-                        carrierStateRegistration: order.carrierStateRegistration || '',
-                        carrierAddress: order.carrierAddress || '',
-                        carrierCity: order.carrierCity || '',
-                        carrierState: order.carrierState || 'RS',
-                        vehiclePlate: order.vehiclePlate || '',
-                        vehiclePlateState: order.vehiclePlateState || 'RS',
-                        freightModality: order.freightModality ?? 9,
-                        additionalNotes: order.additionalNotes || ''
-                    });
-                })
-                .catch(() => toast.error('Erro ao carregar dados da ordem para edição.'))
-                .finally(() => setIsLoading(false));
-        }
-    }, [orderId, isEditMode, reset]);
+        let isMounted = true;
+        customInstance({ url: `/api/outbound/orders/${orderId}`, method: 'GET' })
+            .then(order => {
+                if (!isMounted) return;
+                const formattedDate = order.expectedShipDate
+                    ? new Date(order.expectedShipDate).toISOString().split('T')[0]
+                    : '';
+
+                reset({
+                    customerId: order.customerId || '',
+                    expectedShipDate: formattedDate,
+                    orderNumber: order.orderNumber || '',
+                    invoiceNumber: order.invoiceNumber || '',
+                    invoiceSerie: order.invoiceSerie || '',
+                    accessKey: order.accessKey || '',
+                    isReturnToCustomer: true,
+                    carrierCnpjCpf: order.carrierCnpjCpf || '',
+                    carrierName: order.carrierName || '',
+                    carrierStateRegistration: order.carrierStateRegistration || '',
+                    carrierAddress: order.carrierAddress || '',
+                    carrierCity: order.carrierCity || '',
+                    carrierState: order.carrierState || 'RS',
+                    vehiclePlate: order.vehiclePlate || '',
+                    vehiclePlateState: order.vehiclePlateState || 'RS',
+                    freightModality: order.freightModality ?? 9,
+                    additionalNotes: order.additionalNotes || ''
+                });
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar dados da ordem para edição.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, isEditMode, canViewOutbound, reset]);
 
     const handleConsultCarrierSefaz = async () => {
+        if (!canConsultSefaz || isReadOnly) return;
+
         const cleanCnpj = (carrierCnpjCpf || '').replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos para consultar.');
 
@@ -244,7 +280,7 @@ export default function CreateOutboundOrderPage() {
             setValue('carrierCity', sefazData.cityName || '');
             setValue('carrierState', sefazData.state || carrierState || 'RS');
 
-            if (!watch('vehiclePlateState')) {
+            if (!vehiclePlateState) {
                 setValue('vehiclePlateState', sefazData.state || 'RS');
             }
         } catch (error) {
@@ -255,6 +291,8 @@ export default function CreateOutboundOrderPage() {
     };
 
     const onSubmit = async (data) => {
+        if (isReadOnly) return;
+
         try {
             setIsSaving(true);
             const isNoFreight = Number(data.freightModality) === 9;
@@ -265,7 +303,6 @@ export default function CreateOutboundOrderPage() {
                 freightModality: Number(data.freightModality),
                 expectedShipDate: new Date(data.expectedShipDate).toISOString(),
 
-                // Limpa campos se a modalidade for 9 (Sem Frete)
                 carrierCnpjCpf: !isNoFreight && data.carrierCnpjCpf ? data.carrierCnpjCpf.replace(/\D/g, '') : null,
                 carrierName: !isNoFreight ? (data.carrierName?.trim() || null) : null,
                 carrierStateRegistration: !isNoFreight ? (data.carrierStateRegistration?.trim() || null) : null,
@@ -283,7 +320,7 @@ export default function CreateOutboundOrderPage() {
                     data: { id: orderId, ...cleanPayload }
                 });
                 toast.success('Cabeçalho da Ordem de Saída atualizado com sucesso!');
-                navigate(`/outbound/ordem/${orderId}/itens`);
+                navigate(canAllocateOutbound ? `/outbound/ordem/${orderId}/itens` : `/outbound/detalhes/${orderId}`);
             } else {
                 const res = await customInstance({
                     url: '/api/outbound/orders',
@@ -291,7 +328,7 @@ export default function CreateOutboundOrderPage() {
                     data: cleanPayload
                 });
                 toast.success(`Ordem ${res.orderNumber} criada com sucesso!`);
-                navigate(`/outbound/ordem/${res.id}/itens`);
+                navigate(canAllocateOutbound ? `/outbound/ordem/${res.id}/itens` : `/outbound/detalhes/${res.id}`);
             }
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao salvar ordem de saída.');
@@ -331,10 +368,12 @@ export default function CreateOutboundOrderPage() {
 
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => navigate('/outbound')} disabled={isSaving}>Cancelar</Button>
-                    <Button onClick={handleSubmit(onSubmit)} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold min-w-[170px]">
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : isEditMode ? <Save className="h-4 w-4 mr-2" /> : <ArrowRight className="h-4 w-4 mr-2" />}
-                        {isEditMode ? 'Salvar Alterações' : 'Avançar para Itens'}
-                    </Button>
+                    {!isReadOnly && (
+                        <Button onClick={handleSubmit(onSubmit)} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold min-w-[170px]">
+                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : isEditMode ? <Save className="h-4 w-4 mr-2" /> : <ArrowRight className="h-4 w-4 mr-2" />}
+                            {isEditMode ? 'Salvar Alterações' : 'Avançar para Itens'}
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -346,12 +385,11 @@ export default function CreateOutboundOrderPage() {
                         <UserCheck className="text-orange-600" size={18} /> 1. Origem & Identificação
                     </h3>
 
-                    {/* Linha Superior: Depositante (6 cols), Data Prevista (3 cols) e Nº do Pedido (3 cols) */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                         <div className="space-y-1.5 md:col-span-6">
                             <Label className="text-slate-800 font-semibold text-xs">Depositante (Dono do Estoque) *</Label>
                             <SearchableCustomerSelect
-                                disabled={isEditMode}
+                                disabled={isEditMode || isReadOnly}
                                 value={selectedCustomerId}
                                 onChange={(val) => setValue('customerId', val, { shouldValidate: true })}
                                 customers={customers}
@@ -366,6 +404,7 @@ export default function CreateOutboundOrderPage() {
                             <DatePicker
                                 date={expectedShipDate}
                                 setDate={(d) => setValue('expectedShipDate', d ? d.toISOString().split('T')[0] : '', { shouldValidate: true })}
+                                disabled={isReadOnly}
                                 placeholder="DD/MM/AAAA"
                             />
                             {errors.expectedShipDate && <p className="text-xs text-rose-500">{errors.expectedShipDate.message}</p>}
@@ -375,18 +414,19 @@ export default function CreateOutboundOrderPage() {
                             <Label className="text-xs">Nº do Pedido / Solicitação</Label>
                             <Input
                                 {...register('orderNumber')}
+                                disabled={isReadOnly}
                                 placeholder="Opcional (ex: RET-1001)"
                                 className="font-mono text-xs bg-white h-9"
                             />
                         </div>
                     </div>
 
-                    {/* Linha Intermediária: Dados da NF-e e Chave de Acesso Expandida (7 cols) */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 border-t border-slate-100 pt-3">
                         <div className="space-y-1.5 md:col-span-3">
                             <Label className="text-xs">Nº NF-e Ref. (Opcional)</Label>
                             <Input
                                 {...register('invoiceNumber')}
+                                disabled={isReadOnly}
                                 placeholder="Ex: 1250"
                                 className="font-mono text-xs bg-white h-9"
                             />
@@ -396,6 +436,7 @@ export default function CreateOutboundOrderPage() {
                             <Label className="text-xs">Série NF-e</Label>
                             <Input
                                 {...register('invoiceSerie')}
+                                disabled={isReadOnly}
                                 placeholder="Ex: 1"
                                 className="font-mono text-xs bg-white h-9"
                             />
@@ -406,13 +447,13 @@ export default function CreateOutboundOrderPage() {
                             <Input
                                 maxLength={44}
                                 {...register('accessKey')}
+                                disabled={isReadOnly}
                                 placeholder="44 dígitos da chave de acesso da NF-e referenciada..."
                                 className="font-mono text-xs bg-white h-9 tracking-wider"
                             />
                         </div>
                     </div>
 
-                    {/* Observações da Ordem: Mais Alta e com Expansão Vertical */}
                     <div className="space-y-1.5 border-t border-slate-100 pt-3">
                         <Label className="text-xs font-semibold text-slate-800">
                             Observações Adicionais da Ordem / Instruções (infCpl)
@@ -420,13 +461,14 @@ export default function CreateOutboundOrderPage() {
                         <textarea
                             rows={3}
                             {...register('additionalNotes')}
+                            disabled={isReadOnly}
                             placeholder="Ex: Entregar apenas no período da manhã. Ref. Pedido de Compra #1234..."
                             className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-y min-h-[76px] font-sans transition-all"
                         />
                     </div>
                 </div>
 
-                {/* BLOCO 2: TRANSPORTADORA, VEÍCULO & FRETE (Seção 2 de Regra Fiscal suprimida para ordens manuais) */}
+                {/* BLOCO 2: TRANSPORTADORA, VEÍCULO & FRETE */}
                 <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
                     <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-3">
                         <Truck className="text-orange-600" size={18} /> 2. Transportadora, Veículo & Frete
@@ -435,7 +477,11 @@ export default function CreateOutboundOrderPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-1.5 md:col-span-3">
                             <Label className="text-xs">Modalidade do Frete *</Label>
-                            <Select value={watch('freightModality')?.toString()} onValueChange={(val) => setValue('freightModality', Number(val))}>
+                            <Select
+                                value={String(freightModality)}
+                                onValueChange={(val) => setValue('freightModality', Number(val))}
+                                disabled={isReadOnly}
+                            >
                                 <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="9">9 - Sem Ocorrência de Transporte (Padrão)</SelectItem>
@@ -449,7 +495,6 @@ export default function CreateOutboundOrderPage() {
                         </div>
                     </div>
 
-                    {/* SELEÇÃO CONDICIONAL: CASO MODALIDADE SEJA 9 (SEM FRETE) */}
                     {isSemFrete ? (
                         <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs text-slate-600">
                             <div className="flex items-center gap-2 font-bold text-slate-800">
@@ -465,39 +510,65 @@ export default function CreateOutboundOrderPage() {
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">CNPJ Transportadora</Label>
                                     <div className="flex gap-2">
-                                        <Input {...register('carrierCnpjCpf')} placeholder="00.000.000/0000-00" className="font-mono text-xs flex-1 bg-white h-9" />
-                                        <Button
-                                            type="button" variant="outline"
-                                            onClick={handleConsultCarrierSefaz}
-                                            disabled={isConsultingCarrierSefaz}
-                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
-                                        >
-                                            {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                                            SEFAZ
-                                        </Button>
+                                        <Input
+                                            {...register('carrierCnpjCpf')}
+                                            disabled={isReadOnly}
+                                            placeholder="00.000.000/0000-00"
+                                            className="font-mono text-xs flex-1 bg-white h-9"
+                                        />
+                                        {canConsultSefaz && !isReadOnly && (
+                                            <Button
+                                                type="button" variant="outline"
+                                                onClick={handleConsultCarrierSefaz}
+                                                disabled={isConsultingCarrierSefaz}
+                                                className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
+                                            >
+                                                {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                                SEFAZ
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Inscrição Estadual Transportadora</Label>
-                                    <Input {...register('carrierStateRegistration')} placeholder="IE..." className="font-mono text-xs bg-white h-9" />
+                                    <Input
+                                        {...register('carrierStateRegistration')}
+                                        disabled={isReadOnly}
+                                        placeholder="IE..."
+                                        className="font-mono text-xs bg-white h-9"
+                                    />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5 md:col-span-2">
                                     <Label className="text-xs">Nome / Razão Social Transportadora</Label>
-                                    <Input {...register('carrierName')} placeholder="Razão social da transportadora" className="text-xs bg-white h-9" />
+                                    <Input
+                                        {...register('carrierName')}
+                                        disabled={isReadOnly}
+                                        placeholder="Razão social da transportadora"
+                                        className="text-xs bg-white h-9"
+                                    />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Placa do Veículo</Label>
-                                    <Input {...register('vehiclePlate')} placeholder="Ex: ABC1D23" className="font-mono uppercase text-xs bg-white h-9" />
+                                    <Input
+                                        {...register('vehiclePlate')}
+                                        disabled={isReadOnly}
+                                        placeholder="Ex: ABC1D23"
+                                        className="font-mono uppercase text-xs bg-white h-9"
+                                    />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">UF da Placa</Label>
-                                    <Select value={watch('vehiclePlateState')} onValueChange={(val) => setValue('vehiclePlateState', val)}>
+                                    <Select
+                                        value={vehiclePlateState}
+                                        onValueChange={(val) => setValue('vehiclePlateState', val)}
+                                        disabled={isReadOnly}
+                                    >
                                         <SelectTrigger className="text-xs bg-white h-9"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
@@ -509,17 +580,31 @@ export default function CreateOutboundOrderPage() {
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-100 pt-3">
                                 <div className="space-y-1.5 md:col-span-2">
                                     <Label className="text-xs">Endereço da Transportadora (xEnder)</Label>
-                                    <Input {...register('carrierAddress')} placeholder="Rua, Número, Bairro..." className="text-xs bg-white h-9" />
+                                    <Input
+                                        {...register('carrierAddress')}
+                                        disabled={isReadOnly}
+                                        placeholder="Rua, Número, Bairro..."
+                                        className="text-xs bg-white h-9"
+                                    />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs">Município (xMun)</Label>
-                                    <Input {...register('carrierCity')} placeholder="Cidade da transportadora" className="text-xs bg-white h-9" />
+                                    <Input
+                                        {...register('carrierCity')}
+                                        disabled={isReadOnly}
+                                        placeholder="Cidade da transportadora"
+                                        className="text-xs bg-white h-9"
+                                    />
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
-                                    <Select value={watch('carrierState')} onValueChange={(val) => setValue('carrierState', val)}>
+                                    <Select
+                                        value={carrierState}
+                                        onValueChange={(val) => setValue('carrierState', val)}
+                                        disabled={isReadOnly}
+                                    >
                                         <SelectTrigger className="text-xs bg-white font-mono font-bold h-9"><SelectValue placeholder="UF" /></SelectTrigger>
                                         <SelectContent>
                                             {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
