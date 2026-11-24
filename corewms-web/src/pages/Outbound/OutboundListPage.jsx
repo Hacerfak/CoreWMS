@@ -87,7 +87,13 @@ export default function OutboundListPage() {
 
     useEffect(() => {
         loadOrders();
-    }, [page, customerFilter, statusFilter, dateRange]);
+    }, [
+	page,
+	customerFilter,
+	statusFilter,
+	dateRange,
+	
+]);
 
     const handleClearFilters = () => {
         setSearch('');

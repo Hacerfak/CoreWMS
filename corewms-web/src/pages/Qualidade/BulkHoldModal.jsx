@@ -137,7 +137,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                 quality: '1'
             });
         }
-    }, [open]);
+    }, [open, ]);
 
     const selectedList = useMemo(() => Object.values(selectedHusMap), [selectedHusMap]);
 

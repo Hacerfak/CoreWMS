@@ -112,7 +112,7 @@ export default function AlocacaoInteligentePage() {
             const list = Array.isArray(res) ? res : [];
             setSuggestions(list);
             setSelectedHuIds(list.map(s => s.handlingUnitId));
-        } catch (err) {
+        } catch  {
             toast.error('Erro ao carregar sugestões de alocação.');
         } finally {
             setIsLoading(false);
@@ -121,7 +121,7 @@ export default function AlocacaoInteligentePage() {
 
     useEffect(() => {
         if (orderId) loadSuggestions();
-    }, [orderId]);
+    }, [orderId, ]);
 
     // Atualização de Posição Individual
     const handleUpdateLocation = (huId, newLocId, newLocPath) => {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useGetApiInventoryHandlingUnits } from '@/api/generated/inventory/inventory';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
 import { customInstance } from '@/api/orval-mutator';
@@ -56,7 +56,7 @@ export default function QualidadePage() {
     // ==========================================
     // ESTADO: ABA 2 - PRONTUÁRIOS & LAUDOS (QUALITY EVENTS)
     // ==========================================
-    const [eventsCustomer, setEventsCustomer] = useState('ALL');
+    const [eventsCustomer] = useState('ALL');
     const [eventsStatus, setEventsStatus] = useState('OPEN_ONLY'); // OPEN_ONLY, ALL, RESOLVED_ONLY
     const [eventsSearch, setEventsSearch] = useState('');
     const [eventsStartDate, setEventsStartDate] = useState(undefined);

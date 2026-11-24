@@ -33,7 +33,7 @@ export default function SelecaoEmpresa() {
 
             setPermissions(userPermissions);
             navigate('/dashboard');
-        } catch (error) {
+        } catch  {
             toast.error('Erro ao carregar matriz de permissões. Tente novamente.');
             setCompanyId(null);
         } finally {

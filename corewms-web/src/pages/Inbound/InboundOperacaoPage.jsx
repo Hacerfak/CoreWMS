@@ -74,7 +74,7 @@ export default function InboundOperacaoPage() {
 
     useEffect(() => {
         loadYardAppointment();
-    }, [orderId]);
+    }, [orderId, ]);
 
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
         mutation: {

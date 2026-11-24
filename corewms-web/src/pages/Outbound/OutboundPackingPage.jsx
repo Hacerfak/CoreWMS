@@ -101,7 +101,7 @@ export default function OutboundPackingPage() {
 
     useEffect(() => {
         if (orderId) loadOrderData();
-    }, [orderId]);
+    }, [orderId, ]);
 
     // Item selecionado para trabalho no momento
     const selectedItem = useMemo(() => {
@@ -164,7 +164,14 @@ export default function OutboundPackingPage() {
         };
 
         loadItemDetails();
-    }, [selectedItemId, selectedItem?.productId, orderId]);
+    }, [
+	selectedItemId,
+	selectedItem?.productId,
+	orderId,
+	selectedItem.pickedQuantity,
+	globalPackagingTypes,
+	selectedItem.id
+]);
 
     // Subtotal de peças do SKU ativo
     const currentPointedTotal = useMemo(() => {

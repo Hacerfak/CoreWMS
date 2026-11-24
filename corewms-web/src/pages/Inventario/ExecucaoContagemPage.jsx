@@ -78,7 +78,11 @@ export default function ExecucaoContagemPage() {
 
     useEffect(() => {
         loadLocationData();
-    }, [planId, locationId]);
+    }, [
+	planId,
+	locationId,
+	
+]);
 
     useEffect(() => {
         if (!isLoading && !isEmptyLocation && codeInputRef.current) {

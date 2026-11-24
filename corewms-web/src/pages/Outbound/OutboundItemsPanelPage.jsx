@@ -263,7 +263,7 @@ export default function OutboundItemsPanelPage() {
 
     useEffect(() => {
         if (orderId) loadOrderData();
-    }, [orderId]);
+    }, [orderId, ]);
 
     // Reload do Estoque Disponível
     const loadAvailableStock = async () => {
@@ -298,7 +298,11 @@ export default function OutboundItemsPanelPage() {
 
     useEffect(() => {
         loadAvailableStock();
-    }, [orderId, selectedProductId]);
+    }, [
+	orderId,
+	selectedProductId,
+	
+]);
 
     // Adição Síncrona de Volumes Fechados
     const handleReserveClosedVolumes = async () => {

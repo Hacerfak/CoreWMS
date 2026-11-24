@@ -98,7 +98,19 @@ export default function NovoAgendamentoModal({
                 setXmlRawFile(null);
             }
         }
-    }, [open, appointmentToEdit, preSelectedOrderId]);
+    }, [
+	open,
+	appointmentToEdit,
+	preSelectedOrderId,
+	preSelectedDockId,
+	preSelectedPlate,
+	preSelectedInvoice,
+	preSelectedOrderType,
+	preSelectedAccessKey,
+	preSelectedCarrier,
+	preSelectedPlateState,
+	isEdit
+]);
 
     const handleXmlFileChange = async (e) => {
         const file = e.target.files?.[0];

@@ -95,7 +95,12 @@ export default function PortariaPage() {
     useEffect(() => {
         loadData();
         loadDocks();
-    }, [filterDate, filterStatus, filterType]);
+    }, [
+	filterDate,
+	filterStatus,
+	filterType,
+	
+]);
 
     // Abertura atômica do modal em modo de edição
     const handleEditAppointment = (appointment) => {

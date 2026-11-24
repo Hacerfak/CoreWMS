@@ -131,7 +131,11 @@ export default function UserFormPage() {
                 fetchCustomersForCompany(a.companyId);
             }
         });
-    }, [activeAssignments]);
+    }, [
+	
+	customersByCompany,
+	
+]);
 
     // Abre modal para NOVO vínculo
     const handleOpenNewAssignmentModal = () => {
@@ -179,7 +183,7 @@ export default function UserFormPage() {
                     c.cnpj?.replace(/\D/g, '').includes(term.replace(/\D/g, ''))
             )
             .slice(0, 30);
-    }, [modalCompanyCustomers, customerSearch]);
+    }, [customerSearch, modalCompanyCustomers]);
 
     const selectedCustomerObjects = useMemo(() => {
         return modalCustomerIds.map(cid => {

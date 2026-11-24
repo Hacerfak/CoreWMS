@@ -145,7 +145,11 @@ export default function CreateOrEditFiscalRulePage() {
         if (isEditing) {
             loadRule();
         }
-    }, [id]);
+    }, [
+	id,
+	isEditing,
+	
+]);
 
     const handleSave = async (e) => {
         e?.preventDefault();

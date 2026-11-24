@@ -155,7 +155,12 @@ export default function CreateOrEditRuleExceptionPage() {
         };
 
         loadData();
-    }, [ruleId, exceptionId]);
+    }, [
+	ruleId,
+	exceptionId,
+	isEditing,
+	navigate
+]);
 
     const handleSave = async (e) => {
         e?.preventDefault();

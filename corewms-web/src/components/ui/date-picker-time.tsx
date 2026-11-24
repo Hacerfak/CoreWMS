@@ -178,7 +178,7 @@ export function DatePickerTime({
         } else {
             hasInitialScrolledRef.current = false
         }
-    }, [timeOpen])
+    }, [timeOpen, inputTime])
 
     const emitChange = (d: Date | null, timeStr: string) => {
         if (!d) {

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -21,9 +22,10 @@ const serviceSchema = z.object({
 });
 
 export default function ModalServico({ isOpen, onOpenChange, editingService, reload }) {
+    const canManageBilling = useHasPermission('billing:manage');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { handleSubmit, setValue, control, reset, formState: { errors } } = useForm({
         resolver: zodResolver(serviceSchema),
         defaultValues: {
             name: '',
@@ -32,7 +34,9 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
         }
     });
 
-    const watchType = watch('type');
+    const watchName = useWatch({ control, name: 'name' });
+    const watchType = useWatch({ control, name: 'type' });
+    const watchSqlTemplate = useWatch({ control, name: 'sqlTemplate' });
 
     useEffect(() => {
         if (isOpen) {
@@ -52,6 +56,8 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
     }, [isOpen, editingService, setValue, reset]);
 
     const onSave = async (data) => {
+        if (!canManageBilling) return;
+
         try {
             setIsSubmitting(true);
             const isAutoDaily = data.type === 'Automatic_Daily' || data.type === 'Automatic_SQL' || data.type === 1;
@@ -302,7 +308,7 @@ GROUP BY pt."Code";`;
                             <Label className="text-xs font-semibold text-slate-700">Nome do Serviço *</Label>
                             <Input
                                 placeholder="Ex: Armazenagem Diária (Palete) / Expedição de Caixa"
-                                value={watch('name')}
+                                value={watchName || ''}
                                 onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })}
                                 className="bg-white text-xs h-9"
                             />
@@ -311,7 +317,7 @@ GROUP BY pt."Code";`;
 
                         <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-700">Modalidade de Apuração *</Label>
-                            <Select value={watchType} onValueChange={(v) => setValue('type', v, { shouldValidate: true })}>
+                            <Select value={watchType || 'Automatic_Daily'} onValueChange={(v) => setValue('type', v, { shouldValidate: true })}>
                                 <SelectTrigger className="bg-white text-xs h-9">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -353,7 +359,7 @@ GROUP BY pt."Code";`;
                         <Textarea
                             rows={8}
                             placeholder="SELECT COUNT(*) AS VOLUME, COUNT(*) * @ServicoValor AS VALOR_TOTAL FROM ..."
-                            value={watch('sqlTemplate')}
+                            value={watchSqlTemplate || ''}
                             onChange={(e) => setValue('sqlTemplate', e.target.value)}
                             className="font-mono text-xs bg-slate-900 text-emerald-400 p-3 leading-relaxed border-slate-800 focus:ring-purple-500 rounded-xl"
                         />
@@ -377,10 +383,12 @@ GROUP BY pt."Code";`;
 
                     <DialogFooter className="pt-3">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancelar</Button>
-                        <Button type="submit" disabled={isSubmitting} className="bg-purple-600 hover:bg-purple-700 text-white min-w-[130px] font-bold h-9">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Salvar Serviço
-                        </Button>
+                        {canManageBilling && (
+                            <Button type="submit" disabled={isSubmitting} className="bg-purple-600 hover:bg-purple-700 text-white min-w-[130px] font-bold h-9">
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                Salvar Serviço
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

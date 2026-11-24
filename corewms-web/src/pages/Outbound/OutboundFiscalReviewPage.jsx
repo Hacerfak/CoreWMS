@@ -61,7 +61,7 @@ export default function OutboundFiscalReviewPage() {
 
     useEffect(() => {
         if (orderId) loadInitialData();
-    }, [orderId]);
+    }, [orderId, ]);
 
     // Recalcula o espelho de itens em tempo real ao selecionar outra Natureza
     const handleFiscalRuleChange = async (newRuleId) => {

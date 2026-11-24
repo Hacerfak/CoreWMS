@@ -59,7 +59,7 @@ export default function InventarioDetalhesPage() {
 
     useEffect(() => {
         if (id) loadPlanDetails();
-    }, [id]);
+    }, [id, ]);
 
     const toggleExpandTask = (taskId) => {
         if (expandedTaskIds.includes(taskId)) {

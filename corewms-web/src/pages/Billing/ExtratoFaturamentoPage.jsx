@@ -39,7 +39,8 @@ export default function ExtratoFaturamentoPage() {
 
     const [cycle, setCycle] = useState(null);
     const [services, setServices] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(cycleId && canViewBilling));
+    const [refreshTick, setRefreshTick] = useState(0);
 
     const [viewMode, setViewMode] = useState('services');
     const [filterTerm, setFilterTerm] = useState('');
@@ -63,29 +64,39 @@ export default function ExtratoFaturamentoPage() {
     const [itemToDelete, setItemToDelete] = useState(null);
     const [isDeletingItem, setIsDeletingItem] = useState(false);
 
-    const loadCycleDetails = async () => {
-        if (!canViewBilling) return;
-
-        try {
-            setIsLoading(true);
-            const [cycleRes, servicesRes] = await Promise.all([
-                customInstance({ url: `/api/billing/cycles/${cycleId}`, method: 'GET' }),
-                canManageBilling
-                    ? customInstance({ url: '/api/billing/services', method: 'GET' })
-                    : Promise.resolve([])
-            ]);
-            setCycle(cycleRes);
-            setServices(Array.isArray(servicesRes) ? servicesRes : []);
-        } catch {
-            toast.error('Erro ao carregar detalhes do ciclo de faturamento.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!cycleId || !canViewBilling) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        if (cycleId) loadCycleDetails();
-    }, [cycleId, canViewBilling, canManageBilling]);
+        if (!cycleId || !canViewBilling) return;
+
+        let isMounted = true;
+
+        Promise.all([
+            customInstance({ url: `/api/billing/cycles/${cycleId}`, method: 'GET' }),
+            canManageBilling
+                ? customInstance({ url: '/api/billing/services', method: 'GET' })
+                : Promise.resolve([])
+        ])
+            .then(([cycleRes, servicesRes]) => {
+                if (!isMounted) return;
+                setCycle(cycleRes);
+                setServices(Array.isArray(servicesRes) ? servicesRes : []);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar detalhes do ciclo de faturamento.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [cycleId, canViewBilling, canManageBilling, refreshTick]);
 
     const handlePrintStatement = async () => {
         if (!cycleId || !canExportBilling) return;
@@ -168,7 +179,7 @@ export default function ExtratoFaturamentoPage() {
                 }
             });
             toast.success('Motor executado! Diárias e saldos recalculados com sucesso.');
-            loadCycleDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao recalcular ciclo.');
             setIsLoading(false);
@@ -181,7 +192,7 @@ export default function ExtratoFaturamentoPage() {
         try {
             await customInstance({ url: `/api/billing/cycles/${cycleId}/close`, method: 'POST' });
             toast.success('Ciclo de faturamento encerrado com sucesso!');
-            loadCycleDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao fechar ciclo.');
         }
@@ -224,7 +235,7 @@ export default function ExtratoFaturamentoPage() {
             setQuantity(1);
             setTotalValue(0);
             setManualNotes('');
-            loadCycleDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao gravar lançamento manual.');
         } finally {
@@ -242,7 +253,7 @@ export default function ExtratoFaturamentoPage() {
             });
             toast.success('Lançamento removido do extrato!');
             setItemToDelete(null);
-            loadCycleDetails();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao remover lançamento.');
         } finally {

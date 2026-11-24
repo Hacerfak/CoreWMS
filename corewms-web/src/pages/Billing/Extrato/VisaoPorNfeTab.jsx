@@ -16,7 +16,6 @@ export default function VisaoPorNfeTab({
     expandedNfeKeys,
     toggleNfeExpand
 }) {
-    // Controla as datas expandidas dentro de cada NF-e (chave: "nfe_data")
     const [expandedDates, setExpandedDates] = useState([]);
 
     const toggleDateExpand = (dateKey) => {
@@ -25,7 +24,33 @@ export default function VisaoPorNfeTab({
         );
     };
 
-    if (!nfes || nfes.length === 0) {
+    const enrichedNfes = useMemo(() => {
+        if (!nfes || nfes.length === 0) return [];
+
+        return nfes.map(nfeGroup => {
+            const map = {};
+            (nfeGroup.occurrences || []).forEach(occ => {
+                const dateStr = formatDatePtBr(occ.date);
+                if (!map[dateStr]) {
+                    map[dateStr] = {
+                        rawDate: occ.date,
+                        formattedDate: dateStr,
+                        totalAmount: 0,
+                        totalVolume: 0,
+                        items: []
+                    };
+                }
+                map[dateStr].totalAmount += Number(occ.amount || 0);
+                map[dateStr].totalVolume += Number(occ.volume || 0);
+                map[dateStr].items.push(occ);
+            });
+
+            const occurrencesByDate = Object.values(map).sort((a, b) => new Date(a.rawDate) - new Date(b.rawDate));
+            return { ...nfeGroup, occurrencesByDate };
+        });
+    }, [nfes]);
+
+    if (enrichedNfes.length === 0) {
         return (
             <Card className="p-8 text-center text-slate-400 italic text-xs bg-white">
                 Nenhuma NF-e de entrada identificada com cobranças neste ciclo.
@@ -35,31 +60,9 @@ export default function VisaoPorNfeTab({
 
     return (
         <div className="space-y-4">
-            {nfes.map(nfeGroup => {
+            {enrichedNfes.map(nfeGroup => {
                 const isExpandedNfe = expandedNfeKeys.includes(nfeGroup.nfeNumber);
-
-                // Agrupa as ocorrências da NF-e por Data Civil
-                const occurrencesByDate = useMemo(() => {
-                    const map = {};
-                    (nfeGroup.occurrences || []).forEach(occ => {
-                        const dateStr = formatDatePtBr(occ.date);
-                        if (!map[dateStr]) {
-                            map[dateStr] = {
-                                rawDate: occ.date,
-                                formattedDate: dateStr,
-                                totalAmount: 0,
-                                totalVolume: 0,
-                                items: []
-                            };
-                        }
-                        map[dateStr].totalAmount += Number(occ.amount || 0);
-                        map[dateStr].totalVolume += Number(occ.volume || 0);
-                        map[dateStr].items.push(occ);
-                    });
-
-                    // Ordena cronologicamente (da entrada para os dias seguintes)
-                    return Object.values(map).sort((a, b) => new Date(a.rawDate) - new Date(b.rawDate));
-                }, [nfeGroup.occurrences]);
+                const { occurrencesByDate } = nfeGroup;
 
                 return (
                     <Card key={nfeGroup.nfeNumber} className="border-slate-200/80 bg-white shadow-2xs overflow-hidden transition-all">
@@ -166,7 +169,7 @@ export default function VisaoPorNfeTab({
                                                     </div>
                                                 </div>
 
-                                                {/* TABELA DE SERVIÇOS DO DIA (SEM A COLUNA REDUNDANTE DE VOLUME) */}
+                                                {/* TABELA DE SERVIÇOS DO DIA */}
                                                 {isDateExpanded && (
                                                     <div className="p-0 bg-white animate-in fade-in duration-150">
                                                         <Table>
@@ -213,7 +216,6 @@ export default function VisaoPorNfeTab({
                                                                                         </Badge>
                                                                                     ))}
 
-                                                                                    {/* ALÍQUOTA DIÁRIA DESTACADA NO AD-VALOREM */}
                                                                                     {isAdValorem && occ.detailedPacks[0]?.unitValue > 0 && (
                                                                                         <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-800 border-emerald-200 font-mono">
                                                                                             Alíquota: {formatUnitRate(occ.detailedPacks[0].unitValue)}

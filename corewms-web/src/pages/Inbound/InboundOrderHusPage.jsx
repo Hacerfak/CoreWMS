@@ -151,7 +151,12 @@ export default function InboundOrderHusPage() {
             const matchesStatus = statusFilter === 'ALL' || String(hu.status) === statusFilter;
             return matchesSearch && matchesQuality && matchesStatus;
         });
-    }, [orderHus, search, qualityFilter, statusFilter]);
+    }, [
+	search,
+	qualityFilter,
+	statusFilter,
+	orderHus
+]);
 
     const metrics = useMemo(() => {
         const totalHus = totalCount;
@@ -159,7 +164,7 @@ export default function InboundOrderHusPage() {
         const quarantineHus = orderHus.filter(h => String(h.qualityStatus) === '2' || String(h.qualityStatus) === 'Quarantine' || String(h.qualityStatus) === '3' || String(h.qualityStatus) === 'Damaged').length;
         const pendingAllocationHus = orderHus.filter(h => String(h.status) === '2' || String(h.status) === 'Received').length;
         return { totalHus, totalUnitsInStock, quarantineHus, pendingAllocationHus };
-    }, [orderHus, totalCount]);
+    }, [totalCount, orderHus]);
 
     const toggleSelectAll = () => {
         if (selectedHus.length === filteredHus.length) setSelectedHus([]);

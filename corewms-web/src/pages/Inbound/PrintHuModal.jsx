@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiPrintingTemplates, useGetApiPrintingAgents } from '@/api/generated/printing/printing';
 import { customInstance } from '@/api/orval-mutator';
 
@@ -7,12 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Printer, CheckCircle2 } from 'lucide-react';
+import { Loader2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orderData }) {
-    const { data: templates = [], isLoading: isLoadingTemplates } = useGetApiPrintingTemplates();
-    const { data: agents = [], isLoading: isLoadingAgents } = useGetApiPrintingAgents();
+    const { data: templates = [], } = useGetApiPrintingTemplates();
+    const { data: agents = [], } = useGetApiPrintingAgents();
 
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [selectedAgentName, setSelectedAgentName] = useState('');
@@ -31,7 +30,12 @@ export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orde
             setSelectedAgentName(availablePrinters[0].agentName);
             setSelectedPrinterName(availablePrinters[0].name || availablePrinters[0].Name);
         }
-    }, [templates, availablePrinters]);
+    }, [
+	templates,
+	availablePrinters,
+	selectedPrinterName,
+	selectedTemplateId
+]);
 
     const handlePrint = async () => {
         if (!selectedTemplateId || !selectedPrinterName || !selectedAgentName) {

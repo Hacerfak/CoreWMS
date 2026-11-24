@@ -109,7 +109,11 @@ export default function QualityEventDetailsModal({
         return () => {
             isMounted = false;
         };
-    }, [open, targetHuId]);
+    }, [
+	open,
+	targetHuId,
+	initialEvent
+]);
 
     const latestEvent = events[0] || initialEvent;
     const lpn = latestEvent?.lpn || initialHu?.lpn || '-';

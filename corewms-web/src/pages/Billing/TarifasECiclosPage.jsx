@@ -24,6 +24,7 @@ export default function TarifasECiclosPage() {
 
     const [activeTab, setActiveTab] = useState('cycles');
     const [selectedCustomer, setSelectedCustomer] = useState('ALL');
+    const [refreshTick, setRefreshTick] = useState(0);
 
     // Modais
     const [isCycleModalOpen, setIsCycleModalOpen] = useState(false);
@@ -42,49 +43,54 @@ export default function TarifasECiclosPage() {
     const [cycles, setCycles] = useState([]);
     const [tariffs, setTariffs] = useState([]);
     const [services, setServices] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(canViewBilling);
 
-    const loadData = async () => {
+    const triggerReload = () => {
         if (!canViewBilling) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
+    };
 
-        try {
-            setIsLoading(true);
-            const customerParam = selectedCustomer !== 'ALL' ? `?customerId=${selectedCustomer}` : '';
-
-            const requests = [
-                customInstance({ url: `/api/billing/cycles${customerParam}`, method: 'GET' }),
-                canManageBilling
-                    ? customInstance({ url: `/api/billing/tariffs${customerParam}`, method: 'GET' })
-                    : Promise.resolve([]),
-                canManageBilling
-                    ? customInstance({ url: '/api/billing/services', method: 'GET' })
-                    : Promise.resolve([])
-            ];
-
-            const [cyclesRes, tariffsRes, servicesRes] = await Promise.all(requests);
-
-            setCycles(Array.isArray(cyclesRes) ? cyclesRes : []);
-            setTariffs(Array.isArray(tariffsRes) ? tariffsRes : []);
-            setServices(Array.isArray(servicesRes) ? servicesRes : []);
-        } catch {
-            toast.error('Erro ao carregar dados de faturamento.');
-        } finally {
-            setIsLoading(false);
-        }
+    const handleCustomerFilterChange = (value) => {
+        setSelectedCustomer(value);
+        if (canViewBilling) setIsLoading(true);
     };
 
     useEffect(() => {
-        loadData();
-    }, [selectedCustomer, canViewBilling, canManageBilling]);
+        if (!canViewBilling) return;
 
-    // Garante que usuários sem billing:manage permaneçam sempre na aba de ciclos
-    useEffect(() => {
-        if (!canManageBilling && activeTab !== 'cycles') {
-            setActiveTab('cycles');
-        }
-    }, [canManageBilling, activeTab]);
+        let isMounted = true;
+        const customerParam = selectedCustomer !== 'ALL' ? `?customerId=${selectedCustomer}` : '';
 
-    // Resumo de KPIs do Topo
+        Promise.all([
+            customInstance({ url: `/api/billing/cycles${customerParam}`, method: 'GET' }),
+            canManageBilling
+                ? customInstance({ url: `/api/billing/tariffs${customerParam}`, method: 'GET' })
+                : Promise.resolve([]),
+            canManageBilling
+                ? customInstance({ url: '/api/billing/services', method: 'GET' })
+                : Promise.resolve([])
+        ])
+            .then(([cyclesRes, tariffsRes, servicesRes]) => {
+                if (!isMounted) return;
+                setCycles(Array.isArray(cyclesRes) ? cyclesRes : []);
+                setTariffs(Array.isArray(tariffsRes) ? tariffsRes : []);
+                setServices(Array.isArray(servicesRes) ? servicesRes : []);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar dados de faturamento.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [selectedCustomer, canViewBilling, canManageBilling, refreshTick]);
+
+    const currentTab = canManageBilling ? activeTab : 'cycles';
+
     const kpis = useMemo(() => {
         const activeCycles = cycles.filter(c => c.status === 'Draft');
         return {
@@ -120,7 +126,7 @@ export default function TarifasECiclosPage() {
                 <div className="flex items-center gap-3">
                     {canViewCustomers && customers.length > 1 && (
                         <div className="w-[240px]">
-                            <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                            <Select value={selectedCustomer} onValueChange={handleCustomerFilterChange}>
                                 <SelectTrigger className="bg-slate-50 h-9 text-xs border-slate-200 font-medium">
                                     <SelectValue placeholder="Filtrar por Depositante" />
                                 </SelectTrigger>
@@ -133,7 +139,7 @@ export default function TarifasECiclosPage() {
                             </Select>
                         </div>
                     )}
-                    <Button onClick={loadData} variant="outline" size="sm" className="bg-white h-9 px-3" title="Atualizar dados">
+                    <Button onClick={triggerReload} variant="outline" size="sm" className="bg-white h-9 px-3" title="Atualizar dados">
                         <RefreshCw size={14} className={isLoading ? 'animate-spin text-slate-700' : 'text-slate-700'} />
                     </Button>
                 </div>
@@ -201,7 +207,7 @@ export default function TarifasECiclosPage() {
             </div>
 
             {/* ABAS */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 space-y-4">
+            <Tabs value={currentTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 space-y-4">
                 <div className="flex items-center justify-between bg-white border border-slate-200/80 rounded-xl p-1.5 shadow-2xs">
                     <TabsList className="bg-transparent h-10 gap-1">
                         <TabsTrigger value="cycles" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 px-4 text-xs font-bold gap-2 rounded-lg">
@@ -222,17 +228,17 @@ export default function TarifasECiclosPage() {
 
                     {canManageBilling && (
                         <div>
-                            {activeTab === 'cycles' && (
+                            {currentTab === 'cycles' && (
                                 <Button onClick={() => setIsCycleModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white h-8 text-xs font-bold shadow-xs">
                                     <Plus size={14} className="mr-1" /> Abrir Ciclo de Cobrança
                                 </Button>
                             )}
-                            {activeTab === 'tariffs' && (
+                            {currentTab === 'tariffs' && (
                                 <Button onClick={() => setIsTariffModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs font-bold shadow-xs">
                                     <Plus size={14} className="mr-1" /> Nova Tarifa
                                 </Button>
                             )}
-                            {activeTab === 'services' && (
+                            {currentTab === 'services' && (
                                 <Button onClick={() => { setEditingService(null); setIsServiceModalOpen(true); }} className="bg-purple-600 hover:bg-purple-700 text-white h-8 text-xs font-bold shadow-xs">
                                     <Plus size={14} className="mr-1" /> Novo Serviço / SQL
                                 </Button>
@@ -248,11 +254,11 @@ export default function TarifasECiclosPage() {
                 {canManageBilling && (
                     <>
                         <TabsContent value="tariffs" className="mt-0 outline-none">
-                            <TabTarifas tariffs={tariffs} isLoading={isLoading} reload={loadData} />
+                            <TabTarifas tariffs={tariffs} isLoading={isLoading} reload={triggerReload} />
                         </TabsContent>
 
                         <TabsContent value="services" className="mt-0 outline-none">
-                            <TabServicos services={services} isLoading={isLoading} onEdit={handleEditService} reload={loadData} />
+                            <TabServicos services={services} isLoading={isLoading} onEdit={handleEditService} reload={triggerReload} />
                         </TabsContent>
                     </>
                 )}
@@ -261,9 +267,9 @@ export default function TarifasECiclosPage() {
             {/* MODAIS ADMINISTRATIVOS */}
             {canManageBilling && (
                 <>
-                    <ModalCiclo isOpen={isCycleModalOpen} onOpenChange={setIsCycleModalOpen} customers={customers} reload={loadData} />
-                    <ModalTarifa isOpen={isTariffModalOpen} onOpenChange={setIsTariffModalOpen} customers={customers} services={services} reload={loadData} />
-                    <ModalServico isOpen={isServiceModalOpen} onOpenChange={setIsServiceModalOpen} editingService={editingService} reload={loadData} />
+                    <ModalCiclo isOpen={isCycleModalOpen} onOpenChange={setIsCycleModalOpen} customers={customers} reload={triggerReload} />
+                    <ModalTarifa isOpen={isTariffModalOpen} onOpenChange={setIsTariffModalOpen} customers={customers} services={services} reload={triggerReload} />
+                    <ModalServico isOpen={isServiceModalOpen} onOpenChange={setIsServiceModalOpen} editingService={editingService} reload={triggerReload} />
                 </>
             )}
         </div>

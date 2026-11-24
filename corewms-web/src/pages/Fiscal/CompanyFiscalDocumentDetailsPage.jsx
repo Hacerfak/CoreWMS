@@ -81,7 +81,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
 
     useEffect(() => {
         if (documentId) loadDocumentDetails();
-    }, [documentId]);
+    }, [documentId, ]);
 
     const handleCopyAccessKey = () => {
         if (!doc?.accessKey) return;

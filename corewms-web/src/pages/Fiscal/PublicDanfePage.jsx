@@ -27,7 +27,7 @@ export default function PublicDanfePage() {
 
         fetch(endpointUrl)
             .then(async (res) => {
-                const contentType = res.headers.get('content-type') || '';
+                
 
                 if (!res.ok) {
                     const errText = await res.text();

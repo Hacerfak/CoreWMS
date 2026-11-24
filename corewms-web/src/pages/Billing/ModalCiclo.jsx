@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
@@ -18,7 +18,6 @@ const cycleSchema = z.object({
     referenceMonth: z.string().regex(/^(0[1-9]|1[0-2])\/\d{4}$/, 'Formato deve ser MM/YYYY (Ex: 10/2026)')
 });
 
-// Calcula automaticamente o 1º e último dia de um mês no formato MM/YYYY
 const getDefaultRangeForMonth = (refMonth) => {
     if (!refMonth || !refMonth.includes('/')) return undefined;
     const [mStr, yStr] = refMonth.split('/');
@@ -32,25 +31,26 @@ const getDefaultRangeForMonth = (refMonth) => {
     };
 };
 
+const getCurrentRefMonth = () => {
+    const today = new Date();
+    return `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+};
+
 export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [dateRange, setDateRange] = useState(() => getDefaultRangeForMonth(getCurrentRefMonth()));
 
-    const today = new Date();
-    const currentRefMonth = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-
-    const [dateRange, setDateRange] = useState(() => getDefaultRangeForMonth(currentRefMonth));
-
-    const { handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { handleSubmit, setValue, control, reset, formState: { errors } } = useForm({
         resolver: zodResolver(cycleSchema),
         defaultValues: {
             customerId: '',
-            referenceMonth: currentRefMonth
+            referenceMonth: getCurrentRefMonth()
         }
     });
 
-    const selectedRefMonth = watch('referenceMonth');
+    const selectedCustomerId = useWatch({ control, name: 'customerId' });
+    const selectedRefMonth = useWatch({ control, name: 'referenceMonth' });
 
-    // Ao alterar o mês de competência, ajusta o período sugerido caso o usuário não tenha personalizado
     const handleMonthChange = (newMonth) => {
         setValue('referenceMonth', newMonth, { shouldValidate: true });
         if (newMonth) {
@@ -58,13 +58,13 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
         }
     };
 
-    // Reseta os campos ao abrir o modal
     useEffect(() => {
         if (isOpen) {
-            setValue('referenceMonth', currentRefMonth);
-            setDateRange(getDefaultRangeForMonth(currentRefMonth));
+            const current = getCurrentRefMonth();
+            setValue('referenceMonth', current);
+            setDateRange(getDefaultRangeForMonth(current));
         }
-    }, [isOpen, setValue, currentRefMonth]);
+    }, [isOpen, setValue]);
 
     const onSave = async (data) => {
         if (!dateRange?.from) {
@@ -75,7 +75,6 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
         try {
             setIsSubmitting(true);
 
-            // Início do 1º dia às 00:00:00.000 e fim do último dia às 23:59:59.999
             const fromDate = new Date(dateRange.from);
             fromDate.setHours(0, 0, 0, 0);
             const startUtc = fromDate.toISOString();
@@ -95,12 +94,13 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
                 }
             });
 
+            const current = getCurrentRefMonth();
             toast.success('Ciclo de faturamento aberto com sucesso!');
             reset({
                 customerId: '',
-                referenceMonth: currentRefMonth
+                referenceMonth: current
             });
-            setDateRange(getDefaultRangeForMonth(currentRefMonth));
+            setDateRange(getDefaultRangeForMonth(current));
             onOpenChange(false);
             reload();
         } catch (error) {
@@ -125,7 +125,7 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
                 <form onSubmit={handleSubmit(onSave)} className="space-y-4 py-2">
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Depositante *</Label>
-                        <Select value={watch('customerId')} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
+                        <Select value={selectedCustomerId} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
                             <SelectTrigger className="bg-white text-xs h-9">
                                 <SelectValue placeholder="Escolha o depositante..." />
                             </SelectTrigger>

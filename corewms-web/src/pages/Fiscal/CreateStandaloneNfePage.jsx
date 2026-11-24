@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import {
     ArrowLeft, Send, Loader2, Sparkles, Plus, Trash2,
-    FileText, UserCheck, Layers, Truck, MessageSquare, CreditCard, Tag, Link as LinkIcon, Calculator, AlertCircle, Info
+    FileText, UserCheck, Layers, Truck, MessageSquare, CreditCard, Tag, Link as LinkIcon, Calculator, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 

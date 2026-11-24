@@ -23,7 +23,7 @@ import {
 import {
     ArrowLeft, Box, MapPin, Barcode, CheckCircle2, Loader2,
     Check, Calendar, Tag, ChevronDown, ChevronRight, Receipt,
-    RotateCcw, Undo2, ArrowRight
+    RotateCcw, Undo2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -108,7 +108,7 @@ export default function OutboundPickingPage() {
 
     useEffect(() => {
         if (orderId) loadTasks(false);
-    }, [orderId]);
+    }, [orderId, ]);
 
     const pendingItems = useMemo(() => {
         return orderData?.items?.filter(i => i.pickedQuantity < i.expectedQuantity) || [];
@@ -144,7 +144,14 @@ export default function OutboundPickingPage() {
                 lpnInputRef.current.focus();
             }
         }
-    }, [activeItem?.orderItemId, suggestedHus.length]);
+    }, [
+	activeItem?.orderItemId,
+	suggestedHus.length,
+	activeItem.expectedQuantity,
+	activeItem.pickedQuantity,
+	activeItem,
+	suggestedHus
+]);
 
     const handleQuickSelectHu = (hu) => {
         setScannedLpn(hu.lpn);

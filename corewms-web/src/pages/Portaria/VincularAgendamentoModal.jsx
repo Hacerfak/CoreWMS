@@ -57,7 +57,12 @@ export default function VincularAgendamentoModal({
         if (open) {
             loadData();
         }
-    }, [open, orderId, appointment]);
+    }, [
+	open,
+	orderId,
+	appointment,
+	
+]);
 
     const handleConfirmLink = async () => {
         if (!selectedId) {

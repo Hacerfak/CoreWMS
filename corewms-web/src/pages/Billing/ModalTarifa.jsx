@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
@@ -22,7 +22,7 @@ const tariffSchema = z.object({
 export default function ModalTarifa({ isOpen, onOpenChange, customers, services, reload }) {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { handleSubmit, setValue, control, reset, formState: { errors } } = useForm({
         resolver: zodResolver(tariffSchema),
         defaultValues: {
             customerId: '',
@@ -32,11 +32,14 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
         }
     });
 
+    const selectedCustomerId = useWatch({ control, name: 'customerId' });
+    const selectedServiceId = useWatch({ control, name: 'billingServiceId' });
+    const selectedValidFrom = useWatch({ control, name: 'validFrom' });
+
     const onSave = async (data) => {
         try {
             setIsSubmitting(true);
 
-            // Normaliza a data civil escolhida para UTC às 00:00:00.000Z
             const d = data.validFrom;
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -80,7 +83,7 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                 <form onSubmit={handleSubmit(onSave)} className="space-y-4 py-2">
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Depositante *</Label>
-                        <Select value={watch('customerId')} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
+                        <Select value={selectedCustomerId} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
                             <SelectTrigger className="bg-white text-xs h-9">
                                 <SelectValue placeholder="Escolha o depositante..." />
                             </SelectTrigger>
@@ -95,7 +98,7 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
 
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Serviço Logístico *</Label>
-                        <Select value={watch('billingServiceId')} onValueChange={(v) => setValue('billingServiceId', v, { shouldValidate: true })}>
+                        <Select value={selectedServiceId} onValueChange={(v) => setValue('billingServiceId', v, { shouldValidate: true })}>
                             <SelectTrigger className="bg-white text-xs h-9">
                                 <SelectValue placeholder="Escolha o serviço..." />
                             </SelectTrigger>
@@ -124,7 +127,7 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                         <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-700">Início da Vigência *</Label>
                             <DatePicker
-                                date={watch('validFrom')}
+                                date={selectedValidFrom}
                                 setDate={(d) => setValue('validFrom', d, { shouldValidate: true })}
                                 className="h-9"
                             />

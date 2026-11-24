@@ -53,7 +53,7 @@ api.interceptors.response.use(
                 });
                 useAuthStore.setState({ permissions: novasPermissoes });
                 window.location.href = '/dashboard';
-            } catch (err) {
+            } catch  {
                 window.location.href = '/selecao-empresa';
             }
             return Promise.reject(error);

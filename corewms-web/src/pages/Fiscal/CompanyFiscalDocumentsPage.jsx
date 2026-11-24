@@ -42,7 +42,7 @@ export default function CompanyFiscalDocumentsPage() {
     const [typeFilter, setTypeFilter] = useState('ALL');
 
     // Downloads
-    const [downloadingDocId, setDownloadingDocId] = useState(null);
+    const [downloadingDocId] = useState(null);
 
     // Modais Fiscais (Eventos SEFAZ e E-mail)
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -85,7 +85,13 @@ export default function CompanyFiscalDocumentsPage() {
 
     useEffect(() => {
         loadDocuments();
-    }, [page, pageSize, statusFilter, typeFilter]);
+    }, [
+	page,
+	pageSize,
+	statusFilter,
+	typeFilter,
+	
+]);
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
@@ -115,7 +121,7 @@ export default function CompanyFiscalDocumentsPage() {
                 printWindow.document.write(html);
                 printWindow.document.close();
             }
-        } catch (error) {
+        } catch  {
             if (printWindow) printWindow.close();
             toast.error('Erro ao carregar visualização da DANFE.');
         }

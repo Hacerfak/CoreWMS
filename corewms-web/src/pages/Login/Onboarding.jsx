@@ -80,7 +80,7 @@ export default function Onboarding() {
                                 ]
                             });
                         }
-                    } catch (err) {
+                    } catch  {
                         useAuthStore.setState({
                             empresas: [
                                 ...authStore.empresas,

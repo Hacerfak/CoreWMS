@@ -35,7 +35,7 @@ export default function OutboundOrderDetailsPage() {
     const navigate = useNavigate();
 
     const [order, setOrder] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [,setIsLoading] = useState(true);
     const [downloadingDocId, setDownloadingDocId] = useState(null);
     const [expandedItemIds, setExpandedItemIds] = useState({});
 
@@ -110,7 +110,7 @@ export default function OutboundOrderDetailsPage() {
 
     useEffect(() => {
         if (orderId) loadOrderDetails();
-    }, [orderId]);
+    }, [orderId, ]);
 
     const toggleExpandItem = (itemId) => {
         setExpandedItemIds(prev => ({ ...prev, [itemId]: !prev[itemId] }));
