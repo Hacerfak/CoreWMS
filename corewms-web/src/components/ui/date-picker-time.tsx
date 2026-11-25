@@ -30,6 +30,7 @@ const CURRENT_YEAR = new Date().getFullYear()
 const START_YEAR = 1940
 const END_YEAR = CURRENT_YEAR + 30
 const YEARS = Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i)
+const FALLBACK_DATE = new Date()
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"))
 const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
@@ -141,11 +142,13 @@ export function DatePickerTime({
         return parsedDateTime || new Date()
     })
 
-    const safeViewDate = React.useMemo(() => {
-        return viewDate instanceof Date && !isNaN(viewDate.getTime()) ? viewDate : new Date()
-    }, [viewDate])
+    const [prevParsedTime, setPrevParsedTime] = React.useState<number | undefined>(() =>
+        parsedDateTime?.getTime()
+    )
 
-    React.useEffect(() => {
+    const currentParsedTime = parsedDateTime?.getTime()
+    if (currentParsedTime !== prevParsedTime) {
+        setPrevParsedTime(currentParsedTime)
         if (parsedDateTime) {
             setInputDate(format(parsedDateTime, "dd/MM/yyyy"))
             setInputTime(format(parsedDateTime, "HH:mm"))
@@ -153,9 +156,11 @@ export function DatePickerTime({
         } else {
             setInputDate("")
         }
-    }, [parsedDateTime])
+    }
 
-    // Posiciona no horário selecionado apenas ao abrir o popover, sem mover ao clicar/selecionar
+    const safeViewDate = viewDate instanceof Date && !isNaN(viewDate.getTime()) ? viewDate : FALLBACK_DATE
+
+    // Posiciona no horário selecionado apenas ao abrir o popover
     React.useEffect(() => {
         if (timeOpen) {
             if (!hasInitialScrolledRef.current) {
@@ -203,9 +208,6 @@ export function DatePickerTime({
         setDate(combined)
     }
 
-    // -------------------------------------------------------------
-    // CONTROLES DE DATA
-    // -------------------------------------------------------------
     const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const masked = maskDateInput(e.target.value)
         setInputDate(masked)
@@ -271,9 +273,6 @@ export function DatePickerTime({
         emitChange(null, inputTime)
     }
 
-    // -------------------------------------------------------------
-    // CONTROLES DE HORÁRIO
-    // -------------------------------------------------------------
     const handleTimeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const masked = maskTimeInput(e.target.value)
         setInputTime(masked)

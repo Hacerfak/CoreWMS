@@ -1,22 +1,32 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiProducts, useDeleteApiProductsId } from '@/api/generated/products/products';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, Plus, Edit, Trash2, Package, Loader2 } from 'lucide-react';
+import { Search, Plus, Edit, Eye, Trash2, Package, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import ProductFormSheet from './ProductFormSheet';
 
 export default function ProductsTab() {
     const queryClient = useQueryClient();
+
+    const canViewProducts = useHasPermission(['products:view', 'products:create', 'products:edit', 'products:delete']);
+    const canCreateProduct = useHasPermission('products:create');
+    const canEditProduct = useHasPermission('products:edit');
+    const canDeleteProduct = useHasPermission('products:delete');
+
     const [search, setSearch] = useState('');
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [selectedProductId, setSelectedProductId] = useState(null);
     const [productToDelete, setProductToDelete] = useState(null);
 
-    const { data: apiResponse, isLoading } = useGetApiProducts({ Search: search });
+    const { data: apiResponse, isLoading } = useGetApiProducts(
+        { Search: search },
+        { query: { enabled: canViewProducts } }
+    );
     const products = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
     const { mutate: deleteProduct, isPending: isDeleting } = useDeleteApiProductsId({
@@ -31,11 +41,12 @@ export default function ProductsTab() {
     });
 
     const handleCreate = () => {
+        if (!canCreateProduct) return;
         setSelectedProductId(null);
         setIsSheetOpen(true);
     };
 
-    const handleEdit = (prod) => {
+    const handleOpenDetailsOrEdit = (prod) => {
         setSelectedProductId(prod.id);
         setIsSheetOpen(true);
     };
@@ -52,9 +63,11 @@ export default function ProductsTab() {
                         className="pl-9 bg-slate-50"
                     />
                 </div>
-                <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
-                    <Plus className="mr-2 h-4 w-4" /> Novo Produto
-                </Button>
+                {canCreateProduct && (
+                    <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700 text-white ml-auto">
+                        <Plus className="mr-2 h-4 w-4" /> Novo Produto
+                    </Button>
+                )}
             </div>
 
             <div className="flex-1 overflow-auto">
@@ -88,12 +101,18 @@ export default function ProductsTab() {
                                 </TableCell>
                                 <TableCell className="text-sm font-medium text-slate-700">{prod.customerName}</TableCell>
                                 <TableCell className="text-right space-x-1">
-                                    <Button variant="ghost" size="sm" onClick={() => handleEdit(prod)} className="text-blue-600 hover:bg-blue-50">
-                                        <Edit className="h-4 w-4 mr-1" /> Editar
+                                    <Button variant="ghost" size="sm" onClick={() => handleOpenDetailsOrEdit(prod)} className="text-blue-600 hover:bg-blue-50">
+                                        {canEditProduct ? (
+                                            <><Edit className="h-4 w-4 mr-1" /> Editar</>
+                                        ) : (
+                                            <><Eye className="h-4 w-4 mr-1" /> Visualizar</>
+                                        )}
                                     </Button>
-                                    <Button variant="ghost" size="sm" onClick={() => setProductToDelete(prod)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
-                                        <Trash2 className="h-4 w-4 mr-1" /> Excluir
-                                    </Button>
+                                    {canDeleteProduct && (
+                                        <Button variant="ghost" size="sm" onClick={() => setProductToDelete(prod)} className="text-rose-600 hover:bg-rose-50 hover:text-rose-700">
+                                            <Trash2 className="h-4 w-4 mr-1" /> Excluir
+                                        </Button>
+                                    )}
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -103,22 +122,24 @@ export default function ProductsTab() {
 
             <ProductFormSheet open={isSheetOpen} onOpenChange={setIsSheetOpen} productId={selectedProductId} />
 
-            <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir Produto?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Confirma a exclusão de <strong>{productToDelete?.sku}</strong> e todas as embalagens associadas? Esta ação falhará se houver estoque.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteProduct({ id: productToDelete.id })} disabled={isDeleting} className="bg-rose-600 text-white hover:bg-rose-700">
-                            Confirmar
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canDeleteProduct && (
+                <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Produto?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Confirma a exclusão de <strong>{productToDelete?.sku}</strong> e todas as embalagens associadas? Esta ação falhará se houver estoque.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteProduct({ id: productToDelete.id })} disabled={isDeleting} className="bg-rose-600 text-white hover:bg-rose-700">
+                                Confirmar
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

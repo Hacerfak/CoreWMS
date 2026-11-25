@@ -23,6 +23,8 @@ const MONTHS = [
     { label: "Dez", full: "Dezembro", value: "12" },
 ]
 
+const DEFAULT_YEAR = new Date().getFullYear()
+
 interface MonthPickerProps {
     value: string | undefined // Exemplo: "10/2026"
     onChange: (value: string) => void
@@ -40,28 +42,30 @@ export function MonthPicker({
 }: MonthPickerProps) {
     const [open, setOpen] = React.useState(false)
 
-    // Extrai mês e ano do valor atual (MM/YYYY)
+    // Extrai mês e ano do valor atual (MM/YYYY) de forma pura
     const parsed = React.useMemo(() => {
         if (!value || !value.includes("/")) {
-            const now = new Date()
-            return { month: String(now.getMonth() + 1).padStart(2, "0"), year: now.getFullYear(), hasValue: false }
+            return { month: "01", year: DEFAULT_YEAR, hasValue: false }
         }
         const [m, y] = value.split("/")
         const yNum = parseInt(y, 10)
         return {
             month: m.padStart(2, "0"),
-            year: isNaN(yNum) ? new Date().getFullYear() : yNum,
+            year: isNaN(yNum) ? DEFAULT_YEAR : yNum,
             hasValue: true,
         }
     }, [value])
 
-    const [currentYear, setCurrentYear] = React.useState(parsed.year)
+    const [currentYear, setCurrentYear] = React.useState<number>(() =>
+        parsed.hasValue ? parsed.year : new Date().getFullYear()
+    )
 
-    React.useEffect(() => {
-        if (parsed.hasValue) {
-            setCurrentYear(parsed.year)
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (nextOpen) {
+            setCurrentYear(parsed.hasValue ? parsed.year : new Date().getFullYear())
         }
-    }, [parsed.year, parsed.hasValue])
+        setOpen(nextOpen)
+    }
 
     const handleSelectMonth = (monthVal: string) => {
         onChange(`${monthVal}/${currentYear}`)
@@ -82,7 +86,7 @@ export function MonthPicker({
         : null
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Popover open={open} onOpenChange={handleOpenChange}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"

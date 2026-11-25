@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState, useMemo } from 'react';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
 import { usePostApiProducts, usePutApiProductsId } from '@/api/generated/products/products';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -56,101 +57,152 @@ const productSchema = z.object({
     packagings: z.array(packagingSchema).min(1, 'Adicione pelo menos uma embalagem (ex: Unidade Mestre).')
 });
 
+const EMPTY_PACKAGING = {
+    packagingTypeId: '',
+    conversionFactor: 1,
+    allowFractionalPicking: false,
+    grossWeight: 0,
+    netWeight: 0,
+    lengthMm: 0,
+    widthMm: 0,
+    heightMm: 0,
+    maxStacking: 1
+};
+
+const EMPTY_PRODUCT_VALUES = {
+    customerId: '',
+    customerName: '',
+    sku: '',
+    description: '',
+    baseUnit: 'UN',
+    baseBarcode: '',
+    netWeight: 0,
+    grossWeight: 0,
+    ncm: '',
+    cest: '',
+    origin: 0,
+    pickingStrategy: 1,
+    pickingBaseDate: 1,
+    inboundShelfLifeToleranceDays: null,
+    outboundShelfLifeToleranceDays: null,
+    tracksBatch: false,
+    strictBatch: false,
+    tracksManufacture: false,
+    strictManufacture: false,
+    tracksExpiration: false,
+    strictExpiration: false,
+    tracksSerial: false,
+    strictSerial: false,
+    packagings: [EMPTY_PACKAGING]
+};
+
 export default function ProductFormSheet({ open, onOpenChange, productId = null }) {
     const queryClient = useQueryClient();
+    const isEditing = Boolean(productId);
+
+    const canCreateProduct = useHasPermission('products:create');
+    const canEditProduct = useHasPermission('products:edit');
+    const canSave = isEditing ? canEditProduct : canCreateProduct;
+    const canViewCustomers = useHasPermission('customers:view');
+
     const [activeTab, setActiveTab] = useState('dados');
-    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isLoadingCustomerRules, setIsLoadingCustomerRules] = useState(false);
 
-    const [customersSummary, setCustomersSummary] = useState([]);
-    const [packagingTypesSummary, setPackagingTypesSummary] = useState([]);
+    const { data: packagingTypesSummary = [] } = useQuery({
+        queryKey: ['/api/packaging-types/summary'],
+        queryFn: () => customInstance({ url: '/api/packaging-types/summary', method: 'GET' }).then(res => res || []),
+        enabled: open
+    });
 
-    const isEditing = !!productId;
+    const { data: customersSummary = [] } = useQuery({
+        queryKey: ['/api/customers/summary'],
+        queryFn: () => customInstance({ url: '/api/customers/summary', method: 'GET' }).then(res => res || []),
+        enabled: open && !isEditing && canViewCustomers
+    });
 
-    const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
-        resolver: zodResolver(productSchema),
-        defaultValues: {
-            customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '',
-            netWeight: 0, grossWeight: 0, origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
-            tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
-            tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
-            packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
+    const { data: productDetails, isLoading: isLoadingDetails } = useQuery({
+        queryKey: ['/api/products', productId],
+        queryFn: () => customInstance({ url: `/api/products/${productId}`, method: 'GET' }),
+        enabled: open && isEditing
+    });
+
+    const formValues = useMemo(() => {
+        if (!open) return EMPTY_PRODUCT_VALUES;
+        if (isEditing && productDetails) {
+            return {
+                ...EMPTY_PRODUCT_VALUES,
+                ...productDetails,
+                netWeight: productDetails.netWeight || 0,
+                grossWeight: productDetails.grossWeight || 0,
+                packagings: productDetails.packagings?.length > 0
+                    ? productDetails.packagings.map(p => ({ ...p, maxStacking: p.maxStacking || 1 }))
+                    : [EMPTY_PACKAGING]
+            };
         }
+        return EMPTY_PRODUCT_VALUES;
+    }, [open, isEditing, productDetails]);
+
+    const { register, control, handleSubmit, setValue, getValues, formState: { errors } } = useForm({
+        resolver: zodResolver(productSchema),
+        defaultValues: EMPTY_PRODUCT_VALUES,
+        values: formValues
     });
 
     const { fields, append, remove } = useFieldArray({ control, name: 'packagings' });
+    const watchedValues = useWatch({ control });
 
-    // Observa os pesos unitários base para cálculos automáticos das embalagens
-    const currentBaseNetWeight = watch('netWeight') || 0;
-    const currentBaseGrossWeight = watch('grossWeight') || 0;
+    const currentBaseNetWeight = watchedValues?.netWeight || 0;
+    const currentBaseGrossWeight = watchedValues?.grossWeight || 0;
 
-    useEffect(() => {
-        if (!open) return;
-
-        customInstance({ url: '/api/packaging-types/summary', method: 'GET' })
-            .then(res => setPackagingTypesSummary(res || []))
-            .catch(() => toast.error('Erro ao carregar tipos de embalagem.'));
-
-        if (productId) {
-            setIsLoadingDetails(true);
-            customInstance({ url: `/api/products/${productId}`, method: 'GET' })
-                .then((data) => {
-                    reset({
-                        ...data,
-                        netWeight: data.netWeight || 0,
-                        grossWeight: data.grossWeight || 0,
-                        packagings: data.packagings?.map(p => ({
-                            ...p,
-                            maxStacking: p.maxStacking || 1
-                        })) || [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
-                    });
-                    setActiveTab('dados');
-                })
-                .catch(() => toast.error('Erro ao carregar dados do produto.'))
-                .finally(() => setIsLoadingDetails(false));
-        } else {
-            customInstance({ url: '/api/customers/summary', method: 'GET' })
-                .then(res => setCustomersSummary(res || []))
-                .catch(() => toast.error('Erro ao carregar lista de depositantes.'));
-
-            reset({
-                customerId: '', sku: '', description: '', baseUnit: 'UN', baseBarcode: '',
-                netWeight: 0, grossWeight: 0, origin: 0, pickingStrategy: 1, pickingBaseDate: 1,
-                tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
-                tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
-                packagings: [{ packagingTypeId: '', conversionFactor: 1, allowFractionalPicking: false, grossWeight: 0, netWeight: 0, lengthMm: 0, widthMm: 0, heightMm: 0, maxStacking: 1 }]
-            });
+    const handleOpenChange = (nextOpen) => {
+        if (nextOpen) {
             setActiveTab('dados');
         }
-    }, [open, productId, reset]);
+        onOpenChange(nextOpen);
+    };
 
     const { mutate: createProduct, isPending: isCreating } = usePostApiProducts({
         mutation: {
-            onSuccess: () => { toast.success('Produto criado com sucesso!'); queryClient.invalidateQueries({ queryKey: ['/api/products'] }); onOpenChange(false); },
+            onSuccess: () => {
+                toast.success('Produto criado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+                onOpenChange(false);
+            },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao criar produto.')
         }
     });
 
     const { mutate: updateProduct, isPending: isUpdating } = usePutApiProductsId({
         mutation: {
-            onSuccess: () => { toast.success('Produto atualizado com sucesso!'); queryClient.invalidateQueries({ queryKey: ['/api/products'] }); onOpenChange(false); },
+            onSuccess: () => {
+                toast.success('Produto atualizado com sucesso!');
+                queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+                onOpenChange(false);
+            },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao atualizar produto.')
         }
     });
 
     const onSubmit = (data) => {
+        if (!canSave) return;
+
         if (data.pickingStrategy === 2 && !data.tracksExpiration) {
             toast.error("A estratégia FEFO exige que o 'Controle de Validade' esteja habilitado nas Regras WMS.");
             setActiveTab('regras');
             return;
         }
-        isEditing ? updateProduct({ id: productId, data }) : createProduct({ data });
+
+        if (isEditing) {
+            updateProduct({ id: productId, data });
+        } else {
+            createProduct({ data });
+        }
     };
 
     const handleCustomerChange = async (customerId) => {
         setValue('customerId', customerId, { shouldValidate: true });
 
-        if (!isEditing && customerId) {
+        if (!isEditing && customerId && canViewCustomers) {
             setIsLoadingCustomerRules(true);
             try {
                 const customerDetail = await customInstance({ url: `/api/customers/${customerId}`, method: 'GET' });
@@ -175,11 +227,10 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
         }
     };
 
-    // Função de recálculo dos pesos de uma embalagem específica com base no fator de conversão
     const handleRecalculatePackagingWeights = (index) => {
-        const factor = Number(watch(`packagings.${index}.conversionFactor`)) || 1;
-        const netW = Number(currentBaseNetWeight) || 0;
-        const grossW = Number(currentBaseGrossWeight) || 0;
+        const factor = Number(getValues(`packagings.${index}.conversionFactor`)) || 1;
+        const netW = Number(getValues('netWeight')) || 0;
+        const grossW = Number(getValues('grossWeight')) || 0;
 
         if (netW === 0 && grossW === 0) {
             toast.warning('Informe primeiro o peso líquido e/ou bruto unitário na aba Básicos.');
@@ -194,18 +245,16 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
         toast.success(`Pesos da Embalagem #${index + 1} recalculados para fator ${factor}!`);
     };
 
-    // Ao mudar o fator de conversão, se os pesos estiverem zerados, auto-calcula
     const handleConversionFactorChange = (index, value) => {
         const factor = Number(value) || 1;
         setValue(`packagings.${index}.conversionFactor`, factor, { shouldValidate: true });
 
-        const currentPackGross = Number(watch(`packagings.${index}.grossWeight`)) || 0;
-        const currentPackNet = Number(watch(`packagings.${index}.netWeight`)) || 0;
+        const currentPackGross = Number(getValues(`packagings.${index}.grossWeight`)) || 0;
+        const currentPackNet = Number(getValues(`packagings.${index}.netWeight`)) || 0;
 
-        // Se os pesos da embalagem ainda não foram preenchidos manualmente, auto-sugere
         if (currentPackGross === 0 && currentPackNet === 0) {
-            const netW = Number(currentBaseNetWeight) || 0;
-            const grossW = Number(currentBaseGrossWeight) || 0;
+            const netW = Number(getValues('netWeight')) || 0;
+            const grossW = Number(getValues('grossWeight')) || 0;
             if (netW > 0 || grossW > 0) {
                 setValue(`packagings.${index}.netWeight`, Math.round(factor * netW * 1000) / 1000);
                 setValue(`packagings.${index}.grossWeight`, Math.round(factor * (grossW > 0 ? grossW : netW) * 1000) / 1000);
@@ -230,31 +279,46 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
         });
     };
 
-    const renderToggle = (title, desc, trackField, strictField) => (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-                <div>
-                    <Label className="text-sm text-slate-900 font-bold">{title}</Label>
-                    <p className="text-[10px] text-slate-500">{desc}</p>
+    const renderToggle = (title, desc, trackField, strictField) => {
+        const isTracked = Boolean(watchedValues?.[trackField]);
+        const isStrict = Boolean(watchedValues?.[strictField]);
+
+        return (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <Label className="text-sm text-slate-900 font-bold">{title}</Label>
+                        <p className="text-[10px] text-slate-500">{desc}</p>
+                    </div>
+                    <Switch
+                        checked={isTracked}
+                        disabled={!canSave}
+                        onCheckedChange={(v) => {
+                            setValue(trackField, v);
+                            if (!v) setValue(strictField, false);
+                        }}
+                    />
                 </div>
-                <Switch
-                    checked={watch(trackField)}
-                    onCheckedChange={(v) => { setValue(trackField, v); if (!v) setValue(strictField, false); }}
-                />
+                {isTracked && (
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 ml-2 animate-in slide-in-from-top-2">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                            <Checkbox
+                                checked={isStrict}
+                                disabled={!canSave}
+                                onCheckedChange={(v) => setValue(strictField, Boolean(v))}
+                            />
+                            <span className="text-rose-700">Exigência Fiscal Obrigatória</span>
+                        </label>
+                    </div>
+                )}
             </div>
-            {watch(trackField) && (
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 ml-2 animate-in slide-in-from-top-2">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                        <Checkbox checked={watch(strictField)} onCheckedChange={(v) => setValue(strictField, v)} />
-                        <span className="text-rose-700">Exigência Fiscal Obrigatória</span>
-                    </label>
-                </div>
-            )}
-        </div>
-    );
+        );
+    };
+
+    const isSaving = isCreating || isUpdating;
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
+        <Sheet open={open} onOpenChange={handleOpenChange}>
             <SheetContent className="w-full sm:w-[950px] !max-w-[950px] flex flex-col p-0 bg-white shadow-2xl">
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <SheetTitle className="text-xl font-bold text-slate-900">{isEditing ? 'Editar Produto' : 'Novo Produto'}</SheetTitle>
@@ -291,12 +355,16 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                         </div>
                                         {isEditing ? (
                                             <Input
-                                                value={watch('customerName') || 'Depositante'}
+                                                value={watchedValues?.customerName || 'Depositante'}
                                                 disabled
                                                 className="bg-slate-100 font-medium text-slate-700 cursor-not-allowed border-slate-200"
                                             />
                                         ) : (
-                                            <Select value={watch('customerId')} onValueChange={handleCustomerChange}>
+                                            <Select
+                                                value={watchedValues?.customerId || ''}
+                                                onValueChange={handleCustomerChange}
+                                                disabled={!canSave || !canViewCustomers}
+                                            >
                                                 <SelectTrigger className={errors.customerId ? 'border-rose-500' : ''}>
                                                     <SelectValue placeholder="Selecione o dono da mercadoria" />
                                                 </SelectTrigger>
@@ -310,22 +378,22 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="space-y-1.5 col-span-2">
                                             <Label>SKU *</Label>
-                                            <Input {...register('sku')} className={`font-mono uppercase ${errors.sku ? 'border-rose-500' : ''}`} disabled={isEditing} />
+                                            <Input {...register('sku')} className={`font-mono uppercase ${errors.sku ? 'border-rose-500' : ''}`} disabled={isEditing || !canSave} />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>Unidade Base (Fiscal) *</Label>
-                                            <Input {...register('baseUnit')} placeholder="Ex: UN, KG" className="font-mono uppercase" />
+                                            <Input {...register('baseUnit')} placeholder="Ex: UN, KG" className="font-mono uppercase" disabled={!canSave} />
                                         </div>
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label>Descrição Completa *</Label>
-                                        <Input {...register('description')} className={errors.description ? 'border-rose-500' : ''} />
+                                        <Input {...register('description')} className={errors.description ? 'border-rose-500' : ''} disabled={!canSave} />
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label>Código de Barras Base (EAN/GTIN)</Label>
-                                        <Input {...register('baseBarcode')} className="font-mono" />
+                                        <Input {...register('baseBarcode')} className="font-mono" disabled={!canSave} />
                                     </div>
 
                                     {/* BLOCO DE PESOS UNITÁRIOS DO PRODUTO */}
@@ -334,7 +402,7 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                             <Scale size={16} className="text-orange-600" />
                                             <div>
                                                 <span className="font-bold text-slate-900 text-xs block uppercase tracking-wider">
-                                                    Pesos Unitários do Produto (Por {watch('baseUnit') || 'UN'})
+                                                    Pesos Unitários do Produto (Por {watchedValues?.baseUnit || 'UN'})
                                                 </span>
                                                 <span className="text-[10px] text-slate-500">
                                                     Utilizado como fallback caso a NF-e de entrada não informe o peso e para totalizar a NF-e de expedição.
@@ -348,6 +416,7 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                                 <Input
                                                     type="number"
                                                     step="0.0001"
+                                                    disabled={!canSave}
                                                     {...register('netWeight')}
                                                     className="font-mono bg-white text-xs h-9"
                                                     placeholder="0.0000"
@@ -358,6 +427,7 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                                 <Input
                                                     type="number"
                                                     step="0.0001"
+                                                    disabled={!canSave}
                                                     {...register('grossWeight')}
                                                     className="font-mono bg-white text-xs h-9"
                                                     placeholder="0.0000"
@@ -371,17 +441,21 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <Label>NCM</Label>
-                                            <Input {...register('ncm')} className="font-mono" />
+                                            <Input {...register('ncm')} className="font-mono" disabled={!canSave} />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>CEST</Label>
-                                            <Input {...register('cest')} className="font-mono" />
+                                            <Input {...register('cest')} className="font-mono" disabled={!canSave} />
                                         </div>
                                     </div>
 
                                     <div className="space-y-1.5">
                                         <Label>Origem da Mercadoria</Label>
-                                        <Select value={String(watch('origin') || '0')} onValueChange={(v) => setValue('origin', Number(v))}>
+                                        <Select
+                                            value={String(watchedValues?.origin ?? 0)}
+                                            onValueChange={(v) => setValue('origin', Number(v))}
+                                            disabled={!canSave}
+                                        >
                                             <SelectTrigger><SelectValue placeholder="Origem" /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="0">0 - Nacional</SelectItem>
@@ -406,11 +480,15 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label>Estratégia de Separação</Label>
-                                                <Select value={String(watch('pickingStrategy'))} onValueChange={(val) => setValue('pickingStrategy', Number(val))}>
+                                                <Select
+                                                    value={String(watchedValues?.pickingStrategy ?? 1)}
+                                                    onValueChange={(val) => setValue('pickingStrategy', Number(val))}
+                                                    disabled={!canSave}
+                                                >
                                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="1">FIFO</SelectItem>
-                                                        <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO</SelectItem>
+                                                        <SelectItem value="2" disabled={!watchedValues?.tracksExpiration}>FEFO</SelectItem>
                                                         <SelectItem value="3">LIFO</SelectItem>
                                                     </SelectContent>
                                                 </Select>
@@ -418,7 +496,11 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
 
                                             <div className="space-y-2">
                                                 <Label>Data Base Analisada</Label>
-                                                <Select value={String(watch('pickingBaseDate'))} onValueChange={(val) => setValue('pickingBaseDate', Number(val))} disabled={watch('pickingStrategy') == 2}>
+                                                <Select
+                                                    value={String(watchedValues?.pickingBaseDate ?? 1)}
+                                                    onValueChange={(val) => setValue('pickingBaseDate', Number(val))}
+                                                    disabled={!canSave || Number(watchedValues?.pickingStrategy) === 2}
+                                                >
                                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="1">Data de Recebimento</SelectItem>
@@ -430,120 +512,146 @@ export default function ProductFormSheet({ open, onOpenChange, productId = null 
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4">
-                                            <div className="space-y-1.5"><Label>Tolerância Recebimento (Dias Vida Útil)</Label><Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" /></div>
-                                            <div className="space-y-1.5"><Label>Tolerância Expedição (Dias Vida Útil)</Label><Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" /></div>
+                                            <div className="space-y-1.5">
+                                                <Label>Tolerância Recebimento (Dias Vida Útil)</Label>
+                                                <Input type="number" {...register('inboundShelfLifeToleranceDays')} placeholder="Ex: Bloqueia se < 30 dias" disabled={!canSave} />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label>Tolerância Expedição (Dias Vida Útil)</Label>
+                                                <Input type="number" {...register('outboundShelfLifeToleranceDays')} placeholder="Ex: Não expede se < 10 dias" disabled={!canSave} />
+                                            </div>
                                         </div>
                                     </div>
                                 </TabsContent>
 
                                 <TabsContent value="embalagens" className="space-y-4 mt-0">
                                     {errors.packagings && <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-md">{errors.packagings.root?.message || 'Verifique as informações das embalagens.'}</div>}
-                                    {fields.map((item, index) => (
-                                        <div key={item.id} className="relative p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">
-                                            <div className="absolute top-4 right-4 flex items-center gap-1">
-                                                <Button
-                                                    type="button"
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRecalculatePackagingWeights(index)}
-                                                    className="text-orange-600 hover:bg-orange-50 h-8 px-2 text-xs"
-                                                    title="Recalcular pesos com base no peso unitário e fator"
-                                                >
-                                                    <Calculator size={13} className="mr-1" /> Recalcular Pesos
-                                                </Button>
+                                    {fields.map((item, index) => {
+                                        const packValues = watchedValues?.packagings?.[index] || {};
+                                        return (
+                                            <div key={item.id} className="relative p-5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-4">
+                                                {canSave && (
+                                                    <div className="absolute top-4 right-4 flex items-center gap-1">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleRecalculatePackagingWeights(index)}
+                                                            className="text-orange-600 hover:bg-orange-50 h-8 px-2 text-xs"
+                                                            title="Recalcular pesos com base no peso unitário e fator"
+                                                        >
+                                                            <Calculator size={13} className="mr-1" /> Recalcular Pesos
+                                                        </Button>
 
-                                                {fields.length > 1 && (
-                                                    <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0">
-                                                        <Trash2 size={16} />
-                                                    </Button>
+                                                        {fields.length > 1 && (
+                                                            <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-rose-500 hover:bg-rose-50 h-8 w-8 p-0">
+                                                                <Trash2 size={16} />
+                                                            </Button>
+                                                        )}
+                                                    </div>
                                                 )}
-                                            </div>
 
-                                            <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Box size={16} /> Embalagem #{index + 1}</h4>
+                                                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2"><Box size={16} /> Embalagem #{index + 1}</h4>
 
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <div className="space-y-1.5">
-                                                    <Label>Tipo de Embalagem *</Label>
-                                                    <Select value={watch(`packagings.${index}.packagingTypeId`)} onValueChange={(v) => setValue(`packagings.${index}.packagingTypeId`, v, { shouldValidate: true })}>
-                                                        <SelectTrigger className={errors?.packagings?.[index]?.packagingTypeId ? 'border-rose-500' : ''}><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {packagingTypesSummary.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.code} - {pt.description}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
+                                                <div className="grid grid-cols-3 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <Label>Tipo de Embalagem *</Label>
+                                                        <Select
+                                                            value={packValues.packagingTypeId || ''}
+                                                            onValueChange={(v) => setValue(`packagings.${index}.packagingTypeId`, v, { shouldValidate: true })}
+                                                            disabled={!canSave}
+                                                        >
+                                                            <SelectTrigger className={errors?.packagings?.[index]?.packagingTypeId ? 'border-rose-500' : ''}><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                                                            <SelectContent>
+                                                                {packagingTypesSummary.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.code} - {pt.description}</SelectItem>)}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
 
-                                                <div className="space-y-1.5">
-                                                    <Label>Fator de Conversão *</Label>
-                                                    <div className="flex items-center gap-2">
-                                                        <Input
-                                                            type="number"
-                                                            step="0.0001"
-                                                            value={watch(`packagings.${index}.conversionFactor`)}
-                                                            onChange={(e) => handleConversionFactorChange(index, e.target.value)}
-                                                            className={errors?.packagings?.[index]?.conversionFactor ? 'border-rose-500' : ''}
-                                                        />
-                                                        <span className="text-xs font-mono text-slate-500">{watch('baseUnit')}</span>
+                                                    <div className="space-y-1.5">
+                                                        <Label>Fator de Conversão *</Label>
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                type="number"
+                                                                step="0.0001"
+                                                                disabled={!canSave}
+                                                                value={packValues.conversionFactor ?? 1}
+                                                                onChange={(e) => handleConversionFactorChange(index, e.target.value)}
+                                                                className={errors?.packagings?.[index]?.conversionFactor ? 'border-rose-500' : ''}
+                                                            />
+                                                            <span className="text-xs font-mono text-slate-500">{watchedValues?.baseUnit || 'UN'}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="space-y-1.5">
+                                                        <Label>Cód. Barras (DUN/ITF)</Label>
+                                                        <Input {...register(`packagings.${index}.barcode`)} className="font-mono" disabled={!canSave} />
                                                     </div>
                                                 </div>
 
-                                                <div className="space-y-1.5">
-                                                    <Label>Cód. Barras (DUN/ITF)</Label>
-                                                    <Input {...register(`packagings.${index}.barcode`)} className="font-mono" />
+                                                <div className="grid grid-cols-6 gap-3">
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs">Peso Bruto (KG)</Label>
+                                                        <Input type="number" step="0.001" {...register(`packagings.${index}.grossWeight`)} className="h-8 text-xs font-mono" disabled={!canSave} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs">Peso Líq. (KG)</Label>
+                                                        <Input type="number" step="0.001" {...register(`packagings.${index}.netWeight`)} className="h-8 text-xs font-mono" disabled={!canSave} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs">Comp. (mm)</Label>
+                                                        <Input type="number" step="0.1" {...register(`packagings.${index}.lengthMm`)} className="h-8 text-xs" disabled={!canSave} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs">Largura (mm)</Label>
+                                                        <Input type="number" step="0.1" {...register(`packagings.${index}.widthMm`)} className="h-8 text-xs" disabled={!canSave} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs">Altura (mm)</Label>
+                                                        <Input type="number" step="0.1" {...register(`packagings.${index}.heightMm`)} className="h-8 text-xs" disabled={!canSave} />
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-xs font-bold text-blue-900">Empilhamento Máx.</Label>
+                                                        <Input type="number" min="1" {...register(`packagings.${index}.maxStacking`)} className="h-8 text-xs font-bold text-blue-700 bg-blue-50/50 border-blue-200" disabled={!canSave} />
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex gap-6 pt-2 border-t border-slate-200">
+                                                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-amber-700">
+                                                        <Checkbox
+                                                            checked={Boolean(packValues.allowFractionalPicking)}
+                                                            disabled={!canSave}
+                                                            onCheckedChange={(v) => setValue(`packagings.${index}.allowFractionalPicking`, Boolean(v))}
+                                                        />
+                                                        Permite Quebra (Fracionamento)
+                                                    </label>
                                                 </div>
                                             </div>
+                                        );
+                                    })}
 
-                                            <div className="grid grid-cols-6 gap-3">
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">Peso Bruto (KG)</Label>
-                                                    <Input type="number" step="0.001" {...register(`packagings.${index}.grossWeight`)} className="h-8 text-xs font-mono" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">Peso Líq. (KG)</Label>
-                                                    <Input type="number" step="0.001" {...register(`packagings.${index}.netWeight`)} className="h-8 text-xs font-mono" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">Comp. (mm)</Label>
-                                                    <Input type="number" step="0.1" {...register(`packagings.${index}.lengthMm`)} className="h-8 text-xs" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">Largura (mm)</Label>
-                                                    <Input type="number" step="0.1" {...register(`packagings.${index}.widthMm`)} className="h-8 text-xs" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs">Altura (mm)</Label>
-                                                    <Input type="number" step="0.1" {...register(`packagings.${index}.heightMm`)} className="h-8 text-xs" />
-                                                </div>
-                                                <div className="space-y-1.5">
-                                                    <Label className="text-xs font-bold text-blue-900">Empilhamento Máx.</Label>
-                                                    <Input type="number" min="1" {...register(`packagings.${index}.maxStacking`)} className="h-8 text-xs font-bold text-blue-700 bg-blue-50/50 border-blue-200" />
-                                                </div>
-                                            </div>
-
-                                            <div className="flex gap-6 pt-2 border-t border-slate-200">
-                                                <label className="flex items-center gap-2 text-xs font-medium cursor-pointer text-amber-700">
-                                                    <Checkbox checked={watch(`packagings.${index}.allowFractionalPicking`)} onCheckedChange={(v) => setValue(`packagings.${index}.allowFractionalPicking`, v)} />
-                                                    Permite Quebra (Fracionamento)
-                                                </label>
-                                            </div>
-                                        </div>
-                                    ))}
-
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={handleAddPackaging}
-                                        className="w-full border-dashed border-2 text-blue-600 hover:bg-blue-50"
-                                    >
-                                        <PlusCircle size={16} className="mr-2" /> Adicionar Embalagem Secundária
-                                    </Button>
+                                    {canSave && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={handleAddPackaging}
+                                            className="w-full border-dashed border-2 text-blue-600 hover:bg-blue-50"
+                                        >
+                                            <PlusCircle size={16} className="mr-2" /> Adicionar Embalagem Secundária
+                                        </Button>
+                                    )}
                                 </TabsContent>
                             </div>
 
                             <SheetFooter className="p-6 border-t border-slate-100 bg-slate-50/50">
-                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                                <Button type="submit" disabled={isCreating || isUpdating} className="bg-slate-900 text-white min-w-[140px]">
-                                    {isCreating || isUpdating ? <Loader2 className="animate-spin h-4 w-4" /> : <><Save className="h-4 w-4 mr-2" /> Salvar Produto</>}
+                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+                                    {canSave ? 'Cancelar' : 'Fechar'}
                                 </Button>
+                                {canSave && (
+                                    <Button type="submit" disabled={isSaving} className="bg-slate-900 text-white min-w-[140px]">
+                                        {isSaving ? <Loader2 className="animate-spin h-4 w-4" /> : <><Save className="h-4 w-4 mr-2" /> Salvar Produto</>}
+                                    </Button>
+                                )}
                             </SheetFooter>
                         </Tabs>
                     </form>

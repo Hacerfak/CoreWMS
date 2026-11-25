@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Package, Box } from 'lucide-react';
 import ProductsTab from './ProductsTab';
 import PackagingTypesTab from './PackagingTypesTab';
 
 export default function ProdutosPage() {
-    // Estado que controla a tab visível para ativar o Lazy Mounting
-    const [currentTab, setCurrentTab] = useState("products");
+    const canViewProducts = useHasPermission(['products:view', 'products:create', 'products:edit', 'products:delete']);
+
+    const [currentTab, setCurrentTab] = useState('products');
+
+    if (!canViewProducts) {
+        return null;
+    }
 
     return (
         <div className="flex flex-col h-full space-y-6">
@@ -28,14 +34,12 @@ export default function ProdutosPage() {
                 </div>
 
                 <div className="flex-1 mt-4 overflow-hidden relative">
-                    {/* Renderização Condicional: Monta a Tab de Produtos apenas se for a ativa */}
                     {currentTab === 'products' && (
                         <div className="absolute inset-0 h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <ProductsTab />
                         </div>
                     )}
 
-                    {/* Renderização Condicional: Monta a Tab de Embalagens apenas se for a ativa */}
                     {currentTab === 'packagings' && (
                         <div className="absolute inset-0 h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <PackagingTypesTab />

@@ -30,6 +30,7 @@ const CURRENT_YEAR = new Date().getFullYear()
 const START_YEAR = 1940
 const END_YEAR = CURRENT_YEAR + 30
 const YEARS = Array.from({ length: END_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i)
+const FALLBACK_DATE = new Date()
 
 function maskDateInput(value: string): string {
     const digits = value.replace(/\D/g, "").slice(0, 8)
@@ -112,19 +113,22 @@ export function DatePicker({
         return parsedDate || new Date()
     })
 
-    // Garante sempre uma instância segura de Date para o cabeçalho
-    const safeViewDate = React.useMemo(() => {
-        return viewDate instanceof Date && !isNaN(viewDate.getTime()) ? viewDate : new Date()
-    }, [viewDate])
+    const [prevParsedTime, setPrevParsedTime] = React.useState<number | undefined>(() =>
+        parsedDate?.getTime()
+    )
 
-    React.useEffect(() => {
+    const currentParsedTime = parsedDate?.getTime()
+    if (currentParsedTime !== prevParsedTime) {
+        setPrevParsedTime(currentParsedTime)
         if (parsedDate) {
             setInputValue(format(parsedDate, "dd/MM/yyyy"))
             setViewDate(parsedDate)
         } else {
             setInputValue("")
         }
-    }, [parsedDate])
+    }
+
+    const safeViewDate = viewDate instanceof Date && !isNaN(viewDate.getTime()) ? viewDate : FALLBACK_DATE
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const masked = maskDateInput(e.target.value)
