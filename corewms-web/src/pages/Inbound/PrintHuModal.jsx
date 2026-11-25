@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useGetApiPrintingTemplates, useGetApiPrintingAgents } from '@/api/generated/printing/printing';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,9 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orderData }) {
-    const { data: templates = [], } = useGetApiPrintingTemplates();
-    const { data: agents = [], } = useGetApiPrintingAgents();
+export default function PrintHuModal({ open, onOpenChange, husToPrint = [] }) {
+    const canManagePrinting = useHasPermission('printing:manage');
+
+    const { data: templates = [] } = useGetApiPrintingTemplates({
+        query: { enabled: open && canManagePrinting }
+    });
+    const { data: agents = [] } = useGetApiPrintingAgents({
+        query: { enabled: open && canManagePrinting }
+    });
 
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
     const [selectedAgentName, setSelectedAgentName] = useState('');
@@ -19,30 +26,23 @@ export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orde
     const [isPending, setIsPending] = useState(false);
 
     // Filtra impressoras ativas dos agentes online
-    const onlineAgents = agents.filter(a => a.isOnline && a.isActive);
-    const availablePrinters = onlineAgents.flatMap(a => (a.printers || []).map(p => ({ ...p, agentName: a.Name || a.name })));
+    const availablePrinters = useMemo(() => {
+        const onlineAgents = agents.filter(a => a.isOnline && a.isActive);
+        return onlineAgents.flatMap(a => (a.printers || []).map(p => ({ ...p, agentName: a.Name || a.name })));
+    }, [agents]);
 
-    useEffect(() => {
-        if (templates.length > 0 && !selectedTemplateId) {
-            setSelectedTemplateId(templates[0].id);
-        }
-        if (availablePrinters.length > 0 && !selectedPrinterName) {
-            setSelectedAgentName(availablePrinters[0].agentName);
-            setSelectedPrinterName(availablePrinters[0].name || availablePrinters[0].Name);
-        }
-    }, [
-	templates,
-	availablePrinters,
-	selectedPrinterName,
-	selectedTemplateId
-]);
+    const effectiveTemplateId = selectedTemplateId || templates[0]?.id || '';
+    const firstPrinter = availablePrinters[0];
+    const effectivePrinterName = selectedPrinterName || (firstPrinter ? (firstPrinter.name || firstPrinter.Name) : '');
+    const effectiveAgentName = selectedAgentName || (firstPrinter ? firstPrinter.agentName : '');
 
     const handlePrint = async () => {
-        if (!selectedTemplateId || !selectedPrinterName || !selectedAgentName) {
+        if (!canManagePrinting) return;
+
+        if (!effectiveTemplateId || !effectivePrinterName || !effectiveAgentName) {
             return toast.warning('Selecione o template e a impressora destino.');
         }
 
-        // Filtra apenas IDs válidos para evitar envio de nulls
         const huIds = husToPrint.map(h => h.id).filter(Boolean);
         if (huIds.length === 0) {
             return toast.warning('Nenhum ID de HU válido encontrado para impressão.');
@@ -55,13 +55,13 @@ export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orde
                 method: 'POST',
                 data: {
                     handlingUnitIds: huIds,
-                    templateId: selectedTemplateId,
-                    stationName: selectedAgentName,
-                    printerName: selectedPrinterName
+                    templateId: effectiveTemplateId,
+                    stationName: effectiveAgentName,
+                    printerName: effectivePrinterName
                 }
             });
 
-            toast.success(`${huIds.length} etiqueta(s) enviada(s) para a impressora ${selectedPrinterName}!`);
+            toast.success(`${huIds.length} etiqueta(s) enviada(s) para a impressora ${effectivePrinterName}!`);
             onOpenChange(false);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao solicitar impressão no servidor.');
@@ -85,7 +85,7 @@ export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orde
                 <div className="space-y-4 py-2">
                     <div className="space-y-1">
                         <Label className="text-xs font-semibold">Modelo de Etiqueta (ZPL)</Label>
-                        <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                        <Select value={effectiveTemplateId} onValueChange={setSelectedTemplateId} disabled={!canManagePrinting}>
                             <SelectTrigger className="bg-slate-50"><SelectValue placeholder="Selecione o Template..." /></SelectTrigger>
                             <SelectContent>
                                 {templates.map(t => (
@@ -98,7 +98,8 @@ export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orde
                     <div className="space-y-1">
                         <Label className="text-xs font-semibold">Impressora Térmica Conectada</Label>
                         <Select
-                            value={selectedPrinterName}
+                            value={effectivePrinterName}
+                            disabled={!canManagePrinting}
                             onValueChange={(pName) => {
                                 const p = availablePrinters.find(x => (x.name || x.Name) === pName);
                                 setSelectedPrinterName(pName);
@@ -123,9 +124,11 @@ export default function PrintHuModal({ open, onOpenChange, husToPrint = [], orde
 
                 <DialogFooter className="border-t border-slate-100 pt-4">
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Cancelar</Button>
-                    <Button onClick={handlePrint} disabled={isPending || husToPrint.length === 0 || availablePrinters.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white">
-                        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Printer className="w-4 h-4 mr-2" /> Disparar Impressão ({husToPrint.length})</>}
-                    </Button>
+                    {canManagePrinting && (
+                        <Button onClick={handlePrint} disabled={isPending || husToPrint.length === 0 || availablePrinters.length === 0} className="bg-blue-600 hover:bg-blue-700 text-white">
+                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Printer className="w-4 h-4 mr-2" /> Disparar Impressão ({husToPrint.length})</>}
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

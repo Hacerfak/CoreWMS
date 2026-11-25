@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGetApiInboundReview } from '@/api/generated/inbound/inbound';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,12 +10,14 @@ import LinkProductModal from './LinkProductModal';
 
 export default function ReviewInbound() {
     const navigate = useNavigate();
-    const { id: filterOrderId } = useParams(); // Permite filtrar por uma ordem específica se vier da rota /inbound/revisao/:id
+    const { id: filterOrderId } = useParams();
+    const canReviewInbound = useHasPermission('inbound:review');
     const [selectedItem, setSelectedItem] = useState(null);
 
-    const { data: pendingItems = [], isLoading } = useGetApiInboundReview();
+    const { data: pendingItems = [], isLoading } = useGetApiInboundReview({
+        query: { enabled: canReviewInbound }
+    });
 
-    // Se a rota possuir um ID de ordem, filtra apenas os itens daquela Nota Fiscal
     const filteredItems = filterOrderId
         ? pendingItems.filter(i => i.inboundOrderId === filterOrderId)
         : pendingItems;
@@ -94,9 +97,11 @@ export default function ReviewInbound() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button size="sm" onClick={() => setSelectedItem(item)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
-                                            <LinkIcon className="h-4 w-4 mr-2" /> Tratar / Vincular
-                                        </Button>
+                                        {canReviewInbound && (
+                                            <Button size="sm" onClick={() => setSelectedItem(item)} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+                                                <LinkIcon className="h-4 w-4 mr-2" /> Tratar / Vincular
+                                            </Button>
+                                        )}
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -105,7 +110,7 @@ export default function ReviewInbound() {
                 </div>
             </div>
 
-            {selectedItem && (
+            {selectedItem && canReviewInbound && (
                 <LinkProductModal
                     open={!!selectedItem}
                     onOpenChange={(v) => !v && setSelectedItem(null)}

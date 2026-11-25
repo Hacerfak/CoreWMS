@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useGetApiInbound, useDeleteApiInboundIdCancel, useDeleteApiInboundId } from '@/api/generated/inbound/inbound';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,6 +21,14 @@ import ImportXmlModal from './ImportXmlModal';
 export default function InboundList() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+
+    const canViewInbound = useHasPermission('inbound:view');
+    const canImportInbound = useHasPermission('inbound:import');
+    const canReviewInbound = useHasPermission('inbound:review');
+    const canReceiveInbound = useHasPermission('inbound:receive');
+    const canCancelInbound = useHasPermission('inbound:cancel');
+    const canManageInbound = useHasPermission('inbound:manage');
+
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [dateRange, setDateRange] = useState(undefined);
@@ -36,7 +45,7 @@ export default function InboundList() {
         const fromDate = new Date(dateRange.from);
         fromDate.setHours(0, 0, 0, 0);
         return fromDate.toISOString();
-    }, [dateRange?.from]);
+    }, [dateRange]);
 
     const formattedEndDate = useMemo(() => {
         if (!dateRange?.from) return undefined;
@@ -54,7 +63,9 @@ export default function InboundList() {
         ...(formattedEndDate && { EndDate: formattedEndDate })
     };
 
-    const { data: apiResponse, isLoading, isFetching } = useGetApiInbound(queryParams);
+    const { data: apiResponse, isLoading, isFetching } = useGetApiInbound(queryParams, {
+        query: { enabled: canViewInbound }
+    });
     const inbounds = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -132,12 +143,16 @@ export default function InboundList() {
                     <p className="text-sm text-slate-500 mt-1">Gestão de entradas, conferência de XML e acompanhamento de descargas.</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button onClick={() => navigate('/inbound/revisao')} variant="outline" className="border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100">
-                        <FileCode2 className="mr-2 h-4 w-4 text-amber-600" /> Revisar Pendências
-                    </Button>
-                    <Button onClick={() => setIsImportModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">
-                        <Upload className="mr-2 h-4 w-4" /> Importar NF-e / SEFAZ
-                    </Button>
+                    {canReviewInbound && (
+                        <Button onClick={() => navigate('/inbound/revisao')} variant="outline" className="border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100">
+                            <FileCode2 className="mr-2 h-4 w-4 text-amber-600" /> Revisar Pendências
+                        </Button>
+                    )}
+                    {canImportInbound && (
+                        <Button onClick={() => setIsImportModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs">
+                            <Upload className="mr-2 h-4 w-4" /> Importar NF-e / SEFAZ
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -243,7 +258,7 @@ export default function InboundList() {
                                         <TableCell className="text-right space-x-1">
                                             <div className="inline-flex items-center gap-1">
                                                 {/* Botão Ver Detalhes - Disponível em qualquer status ativo */}
-                                                {order.status !== 'Canceled' && (
+                                                {canViewInbound && order.status !== 'Canceled' && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -255,7 +270,7 @@ export default function InboundList() {
                                                 )}
 
                                                 {/* 1. Etapa de Revisão de Itens / Pré-cadastro de SKU */}
-                                                {order.status === 'Pending' && order.hasPendingReview && (
+                                                {canReviewInbound && order.status === 'Pending' && order.hasPendingReview && (
                                                     <Button
                                                         size="sm"
                                                         onClick={() => navigate(`/inbound/revisao/${order.id}`)}
@@ -266,7 +281,7 @@ export default function InboundList() {
                                                 )}
 
                                                 {/* 2. Aguardando Início do Recebimento */}
-                                                {order.status === 'Pending' && !order.hasPendingReview && (
+                                                {canReceiveInbound && order.status === 'Pending' && !order.hasPendingReview && (
                                                     <Button
                                                         size="sm"
                                                         onClick={() => navigate(`/inbound/operacao/${order.id}`)}
@@ -277,7 +292,7 @@ export default function InboundList() {
                                                 )}
 
                                                 {/* 3. Recebimento em Andamento */}
-                                                {order.status === 'Receiving' && (
+                                                {canReceiveInbound && order.status === 'Receiving' && (
                                                     <Button
                                                         size="sm"
                                                         onClick={() => navigate(`/inbound/operacao/${order.id}`)}
@@ -288,7 +303,7 @@ export default function InboundList() {
                                                 )}
 
                                                 {/* 4. Finalizado: Acesso direto às HUs geradas */}
-                                                {order.status === 'Completed' && (
+                                                {canViewInbound && order.status === 'Completed' && (
                                                     <Button
                                                         size="sm"
                                                         variant="outline"
@@ -301,7 +316,7 @@ export default function InboundList() {
                                                 )}
 
                                                 {/* Cancelamento */}
-                                                {order.status !== 'Completed' && order.status !== 'Canceled' && (
+                                                {canCancelInbound && order.status !== 'Completed' && order.status !== 'Canceled' && (
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
@@ -314,7 +329,7 @@ export default function InboundList() {
                                                 )}
 
                                                 {/* Exclusão de Canceladas */}
-                                                {order.status === 'Canceled' && (
+                                                {canManageInbound && order.status === 'Canceled' && (
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
@@ -347,43 +362,49 @@ export default function InboundList() {
                 )}
             </div>
 
-            <ImportXmlModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+            {canImportInbound && (
+                <ImportXmlModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+            )}
 
             {/* Modal Cancelar */}
-            <AlertDialog open={!!orderToCancel} onOpenChange={(open) => !open && setOrderToCancel(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Cancelar Ordem de Recebimento?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Deseja cancelar a entrada desta NF-e? Esta ação é irreversível.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isCanceling}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => cancelOrder({ id: orderToCancel.id })} disabled={isCanceling} className="bg-rose-600 hover:bg-rose-700 text-white">
-                            {isCanceling ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canCancelInbound && (
+                <AlertDialog open={!!orderToCancel} onOpenChange={(open) => !open && setOrderToCancel(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Cancelar Ordem de Recebimento?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Deseja cancelar a entrada desta NF-e? Esta ação é irreversível.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isCanceling}>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => cancelOrder({ id: orderToCancel.id })} disabled={isCanceling} className="bg-rose-600 hover:bg-rose-700 text-white">
+                                {isCanceling ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Cancelamento'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* Modal Excluir */}
-            <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Excluir Registo da NF-e?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Deseja excluir definitivamente o registo desta nota cancelada? Esta ação não afetará os cadastros de Clientes ou Produtos existentes.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteOrder({ id: orderToDelete.id })} disabled={isDeleting} className="bg-rose-600 hover:bg-rose-700 text-white">
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageInbound && (
+                <AlertDialog open={!!orderToDelete} onOpenChange={(open) => !open && setOrderToDelete(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Registo da NF-e?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Deseja excluir definitivamente o registo desta nota cancelada? Esta ação não afetará os cadastros de Clientes ou Produtos existentes.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteOrder({ id: orderToDelete.id })} disabled={isDeleting} className="bg-rose-600 hover:bg-rose-700 text-white">
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

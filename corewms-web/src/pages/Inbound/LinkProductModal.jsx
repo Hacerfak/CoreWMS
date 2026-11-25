@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import { useGetApiProducts, usePostApiProducts } from '@/api/generated/products/
 import { usePostApiInboundReviewItemIdLink } from '@/api/generated/inbound/inbound';
 import { useGetApiPackagingTypes } from '@/api/generated/packaging-types/packaging-types';
 import { useGetApiCustomersId } from '@/api/generated/customers/customers';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,7 +19,6 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, Search, Link as LinkIcon, PackageCheck, AlertCircle, Plus, Trash2, Sparkles, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Validation Schema - Edição do SKU e embalagens
 const quickPackagingSchema = z.object({
     packagingTypeId: z.string().min(1, 'Selecione o tipo de embalagem.'),
     conversionFactor: z.coerce.number().min(1, 'Mínimo 1.'),
@@ -34,54 +34,45 @@ const quickProductSchema = z.object({
 
 export default function LinkProductModal({ open, onOpenChange, item }) {
     const queryClient = useQueryClient();
+
+    const canReviewInbound = useHasPermission('inbound:review');
+    const canCreateProduct = useHasPermission('products:create');
+    const canViewCustomers = useHasPermission('customers:view');
+    const canViewProducts = useHasPermission(['products:view', 'inbound:review']);
+
     const [activeTab, setActiveTab] = useState('existing');
     const [search, setSearch] = useState(item?.rawSkuCode || '');
     const [selectedProductId, setSelectedProductId] = useState(null);
 
-    // 1. Busca os tipos de embalagens cadastrados
-    const { data: packTypesResponse } = useGetApiPackagingTypes();
+    const { data: packTypesResponse } = useGetApiPackagingTypes({
+        query: { enabled: open && canCreateProduct }
+    });
     const packagingTypes = Array.isArray(packTypesResponse) ? packTypesResponse : (packTypesResponse?.items || []);
 
-    // 2. Consulta pontual das regras do Depositante pelo ID específico do item
     const { data: customerData, isLoading: isLoadingCustomer } = useGetApiCustomersId(
         item?.customerId,
-        { query: { enabled: open && Boolean(item?.customerId) } }
+        { query: { enabled: open && Boolean(item?.customerId) && canCreateProduct && canViewCustomers } }
     );
 
-    // 3. Busca de produtos existentes no catálogo
     const { data: apiResponse, isLoading: isLoadingProducts } = useGetApiProducts(
-        { Search: search, PageSize: 5 },
-        { query: { enabled: open && search.length >= 2 } }
+        { Search: search, CustomerId: item?.customerId, PageSize: 10 },
+        { query: { enabled: open && search.length >= 2 && canViewProducts } }
     );
     const products = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
 
-    const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { register, control, handleSubmit, setValue, formState: { errors } } = useForm({
         resolver: zodResolver(quickProductSchema),
-        defaultValues: {
-            sku: '',
-            description: '',
-            baseUnit: 'UN',
-            packagings: [{ packagingTypeId: '', conversionFactor: 1, barcode: '' }]
+        values: {
+            sku: item?.rawSkuCode || '',
+            description: item?.rawDescription || '',
+            baseUnit: item?.rawUnit || 'UN',
+            packagings: [{ packagingTypeId: '', conversionFactor: 1, barcode: item?.rawBarcode || '' }]
         }
     });
 
     const { fields, append, remove } = useFieldArray({ control, name: 'packagings' });
+    const watchedPackagings = useWatch({ control, name: 'packagings' }) || [];
 
-    useEffect(() => {
-        if (open && item) {
-            reset({
-                sku: item.rawSkuCode || '',
-                description: item.rawDescription || '',
-                baseUnit: item.rawUnit || 'UN',
-                packagings: [{ packagingTypeId: '', conversionFactor: 1, barcode: item.rawBarcode || '' }]
-            });
-            setSearch(item.rawSkuCode || '');
-            setSelectedProductId(null);
-            setActiveTab('existing');
-        }
-    }, [open, item, reset]);
-
-    // Mutação para Vincular Produto Existente
     const { mutate: linkProduct, isPending: isLinking } = usePostApiInboundReviewItemIdLink({
         mutation: {
             onSuccess: () => {
@@ -94,7 +85,6 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
         }
     });
 
-    // Mutação para Cadastro Rápido
     const { mutate: createProduct, isPending: isCreating } = usePostApiProducts({
         mutation: {
             onSuccess: (newProduct) => {
@@ -102,7 +92,7 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                 queryClient.invalidateQueries({ queryKey: ['/api/products'] });
 
                 const createdId = newProduct?.id;
-                if (createdId) {
+                if (createdId && canReviewInbound) {
                     linkProduct({ itemId: item.itemId, data: { productId: createdId } });
                 } else {
                     toast.info('Procure pelo novo SKU na aba de busca para concluir o vínculo.');
@@ -114,11 +104,13 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
     });
 
     const handleLinkExisting = () => {
-        if (!selectedProductId) return;
+        if (!selectedProductId || !canReviewInbound) return;
         linkProduct({ itemId: item.itemId, data: { productId: selectedProductId } });
     };
 
     const handleCreateQuickProduct = (data) => {
+        if (!canCreateProduct) return;
+
         const fullPayload = {
             customerId: item.customerId,
             sku: data.sku.trim(),
@@ -155,9 +147,19 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
     };
 
     const isBusy = isLinking || isCreating;
+    const effectiveTab = canCreateProduct ? activeTab : 'existing';
+
+    const handleOpenChange = (nextOpen) => {
+        if (isBusy) return;
+        if (!nextOpen) {
+            setSelectedProductId(null);
+            setActiveTab('existing');
+        }
+        onOpenChange(nextOpen);
+    };
 
     return (
-        <Dialog open={open} onOpenChange={(v) => { if (!isBusy) onOpenChange(v); }}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-2xl bg-white p-0 overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-6 pb-4 border-b border-slate-100 bg-slate-50/50">
                     <DialogHeader>
@@ -165,7 +167,9 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                             <LinkIcon className="text-blue-600" size={20} /> Tratamento de Produto Desconhecido
                         </DialogTitle>
                         <DialogDescription className="text-slate-500">
-                            Escolha um produto existente no catálogo ou crie um novo SKU rápido para a nota fiscal.
+                            {canCreateProduct
+                                ? 'Escolha um produto existente no catálogo ou crie um novo SKU rápido para a nota fiscal.'
+                                : 'Escolha um produto existente no catálogo deste depositante para vincular ao item da nota fiscal.'}
                         </DialogDescription>
                     </DialogHeader>
                 </div>
@@ -195,15 +199,17 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                         </div>
                     </div>
 
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                        <TabsList className="grid grid-cols-2 w-full bg-slate-100 p-1">
-                            <TabsTrigger value="existing" className="data-[state=active]:bg-white text-xs font-semibold">
-                                <Search size={14} className="mr-2" /> Buscar SKU Existente
-                            </TabsTrigger>
-                            <TabsTrigger value="new" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs font-semibold">
-                                <Sparkles size={14} className="mr-2" /> Cadastro Rápido de SKU
-                            </TabsTrigger>
-                        </TabsList>
+                    <Tabs value={effectiveTab} onValueChange={setActiveTab} className="w-full">
+                        {canCreateProduct && (
+                            <TabsList className="grid grid-cols-2 w-full bg-slate-100 p-1">
+                                <TabsTrigger value="existing" className="data-[state=active]:bg-white text-xs font-semibold">
+                                    <Search size={14} className="mr-2" /> Buscar SKU Existente
+                                </TabsTrigger>
+                                <TabsTrigger value="new" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-xs font-semibold">
+                                    <Sparkles size={14} className="mr-2" /> Cadastro Rápido de SKU
+                                </TabsTrigger>
+                            </TabsList>
+                        )}
 
                         <TabsContent value="existing" className="space-y-4 pt-4">
                             <div className="relative">
@@ -244,116 +250,123 @@ export default function LinkProductModal({ open, onOpenChange, item }) {
                                 )}
                             </div>
 
-                            <div className="pt-2 flex justify-end">
-                                <Button
-                                    onClick={handleLinkExisting}
-                                    disabled={!selectedProductId || isBusy}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
-                                >
-                                    {isLinking ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Vínculo'}
-                                </Button>
-                            </div>
-                        </TabsContent>
-
-                        <TabsContent value="new" className="pt-4">
-                            <form onSubmit={handleSubmit(handleCreateQuickProduct)} className="space-y-4">
-                                <div className="grid grid-cols-12 gap-3">
-                                    <div className="col-span-4 space-y-1">
-                                        <Label className="text-xs">Código SKU *</Label>
-                                        <Input {...register('sku')} className="h-9 text-xs font-mono font-bold text-blue-950 uppercase" />
-                                        {errors.sku && <p className="text-[10px] text-rose-500">{errors.sku.message}</p>}
-                                    </div>
-                                    <div className="col-span-6 space-y-1">
-                                        <Label className="text-xs">Descrição Completa *</Label>
-                                        <Input {...register('description')} className="h-9 text-xs" />
-                                        {errors.description && <p className="text-[10px] text-rose-500">{errors.description.message}</p>}
-                                    </div>
-                                    <div className="col-span-2 space-y-1">
-                                        <Label className="text-xs">UN Fiscal *</Label>
-                                        <Input {...register('baseUnit')} placeholder="Ex: UN, KG" className="h-9 text-xs font-mono uppercase" />
-                                        {errors.baseUnit && <p className="text-[10px] text-rose-500">{errors.baseUnit.message}</p>}
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3 pt-2">
-                                    <div className="flex items-center justify-between border-b pb-1">
-                                        <Label className="text-xs font-bold text-slate-800">Embalagens & Fatores de Conversão *</Label>
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => append({ packagingTypeId: '', conversionFactor: 1, barcode: '' })}
-                                            className="h-6 text-[10px] text-blue-600 hover:bg-blue-50"
-                                        >
-                                            <Plus size={12} className="mr-1" /> Adicionar Embalagem
-                                        </Button>
-                                    </div>
-
-                                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                                        {fields.map((field, idx) => (
-                                            <div key={field.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                                                <div className="flex-1">
-                                                    <Select value={watch(`packagings.${idx}.packagingTypeId`)} onValueChange={(v) => setValue(`packagings.${idx}.packagingTypeId`, v, { shouldValidate: true })}>
-                                                        <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Tipo..." /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {packagingTypes.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.code} - {pt.description}</SelectItem>)}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="w-24">
-                                                    <Input type="number" step="0.0001" placeholder="Fator" {...register(`packagings.${idx}.conversionFactor`)} className="h-8 text-xs bg-white font-mono" />
-                                                </div>
-                                                <div className="w-32">
-                                                    <Input placeholder="Cód. Barras" {...register(`packagings.${idx}.barcode`)} className="h-8 text-xs bg-white font-mono" />
-                                                </div>
-                                                {fields.length > 1 && (
-                                                    <Button type="button" variant="ghost" size="sm" onClick={() => remove(idx)} className="h-8 w-8 p-0 text-rose-500 hover:bg-rose-50"><Trash2 size={14} /></Button>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs flex items-center justify-between text-blue-900">
-                                    <div className="flex items-center gap-2">
-                                        <ShieldCheck size={16} className="text-blue-600 shrink-0" />
-                                        <span>
-                                            Regras WMS Herdadas do Depositante (
-                                            {isLoadingCustomer
-                                                ? 'Carregando regras...'
-                                                : (customerData?.corporateName || 'Depositante')}
-                                            )
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        {isLoadingCustomer ? (
-                                            <Loader2 size={13} className="animate-spin text-blue-600" />
-                                        ) : (
-                                            <>
-                                                {customerData?.tracksBatch && <Badge variant="outline" className="bg-white text-[9px]">Lote</Badge>}
-                                                {customerData?.tracksExpiration && <Badge variant="outline" className="bg-white text-[9px]">Validade</Badge>}
-                                                {customerData?.tracksManufacture && <Badge variant="outline" className="bg-white text-[9px]">Fabricação</Badge>}
-                                                {customerData?.tracksSerial && <Badge variant="outline" className="bg-white text-[9px]">Serial</Badge>}
-                                                {!customerData?.tracksBatch && !customerData?.tracksExpiration && !customerData?.tracksManufacture && !customerData?.tracksSerial && (
-                                                    <span className="text-[10px] text-blue-600/70 italic">Sem travas obrigatórias</span>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="pt-3 border-t border-slate-100 flex justify-end">
-                                    <Button type="submit" disabled={isBusy || isLoadingCustomer} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[150px] text-xs">
-                                        {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-2" /> Salvar e Vincular</>}
+                            {canReviewInbound && (
+                                <div className="pt-2 flex justify-end">
+                                    <Button
+                                        onClick={handleLinkExisting}
+                                        disabled={!selectedProductId || isBusy}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                                    >
+                                        {isLinking ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Vínculo'}
                                     </Button>
                                 </div>
-                            </form>
+                            )}
                         </TabsContent>
+
+                        {canCreateProduct && (
+                            <TabsContent value="new" className="pt-4">
+                                <form onSubmit={handleSubmit(handleCreateQuickProduct)} className="space-y-4">
+                                    <div className="grid grid-cols-12 gap-3">
+                                        <div className="col-span-4 space-y-1">
+                                            <Label className="text-xs">Código SKU *</Label>
+                                            <Input {...register('sku')} className="h-9 text-xs font-mono font-bold text-blue-950 uppercase" />
+                                            {errors.sku && <p className="text-[10px] text-rose-500">{errors.sku.message}</p>}
+                                        </div>
+                                        <div className="col-span-6 space-y-1">
+                                            <Label className="text-xs">Descrição Completa *</Label>
+                                            <Input {...register('description')} className="h-9 text-xs" />
+                                            {errors.description && <p className="text-[10px] text-rose-500">{errors.description.message}</p>}
+                                        </div>
+                                        <div className="col-span-2 space-y-1">
+                                            <Label className="text-xs">UN Fiscal *</Label>
+                                            <Input {...register('baseUnit')} placeholder="Ex: UN, KG" className="h-9 text-xs font-mono uppercase" />
+                                            {errors.baseUnit && <p className="text-[10px] text-rose-500">{errors.baseUnit.message}</p>}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 pt-2">
+                                        <div className="flex items-center justify-between border-b pb-1">
+                                            <Label className="text-xs font-bold text-slate-800">Embalagens & Fatores de Conversão *</Label>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => append({ packagingTypeId: '', conversionFactor: 1, barcode: '' })}
+                                                className="h-6 text-[10px] text-blue-600 hover:bg-blue-50"
+                                            >
+                                                <Plus size={12} className="mr-1" /> Adicionar Embalagem
+                                            </Button>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                                            {fields.map((field, idx) => (
+                                                <div key={field.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                                                    <div className="flex-1">
+                                                        <Select
+                                                            value={watchedPackagings[idx]?.packagingTypeId || ''}
+                                                            onValueChange={(v) => setValue(`packagings.${idx}.packagingTypeId`, v, { shouldValidate: true })}
+                                                        >
+                                                            <SelectTrigger className="h-8 text-xs bg-white"><SelectValue placeholder="Tipo..." /></SelectTrigger>
+                                                            <SelectContent>
+                                                                {packagingTypes.map(pt => <SelectItem key={pt.id} value={pt.id}>{pt.code} - {pt.description}</SelectItem>)}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="w-24">
+                                                        <Input type="number" step="0.0001" placeholder="Fator" {...register(`packagings.${idx}.conversionFactor`)} className="h-8 text-xs bg-white font-mono" />
+                                                    </div>
+                                                    <div className="w-32">
+                                                        <Input placeholder="Cód. Barras" {...register(`packagings.${idx}.barcode`)} className="h-8 text-xs bg-white font-mono" />
+                                                    </div>
+                                                    {fields.length > 1 && (
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => remove(idx)} className="h-8 w-8 p-0 text-rose-500 hover:bg-rose-50"><Trash2 size={14} /></Button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-xs flex items-center justify-between text-blue-900">
+                                        <div className="flex items-center gap-2">
+                                            <ShieldCheck size={16} className="text-blue-600 shrink-0" />
+                                            <span>
+                                                Regras WMS Herdadas do Depositante (
+                                                {isLoadingCustomer
+                                                    ? 'Carregando regras...'
+                                                    : (customerData?.corporateName || 'Depositante')}
+                                                )
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {isLoadingCustomer ? (
+                                                <Loader2 size={13} className="animate-spin text-blue-600" />
+                                            ) : (
+                                                <>
+                                                    {customerData?.tracksBatch && <Badge variant="outline" className="bg-white text-[9px]">Lote</Badge>}
+                                                    {customerData?.tracksExpiration && <Badge variant="outline" className="bg-white text-[9px]">Validade</Badge>}
+                                                    {customerData?.tracksManufacture && <Badge variant="outline" className="bg-white text-[9px]">Fabricação</Badge>}
+                                                    {customerData?.tracksSerial && <Badge variant="outline" className="bg-white text-[9px]">Serial</Badge>}
+                                                    {!customerData?.tracksBatch && !customerData?.tracksExpiration && !customerData?.tracksManufacture && !customerData?.tracksSerial && (
+                                                        <span className="text-[10px] text-blue-600/70 italic">Sem travas obrigatórias</span>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-slate-100 flex justify-end">
+                                        <Button type="submit" disabled={isBusy || isLoadingCustomer} className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[150px] text-xs">
+                                            {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-2" /> Salvar e Vincular</>}
+                                        </Button>
+                                    </div>
+                                </form>
+                            </TabsContent>
+                        )}
                     </Tabs>
                 </div>
 
                 <DialogFooter className="p-4 border-t border-slate-100 bg-slate-50/50 mt-4">
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isBusy} className="text-xs">Cancelar</Button>
+                    <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isBusy} className="text-xs">Cancelar</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

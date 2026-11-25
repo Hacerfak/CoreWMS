@@ -8,6 +8,7 @@ import {
 } from '@/api/generated/inbound/inbound';
 import { useGetApiTopologyLocationsDocks } from '@/api/generated/topology/topology';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -31,6 +32,16 @@ export default function InboundOperacaoPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const canViewInbound = useHasPermission('inbound:view');
+    const canManifestInbound = useHasPermission('inbound:manifest');
+    const canReviewInbound = useHasPermission('inbound:review');
+    const canReceiveInbound = useHasPermission('inbound:receive');
+    const canViewCustomers = useHasPermission('customers:view');
+
+    const canViewYard = useHasPermission('yard:view');
+    const canOperateYard = useHasPermission('yard:operate');
+    const canCreateYardAppointment = useHasPermission(['yard:schedule', 'yard:manage']);
+
     const [selectedDocks, setSelectedDocks] = useState({});
 
     // Estados de Manifestação SEFAZ
@@ -44,23 +55,26 @@ export default function InboundOperacaoPage() {
     const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
 
     // 1. Detalhes da Ordem
-    const { data: order, isLoading } = useGetApiInboundId(orderId);
+    const { data: order, isLoading } = useGetApiInboundId(orderId, {
+        query: { enabled: Boolean(orderId && canViewInbound) }
+    });
 
     // 2. Busca Cadastro do Cliente
     const { data: customersResponse } = useGetApiCustomers(
         { PageSize: 500 },
-        { query: { enabled: Boolean(order?.customerId) } }
+        { query: { enabled: Boolean(order?.customerId && canViewCustomers) } }
     );
     const customersList = customersResponse?.items || (Array.isArray(customersResponse) ? customersResponse : []);
     const customerDetail = customersList.find(c => c.id === order?.customerId);
     const isBlindInbound = Boolean(customerDetail?.requiresBlindInbound);
 
     // 3. Lista de Docas da Topologia
-    const { data: dockLocations = [], isLoading: isLoadingDocks } = useGetApiTopologyLocationsDocks();
+    const { data: dockLocations = [], isLoading: isLoadingDocks } = useGetApiTopologyLocationsDocks({
+        query: { enabled: canReceiveInbound }
+    });
 
-    // Consulta complementar garantida para pátio / agendamento
-    const loadYardAppointment = async () => {
-        if (!orderId) return;
+    const reloadYardAppointment = async () => {
+        if (!orderId || !canViewInbound) return;
         try {
             const res = await customInstance({
                 url: `/api/yard/appointments/by-order/${orderId}`,
@@ -73,8 +87,24 @@ export default function InboundOperacaoPage() {
     };
 
     useEffect(() => {
-        loadYardAppointment();
-    }, [orderId, ]);
+        if (!orderId || !canViewInbound) return;
+
+        let isMounted = true;
+        customInstance({
+            url: `/api/yard/appointments/by-order/${orderId}`,
+            method: 'GET'
+        })
+            .then(res => {
+                if (isMounted) setYardAppointment(res?.data || res || null);
+            })
+            .catch(() => {
+                if (isMounted) setYardAppointment(null);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canViewInbound]);
 
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
         mutation: {
@@ -83,7 +113,7 @@ export default function InboundOperacaoPage() {
                 queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
                 queryClient.invalidateQueries({ queryKey: ['/api/yard'] });
                 queryClient.invalidateQueries({ queryKey: ['/api/inbound'] });
-                loadYardAppointment();
+                reloadYardAppointment();
                 navigate(`/inbound/operacao/${orderId}/item/${variables.data.orderItemId}`);
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao iniciar recebimento do item.')
@@ -102,6 +132,7 @@ export default function InboundOperacaoPage() {
     });
 
     const handleUnlinkAppointment = async (appointmentId) => {
+        if (!canOperateYard) return;
         if (!confirm('Deseja realmente desvincular este agendamento da ordem?')) return;
         try {
             await customInstance({
@@ -110,7 +141,7 @@ export default function InboundOperacaoPage() {
             });
             toast.success('Agendamento desvinculado com sucesso!');
             await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-            loadYardAppointment();
+            reloadYardAppointment();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao desvincular agendamento.');
         }
@@ -118,7 +149,7 @@ export default function InboundOperacaoPage() {
 
     // Função de Disparo da Manifestação SEFAZ
     const handleSendManifest = async (eventTypeCode, customJustification = '') => {
-        if (!orderId) return;
+        if (!orderId || !canManifestInbound) return;
 
         setIsManifesting(true);
         try {
@@ -148,10 +179,13 @@ export default function InboundOperacaoPage() {
     };
 
     const handleDockSelect = (itemId, dockId) => {
+        if (!canReceiveInbound) return;
         setSelectedDocks(prev => ({ ...prev, [itemId]: dockId }));
     };
 
     const handleStartItem = (itemId) => {
+        if (!canReceiveInbound) return;
+
         const currentItem = order?.items?.find(i => i.id === itemId);
         const dockId = selectedDocks[itemId] || currentItem?.dockLocationId;
 
@@ -252,13 +286,15 @@ export default function InboundOperacaoPage() {
                         </div>
                     </div>
 
-                    <Button
-                        onClick={() => navigate(`/inbound/operacao/${orderId}/hus`)}
-                        variant="outline"
-                        className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                    >
-                        <Layers className="w-4 h-4 mr-2" /> HUs Geradas ({order?.items?.reduce((acc, i) => acc + (i.receivedQuantity > 0 ? 1 : 0), 0) || 0})
-                    </Button>
+                    {canViewInbound && (
+                        <Button
+                            onClick={() => navigate(`/inbound/operacao/${orderId}/hus`)}
+                            variant="outline"
+                            className="border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
+                        >
+                            <Layers className="w-4 h-4 mr-2" /> HUs Geradas ({order?.items?.reduce((acc, i) => acc + (i.receivedQuantity > 0 ? 1 : 0), 0) || 0})
+                        </Button>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-3 text-xs">
@@ -307,39 +343,41 @@ export default function InboundOperacaoPage() {
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <Button
-                            size="sm"
-                            onClick={() => handleSendManifest(210200)}
-                            disabled={isManifesting || order.lastSefazManifestType === 210200}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] h-8 px-2.5"
-                        >
-                            {isManifesting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
-                            Confirmar Operação
-                        </Button>
+                    {canManifestInbound && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                                size="sm"
+                                onClick={() => handleSendManifest(210200)}
+                                disabled={isManifesting || order.lastSefazManifestType === 210200}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] h-8 px-2.5"
+                            >
+                                {isManifesting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                                Confirmar Operação
+                            </Button>
 
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setIsNotRealizedModalOpen(true)}
-                            disabled={isManifesting || order.lastSefazManifestType === 210240}
-                            className="border-amber-300 text-amber-900 hover:bg-amber-50 font-semibold text-[11px] h-8 px-2.5"
-                        >
-                            <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" />
-                            Não Realizada
-                        </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setIsNotRealizedModalOpen(true)}
+                                disabled={isManifesting || order.lastSefazManifestType === 210240}
+                                className="border-amber-300 text-amber-900 hover:bg-amber-50 font-semibold text-[11px] h-8 px-2.5"
+                            >
+                                <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-600" />
+                                Não Realizada
+                            </Button>
 
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleSendManifest(210220)}
-                            disabled={isManifesting || order.lastSefazManifestType === 210220}
-                            className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-[11px] h-8 px-2.5"
-                        >
-                            <ShieldAlert className="h-3.5 w-3.5 mr-1" />
-                            Desconhecimento
-                        </Button>
-                    </div>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSendManifest(210220)}
+                                disabled={isManifesting || order.lastSefazManifestType === 210220}
+                                className="border-rose-200 text-rose-700 hover:bg-rose-50 font-semibold text-[11px] h-8 px-2.5"
+                            >
+                                <ShieldAlert className="h-3.5 w-3.5 mr-1" />
+                                Desconhecimento
+                            </Button>
+                        </div>
+                    )}
                 </div>
 
                 {/* CARD DE PORTARIA & PÁTIO */}
@@ -374,7 +412,6 @@ export default function InboundOperacaoPage() {
                                     <p>Doca: <strong className="text-blue-700 flex items-center gap-1"><MapPin size={11} /> {currentYard.dockName || 'Aguardando'}</strong></p>
                                 </div>
 
-                                {/* HORÁRIOS OPERACIONAIS: ENTRADA PÁTIO, ENTRADA DOCA, SAÍDA/FIM */}
                                 <div className="pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center font-mono">
                                     <div className="p-1.5 bg-slate-50 rounded border">
                                         <span className="text-[9px] text-slate-400 uppercase block font-semibold truncate" title="Entrada no Pátio">Entrada Pátio</span>
@@ -404,47 +441,57 @@ export default function InboundOperacaoPage() {
                     </div>
 
                     {currentYard ? (
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => navigate('/portaria')}
-                                className="h-7 text-[11px] bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 font-medium"
-                            >
-                                <ExternalLink size={12} className="mr-1" /> Abrir Portaria
-                            </Button>
+                        (canViewYard || (canOperateYard && (currentYard.status === 1 || currentYard.status === 2 || currentYard.status === 'Scheduled' || currentYard.status === 'InYard'))) && (
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                {canViewYard && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => navigate('/portaria')}
+                                        className="h-7 text-[11px] bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 font-medium"
+                                    >
+                                        <ExternalLink size={12} className="mr-1" /> Abrir Portaria
+                                    </Button>
+                                )}
 
-                            {(currentYard.status === 1 || currentYard.status === 2 || currentYard.status === 'Scheduled' || currentYard.status === 'InYard') && (
-                                <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleUnlinkAppointment(currentYard.id)}
-                                    className="h-7 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                    title="Desvincular agendamento"
-                                >
-                                    Desvincular
-                                </Button>
-                            )}
-                        </div>
+                                {canOperateYard && (currentYard.status === 1 || currentYard.status === 2 || currentYard.status === 'Scheduled' || currentYard.status === 'InYard') && (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleUnlinkAppointment(currentYard.id)}
+                                        className="h-7 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                        title="Desvincular agendamento"
+                                    >
+                                        Desvincular
+                                    </Button>
+                                )}
+                            </div>
+                        )
                     ) : (
-                        <div className="flex gap-2 flex-wrap">
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setIsLinkModalOpen(true)}
-                                className="h-8 text-xs border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-semibold"
-                            >
-                                <Link2 size={13} className="mr-1.5" /> Vincular Agendamento Existente
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setIsNewAppointmentOpen(true)}
-                                className="h-8 text-xs border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 font-semibold"
-                            >
-                                <Plus size={13} className="mr-1.5" /> Criar Novo Agendamento
-                            </Button>
-                        </div>
+                        (canOperateYard || canCreateYardAppointment) && (
+                            <div className="flex gap-2 flex-wrap">
+                                {canOperateYard && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setIsLinkModalOpen(true)}
+                                        className="h-8 text-xs border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 font-semibold"
+                                    >
+                                        <Link2 size={13} className="mr-1.5" /> Vincular Agendamento Existente
+                                    </Button>
+                                )}
+                                {canCreateYardAppointment && (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setIsNewAppointmentOpen(true)}
+                                        className="h-8 text-xs border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 font-semibold"
+                                    >
+                                        <Plus size={13} className="mr-1.5" /> Criar Novo Agendamento
+                                    </Button>
+                                )}
+                            </div>
+                        )
                     )}
                 </div>
             </div>
@@ -529,14 +576,14 @@ export default function InboundOperacaoPage() {
                                                     <Warehouse size={12} className="text-blue-600" />
                                                     {item.dockLocationPath || 'Doca Alocada'}
                                                 </Badge>
-                                            ) : (
+                                            ) : canReceiveInbound ? (
                                                 <Select
                                                     value={currentDockValue}
                                                     onValueChange={(dockId) => handleDockSelect(item.id, dockId)}
                                                     disabled={isPendingReview || isLoadingDocks}
                                                 >
                                                     <SelectTrigger className="h-8 text-xs bg-white border-slate-200">
-                                                        <SelectValue placeholder={isLoadingDocks ? "Carregando..." : "Selecione a Doca..."} />
+                                                        <SelectValue placeholder={isLoadingDocks ? 'Carregando...' : 'Selecione a Doca...'} />
                                                     </SelectTrigger>
                                                     <SelectContent>
                                                         {dockLocations.map(d => (
@@ -544,6 +591,10 @@ export default function InboundOperacaoPage() {
                                                         ))}
                                                     </SelectContent>
                                                 </Select>
+                                            ) : (
+                                                <span className="text-xs text-slate-400 italic">
+                                                    {item.dockLocationPath || 'Aguardando doca'}
+                                                </span>
                                             )}
                                         </TableCell>
 
@@ -552,13 +603,13 @@ export default function InboundOperacaoPage() {
                                         </TableCell>
 
                                         <TableCell className="text-right space-x-1">
-                                            {isPendingReview && (
+                                            {isPendingReview && canReviewInbound && (
                                                 <Button size="sm" variant="outline" onClick={() => navigate(`/inbound/revisao/${order.id}`)} className="text-amber-700 border-amber-300 bg-amber-50">
                                                     Revisar SKU
                                                 </Button>
                                             )}
 
-                                            {isReady && (
+                                            {isReady && canReceiveInbound && (
                                                 <Button
                                                     size="sm"
                                                     onClick={() => handleStartItem(item.id)}
@@ -575,7 +626,7 @@ export default function InboundOperacaoPage() {
                                                 </Button>
                                             )}
 
-                                            {isReceiving && (
+                                            {isReceiving && canReceiveInbound && (
                                                 <div className="inline-flex gap-1.5">
                                                     <Button
                                                         size="sm"
@@ -612,77 +663,83 @@ export default function InboundOperacaoPage() {
             </div>
 
             {/* MODAL OPERAÇÃO NÃO REALIZADA (210240) */}
-            <Dialog open={isNotRealizedModalOpen} onOpenChange={setIsNotRealizedModalOpen}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <AlertTriangle className="text-amber-600" size={20} /> Transmitir Operação Não Realizada (210240)
-                        </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            Informe a justificativa técnica para a recusa da carga. A SEFAZ exige no mínimo 15 caracteres.
-                        </DialogDescription>
-                    </DialogHeader>
+            {canManifestInbound && (
+                <Dialog open={isNotRealizedModalOpen} onOpenChange={setIsNotRealizedModalOpen}>
+                    <DialogContent className="sm:max-w-md bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="text-slate-900 flex items-center gap-2">
+                                <AlertTriangle className="text-amber-600" size={20} /> Transmitir Operação Não Realizada (210240)
+                            </DialogTitle>
+                            <DialogDescription className="text-xs text-slate-500">
+                                Informe a justificativa técnica para a recusa da carga. A SEFAZ exige no mínimo 15 caracteres.
+                            </DialogDescription>
+                        </DialogHeader>
 
-                    <div className="py-2 space-y-2">
-                        <label className="text-xs font-bold uppercase text-slate-700">Justificativa da Recusa *</label>
-                        <Input
-                            placeholder="Ex: Carga recusada na doca devido a avaria no transporte..."
-                            value={justification}
-                            onChange={(e) => setJustification(e.target.value)}
-                            className="text-xs"
-                        />
-                        <span className="text-[10px] text-slate-400 block font-mono">
-                            Mínimo de 15 caracteres ({justification.trim().length}/15)
-                        </span>
-                    </div>
+                        <div className="py-2 space-y-2">
+                            <label className="text-xs font-bold uppercase text-slate-700">Justificativa da Recusa *</label>
+                            <Input
+                                placeholder="Ex: Carga recusada na doca devido a avaria no transporte..."
+                                value={justification}
+                                onChange={(e) => setJustification(e.target.value)}
+                                className="text-xs"
+                            />
+                            <span className="text-[10px] text-slate-400 block font-mono">
+                                Mínimo de 15 caracteres ({justification.trim().length}/15)
+                            </span>
+                        </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsNotRealizedModalOpen(false)} disabled={isManifesting}>Cancelar</Button>
-                        <Button
-                            onClick={() => handleSendManifest(210240, justification)}
-                            disabled={isManifesting || justification.trim().length < 15}
-                            className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
-                        >
-                            {isManifesting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Transmitir para SEFAZ
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsNotRealizedModalOpen(false)} disabled={isManifesting}>Cancelar</Button>
+                            <Button
+                                onClick={() => handleSendManifest(210240, justification)}
+                                disabled={isManifesting || justification.trim().length < 15}
+                                className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                            >
+                                {isManifesting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Transmitir para SEFAZ
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* MODAL PORTARIA / NOVO AGENDAMENTO */}
-            <NovoAgendamentoModal
-                open={isNewAppointmentOpen}
-                onOpenChange={setIsNewAppointmentOpen}
-                preSelectedOrderId={order?.id}
-                preSelectedOrderType={1} // 1 = Inbound / Entrada
-                preSelectedAccessKey={order?.accessKey}
-                preSelectedInvoice={
-                    order?.invoiceNumber ||
-                    (order?.accessKey && order.accessKey.length >= 34
-                        ? parseInt(order.accessKey.substring(25, 34), 10).toString()
-                        : '')
-                }
-                preSelectedCarrier={order?.issuerName || order?.customerName}
-                onSuccess={async () => {
-                    setIsNewAppointmentOpen(false);
-                    await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-                    loadYardAppointment();
-                }}
-            />
+            {canCreateYardAppointment && (
+                <NovoAgendamentoModal
+                    open={isNewAppointmentOpen}
+                    onOpenChange={setIsNewAppointmentOpen}
+                    preSelectedOrderId={order?.id}
+                    preSelectedOrderType={1}
+                    preSelectedAccessKey={order?.accessKey}
+                    preSelectedInvoice={
+                        order?.invoiceNumber ||
+                        (order?.accessKey && order.accessKey.length >= 34
+                            ? parseInt(order.accessKey.substring(25, 34), 10).toString()
+                            : '')
+                    }
+                    preSelectedCarrier={order?.issuerName || order?.customerName}
+                    onSuccess={async () => {
+                        setIsNewAppointmentOpen(false);
+                        await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                        reloadYardAppointment();
+                    }}
+                />
+            )}
 
             {/* MODAL VINCULAR AGENDAMENTO EXISTENTE */}
-            <VincularAgendamentoModal
-                open={isLinkModalOpen}
-                onOpenChange={setIsLinkModalOpen}
-                orderId={order?.id}
-                orderNumber={documentNumber}
-                orderType={1} // Inbound
-                onSuccess={async () => {
-                    await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
-                    loadYardAppointment();
-                }}
-            />
+            {canOperateYard && (
+                <VincularAgendamentoModal
+                    open={isLinkModalOpen}
+                    onOpenChange={setIsLinkModalOpen}
+                    orderId={order?.id}
+                    orderNumber={documentNumber}
+                    orderType={1}
+                    onSuccess={async () => {
+                        await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
+                        reloadYardAppointment();
+                    }}
+                />
+            )}
         </div>
     );
 }

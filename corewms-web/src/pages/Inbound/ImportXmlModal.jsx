@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UploadCloud, FileCode2, Loader2, X, KeyRound, ArrowRight, Layers, CheckCircle2 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { toast } from 'sonner';
 
 // Normaliza e aplica a máscara oficial da SEFAZ em blocos de 4 dígitos
@@ -15,6 +16,7 @@ const formatAccessKey = (value) => {
 
 export default function ImportXmlModal({ open, onOpenChange }) {
     const queryClient = useQueryClient();
+    const canImportInbound = useHasPermission('inbound:import');
 
     // Estado de Upload de XML
     const [files, setFiles] = useState([]);
@@ -43,12 +45,14 @@ export default function ImportXmlModal({ open, onOpenChange }) {
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
+        if (!canImportInbound) return;
         const droppedFiles = Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.xml'));
         if (droppedFiles.length === 0) return toast.warning('Apenas ficheiros .xml são suportados.');
         setFiles(prev => [...prev, ...droppedFiles]);
     };
 
     const handleFileSelect = (e) => {
+        if (!canImportInbound) return;
         const selectedFiles = Array.from(e.target.files).filter(f => f.name.endsWith('.xml'));
         setFiles(prev => [...prev, ...selectedFiles]);
         e.target.value = '';
@@ -63,7 +67,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
     };
 
     const handleImport = async () => {
-        if (isProcessingBatch) return;
+        if (isProcessingBatch || !canImportInbound) return;
 
         const hasKey = cleanKey.length === 44;
         const hasFiles = files.length > 0;
@@ -159,7 +163,7 @@ export default function ImportXmlModal({ open, onOpenChange }) {
         resetAndClose();
     };
 
-    const canSubmit = !isProcessingBatch && (cleanKey.length === 44 || files.length > 0);
+    const canSubmit = canImportInbound && !isProcessingBatch && (cleanKey.length === 44 || files.length > 0);
 
     return (
         <Dialog open={open} onOpenChange={(v) => { if (!isProcessingBatch) onOpenChange(v); }}>
@@ -193,11 +197,11 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                         <div className="relative">
                             <Input
                                 type="text"
-                                maxLength={54} // 44 dígitos + 10 espaços da máscara
+                                maxLength={54}
                                 placeholder="4326 1054 9036 8800 0149 5500 1000 0002 5812 5773 9199"
                                 value={accessKey}
                                 onChange={handleAccessKeyChange}
-                                disabled={isProcessingBatch}
+                                disabled={isProcessingBatch || !canImportInbound}
                                 className={`bg-white font-mono text-xs h-10 pr-8 focus-visible:ring-blue-500 ${cleanKey.length === 44 ? 'border-emerald-400 font-bold text-slate-900' : 'border-blue-300'
                                     }`}
                             />
@@ -249,7 +253,14 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                                     {isDragging ? 'Solte os arquivos aqui...' : 'Clique ou arraste arquivos .xml da NF-e'}
                                 </p>
                             </div>
-                            <input type="file" accept=".xml" multiple className="hidden" onChange={handleFileSelect} disabled={isProcessingBatch} />
+                            <input
+                                type="file"
+                                accept=".xml"
+                                multiple
+                                className="hidden"
+                                onChange={handleFileSelect}
+                                disabled={isProcessingBatch || !canImportInbound}
+                            />
                         </label>
 
                         {files.length > 0 && (
@@ -310,23 +321,25 @@ export default function ImportXmlModal({ open, onOpenChange }) {
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessingBatch} className="bg-white">
                         Cancelar
                     </Button>
-                    <Button
-                        onClick={handleImport}
-                        disabled={!canSubmit}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold min-w-[150px] shadow-2xs"
-                    >
-                        {isProcessingBatch ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                        ) : (
-                            <ArrowRight className="h-4 w-4 mr-1.5" />
-                        )}
-                        {cleanKey.length === 44 && files.length > 0
-                            ? `Importar Chave + ${files.length} XML(s)`
-                            : cleanKey.length === 44
-                                ? 'Consultar Chave SEFAZ'
-                                : `Importar ${files.length} XML(s)`
-                        }
-                    </Button>
+                    {canImportInbound && (
+                        <Button
+                            onClick={handleImport}
+                            disabled={!canSubmit}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold min-w-[150px] shadow-2xs"
+                        >
+                            {isProcessingBatch ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                            ) : (
+                                <ArrowRight className="h-4 w-4 mr-1.5" />
+                            )}
+                            {cleanKey.length === 44 && files.length > 0
+                                ? `Importar Chave + ${files.length} XML(s)`
+                                : cleanKey.length === 44
+                                    ? 'Consultar Chave SEFAZ'
+                                    : `Importar ${files.length} XML(s)`
+                            }
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

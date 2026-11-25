@@ -5,6 +5,7 @@ import { useGetApiInboundId } from '@/api/generated/inbound/inbound';
 import { useGetApiInventoryHandlingUnits } from '@/api/generated/inventory/inventory';
 import { useGetApiTopologyLocationsStorage } from '@/api/generated/topology/topology';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -40,7 +41,7 @@ const getErrorMessage = (err, fallback) => {
     return err.message || fallback;
 };
 
-function SearchableLocationSelect({ value, onChange, locations, placeholder = "Pesquisar Posição..." }) {
+function SearchableLocationSelect({ value, onChange, locations, placeholder = 'Pesquisar Posição...' }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const selectedLocation = locations.find(l => l.id === value);
@@ -90,6 +91,16 @@ export default function InboundOrderHusPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const canViewInbound = useHasPermission('inbound:view');
+    const canViewInventory = useHasPermission(['inventory:view', 'inbound:view']);
+    const canMoveInventory = useHasPermission('inventory:move');
+    const canHoldQuality = useHasPermission('quality:hold');
+    const canMergeInventory = useHasPermission('inventory:merge');
+    const canSplitInventory = useHasPermission('inventory:split');
+    const canEditTraceability = useHasPermission('inventory:edittraceability');
+    const canManageInbound = useHasPermission('inbound:manage');
+    const canManagePrinting = useHasPermission('printing:manage');
+
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 100;
 
@@ -114,26 +125,35 @@ export default function InboundOrderHusPage() {
     const [isMoving, setIsMoving] = useState(false);
     const [locationTypeTab, setLocationTypeTab] = useState('storage');
 
-    const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId);
-    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
+    const { data: order, isLoading: isLoadingOrder } = useGetApiInboundId(orderId, {
+        query: { enabled: Boolean(orderId && canViewInbound) }
+    });
+    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage({
+        query: { enabled: canMoveInventory }
+    });
     const [qualityLocations, setQualityLocations] = useState([]);
 
     useEffect(() => {
+        if (!canMoveInventory) return;
+        let isMounted = true;
         customInstance({ url: '/api/topology/locations/quality', method: 'GET' })
-            .then(res => setQualityLocations(Array.isArray(res) ? res : []))
-            .catch(() => setQualityLocations([]));
-    }, []);
+            .then(res => { if (isMounted) setQualityLocations(Array.isArray(res) ? res : []); })
+            .catch(() => { if (isMounted) setQualityLocations([]); });
+        return () => { isMounted = false; };
+    }, [canMoveInventory]);
 
     const { data: apiResponse, isLoading: isLoadingHus, refetch } = useGetApiInventoryHandlingUnits(
         { ReceiptDocumentId: orderId, Page: page, PageSize: PAGE_SIZE },
-        { query: { enabled: !!orderId } }
+        { query: { enabled: Boolean(orderId && canViewInventory) } }
     );
 
-    const orderHus = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
+    const orderHus = useMemo(() => {
+        return apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
+    }, [apiResponse]);
+
     const totalCount = apiResponse?.totalCount || orderHus.length;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-    // FUNÇÃO DE ATUALIZAÇÃO INTEGRAL DA ORDEM E DO INVENTÁRIO
     const refreshData = async () => {
         await refetch();
         await queryClient.invalidateQueries({ queryKey: [`/api/inbound/${orderId}`] });
@@ -151,12 +171,7 @@ export default function InboundOrderHusPage() {
             const matchesStatus = statusFilter === 'ALL' || String(hu.status) === statusFilter;
             return matchesSearch && matchesQuality && matchesStatus;
         });
-    }, [
-	search,
-	qualityFilter,
-	statusFilter,
-	orderHus
-]);
+    }, [search, qualityFilter, statusFilter, orderHus]);
 
     const metrics = useMemo(() => {
         const totalHus = totalCount;
@@ -176,6 +191,7 @@ export default function InboundOrderHusPage() {
     };
 
     const handleOpenMoveModal = (hus) => {
+        if (!canMoveInventory) return;
         setHusToMove(hus);
         setTargetLocationId('');
         const hasQualityRestriction = hus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
@@ -184,7 +200,7 @@ export default function InboundOrderHusPage() {
     };
 
     const handleConfirmRollback = async () => {
-        if (!husToRollback || husToRollback.length === 0) return;
+        if (!husToRollback || husToRollback.length === 0 || !canManageInbound) return;
         setIsRollingBack(true);
         try {
             const huIds = husToRollback.map(h => h.id);
@@ -205,6 +221,7 @@ export default function InboundOrderHusPage() {
     };
 
     const handleExecuteMove = async () => {
+        if (!canMoveInventory) return;
         if (!targetLocationId || husToMove.length === 0) return toast.warning('Selecione o endereço de destino.');
         setIsMoving(true);
         try {
@@ -257,13 +274,29 @@ export default function InboundOrderHusPage() {
 
     const documentNumber = order?.accessKey && order.accessKey.length >= 34 ? parseInt(order.accessKey.substring(25, 34), 10) : 'N/A';
     const firstHuUnit = orderHus[0]?.unit || 'UN';
-    const isSelectedRestricted = selectedHus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
+    const isSelectedRestricted = husToMove.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
+
+    const hasAnyRowAction =
+        canHoldQuality ||
+        canMoveInventory ||
+        canManagePrinting ||
+        canMergeInventory ||
+        canSplitInventory ||
+        canEditTraceability ||
+        canManageInbound;
+
+    const hasAnyBatchAction =
+        canHoldQuality ||
+        canMoveInventory ||
+        canEditTraceability ||
+        canManageInbound ||
+        canManagePrinting;
 
     return (
         <div className="flex flex-col h-full space-y-6">
             {/* CABEÇALHO */}
             <div className="bg-white border border-slate-200/60 rounded-xl p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-3">
                     <div className="flex items-center gap-4">
                         <Button variant="ghost" size="icon" onClick={() => navigate(`/inbound/operacao/${orderId}`)} className="shrink-0 text-slate-500 hover:text-slate-900">
                             <ArrowLeft className="h-5 w-5" />
@@ -278,31 +311,41 @@ export default function InboundOrderHusPage() {
                     </div>
 
                     <div className="flex gap-2 flex-wrap items-center">
-                        {metrics.pendingAllocationHus > 0 && (
+                        {canMoveInventory && metrics.pendingAllocationHus > 0 && (
                             <Button onClick={() => navigate(`/inbound/operacao/${orderId}/alocacao`)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm text-xs">
                                 <Sparkles className="w-4 h-4 mr-1.5" /> Alocação Inteligente ({metrics.pendingAllocationHus})
                             </Button>
                         )}
-                        <Button onClick={() => setHusToHold(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 text-xs font-semibold">
-                            <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-600" /> Avaria ({selectedHus.length})
-                        </Button>
-                        <Button onClick={() => handleOpenMoveModal(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="text-xs font-semibold">
-                            <MapPin className="w-4 h-4 mr-1.5 text-blue-600" /> Mover ({selectedHus.length})
-                        </Button>
-                        <Button
-                            onClick={() => setEditingHus(selectedHus)}
-                            disabled={selectedHus.length === 0}
-                            variant="outline"
-                            className="border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100 text-xs font-semibold"
-                        >
-                            <Pencil className="w-4 h-4 mr-1.5 text-blue-600" /> Editar ({selectedHus.length})
-                        </Button>
-                        <Button onClick={() => setHusToRollback(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold">
-                            <Undo2 className="w-4 h-4 mr-1.5 text-rose-600" /> Estornar ({selectedHus.length})
-                        </Button>
-                        <Button onClick={() => setIsPrintModalOpen(true)} disabled={selectedHus.length === 0} className="bg-slate-900 hover:bg-slate-800 text-white shadow-xs text-xs font-semibold">
-                            <Printer className="w-4 h-4 mr-1.5" /> Reimprimir ({selectedHus.length})
-                        </Button>
+                        {canHoldQuality && (
+                            <Button onClick={() => setHusToHold(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 text-xs font-semibold">
+                                <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-600" /> Avaria ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canMoveInventory && (
+                            <Button onClick={() => handleOpenMoveModal(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="text-xs font-semibold">
+                                <MapPin className="w-4 h-4 mr-1.5 text-blue-600" /> Mover ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canEditTraceability && (
+                            <Button
+                                onClick={() => setEditingHus(selectedHus)}
+                                disabled={selectedHus.length === 0}
+                                variant="outline"
+                                className="border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100 text-xs font-semibold"
+                            >
+                                <Pencil className="w-4 h-4 mr-1.5 text-blue-600" /> Editar ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canManageInbound && (
+                            <Button onClick={() => setHusToRollback(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold">
+                                <Undo2 className="w-4 h-4 mr-1.5 text-rose-600" /> Estornar ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canManagePrinting && (
+                            <Button onClick={() => setIsPrintModalOpen(true)} disabled={selectedHus.length === 0} className="bg-slate-900 hover:bg-slate-800 text-white shadow-xs text-xs font-semibold">
+                                <Printer className="w-4 h-4 mr-1.5" /> Reimprimir ({selectedHus.length})
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -379,12 +422,14 @@ export default function InboundOrderHusPage() {
                     <Table>
                         <TableHeader className="bg-slate-50 sticky top-0 z-10">
                             <TableRow>
-                                <TableHead className="w-[40px]">
-                                    <Checkbox
-                                        checked={filteredHus.length > 0 && selectedHus.length === filteredHus.length}
-                                        onCheckedChange={toggleSelectAll}
-                                    />
-                                </TableHead>
+                                {hasAnyBatchAction && (
+                                    <TableHead className="w-[40px]">
+                                        <Checkbox
+                                            checked={filteredHus.length > 0 && selectedHus.length === filteredHus.length}
+                                            onCheckedChange={toggleSelectAll}
+                                        />
+                                    </TableHead>
+                                )}
                                 <TableHead>LPN / Código HU</TableHead>
                                 <TableHead>SKU / Produto</TableHead>
                                 <TableHead>Saldo Atual / Inicial</TableHead>
@@ -393,7 +438,7 @@ export default function InboundOrderHusPage() {
                                 <TableHead>Posição Atual</TableHead>
                                 <TableHead>Qualidade</TableHead>
                                 <TableHead>Status HU</TableHead>
-                                <TableHead className="w-[50px]"></TableHead>
+                                {hasAnyRowAction && <TableHead className="w-[50px]"></TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -411,9 +456,11 @@ export default function InboundOrderHusPage() {
 
                                     return (
                                         <TableRow key={hu.id} className={isSelected ? 'bg-blue-50/40' : 'hover:bg-slate-50/50'}>
-                                            <TableCell>
-                                                <Checkbox checked={isSelected} onCheckedChange={() => toggleSelectHu(hu)} />
-                                            </TableCell>
+                                            {hasAnyBatchAction && (
+                                                <TableCell>
+                                                    <Checkbox checked={isSelected} onCheckedChange={() => toggleSelectHu(hu)} />
+                                                </TableCell>
+                                            )}
                                             <TableCell className="font-mono font-bold text-slate-900">{hu.lpn}</TableCell>
                                             <TableCell>
                                                 <div className="flex flex-col">
@@ -437,46 +484,60 @@ export default function InboundOrderHusPage() {
                                             </TableCell>
                                             <TableCell>{renderQualityBadge(hu.qualityStatus)}</TableCell>
                                             <TableCell>{renderHuStatusBadge(hu.status)}</TableCell>
-                                            <TableCell>
-                                                <Popover open={openPopoverId === hu.id} onOpenChange={(open) => setOpenPopoverId(open ? hu.id : null)}>
-                                                    <PopoverTrigger asChild>
-                                                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50">
-                                                            <MoreHorizontal size={16} />
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent align="end" className="w-52 p-1 bg-white border-slate-200 shadow-xl rounded-xl">
-                                                        <div className="flex flex-col text-xs font-medium text-slate-600">
-                                                            {!isQualityRestricted && (
-                                                                <button onClick={() => { setHusToHold([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-amber-50 hover:text-amber-700 rounded-md transition-colors">
-                                                                    <AlertTriangle size={14} className="text-amber-500" /> Registrar Avaria
-                                                                </button>
-                                                            )}
-                                                            <button onClick={() => { handleOpenMoveModal([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">
-                                                                <MapPin size={14} className="text-blue-500" /> {isPendingAllocation ? "Alocar no Estoque" : "Mover Posição"}
-                                                            </button>
-                                                            <button onClick={() => { setSelectedHus([hu]); setIsPrintModalOpen(true); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                <Printer size={14} /> Reimprimir Etiqueta
-                                                            </button>
-                                                            {!hasSerial && !isConsumedOrShipped && (
-                                                                <>
-                                                                    <button onClick={() => { setHuToMerge(hu); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                        <Merge size={14} className="text-blue-600" /> Agrupar (Merge)
+                                            {hasAnyRowAction && (
+                                                <TableCell>
+                                                    <Popover open={openPopoverId === hu.id} onOpenChange={(open) => setOpenPopoverId(open ? hu.id : null)}>
+                                                        <PopoverTrigger asChild>
+                                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50">
+                                                                <MoreHorizontal size={16} />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent align="end" className="w-52 p-1 bg-white border-slate-200 shadow-xl rounded-xl">
+                                                            <div className="flex flex-col text-xs font-medium text-slate-600">
+                                                                {canHoldQuality && !isQualityRestricted && (
+                                                                    <button onClick={() => { setHusToHold([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-amber-50 hover:text-amber-700 rounded-md transition-colors">
+                                                                        <AlertTriangle size={14} className="text-amber-500" /> Registrar Avaria
                                                                     </button>
-                                                                    <button onClick={() => { setHuToSplit(hu); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                        <Split size={14} className="text-purple-600" /> Transbordo (Split)
+                                                                )}
+                                                                {canMoveInventory && (
+                                                                    <button onClick={() => { handleOpenMoveModal([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">
+                                                                        <MapPin size={14} className="text-blue-500" /> {isPendingAllocation ? 'Alocar no Estoque' : 'Mover Posição'}
                                                                     </button>
-                                                                </>
-                                                            )}
-                                                            <button onClick={() => { setEditingHus([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                <Pencil size={14} className="text-blue-600" /> Editar Dados / Pesos
-                                                            </button>
-                                                            <button onClick={() => { setHusToRollback([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-rose-50 hover:text-rose-700 rounded-md transition-colors border-t border-slate-100 mt-1 pt-2">
-                                                                <Undo2 size={14} className="text-rose-500" /> Estornar Entrada
-                                                            </button>
-                                                        </div>
-                                                    </PopoverContent>
-                                                </Popover>
-                                            </TableCell>
+                                                                )}
+                                                                {canManagePrinting && (
+                                                                    <button onClick={() => { setSelectedHus([hu]); setIsPrintModalOpen(true); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                        <Printer size={14} /> Reimprimir Etiqueta
+                                                                    </button>
+                                                                )}
+                                                                {!hasSerial && !isConsumedOrShipped && (
+                                                                    <>
+                                                                        {canMergeInventory && (
+                                                                            <button onClick={() => { setHuToMerge(hu); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                                <Merge size={14} className="text-blue-600" /> Agrupar (Merge)
+                                                                            </button>
+                                                                        )}
+                                                                        {canSplitInventory && (
+                                                                            <button onClick={() => { setHuToSplit(hu); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                                <Split size={14} className="text-purple-600" /> Transbordo (Split)
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                                {canEditTraceability && (
+                                                                    <button onClick={() => { setEditingHus([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                        <Pencil size={14} className="text-blue-600" /> Editar Dados / Pesos
+                                                                    </button>
+                                                                )}
+                                                                {canManageInbound && (
+                                                                    <button onClick={() => { setHusToRollback([hu]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-rose-50 hover:text-rose-700 rounded-md transition-colors border-t border-slate-100 mt-1 pt-2">
+                                                                        <Undo2 size={14} className="text-rose-500" /> Estornar Entrada
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </TableCell>
+                                            )}
                                         </TableRow>
                                     );
                                 })
@@ -498,67 +559,69 @@ export default function InboundOrderHusPage() {
             </div>
 
             {/* MODAL DE MOVIMENTAÇÃO */}
-            <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <MapPin className="text-blue-600" size={20} /> Alocar / Mover no Estoque
-                        </DialogTitle>
-                        <DialogDescription className="text-slate-500 text-xs">
-                            Selecione a posição de destino para {husToMove.length} HU(s).
-                        </DialogDescription>
-                    </DialogHeader>
+            {canMoveInventory && (
+                <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
+                    <DialogContent className="sm:max-w-md bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="text-slate-900 flex items-center gap-2">
+                                <MapPin className="text-blue-600" size={20} /> Alocar / Mover no Estoque
+                            </DialogTitle>
+                            <DialogDescription className="text-slate-500 text-xs">
+                                Selecione a posição de destino para {husToMove.length} HU(s).
+                            </DialogDescription>
+                        </DialogHeader>
 
-                    <div className="space-y-4 py-2">
-                        {isSelectedRestricted ? (
-                            <div className="p-3 rounded-lg border bg-rose-50 border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
-                                <ShieldAlert size={18} className="shrink-0 text-rose-600" />
-                                <span>Volumes com avaria ou quarentena só podem ser movimentados para posições do tipo <strong>Qualidade</strong>.</span>
-                            </div>
-                        ) : (
-                            <div className="flex border-b border-slate-200">
-                                <button
-                                    type="button"
-                                    onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
-                                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Armazenamento Geral ({storageLocations.length})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
-                                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Posições de Qualidade / Retenção ({qualityLocations.length})
-                                </button>
-                            </div>
-                        )}
+                        <div className="space-y-4 py-2">
+                            {isSelectedRestricted ? (
+                                <div className="p-3 rounded-lg border bg-rose-50 border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
+                                    <ShieldAlert size={18} className="shrink-0 text-rose-600" />
+                                    <span>Volumes com avaria ou quarentena só podem ser movimentados para posições do tipo <strong>Qualidade</strong>.</span>
+                                </div>
+                            ) : (
+                                <div className="flex border-b border-slate-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
+                                        className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        Armazenamento Geral ({storageLocations.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
+                                        className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        Posições de Qualidade / Retenção ({qualityLocations.length})
+                                    </button>
+                                </div>
+                            )}
 
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-700">
-                                Endereço Destino ({isSelectedRestricted || locationTypeTab === 'quality' ? 'Qualidade' : 'Armazenamento'}) *
-                            </label>
-                            <SearchableLocationSelect
-                                value={targetLocationId}
-                                onChange={(locId) => setTargetLocationId(locId)}
-                                locations={isSelectedRestricted || locationTypeTab === 'quality' ? qualityLocations : storageLocations}
-                                placeholder={isSelectedRestricted || locationTypeTab === 'quality' ? "Pesquisar Posição de Qualidade/Avaria..." : "Pesquisar Posição de Armazenamento..."}
-                            />
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-700">
+                                    Endereço Destino ({isSelectedRestricted || locationTypeTab === 'quality' ? 'Qualidade' : 'Armazenamento'}) *
+                                </label>
+                                <SearchableLocationSelect
+                                    value={targetLocationId}
+                                    onChange={(locId) => setTargetLocationId(locId)}
+                                    locations={isSelectedRestricted || locationTypeTab === 'quality' ? qualityLocations : storageLocations}
+                                    placeholder={isSelectedRestricted || locationTypeTab === 'quality' ? 'Pesquisar Posição de Qualidade/Avaria...' : 'Pesquisar Posição de Armazenamento...'}
+                                />
+                            </div>
                         </div>
-                    </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsMoveModalOpen(false)} disabled={isMoving}>Cancelar</Button>
-                        <Button onClick={handleExecuteMove} disabled={!targetLocationId || isMoving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
-                            {isMoving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                            Confirmar Alocação / Movimento
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsMoveModalOpen(false)} disabled={isMoving}>Cancelar</Button>
+                            <Button onClick={handleExecuteMove} disabled={!targetLocationId || isMoving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                                {isMoving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                                Confirmar Alocação / Movimento
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* MODAL DE APONTAMENTO DE AVARIA */}
-            {husToHold && husToHold.length > 0 && (
+            {canHoldQuality && husToHold && husToHold.length > 0 && (
                 <RegisterHoldModal
                     open={!!husToHold && husToHold.length > 0}
                     onOpenChange={(open) => !open && setHusToHold(null)}
@@ -572,23 +635,25 @@ export default function InboundOrderHusPage() {
             )}
 
             {/* ALERTA DE ESTORNO */}
-            <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Estornar {husToRollback?.length === 1 ? `HU ${husToRollback[0]?.lpn}` : `${husToRollback?.length} HU(s) selecionadas`}?</AlertDialogTitle>
-                        <AlertDialogDescription>Deseja estornar a entrada deste(s) volume(s)? A quantidade recebida na NF-e e os saldos em estoque serão reajustados.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isRollingBack}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmRollback} disabled={isRollingBack} className="bg-rose-600 hover:bg-rose-700 text-white font-semibold">
-                            {isRollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Estorno'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageInbound && (
+                <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Estornar {husToRollback?.length === 1 ? `HU ${husToRollback[0]?.lpn}` : `${husToRollback?.length} HU(s) selecionadas`}?</AlertDialogTitle>
+                            <AlertDialogDescription>Deseja estornar a entrada deste(s) volume(s)? A quantidade recebida na NF-e e os saldos em estoque serão reajustados.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isRollingBack}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmRollback} disabled={isRollingBack} className="bg-rose-600 hover:bg-rose-700 text-white font-semibold">
+                                {isRollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Estorno'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE IMPRESSÃO */}
-            {isPrintModalOpen && (
+            {canManagePrinting && isPrintModalOpen && (
                 <PrintHuModal
                     open={isPrintModalOpen}
                     onOpenChange={setIsPrintModalOpen}
@@ -599,7 +664,7 @@ export default function InboundOrderHusPage() {
             )}
 
             {/* MODAIS COM RECARGA AUTOMÁTICA */}
-            {huToMerge && (
+            {canMergeInventory && huToMerge && (
                 <AgruparHuModal
                     open={Boolean(huToMerge)}
                     onOpenChange={(open) => !open && setHuToMerge(null)}
@@ -611,7 +676,7 @@ export default function InboundOrderHusPage() {
                 />
             )}
 
-            {huToSplit && (
+            {canSplitInventory && huToSplit && (
                 <TransbordoHuModal
                     open={Boolean(huToSplit)}
                     onOpenChange={(open) => !open && setHuToSplit(null)}
@@ -623,7 +688,7 @@ export default function InboundOrderHusPage() {
                 />
             )}
 
-            {editingHus.length > 0 && (
+            {canEditTraceability && editingHus.length > 0 && (
                 <EditarHuModal
                     open={editingHus.length > 0}
                     onOpenChange={(open) => !open && setEditingHus([])}

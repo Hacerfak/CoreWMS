@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiInboundId } from '@/api/generated/inbound/inbound';
 import { useGetApiTopologyLocationsStorage } from '@/api/generated/topology/topology';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import {
 import { toast } from 'sonner';
 
 // SELETOR PESQUISÁVEL COMPACTO PARA A TABELA
-function SearchableLocationCell({ value, onChange, locations }) {
+function SearchableLocationCell({ value, onChange, locations, disabled = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -32,14 +33,15 @@ function SearchableLocationCell({ value, onChange, locations }) {
         <div className="relative">
             <button
                 type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="h-8 px-2.5 text-xs bg-slate-50 border border-slate-300 hover:border-blue-500 rounded-md font-mono font-bold text-slate-900 flex items-center justify-between w-44"
+                disabled={disabled}
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                className="h-8 px-2.5 text-xs bg-slate-50 border border-slate-300 hover:border-blue-500 rounded-md font-mono font-bold text-slate-900 flex items-center justify-between w-44 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-                <span>{selectedLoc?.fullPath || "Selecionar..."}</span>
-                <Search size={12} className="text-slate-400 ml-1" />
+                <span className="truncate">{selectedLoc?.fullPath || 'Selecionar...'}</span>
+                <Search size={12} className="text-slate-400 ml-1 shrink-0" />
             </button>
 
-            {isOpen && (
+            {isOpen && !disabled && (
                 <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-xl z-50 p-2 space-y-1">
                     <input
                         type="text"
@@ -76,8 +78,12 @@ export default function AlocacaoInteligentePage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    const [isLoading, setIsLoading] = useState(true);
+    const canViewInbound = useHasPermission('inbound:view');
+    const canMoveInventory = useHasPermission('inventory:move');
+
+    const [isLoading, setIsLoading] = useState(Boolean(orderId && canMoveInventory));
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [refreshTick, setRefreshTick] = useState(0);
 
     const [suggestions, setSuggestions] = useState([]);
     const [selectedHuIds, setSelectedHuIds] = useState([]);
@@ -87,44 +93,64 @@ export default function AlocacaoInteligentePage() {
     const [bulkLocationId, setBulkLocationId] = useState('');
 
     // 1. Dados da Ordem
-    const { data: order } = useGetApiInboundId(orderId);
+    const { data: order } = useGetApiInboundId(orderId, {
+        query: { enabled: Boolean(orderId && canViewInbound) }
+    });
 
     // 2. Busca todas as Posições (Armazenamento + Qualidade)
-    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
+    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage({
+        query: { enabled: canMoveInventory }
+    });
     const [qualityLocations, setQualityLocations] = useState([]);
 
     useEffect(() => {
+        if (!canMoveInventory) return;
+        let isMounted = true;
         customInstance({ url: '/api/topology/locations/quality', method: 'GET' })
-            .then(res => setQualityLocations(Array.isArray(res) ? res : []))
-            .catch(() => setQualityLocations([]));
-    }, []);
+            .then(res => { if (isMounted) setQualityLocations(Array.isArray(res) ? res : []); })
+            .catch(() => { if (isMounted) setQualityLocations([]); });
+        return () => { isMounted = false; };
+    }, [canMoveInventory]);
 
     const allLocations = useMemo(() => [...storageLocations, ...qualityLocations], [storageLocations, qualityLocations]);
 
-    // 3. Carrega Sugestões do Backend
-    const loadSuggestions = async () => {
+    const triggerRecalculate = () => {
+        if (!orderId || !canMoveInventory) return;
         setIsLoading(true);
-        try {
-            const res = await customInstance({
-                url: `/api/inventory/putaway/suggestions/${orderId}`,
-                method: 'GET'
-            });
-            const list = Array.isArray(res) ? res : [];
-            setSuggestions(list);
-            setSelectedHuIds(list.map(s => s.handlingUnitId));
-        } catch  {
-            toast.error('Erro ao carregar sugestões de alocação.');
-        } finally {
-            setIsLoading(false);
-        }
+        setRefreshTick(t => t + 1);
     };
 
+    // 3. Carrega Sugestões do Backend
     useEffect(() => {
-        if (orderId) loadSuggestions();
-    }, [orderId, ]);
+        if (!orderId || !canMoveInventory) return;
+
+        let isMounted = true;
+
+        customInstance({
+            url: `/api/inventory/putaway/suggestions/${orderId}`,
+            method: 'GET'
+        })
+            .then(res => {
+                if (!isMounted) return;
+                const list = Array.isArray(res) ? res : [];
+                setSuggestions(list);
+                setSelectedHuIds(list.map(s => s.handlingUnitId));
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar sugestões de alocação.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [orderId, canMoveInventory, refreshTick]);
 
     // Atualização de Posição Individual
     const handleUpdateLocation = (huId, newLocId, newLocPath) => {
+        if (!canMoveInventory) return;
         setSuggestions(prev => prev.map(s => {
             if (s.handlingUnitId === huId) {
                 return {
@@ -140,6 +166,7 @@ export default function AlocacaoInteligentePage() {
 
     // Aplicação de Posição em Lote
     const handleApplyBulkLocation = () => {
+        if (!canMoveInventory) return;
         if (!bulkLocationId) return toast.warning('Selecione uma posição para aplicar em lote.');
         if (selectedHuIds.length === 0) return toast.warning('Selecione ao menos uma HU na tabela.');
 
@@ -164,6 +191,8 @@ export default function AlocacaoInteligentePage() {
 
     // Execução Final da Alocação
     const handleConfirmPutaway = async () => {
+        if (!canMoveInventory) return;
+
         const itemsToAllocate = suggestions.filter(s => selectedHuIds.includes(s.handlingUnitId));
         if (itemsToAllocate.length === 0) {
             return toast.warning('Selecione ao menos uma HU para alocar.');
@@ -171,7 +200,6 @@ export default function AlocacaoInteligentePage() {
 
         setIsSubmitting(true);
         try {
-            // Agrupa por Posição para chamadas limpas
             const groupedByLocation = itemsToAllocate.reduce((acc, item) => {
                 const locId = item.suggestedLocationId;
                 if (!acc[locId]) acc[locId] = [];
@@ -218,7 +246,7 @@ export default function AlocacaoInteligentePage() {
     return (
         <div className="flex flex-col h-full space-y-6">
             {/* CABEÇALHO DEDICADO */}
-            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between">
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/inbound/operacao/${orderId}/hus`)}>
                         <ArrowLeft className="h-5 w-5 text-slate-500" />
@@ -236,25 +264,27 @@ export default function AlocacaoInteligentePage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={loadSuggestions} disabled={isLoading} className="text-xs font-semibold">
-                        <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} /> Recalcular Sugestões
-                    </Button>
-                    <Button
-                        onClick={handleConfirmPutaway}
-                        disabled={selectedHuIds.length === 0 || isSubmitting}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs shadow-sm"
-                    >
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                        Confirmar e Gravar Alocação ({selectedHuIds.length})
-                    </Button>
-                </div>
+                {canMoveInventory && (
+                    <div className="flex items-center gap-3">
+                        <Button variant="outline" onClick={triggerRecalculate} disabled={isLoading} className="text-xs font-semibold">
+                            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isLoading ? 'animate-spin' : ''}`} /> Recalcular Sugestões
+                        </Button>
+                        <Button
+                            onClick={handleConfirmPutaway}
+                            disabled={selectedHuIds.length === 0 || isSubmitting}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 text-xs shadow-sm"
+                        >
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                            Confirmar e Gravar Alocação ({selectedHuIds.length})
+                        </Button>
+                    </div>
+                )}
             </div>
 
             {/* TABELA DE REVISÃO E AÇÕES EM LOTE */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
-                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0">
-                    <div className="relative flex-1 max-w-md">
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-4 flex-wrap shrink-0">
+                    <div className="relative flex-1 min-w-[220px] max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
                             placeholder="Buscar por LPN, SKU ou Lote..."
@@ -265,19 +295,21 @@ export default function AlocacaoInteligentePage() {
                     </div>
 
                     {/* AÇÃO EM LOTE */}
-                    <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200">
-                        <span className="text-xs text-slate-500 px-2 font-semibold">Alterar Selecionados ({selectedHuIds.length}):</span>
-                        <div className="w-56">
-                            <SearchableLocationCell
-                                value={bulkLocationId}
-                                onChange={(locId) => setBulkLocationId(locId)}
-                                locations={allLocations}
-                            />
+                    {canMoveInventory && (
+                        <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200">
+                            <span className="text-xs text-slate-500 px-2 font-semibold">Alterar Selecionados ({selectedHuIds.length}):</span>
+                            <div className="w-56">
+                                <SearchableLocationCell
+                                    value={bulkLocationId}
+                                    onChange={(locId) => setBulkLocationId(locId)}
+                                    locations={allLocations}
+                                />
+                            </div>
+                            <Button size="sm" onClick={handleApplyBulkLocation} className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8">
+                                Aplicar Posição
+                            </Button>
                         </div>
-                        <Button size="sm" onClick={handleApplyBulkLocation} className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8">
-                            Aplicar Posição
-                        </Button>
-                    </div>
+                    )}
                 </div>
 
                 <div className="flex-1 overflow-auto">
@@ -287,6 +319,7 @@ export default function AlocacaoInteligentePage() {
                                 <TableHead className="w-[40px]">
                                     <Checkbox
                                         checked={filteredSuggestions.length > 0 && selectedHuIds.length === filteredSuggestions.length}
+                                        disabled={!canMoveInventory}
                                         onCheckedChange={() => {
                                             if (selectedHuIds.length === filteredSuggestions.length) setSelectedHuIds([]);
                                             else setSelectedHuIds(filteredSuggestions.map(s => s.handlingUnitId));
@@ -317,6 +350,7 @@ export default function AlocacaoInteligentePage() {
                                             <TableCell>
                                                 <Checkbox
                                                     checked={isSelected}
+                                                    disabled={!canMoveInventory}
                                                     onCheckedChange={() => {
                                                         setSelectedHuIds(prev =>
                                                             prev.includes(item.handlingUnitId)
@@ -364,6 +398,7 @@ export default function AlocacaoInteligentePage() {
                                             <TableCell>
                                                 <SearchableLocationCell
                                                     value={item.suggestedLocationId}
+                                                    disabled={!canMoveInventory}
                                                     onChange={(newLocId, newPath) => handleUpdateLocation(item.handlingUnitId, newLocId, newPath)}
                                                     locations={isQualityRestricted ? qualityLocations : storageLocations}
                                                 />
