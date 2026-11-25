@@ -17,10 +17,11 @@ import { useGetApiProducts } from '@/api/generated/products/products';
 import { useGetApiTopologyLocationsStorage } from '@/api/generated/topology/topology';
 import { useGetApiUsers } from '@/api/generated/users/users';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { toast } from 'sonner';
 
 // 1. SELETOR PESQUISÁVEL DE DEPOSITANTES (USANDO POPOVER PORTAL)
-function MultiSearchableCustomerSelect({ selectedIds, onChange, customers }) {
+function MultiSearchableCustomerSelect({ selectedIds, onChange, customers, disabled = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -34,10 +35,10 @@ function MultiSearchableCustomerSelect({ selectedIds, onChange, customers }) {
     }, [customers, searchTerm]);
 
     const displayLabel = useMemo(() => {
-        if (!selectedIds || selectedIds.length === 0) return "Todos os Depositantes";
+        if (!selectedIds || selectedIds.length === 0) return 'Todos os Depositantes';
         if (selectedIds.length === 1) {
             const found = customers.find(c => c.id === selectedIds[0]);
-            return found ? found.corporateName : "1 Depositante Selecionado";
+            return found ? found.corporateName : '1 Depositante Selecionado';
         }
         return `${selectedIds.length} Depositantes Selecionados`;
     }, [selectedIds, customers]);
@@ -51,16 +52,17 @@ function MultiSearchableCustomerSelect({ selectedIds, onChange, customers }) {
     };
 
     return (
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover open={isOpen} onOpenChange={(v) => !disabled && setIsOpen(v)}>
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${selectedIds.length > 0 ? 'border-blue-400 font-bold text-slate-900' : 'border-slate-200 text-slate-600'
+                    disabled={disabled}
+                    className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60 ${selectedIds.length > 0 ? 'border-blue-400 font-bold text-slate-900' : 'border-slate-200 text-slate-600'
                         }`}
                 >
                     <span className="truncate">{displayLabel}</span>
                     <div className="flex items-center gap-1 shrink-0 ml-1">
-                        {selectedIds.length > 0 && (
+                        {selectedIds.length > 0 && !disabled && (
                             <X
                                 size={12}
                                 className="text-slate-400 hover:text-rose-600 transition-colors"
@@ -121,7 +123,7 @@ function MultiSearchableCustomerSelect({ selectedIds, onChange, customers }) {
 }
 
 // 2. SELETOR PESQUISÁVEL DE PRODUTOS (USANDO POPOVER PORTAL)
-function MultiSearchableProductSelect({ selectedIds, onChange, products }) {
+function MultiSearchableProductSelect({ selectedIds, onChange, products, disabled = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -135,10 +137,10 @@ function MultiSearchableProductSelect({ selectedIds, onChange, products }) {
     }, [products, searchTerm]);
 
     const displayLabel = useMemo(() => {
-        if (!selectedIds || selectedIds.length === 0) return "Todos os SKUs";
+        if (!selectedIds || selectedIds.length === 0) return 'Todos os SKUs';
         if (selectedIds.length === 1) {
             const found = products.find(p => p.id === selectedIds[0]);
-            return found ? `${found.sku} - ${found.description}` : "1 SKU Selecionado";
+            return found ? `${found.sku} - ${found.description}` : '1 SKU Selecionado';
         }
         return `${selectedIds.length} SKUs Selecionados`;
     }, [selectedIds, products]);
@@ -152,16 +154,17 @@ function MultiSearchableProductSelect({ selectedIds, onChange, products }) {
     };
 
     return (
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover open={isOpen} onOpenChange={(v) => !disabled && setIsOpen(v)}>
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${selectedIds.length > 0 ? 'border-blue-400 font-bold text-slate-900' : 'border-slate-200 text-slate-600'
+                    disabled={disabled}
+                    className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60 ${selectedIds.length > 0 ? 'border-blue-400 font-bold text-slate-900' : 'border-slate-200 text-slate-600'
                         }`}
                 >
                     <span className="truncate font-mono">{displayLabel}</span>
                     <div className="flex items-center gap-1 shrink-0 ml-1">
-                        {selectedIds.length > 0 && (
+                        {selectedIds.length > 0 && !disabled && (
                             <X
                                 size={12}
                                 className="text-slate-400 hover:text-rose-600 transition-colors"
@@ -222,7 +225,7 @@ function MultiSearchableProductSelect({ selectedIds, onChange, products }) {
 }
 
 // 3. SELETOR PESQUISÁVEL DE POSIÇÕES / ENDEREÇOS (USANDO POPOVER PORTAL)
-function MultiSearchableLocationSelect({ selectedIds, onChange, locations }) {
+function MultiSearchableLocationSelect({ selectedIds, onChange, locations, disabled = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -236,10 +239,10 @@ function MultiSearchableLocationSelect({ selectedIds, onChange, locations }) {
     }, [locations, searchTerm]);
 
     const displayLabel = useMemo(() => {
-        if (!selectedIds || selectedIds.length === 0) return "Todas as Posições";
+        if (!selectedIds || selectedIds.length === 0) return 'Todas as Posições';
         if (selectedIds.length === 1) {
             const found = locations.find(l => l.id === selectedIds[0]);
-            return found ? found.fullPath : "1 Posição Selecionada";
+            return found ? found.fullPath : '1 Posição Selecionada';
         }
         return `${selectedIds.length} Posições Selecionadas`;
     }, [selectedIds, locations]);
@@ -253,16 +256,17 @@ function MultiSearchableLocationSelect({ selectedIds, onChange, locations }) {
     };
 
     return (
-        <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <Popover open={isOpen} onOpenChange={(v) => !disabled && setIsOpen(v)}>
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${selectedIds.length > 0 ? 'border-blue-400 font-bold text-slate-900 font-mono' : 'border-slate-200 text-slate-600'
+                    disabled={disabled}
+                    className={`w-full h-9 px-3 text-xs bg-white border rounded-lg flex items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all disabled:opacity-60 ${selectedIds.length > 0 ? 'border-blue-400 font-bold text-slate-900 font-mono' : 'border-slate-200 text-slate-600'
                         }`}
                 >
                     <span className="truncate">{displayLabel}</span>
                     <div className="flex items-center gap-1 shrink-0 ml-1">
-                        {selectedIds.length > 0 && (
+                        {selectedIds.length > 0 && !disabled && (
                             <X
                                 size={12}
                                 className="text-slate-400 hover:text-rose-600 transition-colors"
@@ -324,6 +328,12 @@ function MultiSearchableLocationSelect({ selectedIds, onChange, locations }) {
 
 export default function NovoInventarioPage() {
     const navigate = useNavigate();
+
+    const canManageCycleCount = useHasPermission('cyclecount:manage');
+    const canViewCustomers = useHasPermission('customers:view');
+    const canViewProducts = useHasPermission('products:view');
+    const canViewUsers = useHasPermission('users:view');
+
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Parâmetros Principais
@@ -340,19 +350,31 @@ export default function NovoInventarioPage() {
     const [batch, setBatch] = useState('');
 
     // APIs de Apoio
-    const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 100 });
+    const { data: customersData } = useGetApiCustomers(
+        { OnlyActive: true, PageSize: 100 },
+        { query: { enabled: canManageCycleCount && canViewCustomers } }
+    );
     const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
 
-    const { data: productsData } = useGetApiProducts({ PageSize: 100 });
+    const { data: productsData } = useGetApiProducts(
+        { PageSize: 100 },
+        { query: { enabled: canManageCycleCount && canViewProducts } }
+    );
     const products = productsData?.items || (Array.isArray(productsData) ? productsData : []);
 
-    const { data: locations = [] } = useGetApiTopologyLocationsStorage();
+    const { data: locations = [] } = useGetApiTopologyLocationsStorage({
+        query: { enabled: canManageCycleCount }
+    });
 
-    const { data: usersData } = useGetApiUsers({ PageSize: 100 });
+    const { data: usersData } = useGetApiUsers(
+        { PageSize: 100 },
+        { query: { enabled: canManageCycleCount && canViewUsers } }
+    );
     const users = usersData?.items || (Array.isArray(usersData) ? usersData : []);
 
     const handleCreatePlan = async (e) => {
         if (e) e.preventDefault();
+        if (!canManageCycleCount) return;
         if (!name.trim()) return toast.warning('Informe o nome do inventário.');
 
         setIsSubmitting(true);
@@ -402,10 +424,12 @@ export default function NovoInventarioPage() {
 
                 <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={() => navigate('/inventario/gestao')} disabled={isSubmitting}>Cancelar</Button>
-                    <Button onClick={handleCreatePlan} disabled={isSubmitting || !name.trim()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
-                        {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                        Salvar Plano Rascunho
-                    </Button>
+                    {canManageCycleCount && (
+                        <Button onClick={handleCreatePlan} disabled={isSubmitting || !name.trim()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                            Salvar Plano Rascunho
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -422,6 +446,7 @@ export default function NovoInventarioPage() {
                             <Input
                                 placeholder="Ex: Inventário Geral Corredor B - Rodada 1"
                                 value={name}
+                                disabled={!canManageCycleCount}
                                 onChange={(e) => setName(e.target.value)}
                                 className="bg-white text-xs border-slate-300"
                             />
@@ -429,7 +454,7 @@ export default function NovoInventarioPage() {
 
                         <div className="space-y-1.5">
                             <Label className="text-xs font-bold text-slate-700">Limite de Contagens (Rodadas)</Label>
-                            <Select value={maxRounds} onValueChange={setMaxRounds}>
+                            <Select value={maxRounds} onValueChange={setMaxRounds} disabled={!canManageCycleCount}>
                                 <SelectTrigger className="bg-white text-xs border-slate-300"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="1">1 Contagem Apenas</SelectItem>
@@ -441,7 +466,7 @@ export default function NovoInventarioPage() {
 
                         <div className="space-y-1.5">
                             <Label className="text-xs font-bold text-slate-700">Atribuir Operador Específico</Label>
-                            <Select value={assignedUserId} onValueChange={setAssignedUserId}>
+                            <Select value={assignedUserId} onValueChange={setAssignedUserId} disabled={!canManageCycleCount}>
                                 <SelectTrigger className="bg-white text-xs border-slate-300"><SelectValue placeholder="Livre para qualquer operador" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="UNASSIGNED">Pool Livre (Qualquer Operador)</SelectItem>
@@ -459,7 +484,7 @@ export default function NovoInventarioPage() {
                                     </Label>
                                     <p className="text-[10px] text-slate-500">Trava movimentações nas posições durante o inventário.</p>
                                 </div>
-                                <Switch checked={blockMovements} onCheckedChange={setBlockMovements} />
+                                <Switch checked={blockMovements} disabled={!canManageCycleCount} onCheckedChange={setBlockMovements} />
                             </div>
 
                             {/* MODO AJUSTE VS AUDITORIA */}
@@ -472,7 +497,7 @@ export default function NovoInventarioPage() {
                                         {enableAdjustments ? 'Gera solicitações de NF-e para sobras/faltas.' : 'Modo Auditoria: Não gera ajustes fiscais.'}
                                     </p>
                                 </div>
-                                <Switch checked={enableAdjustments} onCheckedChange={setEnableAdjustments} />
+                                <Switch checked={enableAdjustments} disabled={!canManageCycleCount} onCheckedChange={setEnableAdjustments} />
                             </div>
                         </div>
                     </CardContent>
@@ -495,6 +520,7 @@ export default function NovoInventarioPage() {
                                 selectedIds={selectedCustomerIds}
                                 onChange={setSelectedCustomerIds}
                                 customers={customers}
+                                disabled={!canManageCycleCount}
                             />
                             {selectedCustomerIds.length > 0 && (
                                 <div className="flex flex-wrap gap-1 pt-1">
@@ -503,7 +529,9 @@ export default function NovoInventarioPage() {
                                         return found ? (
                                             <Badge key={id} variant="outline" className="bg-slate-50 text-[10px] gap-1 font-sans">
                                                 {found.corporateName}
-                                                <X size={10} className="cursor-pointer hover:text-rose-600" onClick={() => setSelectedCustomerIds(selectedCustomerIds.filter(i => i !== id))} />
+                                                {canManageCycleCount && (
+                                                    <X size={10} className="cursor-pointer hover:text-rose-600" onClick={() => setSelectedCustomerIds(selectedCustomerIds.filter(i => i !== id))} />
+                                                )}
                                             </Badge>
                                         ) : null;
                                     })}
@@ -520,6 +548,7 @@ export default function NovoInventarioPage() {
                                 selectedIds={selectedProductIds}
                                 onChange={setSelectedProductIds}
                                 products={products}
+                                disabled={!canManageCycleCount}
                             />
                             {selectedProductIds.length > 0 && (
                                 <div className="flex flex-wrap gap-1 pt-1">
@@ -528,7 +557,9 @@ export default function NovoInventarioPage() {
                                         return found ? (
                                             <Badge key={id} variant="outline" className="bg-slate-50 text-[10px] font-mono gap-1">
                                                 {found.sku}
-                                                <X size={10} className="cursor-pointer hover:text-rose-600 font-sans" onClick={() => setSelectedProductIds(selectedProductIds.filter(i => i !== id))} />
+                                                {canManageCycleCount && (
+                                                    <X size={10} className="cursor-pointer hover:text-rose-600 font-sans" onClick={() => setSelectedProductIds(selectedProductIds.filter(i => i !== id))} />
+                                                )}
                                             </Badge>
                                         ) : null;
                                     })}
@@ -545,6 +576,7 @@ export default function NovoInventarioPage() {
                                 selectedIds={selectedLocationIds}
                                 onChange={setSelectedLocationIds}
                                 locations={locations}
+                                disabled={!canManageCycleCount}
                             />
                             {selectedLocationIds.length > 0 && (
                                 <div className="flex flex-wrap gap-1 pt-1 max-h-24 overflow-y-auto">
@@ -554,7 +586,9 @@ export default function NovoInventarioPage() {
                                             <Badge key={id} variant="outline" className="bg-slate-50 text-[10px] font-mono gap-1">
                                                 <MapPin size={10} className="text-blue-600" />
                                                 {found.fullPath}
-                                                <X size={10} className="cursor-pointer hover:text-rose-600 font-sans" onClick={() => setSelectedLocationIds(selectedLocationIds.filter(i => i !== id))} />
+                                                {canManageCycleCount && (
+                                                    <X size={10} className="cursor-pointer hover:text-rose-600 font-sans" onClick={() => setSelectedLocationIds(selectedLocationIds.filter(i => i !== id))} />
+                                                )}
                                             </Badge>
                                         ) : null;
                                     })}
@@ -568,6 +602,7 @@ export default function NovoInventarioPage() {
                             <Input
                                 placeholder="Digite o código do lote físico se desejar..."
                                 value={batch}
+                                disabled={!canManageCycleCount}
                                 onChange={(e) => setBatch(e.target.value)}
                                 className="bg-white text-xs font-mono border-slate-300"
                             />

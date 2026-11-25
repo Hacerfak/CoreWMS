@@ -21,14 +21,23 @@ import {
     Plus, Trash2, AlertTriangle, Layers, Boxes, ShoppingCart, EyeOff
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { toast } from 'sonner';
 
 export default function ExecucaoContagemPage() {
     const { taskId } = useParams(); // Formato: "{planId}_{locationId}"
     const navigate = useNavigate();
 
+    const canCountCycleCount = useHasPermission(['cyclecount:count', 'cyclecount:manage']);
+
+    const { planId, locationId } = useMemo(() => {
+        if (!taskId || !taskId.includes('_')) return { planId: '', locationId: '' };
+        const [pId, lId] = taskId.split('_');
+        return { planId: pId, locationId: lId };
+    }, [taskId]);
+
     const [locationTask, setLocationTask] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(planId && locationId && canCountCycleCount));
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Modais de Confirmação
@@ -43,46 +52,43 @@ export default function ExecucaoContagemPage() {
 
     const codeInputRef = useRef(null);
 
-    const { planId, locationId } = useMemo(() => {
-        if (!taskId || !taskId.includes('_')) return { planId: '', locationId: '' };
-        const [pId, lId] = taskId.split('_');
-        return { planId: pId, locationId: lId };
-    }, [taskId]);
-
-    const loadLocationData = async () => {
+    useEffect(() => {
         if (!planId || !locationId) {
             toast.error('Identificador de endereço inválido.');
             navigate('/inventario/operacao');
             return;
         }
 
-        try {
-            setIsLoading(true);
-            const res = await customInstance({ url: '/api/cycle-count/tasks/operator', method: 'GET' });
-            const list = Array.isArray(res) ? res : [];
-            const found = list.find(l => l.planId === planId && l.locationId === locationId);
+        if (!canCountCycleCount) return;
 
-            if (found) {
-                setLocationTask(found);
-            } else {
-                toast.error('Endereço não encontrado ou já finalizado.');
+        let isMounted = true;
+
+        customInstance({ url: '/api/cycle-count/tasks/operator', method: 'GET' })
+            .then(res => {
+                if (!isMounted) return;
+                const list = Array.isArray(res) ? res : [];
+                const found = list.find(l => l.planId === planId && l.locationId === locationId);
+
+                if (found) {
+                    setLocationTask(found);
+                } else {
+                    toast.error('Endereço não encontrado ou já finalizado.');
+                    navigate('/inventario/operacao');
+                }
+            })
+            .catch(() => {
+                if (!isMounted) return;
+                toast.error('Erro ao carregar dados do endereço.');
                 navigate('/inventario/operacao');
-            }
-        } catch {
-            toast.error('Erro ao carregar dados do endereço.');
-            navigate('/inventario/operacao');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
 
-    useEffect(() => {
-        loadLocationData();
-    }, [
-	planId,
-	locationId,
-	
-]);
+        return () => {
+            isMounted = false;
+        };
+    }, [planId, locationId, canCountCycleCount, navigate]);
 
     useEffect(() => {
         if (!isLoading && !isEmptyLocation && codeInputRef.current) {
@@ -96,6 +102,8 @@ export default function ExecucaoContagemPage() {
 
     const handleAddEntry = (e) => {
         if (e) e.preventDefault();
+        if (!canCountCycleCount) return;
+
         const cleanCode = scannedCode.trim().toUpperCase();
         const qtyNum = Number(inputQty);
 
@@ -128,11 +136,13 @@ export default function ExecucaoContagemPage() {
     };
 
     const handleRemoveEntry = (id) => {
+        if (!canCountCycleCount) return;
         setEntries(prev => prev.filter(item => item.id !== id));
         toast.info('Leitura removida da lista.');
     };
 
     const handleToggleEmptyLocation = (checked) => {
+        if (!canCountCycleCount) return;
         setIsEmptyLocation(checked);
         if (checked) {
             setEntries([]);
@@ -142,6 +152,7 @@ export default function ExecucaoContagemPage() {
     };
 
     const handleConfirmFinalize = async () => {
+        if (!canCountCycleCount) return;
         if (!isEmptyLocation && entries.length === 0) {
             return toast.warning('Adicione ao menos uma leitura ou marque "Endereço Fisicamente Vazio".');
         }
@@ -182,6 +193,7 @@ export default function ExecucaoContagemPage() {
     };
 
     const handleConfirmCancelCounting = async () => {
+        if (!canCountCycleCount) return;
         setIsSubmitting(true);
         try {
             await customInstance({
@@ -251,25 +263,27 @@ export default function ExecucaoContagemPage() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => setIsCancelModalOpen(true)}
-                        disabled={isSubmitting}
-                        className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs h-9"
-                    >
-                        <AlertTriangle size={14} className="mr-1.5" /> Cancelar e Liberar Posição
-                    </Button>
+                {canCountCycleCount && (
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsCancelModalOpen(true)}
+                            disabled={isSubmitting}
+                            className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs h-9"
+                        >
+                            <AlertTriangle size={14} className="mr-1.5" /> Cancelar e Liberar Posição
+                        </Button>
 
-                    <Button
-                        onClick={() => setIsFinalizeModalOpen(true)}
-                        disabled={isSubmitting || !canFinalize}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 shadow-2xs"
-                    >
-                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                        {isEmptyLocation ? 'Confirmar Posição Vazia' : `Finalizar Contagem (${totalCountedUnits} UN)`}
-                    </Button>
-                </div>
+                        <Button
+                            onClick={() => setIsFinalizeModalOpen(true)}
+                            disabled={isSubmitting || !canFinalize}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 shadow-2xs"
+                        >
+                            <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                            {isEmptyLocation ? 'Confirmar Posição Vazia' : `Finalizar Contagem (${totalCountedUnits} UN)`}
+                        </Button>
+                    </div>
+                )}
             </div>
 
             {/* OPÇÃO DE POSIÇÃO VAZIA */}
@@ -280,7 +294,11 @@ export default function ExecucaoContagemPage() {
                         Ative esta opção se não houver nenhuma HU ou produto armazenado nesta posição.
                     </span>
                 </div>
-                <Switch checked={isEmptyLocation} onCheckedChange={handleToggleEmptyLocation} />
+                <Switch
+                    checked={isEmptyLocation}
+                    disabled={!canCountCycleCount}
+                    onCheckedChange={handleToggleEmptyLocation}
+                />
             </div>
 
             {/* PAINEL DE CONTAGEM CEGA */}
@@ -320,6 +338,7 @@ export default function ExecucaoContagemPage() {
                                         autoFocus
                                         placeholder="Bipe ou digite o código..."
                                         value={scannedCode}
+                                        disabled={!canCountCycleCount}
                                         onChange={(e) => setScannedCode(e.target.value)}
                                         className="bg-white font-mono text-sm font-bold uppercase h-11 border-slate-300 focus-visible:ring-pink-500"
                                     />
@@ -332,19 +351,22 @@ export default function ExecucaoContagemPage() {
                                         step="0.0001"
                                         placeholder="1"
                                         value={inputQty}
+                                        disabled={!canCountCycleCount}
                                         onFocus={(e) => e.target.select()}
                                         onChange={(e) => setInputQty(e.target.value)}
                                         className="bg-white font-mono text-xl font-bold text-center h-12 border-slate-300"
                                     />
                                 </div>
 
-                                <Button
-                                    type="submit"
-                                    disabled={!scannedCode.trim() || !inputQty}
-                                    className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold h-10"
-                                >
-                                    <Plus size={16} className="mr-1.5" /> Adicionar Leitura
-                                </Button>
+                                {canCountCycleCount && (
+                                    <Button
+                                        type="submit"
+                                        disabled={!scannedCode.trim() || !inputQty}
+                                        className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold h-10"
+                                    >
+                                        <Plus size={16} className="mr-1.5" /> Adicionar Leitura
+                                    </Button>
+                                )}
                             </form>
                         </CardContent>
                     </Card>
@@ -377,13 +399,13 @@ export default function ExecucaoContagemPage() {
                                             <TableHead className="w-20">Horário</TableHead>
                                             <TableHead>Código Lido (LPN / SKU)</TableHead>
                                             <TableHead className="text-right">Quantidade</TableHead>
-                                            <TableHead className="w-12 text-center"></TableHead>
+                                            {canCountCycleCount && <TableHead className="w-12 text-center"></TableHead>}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {entries.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={4} className="h-36 text-center text-slate-400 text-xs italic">
+                                                <TableCell colSpan={canCountCycleCount ? 4 : 3} className="h-36 text-center text-slate-400 text-xs italic">
                                                     Nenhuma leitura registrada ainda. Utilize o leitor ao lado para bipar os volumes da posição.
                                                 </TableCell>
                                             </TableRow>
@@ -395,17 +417,19 @@ export default function ExecucaoContagemPage() {
                                                     <TableCell className="text-right font-mono font-bold text-xs text-emerald-700">
                                                         {item.quantity.toLocaleString('pt-BR')} UN
                                                     </TableCell>
-                                                    <TableCell className="text-center">
-                                                        <Button
-                                                            type="button"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleRemoveEntry(item.id)}
-                                                            className="h-7 w-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                                                        >
-                                                            <Trash2 size={13} />
-                                                        </Button>
-                                                    </TableCell>
+                                                    {canCountCycleCount && (
+                                                        <TableCell className="text-center">
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleRemoveEntry(item.id)}
+                                                                className="h-7 w-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </Button>
+                                                        </TableCell>
+                                                    )}
                                                 </TableRow>
                                             ))
                                         )}
@@ -417,65 +441,70 @@ export default function ExecucaoContagemPage() {
                 </div>
             )}
 
-            {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO */}
-            <AlertDialog open={isFinalizeModalOpen} onOpenChange={setIsFinalizeModalOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
-                            <CheckCircle2 className="text-emerald-600" size={20} />
-                            Finalizar Contagem do Endereço?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            <span>
-                                {isEmptyLocation
-                                    ? <>Confirma que o endereço <strong className="font-mono text-slate-900">{locationTask.locationPath}</strong> está fisicamente vazio (0 unidades)?</>
-                                    : <>Confirma o envio de <strong>{entries.length} leitura(s)</strong> (total de <strong className="font-mono text-slate-900">{totalCountedUnits} UN</strong>) para o endereço <strong className="font-mono text-slate-900">{locationTask.locationPath}</strong>?</>
-                                }
-                            </span>
-                            <p className="text-slate-500">
-                                Os dados serão submetidos para análise e conciliação pela Gestão.
-                            </p>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Revisar Mais</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmFinalize}
-                            disabled={isSubmitting}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                        >
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            Confirmar e Enviar
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* MODAIS DE CONTAGEM */}
+            {canCountCycleCount && (
+                <>
+                    {/* MODAL DE CONFIRMAÇÃO DE FINALIZAÇÃO */}
+                    <AlertDialog open={isFinalizeModalOpen} onOpenChange={setIsFinalizeModalOpen}>
+                        <AlertDialogContent className="bg-white sm:max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <CheckCircle2 className="text-emerald-600" size={20} />
+                                    Finalizar Contagem do Endereço?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                    <span>
+                                        {isEmptyLocation
+                                            ? <>Confirma que o endereço <strong className="font-mono text-slate-900">{locationTask.locationPath}</strong> está fisicamente vazio (0 unidades)?</>
+                                            : <>Confirma o envio de <strong>{entries.length} leitura(s)</strong> (total de <strong className="font-mono text-slate-900">{totalCountedUnits} UN</strong>) para o endereço <strong className="font-mono text-slate-900">{locationTask.locationPath}</strong>?</>
+                                        }
+                                    </span>
+                                    <p className="text-slate-500">
+                                        Os dados serão submetidos para análise e conciliação pela Gestão.
+                                    </p>
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="pt-2">
+                                <AlertDialogCancel disabled={isSubmitting}>Revisar Mais</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleConfirmFinalize}
+                                    disabled={isSubmitting}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                                >
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                    Confirmar e Enviar
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
-            {/* MODAL DE CANCELAMENTO COM DESVÍNCULO */}
-            <AlertDialog open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
-                            <AlertTriangle className="text-amber-600" size={20} />
-                            Cancelar e Liberar Posição?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-500">
-                            Esta ação descartará as leituras desta sessão, desvinculará o endereço do seu perfil e o devolverá para a fila de contagem.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Voltar à Contagem</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmCancelCounting}
-                            disabled={isSubmitting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            Sim, Liberar Posição
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    {/* MODAL DE CANCELAMENTO COM DESVÍNCULO */}
+                    <AlertDialog open={isCancelModalOpen} onOpenChange={setIsCancelModalOpen}>
+                        <AlertDialogContent className="bg-white sm:max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <AlertTriangle className="text-amber-600" size={20} />
+                                    Cancelar e Liberar Posição?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-xs text-slate-500">
+                                    Esta ação descartará as leituras desta sessão, desvinculará o endereço do seu perfil e o devolverá para a fila de contagem.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="pt-2">
+                                <AlertDialogCancel disabled={isSubmitting}>Voltar à Contagem</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleConfirmCancelCounting}
+                                    disabled={isSubmitting}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                                >
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                    Sim, Liberar Posição
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </>
+            )}
         </div>
     );
 }

@@ -10,12 +10,18 @@ import {
     RefreshCw, EyeOff, Plus, Lock, X
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { toast } from 'sonner';
 
 export default function InventarioOperacaoPage() {
     const navigate = useNavigate();
+
+    const canCountCycleCount = useHasPermission(['cyclecount:count', 'cyclecount:manage']);
+    const canStartSpontaneous = useHasPermission(['cyclecount:spontaneous', 'cyclecount:manage']);
+
     const [activeLocations, setActiveLocations] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(canCountCycleCount);
+    const [refreshTick, setRefreshTick] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
 
     // Estados do Modal de Inventário Espontâneo
@@ -24,21 +30,32 @@ export default function InventarioOperacaoPage() {
     const [spontaneousLocations, setSpontaneousLocations] = useState([]);
     const [isCreatingSpontaneous, setIsCreatingSpontaneous] = useState(false);
 
-    const loadOperatorLocations = async () => {
-        try {
-            setIsLoading(true);
-            const res = await customInstance({ url: '/api/cycle-count/tasks/operator', method: 'GET' });
-            setActiveLocations(Array.isArray(res) ? res : []);
-        } catch {
-            toast.error('Erro ao carregar endereços para contagem.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!canCountCycleCount) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        loadOperatorLocations();
-    }, []);
+        if (!canCountCycleCount) return;
+
+        let isMounted = true;
+
+        customInstance({ url: '/api/cycle-count/tasks/operator', method: 'GET' })
+            .then(res => {
+                if (isMounted) setActiveLocations(Array.isArray(res) ? res : []);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar endereços para contagem.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [canCountCycleCount, refreshTick]);
 
     const filteredLocations = useMemo(() => {
         if (!searchTerm.trim()) return activeLocations;
@@ -51,6 +68,8 @@ export default function InventarioOperacaoPage() {
 
     // Inicia contagem cega do endereço selecionado
     const handleStartLocationCount = async (loc) => {
+        if (!canCountCycleCount) return;
+
         try {
             await customInstance({
                 url: `/api/cycle-count/locations/${loc.planId}/${loc.locationId}/start`,
@@ -65,6 +84,8 @@ export default function InventarioOperacaoPage() {
     // Adiciona endereço à lista do inventário espontâneo
     const handleAddSpontaneousLocation = (e) => {
         if (e) e.preventDefault();
+        if (!canStartSpontaneous) return;
+
         const clean = locationInput.trim().toUpperCase();
         if (!clean) return;
 
@@ -84,6 +105,8 @@ export default function InventarioOperacaoPage() {
 
     // Cria o plano espontâneo, bloqueia movimentações e atualiza a lista
     const handleCreateSpontaneousPlan = async () => {
+        if (!canStartSpontaneous) return;
+
         if (spontaneousLocations.length === 0) {
             return toast.warning('Adicione ao menos um endereço para iniciar a contagem.');
         }
@@ -103,7 +126,7 @@ export default function InventarioOperacaoPage() {
             setIsSpontaneousOpen(false);
             setSpontaneousLocations([]);
             setLocationInput('');
-            await loadOperatorLocations();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao criar contagem espontânea.');
         } finally {
@@ -125,15 +148,19 @@ export default function InventarioOperacaoPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button
-                        onClick={() => setIsSpontaneousOpen(true)}
-                        className="bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs h-9 shadow-2xs"
-                    >
-                        <Plus size={15} className="mr-1.5" /> Iniciar Contagem Espontânea
-                    </Button>
-                    <Button onClick={loadOperatorLocations} variant="outline" size="sm" className="bg-white h-9">
-                        <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-                    </Button>
+                    {canStartSpontaneous && (
+                        <Button
+                            onClick={() => setIsSpontaneousOpen(true)}
+                            className="bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs h-9 shadow-2xs"
+                        >
+                            <Plus size={15} className="mr-1.5" /> Iniciar Contagem Espontânea
+                        </Button>
+                    )}
+                    {canCountCycleCount && (
+                        <Button onClick={triggerReload} variant="outline" size="sm" className="bg-white h-9">
+                            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -163,19 +190,19 @@ export default function InventarioOperacaoPage() {
                                 <TableHead>Tipo Armazenamento</TableHead>
                                 <TableHead className="text-center">Rodada</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Ação</TableHead>
+                                {canCountCycleCount && <TableHead className="text-right">Ação</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-32 text-center">
+                                    <TableCell colSpan={canCountCycleCount ? 6 : 5} className="h-32 text-center">
                                         <Loader2 className="h-6 w-6 animate-spin text-pink-600 mx-auto" />
                                     </TableCell>
                                 </TableRow>
                             ) : filteredLocations.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="h-32 text-center text-slate-500 text-xs">
+                                    <TableCell colSpan={canCountCycleCount ? 6 : 5} className="h-32 text-center text-slate-500 text-xs">
                                         Nenhum endereço pendente de contagem no momento. Utilize "Iniciar Contagem Espontânea" para auditar uma posição.
                                     </TableCell>
                                 </TableRow>
@@ -212,15 +239,17 @@ export default function InventarioOperacaoPage() {
                                                 {loc.status === 'InCounting' ? '⏳ Em Contagem' : '⏳ Aguardando'}
                                             </Badge>
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button
-                                                onClick={() => handleStartLocationCount(loc)}
-                                                size="sm"
-                                                className="bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs h-8"
-                                            >
-                                                <Barcode size={14} className="mr-1.5" /> Contar Endereço
-                                            </Button>
-                                        </TableCell>
+                                        {canCountCycleCount && (
+                                            <TableCell className="text-right">
+                                                <Button
+                                                    onClick={() => handleStartLocationCount(loc)}
+                                                    size="sm"
+                                                    className="bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs h-8"
+                                                >
+                                                    <Barcode size={14} className="mr-1.5" /> Contar Endereço
+                                                </Button>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))
                             )}
@@ -230,96 +259,98 @@ export default function InventarioOperacaoPage() {
             </div>
 
             {/* MODAL DE INVENTÁRIO ESPONTÂNEO */}
-            <Dialog
-                open={isSpontaneousOpen}
-                onOpenChange={(open) => {
-                    if (!open && !isCreatingSpontaneous) {
-                        setIsSpontaneousOpen(false);
-                        setLocationInput('');
-                    }
-                }}
-            >
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <EyeOff size={20} className="text-pink-600" /> Iniciar Inventário Espontâneo
-                        </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            Informe ou bipe um ou mais endereços. O sistema criará um plano vinculado ao seu usuário e bloqueará movimentações nestas posições até a conclusão da revisão.
-                        </DialogDescription>
-                    </DialogHeader>
+            {canStartSpontaneous && (
+                <Dialog
+                    open={isSpontaneousOpen}
+                    onOpenChange={(open) => {
+                        if (!open && !isCreatingSpontaneous) {
+                            setIsSpontaneousOpen(false);
+                            setLocationInput('');
+                        }
+                    }}
+                >
+                    <DialogContent className="sm:max-w-md bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="text-slate-900 flex items-center gap-2">
+                                <EyeOff size={20} className="text-pink-600" /> Iniciar Inventário Espontâneo
+                            </DialogTitle>
+                            <DialogDescription className="text-xs text-slate-500">
+                                Informe ou bipe um ou mais endereços. O sistema criará um plano vinculado ao seu usuário e bloqueará movimentações nestas posições até a conclusão da revisão.
+                            </DialogDescription>
+                        </DialogHeader>
 
-                    <div className="space-y-4 py-2">
-                        <form onSubmit={handleAddSpontaneousLocation} className="flex gap-2">
-                            <Input
-                                autoFocus
-                                placeholder="Ex: P1-C1-B01"
-                                value={locationInput}
-                                onChange={(e) => setLocationInput(e.target.value)}
-                                className="font-mono text-xs uppercase bg-white"
-                            />
-                            <Button
-                                type="submit"
-                                variant="outline"
-                                disabled={!locationInput.trim()}
-                                className="border-pink-200 text-pink-700 hover:bg-pink-50 font-bold text-xs shrink-0"
-                            >
-                                <Plus size={14} className="mr-1" /> Adicionar
-                            </Button>
-                        </form>
+                        <div className="space-y-4 py-2">
+                            <form onSubmit={handleAddSpontaneousLocation} className="flex gap-2">
+                                <Input
+                                    autoFocus
+                                    placeholder="Ex: P1-C1-B01"
+                                    value={locationInput}
+                                    onChange={(e) => setLocationInput(e.target.value)}
+                                    className="font-mono text-xs uppercase bg-white"
+                                />
+                                <Button
+                                    type="submit"
+                                    variant="outline"
+                                    disabled={!locationInput.trim()}
+                                    className="border-pink-200 text-pink-700 hover:bg-pink-50 font-bold text-xs shrink-0"
+                                >
+                                    <Plus size={14} className="mr-1" /> Adicionar
+                                </Button>
+                            </form>
 
-                        <div className="space-y-1.5">
-                            <span className="text-[11px] font-bold text-slate-600 uppercase block">
-                                Endereços Selecionados ({spontaneousLocations.length})
-                            </span>
-                            {spontaneousLocations.length === 0 ? (
-                                <div className="p-4 text-center text-xs text-slate-400 border border-dashed rounded-lg bg-slate-50">
-                                    Nenhum endereço adicionado ainda.
-                                </div>
-                            ) : (
-                                <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border rounded-lg max-h-36 overflow-y-auto">
-                                    {spontaneousLocations.map(code => (
-                                        <Badge
-                                            key={code}
-                                            className="bg-pink-100 text-pink-900 border-pink-300 font-mono text-xs gap-1.5 py-1 px-2"
-                                        >
-                                            <MapPin size={11} className="text-pink-600" />
-                                            {code}
-                                            <X
-                                                size={12}
-                                                className="cursor-pointer hover:text-rose-600"
-                                                onClick={() => handleRemoveSpontaneousLocation(code)}
-                                            />
-                                        </Badge>
-                                    ))}
-                                </div>
-                            )}
+                            <div className="space-y-1.5">
+                                <span className="text-[11px] font-bold text-slate-600 uppercase block">
+                                    Endereços Selecionados ({spontaneousLocations.length})
+                                </span>
+                                {spontaneousLocations.length === 0 ? (
+                                    <div className="p-4 text-center text-xs text-slate-400 border border-dashed rounded-lg bg-slate-50">
+                                        Nenhum endereço adicionado ainda.
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border rounded-lg max-h-36 overflow-y-auto">
+                                        {spontaneousLocations.map(code => (
+                                            <Badge
+                                                key={code}
+                                                className="bg-pink-100 text-pink-900 border-pink-300 font-mono text-xs gap-1.5 py-1 px-2"
+                                            >
+                                                <MapPin size={11} className="text-pink-600" />
+                                                {code}
+                                                <X
+                                                    size={12}
+                                                    className="cursor-pointer hover:text-rose-600"
+                                                    onClick={() => handleRemoveSpontaneousLocation(code)}
+                                                />
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-                    <DialogFooter className="border-t pt-3">
-                        <Button
-                            variant="outline"
-                            onClick={() => setIsSpontaneousOpen(false)}
-                            disabled={isCreatingSpontaneous}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button
-                            onClick={handleCreateSpontaneousPlan}
-                            disabled={isCreatingSpontaneous || spontaneousLocations.length === 0}
-                            className="bg-pink-600 hover:bg-pink-700 text-white font-bold"
-                        >
-                            {isCreatingSpontaneous ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                            ) : (
-                                <Lock className="h-4 w-4 mr-1.5" />
-                            )}
-                            Bloquear e Iniciar
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter className="border-t pt-3">
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsSpontaneousOpen(false)}
+                                disabled={isCreatingSpontaneous}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                onClick={handleCreateSpontaneousPlan}
+                                disabled={isCreatingSpontaneous || spontaneousLocations.length === 0}
+                                className="bg-pink-600 hover:bg-pink-700 text-white font-bold"
+                            >
+                                {isCreatingSpontaneous ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                                ) : (
+                                    <Lock className="h-4 w-4 mr-1.5" />
+                                )}
+                                Bloquear e Iniciar
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }

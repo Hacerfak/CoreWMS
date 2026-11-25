@@ -10,10 +10,10 @@ import {
     TrendingUp, AlertTriangle, FileText, ChevronRight, Boxes
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { toast } from 'sonner';
 
-// Helper de Tradução dos Badges de Status do Plano
-export const renderPlanStatusBadge = (status) => {
+const renderPlanStatusBadge = (status) => {
     const statusStr = String(status);
     switch (statusStr) {
         case 'Draft':
@@ -38,9 +38,14 @@ export const renderPlanStatusBadge = (status) => {
 
 export default function InventarioGestaoPage() {
     const navigate = useNavigate();
+
+    const canViewCycleCount = useHasPermission(['cyclecount:view', 'cyclecount:manage']);
+    const canManageCycleCount = useHasPermission('cyclecount:manage');
+
     const [plans, setPlans] = useState([]);
     const [metrics, setMetrics] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(canViewCycleCount);
+    const [refreshTick, setRefreshTick] = useState(0);
 
     // Filtros de Lista
     const [searchTerm, setSearchTerm] = useState('');
@@ -50,25 +55,37 @@ export default function InventarioGestaoPage() {
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 6;
 
-    const loadData = async () => {
-        try {
-            setIsLoading(true);
-            const [plansRes, metricsRes] = await Promise.all([
-                customInstance({ url: '/api/cycle-count/plans', method: 'GET' }),
-                customInstance({ url: '/api/cycle-count/metrics', method: 'GET' })
-            ]);
-            setPlans(plansRes || []);
-            setMetrics(metricsRes || null);
-        } catch {
-            toast.error('Erro ao carregar dados de inventário.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!canViewCycleCount) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        loadData();
-    }, []);
+        if (!canViewCycleCount) return;
+
+        let isMounted = true;
+
+        Promise.all([
+            customInstance({ url: '/api/cycle-count/plans', method: 'GET' }),
+            customInstance({ url: '/api/cycle-count/metrics', method: 'GET' })
+        ])
+            .then(([plansRes, metricsRes]) => {
+                if (!isMounted) return;
+                setPlans(plansRes || []);
+                setMetrics(metricsRes || null);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar dados de inventário.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [canViewCycleCount, refreshTick]);
 
     // Filtro Client-side
     const filteredPlans = useMemo(() => {
@@ -111,12 +128,16 @@ export default function InventarioGestaoPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button onClick={loadData} variant="outline" size="sm" className="bg-white border-slate-200 text-slate-700 text-xs h-9">
-                        <RefreshCw size={14} className={`mr-1.5 ${isLoading ? 'animate-spin' : ''}`} /> Atualizar
-                    </Button>
-                    <Button onClick={() => navigate('/inventario/gestao/novo')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 shadow-2xs">
-                        <Plus size={16} className="mr-1.5" /> Novo Plano de Inventário
-                    </Button>
+                    {canViewCycleCount && (
+                        <Button onClick={triggerReload} variant="outline" size="sm" className="bg-white border-slate-200 text-slate-700 text-xs h-9">
+                            <RefreshCw size={14} className={`mr-1.5 ${isLoading ? 'animate-spin' : ''}`} /> Atualizar
+                        </Button>
+                    )}
+                    {canManageCycleCount && (
+                        <Button onClick={() => navigate('/inventario/gestao/novo')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 shadow-2xs">
+                            <Plus size={16} className="mr-1.5" /> Novo Plano de Inventário
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -225,8 +246,8 @@ export default function InventarioGestaoPage() {
                                 return (
                                     <div
                                         key={p.id}
-                                        onClick={() => navigate(`/inventario/gestao/${p.id}`)}
-                                        className="bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all rounded-xl p-4 cursor-pointer flex flex-col justify-between space-y-3 group"
+                                        onClick={() => canViewCycleCount && navigate(`/inventario/gestao/${p.id}`)}
+                                        className={`bg-white border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all rounded-xl p-4 flex flex-col justify-between space-y-3 group ${canViewCycleCount ? 'cursor-pointer' : ''}`}
                                     >
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between">

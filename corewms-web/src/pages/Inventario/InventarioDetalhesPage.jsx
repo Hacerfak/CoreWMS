@@ -23,14 +23,42 @@ import {
     AlertTriangle, ChevronDown, ChevronUp, User, CheckCheck, QrCode, Lock, Unlock
 } from 'lucide-react';
 import { customInstance } from '@/api/orval-mutator';
-import { renderPlanStatusBadge } from './InventarioGestaoPage';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { toast } from 'sonner';
+
+const renderPlanStatusBadge = (status) => {
+    const statusStr = String(status);
+    switch (statusStr) {
+        case 'Draft':
+        case '1':
+            return <Badge variant="outline" className="bg-amber-50 text-amber-900 border-amber-300 font-mono text-[10px]">Rascunho</Badge>;
+        case 'ApprovedForCounting':
+        case '2':
+            return <Badge variant="outline" className="bg-blue-50 text-blue-900 border-blue-300 font-mono text-[10px]">Aprovado p/ Contagem</Badge>;
+        case 'InCounting':
+        case '3':
+            return <Badge variant="outline" className="bg-indigo-50 text-indigo-900 border-indigo-300 font-mono text-[10px]">Em Contagem</Badge>;
+        case 'InReview':
+        case '4':
+            return <Badge variant="outline" className="bg-purple-50 text-purple-900 border-purple-300 font-mono text-[10px]">Em Análise</Badge>;
+        case 'Closed':
+        case '5':
+            return <Badge variant="outline" className="bg-emerald-50 text-emerald-900 border-emerald-300 font-mono text-[10px]">Encerrado</Badge>;
+        default:
+            return <Badge variant="outline" className="bg-slate-50 text-slate-700 font-mono text-[10px]">{statusStr}</Badge>;
+    }
+};
 
 export default function InventarioDetalhesPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+
+    const canViewCycleCount = useHasPermission(['cyclecount:view', 'cyclecount:manage']);
+    const canManageCycleCount = useHasPermission('cyclecount:manage');
+
     const [plan, setPlan] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(id && canViewCycleCount));
+    const [refreshTick, setRefreshTick] = useState(0);
     const [selectedTaskForFiscal, setSelectedTaskForFiscal] = useState(null);
     const [nfeNumber, setNfeNumber] = useState('');
     const [nfeNotes, setNfeNotes] = useState('');
@@ -45,21 +73,32 @@ export default function InventarioDetalhesPage() {
     const [isClosePlanModalOpen, setIsClosePlanModalOpen] = useState(false);
     const [locationRoundToRelease, setLocationRoundToRelease] = useState(null);
 
-    const loadPlanDetails = async () => {
-        try {
-            setIsLoading(true);
-            const res = await customInstance({ url: `/api/cycle-count/plans/${id}`, method: 'GET' });
-            setPlan(res || null);
-        } catch {
-            toast.error('Erro ao carregar detalhes do plano.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!id || !canViewCycleCount) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        if (id) loadPlanDetails();
-    }, [id, ]);
+        if (!id || !canViewCycleCount) return;
+
+        let isMounted = true;
+
+        customInstance({ url: `/api/cycle-count/plans/${id}`, method: 'GET' })
+            .then(res => {
+                if (isMounted) setPlan(res || null);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar detalhes do plano.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [id, canViewCycleCount, refreshTick]);
 
     const toggleExpandTask = (taskId) => {
         if (expandedTaskIds.includes(taskId)) {
@@ -70,22 +109,24 @@ export default function InventarioDetalhesPage() {
     };
 
     const handleApprove = async () => {
+        if (!canManageCycleCount) return;
         try {
             await customInstance({ url: `/api/cycle-count/plans/${id}/approve`, method: 'POST' });
             toast.success('Plano aprovado e liberado para os coletores!');
-            await loadPlanDetails();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao aprovar.');
         }
     };
 
     const handleConfirmClosePlan = async () => {
+        if (!canManageCycleCount) return;
         setIsSubmitting(true);
         try {
             await customInstance({ url: `/api/cycle-count/plans/${id}/close`, method: 'POST' });
             toast.success('Inventário encerrado com sucesso! Movimentações desbloqueadas.');
             setIsClosePlanModalOpen(false);
-            await loadPlanDetails();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao encerrar inventário.');
         } finally {
@@ -94,12 +135,13 @@ export default function InventarioDetalhesPage() {
     };
 
     const handleConfirmCancelPlan = async () => {
+        if (!canManageCycleCount) return;
         setIsSubmitting(true);
         try {
             await customInstance({ url: `/api/cycle-count/plans/${id}/cancel`, method: 'POST' });
             toast.info('Plano cancelado e retornado para Rascunho.');
             setIsCancelPlanModalOpen(false);
-            await loadPlanDetails();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao cancelar plano.');
         } finally {
@@ -108,6 +150,7 @@ export default function InventarioDetalhesPage() {
     };
 
     const handleConfirmDeletePlan = async () => {
+        if (!canManageCycleCount) return;
         setIsSubmitting(true);
         try {
             await customInstance({ url: `/api/cycle-count/plans/${id}`, method: 'DELETE' });
@@ -121,9 +164,8 @@ export default function InventarioDetalhesPage() {
         }
     };
 
-    // Libera explicitamente a próxima rodada (2ª ou 3ª contagem) para o endereço inteiro (respeitando filtros do plano)
     const handleConfirmReleaseLocationRound = async () => {
-        if (!locationRoundToRelease) return;
+        if (!locationRoundToRelease || !canManageCycleCount) return;
         setIsSubmitting(true);
         try {
             const res = await customInstance({
@@ -132,7 +174,7 @@ export default function InventarioDetalhesPage() {
             });
             toast.success(res?.message || `Rodada ${locationRoundToRelease.nextRound} liberada no endereço ${locationRoundToRelease.locationPath}!`);
             setLocationRoundToRelease(null);
-            await loadPlanDetails();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao liberar próxima rodada do endereço.');
         } finally {
@@ -141,12 +183,14 @@ export default function InventarioDetalhesPage() {
     };
 
     const handleOpenFiscalOrConciliationModal = (task, divergence) => {
+        if (!canManageCycleCount) return;
         setSelectedTaskForFiscal({ ...task, divergenceQuantity: divergence });
         setNfeNumber(divergence === 0 ? 'CONCILIACAO-HU' : '');
         setNfeNotes('');
     };
 
     const handleApplyFiscalAdjustment = async () => {
+        if (!canManageCycleCount) return;
         if (!selectedTaskForFiscal || !nfeNumber.trim()) {
             return toast.warning('Informe o número do documento ou referência de conciliação.');
         }
@@ -162,7 +206,7 @@ export default function InventarioDetalhesPage() {
             setSelectedTaskForFiscal(null);
             setNfeNumber('');
             setNfeNotes('');
-            await loadPlanDetails();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao aplicar ajuste.');
         } finally {
@@ -190,6 +234,8 @@ export default function InventarioDetalhesPage() {
         plan.blockMovements &&
         ['ApprovedForCounting', 'InCounting', 'InReview'].includes(String(plan.status));
     const hasProductFilter = Array.isArray(plan.productIds) && plan.productIds.length > 0;
+
+    const colSpanCount = canManageCycleCount ? 10 : 9;
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
@@ -222,7 +268,7 @@ export default function InventarioDetalhesPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {plan.status === 'Draft' && (
+                    {canManageCycleCount && plan.status === 'Draft' && (
                         <>
                             <Button onClick={handleApprove} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9">
                                 <Play size={14} className="mr-1.5" /> Aprovar & Liberar
@@ -233,21 +279,23 @@ export default function InventarioDetalhesPage() {
                         </>
                     )}
 
-                    {plan.status === 'InReview' && (
+                    {canManageCycleCount && plan.status === 'InReview' && (
                         <Button onClick={() => setIsClosePlanModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9">
                             <CheckCheck size={16} className="mr-1.5" /> Encerrar Inventário
                         </Button>
                     )}
 
-                    {(plan.status === 'ApprovedForCounting' || plan.status === 'InCounting' || plan.status === 'InReview') && (
+                    {canManageCycleCount && (plan.status === 'ApprovedForCounting' || plan.status === 'InCounting' || plan.status === 'InReview') && (
                         <Button onClick={() => setIsCancelPlanModalOpen(true)} variant="outline" className="text-amber-700 border-amber-300 hover:bg-amber-50 text-xs h-9">
                             <RotateCcw size={14} className="mr-1.5" /> Cancelar Plano (Voltar p/ Rascunho)
                         </Button>
                     )}
 
-                    <Button onClick={loadPlanDetails} variant="outline" size="sm" className="bg-white h-9">
-                        <RefreshCw size={14} />
-                    </Button>
+                    {canViewCycleCount && (
+                        <Button onClick={triggerReload} variant="outline" size="sm" className="bg-white h-9">
+                            <RefreshCw size={14} />
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -291,7 +339,7 @@ export default function InventarioDetalhesPage() {
                                 <TableHead>Status Posição</TableHead>
                                 <TableHead className="text-center">Histórico</TableHead>
                                 <TableHead>Tratativa Fiscal</TableHead>
-                                <TableHead className="text-right">Ações de Revisão</TableHead>
+                                {canManageCycleCount && <TableHead className="text-right">Ações de Revisão</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -379,43 +427,45 @@ export default function InventarioDetalhesPage() {
                                                 )}
                                             </TableCell>
 
-                                            <TableCell className="text-right space-x-1">
-                                                {isFinishedDivergent && (
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        {canReleaseNextRound && (
-                                                            <Button
-                                                                onClick={() =>
-                                                                    setLocationRoundToRelease({
-                                                                        locationId: t.locationId,
-                                                                        locationPath: t.locationPath,
-                                                                        nextRound: t.currentRound + 1
-                                                                    })
-                                                                }
-                                                                size="sm"
-                                                                className="text-xs h-7 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                                                                title={`Liberar ${t.currentRound + 1}ª contagem no endereço ${t.locationPath}`}
-                                                            >
-                                                                <Play size={11} className="mr-1" /> Liberar Rodada {t.currentRound + 1}
-                                                            </Button>
-                                                        )}
+                                            {canManageCycleCount && (
+                                                <TableCell className="text-right space-x-1">
+                                                    {isFinishedDivergent && (
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            {canReleaseNextRound && (
+                                                                <Button
+                                                                    onClick={() =>
+                                                                        setLocationRoundToRelease({
+                                                                            locationId: t.locationId,
+                                                                            locationPath: t.locationPath,
+                                                                            nextRound: t.currentRound + 1
+                                                                        })
+                                                                    }
+                                                                    size="sm"
+                                                                    className="text-xs h-7 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                                                                    title={`Liberar ${t.currentRound + 1}ª contagem no endereço ${t.locationPath}`}
+                                                                >
+                                                                    <Play size={11} className="mr-1" /> Liberar Rodada {t.currentRound + 1}
+                                                                </Button>
+                                                            )}
 
-                                                        <Button
-                                                            onClick={() => handleOpenFiscalOrConciliationModal(t, divergence)}
-                                                            size="sm"
-                                                            className="bg-slate-900 text-white text-xs h-7 hover:bg-slate-800"
-                                                        >
-                                                            <FileText size={12} className="mr-1" />
-                                                            {divergence === 0 ? 'Conciliar' : 'Tratar NF-e'}
-                                                        </Button>
-                                                    </div>
-                                                )}
-                                            </TableCell>
+                                                            <Button
+                                                                onClick={() => handleOpenFiscalOrConciliationModal(t, divergence)}
+                                                                size="sm"
+                                                                className="bg-slate-900 text-white text-xs h-7 hover:bg-slate-800"
+                                                            >
+                                                                <FileText size={12} className="mr-1" />
+                                                                {divergence === 0 ? 'Conciliar' : 'Tratar NF-e'}
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </TableCell>
+                                            )}
                                         </TableRow>
 
                                         {/* DETALHAMENTO DE OPERADORES POR RODADA */}
                                         {isExpanded && (
                                             <TableRow className="bg-slate-50/80 border-b">
-                                                <TableCell colSpan={10} className="p-4">
+                                                <TableCell colSpan={colSpanCount} className="p-4">
                                                     <div className="bg-white p-3 border border-slate-200 rounded-lg space-y-2">
                                                         <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                                                             <BarChart2 size={13} className="text-blue-600" /> Detalhamento de Operadores e Contagens
@@ -473,150 +523,155 @@ export default function InventarioDetalhesPage() {
                 </div>
             </div>
 
-            {/* MODAL CONFIRMAÇÃO LIBERAR PRÓXIMA RODADA POR ENDEREÇO */}
-            <AlertDialog open={!!locationRoundToRelease} onOpenChange={(open) => !open && setLocationRoundToRelease(null)}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
-                            <Play className="text-blue-600" size={18} />
-                            Liberar Rodada {locationRoundToRelease?.nextRound} no Endereço {locationRoundToRelease?.locationPath}?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
-                            {hasProductFilter ? (
-                                <span>
-                                    Este plano possui filtro de <strong>produto(s) específico(s)</strong>. A Rodada {locationRoundToRelease?.nextRound} será liberada no endereço <strong className="font-mono text-slate-900">{locationRoundToRelease?.locationPath}</strong> apenas para os SKUs filtrados neste plano.
-                                </span>
-                            ) : (
-                                <span>
-                                    Este plano audita o <strong>endereço completo</strong>. A Rodada {locationRoundToRelease?.nextRound} será liberada para <strong>todos os itens da posição <span className="font-mono text-slate-900">{locationRoundToRelease?.locationPath}</span></strong> para garantir a integridade da contagem cega.
-                                </span>
-                            )}
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmReleaseLocationRound}
-                            disabled={isSubmitting}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
-                        >
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                            Confirmar Liberação
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* MODAIS DE GESTÃO E CONCILIAÇÃO */}
+            {canManageCycleCount && (
+                <>
+                    {/* MODAL CONFIRMAÇÃO LIBERAR PRÓXIMA RODADA POR ENDEREÇO */}
+                    <AlertDialog open={!!locationRoundToRelease} onOpenChange={(open) => !open && setLocationRoundToRelease(null)}>
+                        <AlertDialogContent className="bg-white sm:max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <Play className="text-blue-600" size={18} />
+                                    Liberar Rodada {locationRoundToRelease?.nextRound} no Endereço {locationRoundToRelease?.locationPath}?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+                                    {hasProductFilter ? (
+                                        <span>
+                                            Este plano possui filtro de <strong>produto(s) específico(s)</strong>. A Rodada {locationRoundToRelease?.nextRound} será liberada no endereço <strong className="font-mono text-slate-900">{locationRoundToRelease?.locationPath}</strong> apenas para os SKUs filtrados neste plano.
+                                        </span>
+                                    ) : (
+                                        <span>
+                                            Este plano audita o <strong>endereço completo</strong>. A Rodada {locationRoundToRelease?.nextRound} será liberada para <strong>todos os itens da posição <span className="font-mono text-slate-900">{locationRoundToRelease?.locationPath}</span></strong> para garantir a integridade da contagem cega.
+                                        </span>
+                                    )}
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="pt-2">
+                                <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleConfirmReleaseLocationRound}
+                                    disabled={isSubmitting}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                                >
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                    Confirmar Liberação
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
-            {/* MODAL TRATAMENTO FISCAL / CONCILIAÇÃO */}
-            <Dialog open={!!selectedTaskForFiscal} onOpenChange={(open) => !open && setSelectedTaskForFiscal(null)}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <FileText size={20} className="text-blue-600" />
-                            {isHuOnlyMismatch
-                                ? 'Conciliar Divergência de HU / Endereço'
-                                : isSurplus
-                                    ? 'Vincular NF-e de Remessa (Sobra)'
-                                    : 'NF-e de Retorno Simbólico (Falta)'}
-                        </DialogTitle>
-                        <DialogDescription className="text-xs">
-                            SKU: <strong className="font-mono">{selectedTaskForFiscal?.productSku}</strong> na posição <strong className="font-mono">{selectedTaskForFiscal?.locationPath}</strong>.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-bold uppercase">
-                                {isHuOnlyMismatch
-                                    ? 'Protocolo / Referência de Conciliação *'
-                                    : isSurplus
-                                        ? 'Número da NF-e de Remessa *'
-                                        : 'Número da NF-e de Retorno Simbólico *'}
-                            </Label>
-                            <Input
-                                placeholder={isHuOnlyMismatch ? 'Ex: CONCILIACAO-HU' : 'Ex: 000.145.890'}
-                                value={nfeNumber}
-                                onChange={(e) => setNfeNumber(e.target.value)}
-                                className="font-mono text-xs"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label className="text-xs font-semibold">Observações / Justificativa</Label>
-                            <Input
-                                placeholder="Justificativa da auditoria..."
-                                value={nfeNotes}
-                                onChange={(e) => setNfeNotes(e.target.value)}
-                                className="text-xs"
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setSelectedTaskForFiscal(null)}>Cancelar</Button>
-                        <Button onClick={handleApplyFiscalAdjustment} disabled={isSubmitting || !nfeNumber.trim()} className="bg-blue-600 text-white font-bold">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Confirmar
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    {/* MODAL TRATAMENTO FISCAL / CONCILIAÇÃO */}
+                    <Dialog open={!!selectedTaskForFiscal} onOpenChange={(open) => !open && setSelectedTaskForFiscal(null)}>
+                        <DialogContent className="sm:max-w-md bg-white">
+                            <DialogHeader>
+                                <DialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <FileText size={20} className="text-blue-600" />
+                                    {isHuOnlyMismatch
+                                        ? 'Conciliar Divergência de HU / Endereço'
+                                        : isSurplus
+                                            ? 'Vincular NF-e de Remessa (Sobra)'
+                                            : 'NF-e de Retorno Simbólico (Falta)'}
+                                </DialogTitle>
+                                <DialogDescription className="text-xs">
+                                    SKU: <strong className="font-mono">{selectedTaskForFiscal?.productSku}</strong> na posição <strong className="font-mono">{selectedTaskForFiscal?.locationPath}</strong>.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-2">
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-bold uppercase">
+                                        {isHuOnlyMismatch
+                                            ? 'Protocolo / Referência de Conciliação *'
+                                            : isSurplus
+                                                ? 'Número da NF-e de Remessa *'
+                                                : 'Número da NF-e de Retorno Simbólico *'}
+                                    </Label>
+                                    <Input
+                                        placeholder={isHuOnlyMismatch ? 'Ex: CONCILIACAO-HU' : 'Ex: 000.145.890'}
+                                        value={nfeNumber}
+                                        onChange={(e) => setNfeNumber(e.target.value)}
+                                        className="font-mono text-xs"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold">Observações / Justificativa</Label>
+                                    <Input
+                                        placeholder="Justificativa da auditoria..."
+                                        value={nfeNotes}
+                                        onChange={(e) => setNfeNotes(e.target.value)}
+                                        className="text-xs"
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setSelectedTaskForFiscal(null)}>Cancelar</Button>
+                                <Button onClick={handleApplyFiscalAdjustment} disabled={isSubmitting || !nfeNumber.trim()} className="bg-blue-600 text-white font-bold">
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Confirmar
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
 
-            {/* CONFIRMAÇÃO ENCERRAR PLANO */}
-            <AlertDialog open={isClosePlanModalOpen} onOpenChange={setIsClosePlanModalOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
-                            <CheckCheck className="text-emerald-600" size={20} /> Encerrar Inventário?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-500">
-                            Todas as posições foram validadas. O inventário passará para o status Encerrado e eventuais bloqueios de movimentação nestas posições serão liberados.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmClosePlan} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Sim, Encerrar
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    {/* CONFIRMAÇÃO ENCERRAR PLANO */}
+                    <AlertDialog open={isClosePlanModalOpen} onOpenChange={setIsClosePlanModalOpen}>
+                        <AlertDialogContent className="bg-white sm:max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <CheckCheck className="text-emerald-600" size={20} /> Encerrar Inventário?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-xs text-slate-500">
+                                    Todas as posições foram validadas. O inventário passará para o status Encerrado e eventuais bloqueios de movimentação nestas posições serão liberados.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="pt-2">
+                                <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleConfirmClosePlan} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Sim, Encerrar
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
-            {/* CONFIRMAÇÃO CANCELAR PLANO */}
-            <AlertDialog open={isCancelPlanModalOpen} onOpenChange={setIsCancelPlanModalOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
-                            <AlertTriangle className="text-amber-600" size={20} /> Cancelar Inventário?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-500">
-                            Deseja cancelar o plano e retornar para Rascunho? Todas as contagens e atribuições em andamento serão resetadas.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmCancelPlan} disabled={isSubmitting} className="bg-amber-600 text-white font-bold">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Sim, Cancelar Plano
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    {/* CONFIRMAÇÃO CANCELAR PLANO */}
+                    <AlertDialog open={isCancelPlanModalOpen} onOpenChange={setIsCancelPlanModalOpen}>
+                        <AlertDialogContent className="bg-white sm:max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <AlertTriangle className="text-amber-600" size={20} /> Cancelar Inventário?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-xs text-slate-500">
+                                    Deseja cancelar o plano e retornar para Rascunho? Todas as contagens e atribuições em andamento serão resetadas.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="pt-2">
+                                <AlertDialogCancel disabled={isSubmitting}>Voltar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleConfirmCancelPlan} disabled={isSubmitting} className="bg-amber-600 text-white font-bold">
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Sim, Cancelar Plano
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
-            {/* CONFIRMAÇÃO EXCLUIR PLANO */}
-            <AlertDialog open={isDeletePlanModalOpen} onOpenChange={setIsDeletePlanModalOpen}>
-                <AlertDialogContent className="bg-white sm:max-w-md">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
-                            <Trash2 className="text-rose-600" size={20} /> Excluir Rascunho de Inventário?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-500">
-                            Esta ação é irreversível. O plano e todas as posições mapeadas serão permanentemente removidos.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="pt-2">
-                        <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmDeletePlan} disabled={isSubmitting} className="bg-rose-600 text-white font-bold">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Sim, Excluir Plano
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+                    {/* CONFIRMAÇÃO EXCLUIR PLANO */}
+                    <AlertDialog open={isDeletePlanModalOpen} onOpenChange={setIsDeletePlanModalOpen}>
+                        <AlertDialogContent className="bg-white sm:max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="text-slate-900 flex items-center gap-2">
+                                    <Trash2 className="text-rose-600" size={20} /> Excluir Rascunho de Inventário?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-xs text-slate-500">
+                                    Esta ação é irreversível. O plano e todas as posições mapeadas serão permanentemente removidos.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="pt-2">
+                                <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleConfirmDeletePlan} disabled={isSubmitting} className="bg-rose-600 text-white font-bold">
+                                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Sim, Excluir Plano
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </>
+            )}
         </div>
     );
 }
