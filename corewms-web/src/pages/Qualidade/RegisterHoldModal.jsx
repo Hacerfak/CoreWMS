@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -20,40 +21,62 @@ export default function RegisterHoldModal({
     open,
     onOpenChange,
     hus = [],
-    defaultStatus = '3', // 2 = Quarentena, 3 = Avariado, 4 = Falta Virtual
+    defaultStatus = '3',
     onSuccess
 }) {
+    const canHoldQuality = useHasPermission('quality:hold');
     const husList = Array.isArray(hus) ? hus : (hus ? [hus] : []);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [reasons, setReasons] = useState([]);
     const [qualityLocations, setQualityLocations] = useState([]);
 
-    const [newStatus, setNewStatus] = useState(String(defaultStatus || '3'));
+    const [newStatus, setNewStatus] = useState(() => String(defaultStatus || '3'));
     const [reasonId, setReasonId] = useState('');
     const [notes, setNotes] = useState('');
     const [qualityLocationId, setQualityLocationId] = useState('NONE');
     const [images, setImages] = useState([]);
 
     useEffect(() => {
-        if (open) {
+        if (!open || !canHoldQuality) return;
+
+        let isMounted = true;
+
+        customInstance({ url: '/api/quality/reasons?onlyActive=true', method: 'GET' })
+            .then(res => {
+                if (isMounted) setReasons(Array.isArray(res) ? res : (res?.items || []));
+            })
+            .catch(() => {
+                if (isMounted) setReasons([]);
+            });
+
+        customInstance({ url: '/api/topology/locations/quality', method: 'GET' })
+            .then(res => {
+                if (isMounted) setQualityLocations(Array.isArray(res) ? res : []);
+            })
+            .catch(() => {
+                if (isMounted) setQualityLocations([]);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [open, canHoldQuality]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen) {
             setNewStatus(String(defaultStatus || '3'));
             setReasonId('');
             setNotes('');
             setQualityLocationId('NONE');
             setImages([]);
-
-            customInstance({ url: '/api/quality/reasons?onlyActive=true', method: 'GET' })
-                .then(res => setReasons(Array.isArray(res) ? res : (res?.items || [])))
-                .catch(() => setReasons([]));
-
-            customInstance({ url: '/api/topology/locations/quality', method: 'GET' })
-                .then(res => setQualityLocations(Array.isArray(res) ? res : []))
-                .catch(() => setQualityLocations([]));
         }
-    }, [open, defaultStatus]);
+        onOpenChange(nextOpen);
+    };
 
     const handleImageUpload = (e) => {
+        if (!canHoldQuality) return;
         const files = Array.from(e.target.files || []);
         files.forEach(file => {
             const reader = new FileReader();
@@ -71,6 +94,7 @@ export default function RegisterHoldModal({
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!canHoldQuality) return;
         if (husList.length === 0) return toast.warning('Nenhuma HU selecionada.');
         if (!reasonId) return toast.warning('Selecione o motivo da ocorrência.');
         if (!notes.trim()) return toast.warning('Descreva a observação/justificativa do bloqueio.');
@@ -105,7 +129,7 @@ export default function RegisterHoldModal({
         : `${husList.length} HU(s) selecionadas`;
 
     return (
-        <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChange(v)}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-slate-900">
@@ -130,7 +154,7 @@ export default function RegisterHoldModal({
                 <form onSubmit={handleSubmit} className="space-y-4 py-1">
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold">Novo Status de Qualidade *</Label>
-                        <Select value={newStatus} onValueChange={setNewStatus}>
+                        <Select value={newStatus} onValueChange={setNewStatus} disabled={!canHoldQuality}>
                             <SelectTrigger className="bg-slate-50 text-xs h-9 font-medium">
                                 <SelectValue />
                             </SelectTrigger>
@@ -144,7 +168,7 @@ export default function RegisterHoldModal({
 
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold">Motivo Padronizado *</Label>
-                        <Select value={reasonId} onValueChange={setReasonId}>
+                        <Select value={reasonId} onValueChange={setReasonId} disabled={!canHoldQuality}>
                             <SelectTrigger className="bg-slate-50 text-xs h-9">
                                 <SelectValue placeholder="Selecione o motivo..." />
                             </SelectTrigger>
@@ -166,6 +190,7 @@ export default function RegisterHoldModal({
                         <Label className="text-xs font-semibold">Observações e Detalhes da Ocorrência *</Label>
                         <Input
                             value={notes}
+                            disabled={!canHoldQuality}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="Ex: Embalagem violada / umidade detectada na descarga..."
                             className="text-xs h-9 bg-white"
@@ -174,7 +199,7 @@ export default function RegisterHoldModal({
 
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold">Transferir para Posição de Qualidade (Opcional)</Label>
-                        <Select value={qualityLocationId} onValueChange={setQualityLocationId}>
+                        <Select value={qualityLocationId} onValueChange={setQualityLocationId} disabled={!canHoldQuality}>
                             <SelectTrigger className="bg-slate-50 text-xs h-9 font-mono">
                                 <SelectValue placeholder="Manter na posição atual..." />
                             </SelectTrigger>
@@ -194,9 +219,9 @@ export default function RegisterHoldModal({
                     <div className="space-y-1.5 pt-1">
                         <Label className="text-xs font-semibold">Fotos e Evidências (Opcional)</Label>
                         <div className="flex items-center gap-3">
-                            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-rose-300 bg-rose-50/50 text-xs text-rose-800 cursor-pointer hover:bg-rose-100/50 transition-colors">
+                            <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-rose-300 bg-rose-50/50 text-xs text-rose-800 transition-colors ${canHoldQuality ? 'cursor-pointer hover:bg-rose-100/50' : 'opacity-60 cursor-not-allowed'}`}>
                                 <Upload size={14} /> Anexar Fotos
-                                <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
+                                <input type="file" accept="image/*" multiple disabled={!canHoldQuality} className="hidden" onChange={handleImageUpload} />
                             </label>
                             <span className="text-[10px] text-slate-500">
                                 {images.length} {images.length === 1 ? 'foto anexada' : 'fotos anexadas'}
@@ -207,14 +232,16 @@ export default function RegisterHoldModal({
                                 {images.map((img, idx) => (
                                     <div key={idx} className="relative group w-14 h-14 rounded-lg overflow-hidden border border-rose-300">
                                         <img src={img.base64Data} alt="Evidência" className="w-full h-full object-cover" />
-                                        <button
-                                            type="button"
-                                            onClick={() => removeImage(idx)}
-                                            className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Remover foto"
-                                        >
-                                            <Trash2 size={13} />
-                                        </button>
+                                        {canHoldQuality && (
+                                            <button
+                                                type="button"
+                                                onClick={() => removeImage(idx)}
+                                                className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Remover foto"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -225,10 +252,12 @@ export default function RegisterHoldModal({
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={isSubmitting} className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <AlertTriangle className="h-4 w-4 mr-1.5" />}
-                            Confirmar Bloqueio ({husList.length})
-                        </Button>
+                        {canHoldQuality && (
+                            <Button type="submit" disabled={isSubmitting} className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs">
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <AlertTriangle className="h-4 w-4 mr-1.5" />}
+                                Confirmar Bloqueio ({husList.length})
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

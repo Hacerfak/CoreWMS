@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -75,18 +76,19 @@ export default function QualityEventDetailsModal({
     initialHu = null,
     onRequestRelease
 }) {
-    const [events, setEvents] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [lightboxImage, setLightboxImage] = useState(null);
+    const canViewQuality = useHasPermission(['quality:view', 'quality:manage']);
+    const canReleaseQuality = useHasPermission('quality:release');
 
     const targetHuId = handlingUnitId || initialEvent?.handlingUnitId || initialHu?.id;
 
+    const [events, setEvents] = useState([]);
+    const [isLoading, setIsLoading] = useState(Boolean(open && targetHuId && canViewQuality));
+    const [lightboxImage, setLightboxImage] = useState(null);
+
     useEffect(() => {
-        if (!open || !targetHuId) return;
+        if (!open || !targetHuId || !canViewQuality) return;
 
         let isMounted = true;
-        setIsLoading(true);
-        setLightboxImage(null);
 
         customInstance({
             url: `/api/quality/handling-units/${targetHuId}/events`,
@@ -109,11 +111,17 @@ export default function QualityEventDetailsModal({
         return () => {
             isMounted = false;
         };
-    }, [
-	open,
-	targetHuId,
-	initialEvent
-]);
+    }, [open, targetHuId, initialEvent, canViewQuality]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (nextOpen && targetHuId && canViewQuality) {
+            setIsLoading(true);
+            setLightboxImage(null);
+        } else if (!nextOpen) {
+            setLightboxImage(null);
+        }
+        onOpenChange(nextOpen);
+    };
 
     const latestEvent = events[0] || initialEvent;
     const lpn = latestEvent?.lpn || initialHu?.lpn || '-';
@@ -128,7 +136,7 @@ export default function QualityEventDetailsModal({
     const qualityStatus = latestEvent?.qualityStatus || initialHu?.qualityStatus || 'Available';
 
     const openEvents = events.filter((e) => !e.isResolved);
-    const canRelease = openEvents.length > 0 || (qualityStatus && qualityStatus !== 'Available');
+    const canRelease = canReleaseQuality && (openEvents.length > 0 || (qualityStatus && qualityStatus !== 'Available'));
 
     const renderQualityStatusBadge = (status) => {
         switch (status) {
@@ -147,7 +155,7 @@ export default function QualityEventDetailsModal({
 
     return (
         <>
-            <Dialog open={open} onOpenChange={onOpenChange}>
+            <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent className="sm:max-w-3xl bg-white max-h-[90vh] flex flex-col overflow-hidden">
                     <DialogHeader>
                         <div className="flex items-center justify-between gap-2 pr-6">

@@ -3,6 +3,7 @@ import { useGetApiInventoryHandlingUnits } from '@/api/generated/inventory/inven
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
 import { customInstance } from '@/api/orval-mutator';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -35,13 +36,20 @@ const formatDate = (dateStr) => {
 
 export default function QualidadePage() {
     const queryClient = useQueryClient();
+
+    const canViewQuality = useHasPermission(['quality:view', 'quality:manage']);
+    const canHoldQuality = useHasPermission('quality:hold');
+    const canReleaseQuality = useHasPermission('quality:release');
+    const canViewCustomers = useHasPermission('customers:view');
+    const canViewStockForQuality = useHasPermission(['inventory:view', 'quality:view', 'quality:hold']);
+
     const [currentTab, setCurrentTab] = useState('estoque');
 
     // ==========================================
     // ESTADO: ABA 1 - ESTOQUE & BLOQUEIOS
     // ==========================================
     const [stockCustomer, setStockCustomer] = useState('ALL');
-    const [stockQuality, setStockQuality] = useState('BLOCKED_ONLY'); // BLOCKED_ONLY, Quarantine, Damaged, Virtual_Shortage, Available, ALL
+    const [stockQuality, setStockQuality] = useState('BLOCKED_ONLY');
     const [stockLpn, setStockLpn] = useState('');
     const [stockPage, setStockPage] = useState(1);
     const STOCK_PAGE_SIZE = 20;
@@ -51,13 +59,13 @@ export default function QualidadePage() {
     const [isHoldModalOpen, setIsHoldModalOpen] = useState(false);
     const [isBulkHoldModalOpen, setIsBulkHoldModalOpen] = useState(false);
     const [isReleaseFromStockModalOpen, setIsReleaseFromStockModalOpen] = useState(false);
-    const [holdTargetStatus, setHoldTargetStatus] = useState('3'); // 2, 3, 4
+    const [holdTargetStatus, setHoldTargetStatus] = useState('3');
 
     // ==========================================
     // ESTADO: ABA 2 - PRONTUÁRIOS & LAUDOS (QUALITY EVENTS)
     // ==========================================
     const [eventsCustomer] = useState('ALL');
-    const [eventsStatus, setEventsStatus] = useState('OPEN_ONLY'); // OPEN_ONLY, ALL, RESOLVED_ONLY
+    const [eventsStatus, setEventsStatus] = useState('OPEN_ONLY');
     const [eventsSearch, setEventsSearch] = useState('');
     const [eventsStartDate, setEventsStartDate] = useState(undefined);
     const [eventsEndDate, setEventsEndDate] = useState(undefined);
@@ -67,13 +75,16 @@ export default function QualidadePage() {
 
     // Controle de Modais - Aba Eventos
     const [isReleaseFromEventsModalOpen, setIsReleaseFromEventsModalOpen] = useState(false);
-    const [viewEventDetailsId, setViewEventDetailsId] = useState(null); // ID da HU para ver o prontuário
+    const [viewEventDetailsId, setViewEventDetailsId] = useState(null);
     const [preloadedEventToView, setPreloadedEventToView] = useState(null);
 
     // ==========================================
     // DADOS MESTRES (DEPOSITANTES E ENDPOINTS)
     // ==========================================
-    const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const { data: customersData } = useGetApiCustomers(
+        { OnlyActive: true, PageSize: 500 },
+        { query: { enabled: canViewCustomers } }
+    );
     const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
 
     // FETCH: ABA 1 (ESTOQUE)
@@ -82,13 +93,16 @@ export default function QualidadePage() {
         return stockQuality;
     };
 
-    const { data: stockResponse, isLoading: isStockLoading, isFetching: isStockFetching } = useGetApiInventoryHandlingUnits({
-        Lpn: stockLpn,
-        Page: stockPage,
-        PageSize: STOCK_PAGE_SIZE,
-        ...(stockCustomer !== 'ALL' && { CustomerId: stockCustomer }),
-        ...(getStockQualityParam() && { QualityStatus: getStockQualityParam() })
-    });
+    const { data: stockResponse, isLoading: isStockLoading, isFetching: isStockFetching } = useGetApiInventoryHandlingUnits(
+        {
+            Lpn: stockLpn,
+            Page: stockPage,
+            PageSize: STOCK_PAGE_SIZE,
+            ...(stockCustomer !== 'ALL' && { CustomerId: stockCustomer }),
+            ...(getStockQualityParam() && { QualityStatus: getStockQualityParam() })
+        },
+        { query: { enabled: canViewStockForQuality } }
+    );
 
     const rawStockHus = stockResponse?.items || (Array.isArray(stockResponse) ? stockResponse : []);
     const stockHus = stockQuality === 'BLOCKED_ONLY'
@@ -103,8 +117,8 @@ export default function QualidadePage() {
         queryKey: ['qualityEvents', eventsPage, eventsCustomer, eventsStatus, eventsSearch, eventsStartDate, eventsEndDate],
         queryFn: async () => {
             const params = new URLSearchParams();
-            params.append('Page', eventsPage);
-            params.append('PageSize', EVENTS_PAGE_SIZE);
+            params.append('Page', String(eventsPage));
+            params.append('PageSize', String(EVENTS_PAGE_SIZE));
             if (eventsCustomer !== 'ALL') params.append('CustomerId', eventsCustomer);
             if (eventsStatus === 'OPEN_ONLY') params.append('IsResolved', 'false');
             if (eventsStatus === 'RESOLVED_ONLY') params.append('IsResolved', 'true');
@@ -119,7 +133,8 @@ export default function QualidadePage() {
             }
 
             return await customInstance({ url: `/api/quality/events?${params.toString()}`, method: 'GET' });
-        }
+        },
+        enabled: canViewQuality
     });
 
     const eventsList = eventsResponse?.items || [];
@@ -138,6 +153,7 @@ export default function QualidadePage() {
     };
 
     const openStockHoldModal = (statusValue) => {
+        if (!canHoldQuality) return;
         if (selectedStockHuIds.length === 0) return toast.warning('Selecione HUs para bloquear.');
         setHoldTargetStatus(statusValue);
         setIsHoldModalOpen(true);
@@ -145,7 +161,7 @@ export default function QualidadePage() {
 
     const handleStockRefresh = () => {
         queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
-        refetchEvents();
+        if (canViewQuality) refetchEvents();
         setSelectedStockHuIds([]);
     };
 
@@ -162,12 +178,13 @@ export default function QualidadePage() {
     };
 
     const handleEventsRefresh = () => {
-        refetchEvents();
+        if (canViewQuality) refetchEvents();
         queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
         setSelectedEventIds([]);
     };
 
     const openProntuarioDetalhado = (ev) => {
+        if (!canViewQuality) return;
         setPreloadedEventToView(ev);
         setViewEventDetailsId(ev.handlingUnitId);
     };
@@ -187,6 +204,8 @@ export default function QualidadePage() {
                 return <Badge variant="outline" className="text-[10px]">{status}</Badge>;
         }
     };
+
+    const canSelectStockRows = canHoldQuality || canReleaseQuality;
 
     return (
         <div className="flex flex-col space-y-5 h-full">
@@ -209,12 +228,16 @@ export default function QualidadePage() {
                         <TabsTrigger value="estoque" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 px-4 text-xs font-semibold">
                             <PackageSearch className="w-4 h-4 mr-2" /> Estoque & Bloqueios Rápidos
                         </TabsTrigger>
-                        <TabsTrigger value="eventos" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 px-4 text-xs font-semibold">
-                            <ClipboardList className="w-4 h-4 mr-2" /> Prontuários, Fotos & Liberação
-                        </TabsTrigger>
-                        <TabsTrigger value="motivos" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 px-4 text-xs font-semibold">
-                            <Tag className="w-4 h-4 mr-2" /> Motivos Padronizados
-                        </TabsTrigger>
+                        {canViewQuality && (
+                            <>
+                                <TabsTrigger value="eventos" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 px-4 text-xs font-semibold">
+                                    <ClipboardList className="w-4 h-4 mr-2" /> Prontuários, Fotos & Liberação
+                                </TabsTrigger>
+                                <TabsTrigger value="motivos" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 px-4 text-xs font-semibold">
+                                    <Tag className="w-4 h-4 mr-2" /> Motivos Padronizados
+                                </TabsTrigger>
+                            </>
+                        )}
                     </TabsList>
                 </div>
 
@@ -225,7 +248,7 @@ export default function QualidadePage() {
                     {/* ============================================================== */}
                     {currentTab === 'estoque' && (
                         <div className="h-full flex flex-col space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            {/* KPI RESUMO DE ESTOQUE (Baseado no cache geral da página) */}
+                            {/* KPI RESUMO DE ESTOQUE */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
                                 <Card className="bg-white border-slate-200 shadow-sm">
                                     <CardContent className="p-4 flex items-center justify-between">
@@ -277,19 +300,21 @@ export default function QualidadePage() {
                                             className="pl-9 bg-slate-50 border-slate-200 h-9 text-xs"
                                         />
                                     </div>
-                                    <div className="w-[180px]">
-                                        <Select value={stockCustomer} onValueChange={(v) => { setStockCustomer(v); setStockPage(1); }}>
-                                            <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
-                                                <SelectValue placeholder="Depositante" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="ALL">Todos Depositantes</SelectItem>
-                                                {customers.map(c => (
-                                                    <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                    {canViewCustomers && (
+                                        <div className="w-[180px]">
+                                            <Select value={stockCustomer} onValueChange={(v) => { setStockCustomer(v); setStockPage(1); }}>
+                                                <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
+                                                    <SelectValue placeholder="Depositante" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="ALL">Todos Depositantes</SelectItem>
+                                                    {customers.map(c => (
+                                                        <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
                                     <div className="w-[180px]">
                                         <Select value={stockQuality} onValueChange={(v) => { setStockQuality(v); setStockPage(1); }}>
                                             <SelectTrigger className="bg-slate-50 border-slate-200 h-9 text-xs">
@@ -313,26 +338,34 @@ export default function QualidadePage() {
                                 {/* AÇÕES EM LOTE NO ESTOQUE */}
                                 <div className="flex items-center gap-2">
                                     {selectedStockHuIds.length === 0 ? (
-                                        <Button
-                                            onClick={() => setIsBulkHoldModalOpen(true)}
-                                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold h-9 text-xs shadow-2xs"
-                                        >
-                                            <ShieldAlert size={14} className="mr-1.5" /> Bloqueio em Massa (Pesquisa)
-                                        </Button>
+                                        canHoldQuality && (
+                                            <Button
+                                                onClick={() => setIsBulkHoldModalOpen(true)}
+                                                className="bg-slate-900 hover:bg-slate-800 text-white font-bold h-9 text-xs shadow-2xs"
+                                            >
+                                                <ShieldAlert size={14} className="mr-1.5" /> Bloqueio em Massa (Pesquisa)
+                                            </Button>
+                                        )
                                     ) : (
                                         <div className="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
                                             <Badge className="bg-slate-900 text-white px-3 h-9 flex items-center rounded-md font-bold text-xs">
                                                 {selectedStockHuIds.length} selecionado(s)
                                             </Badge>
-                                            <Button onClick={() => setIsReleaseFromStockModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 text-xs">
-                                                <ShieldCheck size={14} className="mr-1.5" /> Liberar Lote
-                                            </Button>
-                                            <Button onClick={() => openStockHoldModal('2')} className="bg-amber-600 hover:bg-amber-700 text-white font-bold h-9 text-xs">
-                                                <Lock size={14} className="mr-1.5" /> Reter (Quarentena)
-                                            </Button>
-                                            <Button onClick={() => openStockHoldModal('3')} className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 text-xs">
-                                                <AlertTriangle size={14} className="mr-1.5" /> Reter (Avaria)
-                                            </Button>
+                                            {canReleaseQuality && (
+                                                <Button onClick={() => setIsReleaseFromStockModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 text-xs">
+                                                    <ShieldCheck size={14} className="mr-1.5" /> Liberar Lote
+                                                </Button>
+                                            )}
+                                            {canHoldQuality && (
+                                                <>
+                                                    <Button onClick={() => openStockHoldModal('2')} className="bg-amber-600 hover:bg-amber-700 text-white font-bold h-9 text-xs">
+                                                        <Lock size={14} className="mr-1.5" /> Reter (Quarentena)
+                                                    </Button>
+                                                    <Button onClick={() => openStockHoldModal('3')} className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 text-xs">
+                                                        <AlertTriangle size={14} className="mr-1.5" /> Reter (Avaria)
+                                                    </Button>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -344,18 +377,20 @@ export default function QualidadePage() {
                                     <Table>
                                         <TableHeader className="bg-slate-50/80 sticky top-0 z-10">
                                             <TableRow>
-                                                <TableHead className="w-12 text-center">
-                                                    <Checkbox
-                                                        checked={stockHus.length > 0 && selectedStockHuIds.length === stockHus.length}
-                                                        onCheckedChange={toggleSelectAllStock}
-                                                    />
-                                                </TableHead>
+                                                {canSelectStockRows && (
+                                                    <TableHead className="w-12 text-center">
+                                                        <Checkbox
+                                                            checked={stockHus.length > 0 && selectedStockHuIds.length === stockHus.length}
+                                                            onCheckedChange={toggleSelectAllStock}
+                                                        />
+                                                    </TableHead>
+                                                )}
                                                 <TableHead>LPN / Volume</TableHead>
                                                 <TableHead>Depositante / SKU</TableHead>
                                                 <TableHead>Endereço</TableHead>
                                                 <TableHead className="text-right">Qtd Física</TableHead>
                                                 <TableHead>Status de Qualidade</TableHead>
-                                                <TableHead className="text-right">Ação Rápida</TableHead>
+                                                {canViewQuality && <TableHead className="text-right">Ação Rápida</TableHead>}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -368,12 +403,14 @@ export default function QualidadePage() {
                                                 const isBlocked = h.qualityStatus !== 'Available';
                                                 return (
                                                     <TableRow key={h.id} className={`hover:bg-slate-50/60 transition-colors text-xs ${isSelected ? 'bg-amber-50/40' : ''}`}>
-                                                        <TableCell className="text-center">
-                                                            <Checkbox
-                                                                checked={isSelected}
-                                                                onCheckedChange={(checked) => toggleSelectStockHu(h.id, checked)}
-                                                            />
-                                                        </TableCell>
+                                                        {canSelectStockRows && (
+                                                            <TableCell className="text-center">
+                                                                <Checkbox
+                                                                    checked={isSelected}
+                                                                    onCheckedChange={(checked) => toggleSelectStockHu(h.id, checked)}
+                                                                />
+                                                            </TableCell>
+                                                        )}
                                                         <TableCell>
                                                             <div className="flex items-center gap-2">
                                                                 <Layers size={14} className="text-slate-400" />
@@ -386,7 +423,7 @@ export default function QualidadePage() {
                                                         </TableCell>
                                                         <TableCell>
                                                             <Badge variant="outline" className="bg-slate-50 font-mono text-slate-700 gap-1 text-[10px]">
-                                                                <MapPin size={11} className={isBlocked ? "text-rose-600" : "text-blue-600"} />
+                                                                <MapPin size={11} className={isBlocked ? 'text-rose-600' : 'text-blue-600'} />
                                                                 {h.locationPath || 'TRÂNSITO'}
                                                             </Badge>
                                                         </TableCell>
@@ -396,16 +433,18 @@ export default function QualidadePage() {
                                                         <TableCell>
                                                             {renderQualityBadge(h.qualityStatus)}
                                                         </TableCell>
-                                                        <TableCell className="text-right">
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={() => openProntuarioDetalhado({ handlingUnitId: h.id, lpn: h.lpn, productSku: h.productSku })}
-                                                                className="h-7 text-[10px] border-slate-200 text-slate-700 bg-white"
-                                                            >
-                                                                Ver Prontuário
-                                                            </Button>
-                                                        </TableCell>
+                                                        {canViewQuality && (
+                                                            <TableCell className="text-right">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => openProntuarioDetalhado({ handlingUnitId: h.id, lpn: h.lpn, productSku: h.productSku })}
+                                                                    className="h-7 text-[10px] border-slate-200 text-slate-700 bg-white"
+                                                                >
+                                                                    Ver Prontuário
+                                                                </Button>
+                                                            </TableCell>
+                                                        )}
                                                     </TableRow>
                                                 );
                                             })}
@@ -428,7 +467,7 @@ export default function QualidadePage() {
                     {/* ============================================================== */}
                     {/* ABA 2: PRONTUÁRIOS, LAUDOS E FOTOS (QUALITY EVENTS) */}
                     {/* ============================================================== */}
-                    {currentTab === 'eventos' && (
+                    {currentTab === 'eventos' && canViewQuality && (
                         <div className="h-full flex flex-col space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
 
                             <div className="bg-white border border-slate-200/80 rounded-xl p-3 shadow-xs shrink-0 flex flex-wrap items-center justify-between gap-3">
@@ -464,7 +503,7 @@ export default function QualidadePage() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                    {selectedEventIds.length > 0 && (
+                                    {canReleaseQuality && selectedEventIds.length > 0 && (
                                         <div className="flex items-center gap-2 animate-in fade-in zoom-in-95 duration-200">
                                             <Badge className="bg-slate-900 text-white px-3 h-9 flex items-center rounded-md font-bold text-xs">
                                                 {selectedEventIds.length} ocorrência(s)
@@ -482,12 +521,14 @@ export default function QualidadePage() {
                                     <Table>
                                         <TableHeader className="bg-slate-50/80 sticky top-0 z-10">
                                             <TableRow>
-                                                <TableHead className="w-10 text-center">
-                                                    <Checkbox
-                                                        checked={eventsList.length > 0 && selectedEventIds.length === eventsList.filter(e => !e.isResolved).length && eventsList.filter(e => !e.isResolved).length > 0}
-                                                        onCheckedChange={toggleSelectAllEvents}
-                                                    />
-                                                </TableHead>
+                                                {canReleaseQuality && (
+                                                    <TableHead className="w-10 text-center">
+                                                        <Checkbox
+                                                            checked={eventsList.length > 0 && selectedEventIds.length === eventsList.filter(e => !e.isResolved).length && eventsList.filter(e => !e.isResolved).length > 0}
+                                                            onCheckedChange={toggleSelectAllEvents}
+                                                        />
+                                                    </TableHead>
+                                                )}
                                                 <TableHead className="w-14 text-center">Fotos</TableHead>
                                                 <TableHead>LPN / Produto</TableHead>
                                                 <TableHead>Data Bloqueio</TableHead>
@@ -506,14 +547,16 @@ export default function QualidadePage() {
                                                 const isSelected = selectedEventIds.includes(ev.id);
                                                 return (
                                                     <TableRow key={ev.id} className={`hover:bg-slate-50/60 transition-colors text-xs ${isSelected ? 'bg-emerald-50/40' : ''}`}>
-                                                        <TableCell className="text-center">
-                                                            {!ev.isResolved && (
-                                                                <Checkbox
-                                                                    checked={isSelected}
-                                                                    onCheckedChange={(checked) => toggleSelectEvent(ev.id, checked)}
-                                                                />
-                                                            )}
-                                                        </TableCell>
+                                                        {canReleaseQuality && (
+                                                            <TableCell className="text-center">
+                                                                {!ev.isResolved && (
+                                                                    <Checkbox
+                                                                        checked={isSelected}
+                                                                        onCheckedChange={(checked) => toggleSelectEvent(ev.id, checked)}
+                                                                    />
+                                                                )}
+                                                            </TableCell>
+                                                        )}
                                                         <TableCell className="text-center">
                                                             {ev.images?.length > 0 ? (
                                                                 <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px] font-mono font-bold w-7 justify-center p-0.5" title={`${ev.images.length} fotos anexadas`}>
@@ -583,7 +626,7 @@ export default function QualidadePage() {
                     {/* ============================================================== */}
                     {/* ABA 3: MOTIVOS PADRONIZADOS */}
                     {/* ============================================================== */}
-                    {currentTab === 'motivos' && (
+                    {currentTab === 'motivos' && canViewQuality && (
                         <div className="h-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <QualityReasonsTab onReasonsChanged={handleStockRefresh} />
                         </div>
@@ -592,51 +635,54 @@ export default function QualidadePage() {
             </Tabs>
 
             {/* MODAIS DA PÁGINA */}
+            {canHoldQuality && (
+                <>
+                    <RegisterHoldModal
+                        open={isHoldModalOpen}
+                        onOpenChange={setIsHoldModalOpen}
+                        hus={selectedStockHusObj}
+                        defaultStatus={holdTargetStatus}
+                        onSuccess={handleStockRefresh}
+                    />
 
-            {/* Modal de Bloqueio Rápido via Checkbox na Tabela de Estoque */}
-            <RegisterHoldModal
-                open={isHoldModalOpen}
-                onOpenChange={setIsHoldModalOpen}
-                hus={selectedStockHusObj}
-                defaultStatus={holdTargetStatus}
-                onSuccess={handleStockRefresh}
-            />
+                    <BulkHoldModal
+                        open={isBulkHoldModalOpen}
+                        onOpenChange={setIsBulkHoldModalOpen}
+                        onSuccess={handleStockRefresh}
+                    />
+                </>
+            )}
 
-            {/* Modal de Bloqueio em Massa via Bipagem / Consulta dedicada */}
-            <BulkHoldModal
-                open={isBulkHoldModalOpen}
-                onOpenChange={setIsBulkHoldModalOpen}
-                onSuccess={handleStockRefresh}
-            />
+            {canReleaseQuality && (
+                <>
+                    <ReleaseQualityModal
+                        open={isReleaseFromStockModalOpen}
+                        onOpenChange={setIsReleaseFromStockModalOpen}
+                        hus={selectedStockHusObj}
+                        onSuccess={handleStockRefresh}
+                    />
 
-            {/* Modal de Liberação Lote via Estoque */}
-            <ReleaseQualityModal
-                open={isReleaseFromStockModalOpen}
-                onOpenChange={setIsReleaseFromStockModalOpen}
-                hus={selectedStockHusObj}
-                onSuccess={handleStockRefresh}
-            />
+                    <ReleaseQualityModal
+                        open={isReleaseFromEventsModalOpen}
+                        onOpenChange={setIsReleaseFromEventsModalOpen}
+                        events={selectedEventsObj}
+                        onSuccess={handleEventsRefresh}
+                    />
+                </>
+            )}
 
-            {/* Modal de Liberação Lote via Ocorrências */}
-            <ReleaseQualityModal
-                open={isReleaseFromEventsModalOpen}
-                onOpenChange={setIsReleaseFromEventsModalOpen}
-                events={selectedEventsObj}
-                onSuccess={handleEventsRefresh}
-            />
-
-            {/* Modal de Visualização do Prontuário de Qualidade da HU (Eventos + Fotos) */}
-            <QualityEventDetailsModal
-                open={Boolean(viewEventDetailsId)}
-                onOpenChange={(v) => !v && setViewEventDetailsId(null)}
-                handlingUnitId={viewEventDetailsId}
-                initialEvent={preloadedEventToView}
-                onRequestRelease={(args) => {
-                    // Prepara a HUs e os eventos abertos passados pelo Prontuário para abrir o Modal de Liberação
-                    setSelectedEventIds(args.events.map(e => e.id));
-                    setIsReleaseFromEventsModalOpen(true);
-                }}
-            />
+            {canViewQuality && (
+                <QualityEventDetailsModal
+                    open={Boolean(viewEventDetailsId)}
+                    onOpenChange={(v) => !v && setViewEventDetailsId(null)}
+                    handlingUnitId={viewEventDetailsId}
+                    initialEvent={preloadedEventToView}
+                    onRequestRelease={canReleaseQuality ? (args) => {
+                        setSelectedEventIds(args.events.map(e => e.id));
+                        setIsReleaseFromEventsModalOpen(true);
+                    } : undefined}
+                />
+            )}
         </div>
     );
 }

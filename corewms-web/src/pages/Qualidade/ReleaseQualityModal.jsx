@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -24,6 +25,8 @@ export default function ReleaseQualityModal({
     events = [],
     onSuccess
 }) {
+    const canReleaseQuality = useHasPermission('quality:release');
+
     const husList = useMemo(() => (Array.isArray(hus) ? hus : hus ? [hus] : []), [hus]);
     const eventsList = useMemo(() => (Array.isArray(events) ? events : events ? [events] : []), [events]);
 
@@ -35,16 +38,32 @@ export default function ReleaseQualityModal({
     const [returnToOriginalLocation, setReturnToOriginalLocation] = useState(true);
 
     useEffect(() => {
-        if (open) {
+        if (!open || !canReleaseQuality) return;
+
+        let isMounted = true;
+
+        customInstance({ url: '/api/quality/reasons?onlyActive=true', method: 'GET' })
+            .then(res => {
+                if (isMounted) setReasons(Array.isArray(res) ? res : (res?.items || []));
+            })
+            .catch(() => {
+                if (isMounted) setReasons([]);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [open, canReleaseQuality]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen) {
             setReasonId('');
             setNotes('');
             setReturnToOriginalLocation(true);
-
-            customInstance({ url: '/api/quality/reasons?onlyActive=true', method: 'GET' })
-                .then(res => setReasons(Array.isArray(res) ? res : (res?.items || [])))
-                .catch(() => setReasons([]));
         }
-    }, [open]);
+        onOpenChange(nextOpen);
+    };
 
     const displayBadges = useMemo(() => {
         if (eventsList.length > 0) {
@@ -67,6 +86,7 @@ export default function ReleaseQualityModal({
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!canReleaseQuality) return;
         if (totalItems === 0) return toast.warning('Nenhum item selecionado para liberação.');
         if (!reasonId) return toast.warning('Selecione o motivo padronizado de liberação.');
         if (!notes.trim()) return toast.warning('Informe o parecer técnico de liberação.');
@@ -98,7 +118,7 @@ export default function ReleaseQualityModal({
     };
 
     return (
-        <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChange(v)}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-slate-900">
@@ -130,7 +150,7 @@ export default function ReleaseQualityModal({
                 <form onSubmit={handleSubmit} className="space-y-4 py-1">
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-800">Motivo da Liberação *</Label>
-                        <Select value={reasonId} onValueChange={setReasonId}>
+                        <Select value={reasonId} onValueChange={setReasonId} disabled={!canReleaseQuality}>
                             <SelectTrigger className="bg-slate-50 text-xs h-9">
                                 <SelectValue placeholder="Selecione o motivo padronizado..." />
                             </SelectTrigger>
@@ -154,6 +174,7 @@ export default function ReleaseQualityModal({
                         <Label className="text-xs font-semibold text-slate-800">Parecer Técnico / Laudo de Inspeção *</Label>
                         <Input
                             value={notes}
+                            disabled={!canReleaseQuality}
                             onChange={(e) => setNotes(e.target.value)}
                             placeholder="Ex: Reembalagem concluída e integridade validada pela equipe de qualidade..."
                             className="text-xs h-9 bg-white"
@@ -171,6 +192,7 @@ export default function ReleaseQualityModal({
                         </div>
                         <Switch
                             checked={returnToOriginalLocation}
+                            disabled={!canReleaseQuality}
                             onCheckedChange={setReturnToOriginalLocation}
                         />
                     </div>
@@ -184,18 +206,20 @@ export default function ReleaseQualityModal({
                         >
                             Cancelar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting || totalItems === 0}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs min-w-[170px]"
-                        >
-                            {isSubmitting ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                            ) : (
-                                <ShieldCheck className="h-4 w-4 mr-1.5" />
-                            )}
-                            Confirmar Liberação ({totalItems})
-                        </Button>
+                        {canReleaseQuality && (
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting || totalItems === 0}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs min-w-[170px]"
+                            >
+                                {isSubmitting ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                                ) : (
+                                    <ShieldCheck className="h-4 w-4 mr-1.5" />
+                                )}
+                                Confirmar Liberação ({totalItems})
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

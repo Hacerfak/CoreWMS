@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -22,7 +23,10 @@ import {
 import { toast } from 'sonner';
 
 export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
-    const [isSearching, setIsSearching] = useState(false);
+    const canHoldQuality = useHasPermission('quality:hold');
+    const canViewCustomers = useHasPermission('customers:view');
+
+    const [isSearching, setIsSearching] = useState(Boolean(open && canHoldQuality));
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Dados auxiliares
@@ -36,14 +40,14 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
     const [searchBatch, setSearchBatch] = useState('');
     const [searchNfe, setSearchNfe] = useState('');
     const [customerFilter, setCustomerFilter] = useState('ALL');
-    const [qualityFilter, setQualityFilter] = useState('1'); // 1 = Livre (padrão)
+    const [qualityFilter, setQualityFilter] = useState('1');
 
     // Resultados e Seleção Persistente (Map<id, hu>)
     const [searchResults, setSearchResults] = useState([]);
     const [selectedHusMap, setSelectedHusMap] = useState({});
 
     // Formulário de Bloqueio / Status em Massa
-    const [newStatus, setNewStatus] = useState('2'); // 2 = Quarentena, 3 = Avariado, 4 = Falta Virtual
+    const [newStatus, setNewStatus] = useState('2');
     const [reasonId, setReasonId] = useState('');
     const [notes, setNotes] = useState('');
     const [qualityLocationId, setQualityLocationId] = useState('NONE');
@@ -51,7 +55,9 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
 
     const lpnInputRef = useRef(null);
 
-    const searchHandlingUnits = async (overrides = {}) => {
+    const searchHandlingUnits = useCallback(async (overrides = {}) => {
+        if (!canHoldQuality) return;
+
         try {
             setIsSearching(true);
             const params = new URLSearchParams();
@@ -78,14 +84,12 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
             });
 
             const rawItems = res?.items || (Array.isArray(res) ? res : []);
-            // Considera apenas HUs ativas fisicamente no armazém
             const activeHus = rawItems.filter(
                 h => Number(h.currentQuantity) > 0 && h.status !== 'Consumed' && h.status !== 'Shipped'
             );
 
             setSearchResults(activeHus);
 
-            // Se foi bipado um LPN exato, marca automaticamente na seleção
             if (overrides.autoSelectExactLpn && lpnVal.trim()) {
                 const exact = activeHus.find(
                     h => h.lpn?.toUpperCase() === lpnVal.trim().toUpperCase()
@@ -101,10 +105,45 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
         } finally {
             setIsSearching(false);
         }
-    };
+    }, [canHoldQuality, searchLpn, searchSku, searchBatch, searchNfe, customerFilter, qualityFilter]);
 
     useEffect(() => {
-        if (open) {
+        if (!open || !canHoldQuality) return;
+
+        let isMounted = true;
+
+        Promise.all([
+            canViewCustomers
+                ? customInstance({ url: '/api/customers/summary', method: 'GET' }).catch(() => [])
+                : Promise.resolve([]),
+            customInstance({ url: '/api/quality/reasons?onlyActive=true', method: 'GET' }).catch(() => []),
+            customInstance({ url: '/api/topology/locations/quality', method: 'GET' }).catch(() => []),
+            customInstance({ url: '/api/inventory/handling-units?Page=1&PageSize=60&QualityStatus=1', method: 'GET' }).catch(() => [])
+        ])
+            .then(([custRes, reasonsRes, locRes, husRes]) => {
+                if (!isMounted) return;
+                setCustomers(Array.isArray(custRes) ? custRes : (custRes?.items || []));
+                setReasons(Array.isArray(reasonsRes) ? reasonsRes : (reasonsRes?.items || []));
+                setQualityLocations(Array.isArray(locRes) ? locRes : []);
+
+                const rawItems = husRes?.items || (Array.isArray(husRes) ? husRes : []);
+                const activeHus = rawItems.filter(
+                    h => Number(h.currentQuantity) > 0 && h.status !== 'Consumed' && h.status !== 'Shipped'
+                );
+                setSearchResults(activeHus);
+            })
+            .finally(() => {
+                if (isMounted) setIsSearching(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [open, canHoldQuality, canViewCustomers]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen) {
             setSearchLpn('');
             setSearchSku('');
             setSearchBatch('');
@@ -117,27 +156,10 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
             setNotes('');
             setQualityLocationId('NONE');
             setImages([]);
-
-            Promise.all([
-                customInstance({ url: '/api/customers/summary', method: 'GET' }).catch(() => []),
-                customInstance({ url: '/api/quality/reasons?onlyActive=true', method: 'GET' }).catch(() => []),
-                customInstance({ url: '/api/topology/locations/quality', method: 'GET' }).catch(() => [])
-            ]).then(([custRes, reasonsRes, locRes]) => {
-                setCustomers(Array.isArray(custRes) ? custRes : (custRes?.items || []));
-                setReasons(Array.isArray(reasonsRes) ? reasonsRes : (reasonsRes?.items || []));
-                setQualityLocations(Array.isArray(locRes) ? locRes : []);
-            });
-
-            searchHandlingUnits({
-                lpn: '',
-                sku: '',
-                batch: '',
-                nfe: '',
-                customer: 'ALL',
-                quality: '1'
-            });
+            if (canHoldQuality) setIsSearching(true);
         }
-    }, [open, ]);
+        onOpenChange(nextOpen);
+    };
 
     const selectedList = useMemo(() => Object.values(selectedHusMap), [selectedHusMap]);
 
@@ -182,6 +204,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
     };
 
     const handleImageUpload = (e) => {
+        if (!canHoldQuality) return;
         const files = Array.from(e.target.files || []);
         files.forEach(file => {
             const reader = new FileReader();
@@ -199,6 +222,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!canHoldQuality) return;
         if (selectedList.length === 0) {
             return toast.warning('Selecione ao menos uma Unidade de Manuseio (HU) na tabela.');
         }
@@ -250,7 +274,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
     };
 
     return (
-        <Dialog open={open} onOpenChange={(v) => !isSubmitting && onOpenChange(v)}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-5xl bg-white max-h-[92vh] flex flex-col overflow-hidden">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-slate-900">
@@ -297,23 +321,25 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchHandlingUnits())}
                                 className="h-8 text-xs font-mono bg-white"
                             />
-                            <Select
-                                value={customerFilter}
-                                onValueChange={(v) => {
-                                    setCustomerFilter(v);
-                                    searchHandlingUnits({ customer: v });
-                                }}
-                            >
-                                <SelectTrigger className="h-8 text-xs bg-white">
-                                    <SelectValue placeholder="Depositante" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="ALL">Todos Depositantes</SelectItem>
-                                    {customers.map(c => (
-                                        <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {canViewCustomers && (
+                                <Select
+                                    value={customerFilter}
+                                    onValueChange={(v) => {
+                                        setCustomerFilter(v);
+                                        searchHandlingUnits({ customer: v });
+                                    }}
+                                >
+                                    <SelectTrigger className="h-8 text-xs bg-white">
+                                        <SelectValue placeholder="Depositante" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="ALL">Todos Depositantes</SelectItem>
+                                        {customers.map(c => (
+                                            <SelectItem key={c.id} value={c.id}>{c.corporateName}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                             <div className="flex gap-1.5">
                                 <Select
                                     value={qualityFilter}
@@ -458,7 +484,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                     <form id="bulk-hold-form" onSubmit={handleSubmit} className="lg:col-span-5 space-y-3.5 border border-slate-200 rounded-xl p-4 bg-white">
                         <div className="space-y-1.5">
                             <Label className="text-xs font-bold text-slate-800">Status de Qualidade a Aplicar *</Label>
-                            <Select value={newStatus} onValueChange={setNewStatus}>
+                            <Select value={newStatus} onValueChange={setNewStatus} disabled={!canHoldQuality}>
                                 <SelectTrigger className="bg-slate-50 text-xs h-9 font-semibold">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -472,7 +498,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
 
                         <div className="space-y-1.5">
                             <Label className="text-xs font-bold text-slate-800">Motivo Padronizado *</Label>
-                            <Select value={reasonId} onValueChange={setReasonId}>
+                            <Select value={reasonId} onValueChange={setReasonId} disabled={!canHoldQuality}>
                                 <SelectTrigger className="bg-slate-50 text-xs h-9">
                                     <SelectValue placeholder="Selecione o motivo..." />
                                 </SelectTrigger>
@@ -490,6 +516,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                             <Label className="text-xs font-bold text-slate-800">Parecer / Justificativa Técnica *</Label>
                             <Input
                                 value={notes}
+                                disabled={!canHoldQuality}
                                 onChange={(e) => setNotes(e.target.value)}
                                 placeholder="Ex: Lote retido preventivamente para análise de qualidade..."
                                 className="text-xs h-9 bg-white"
@@ -500,7 +527,7 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                             <Label className="text-xs font-bold text-slate-800 flex items-center gap-1">
                                 <MapPin size={13} className="text-amber-600" /> Mover para Posição de Qualidade (Opcional)
                             </Label>
-                            <Select value={qualityLocationId} onValueChange={setQualityLocationId}>
+                            <Select value={qualityLocationId} onValueChange={setQualityLocationId} disabled={!canHoldQuality}>
                                 <SelectTrigger className="bg-slate-50 text-xs h-9 font-mono">
                                     <SelectValue placeholder="Manter nas posições atuais..." />
                                 </SelectTrigger>
@@ -520,9 +547,9 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                         <div className="space-y-1.5 pt-1">
                             <Label className="text-xs font-bold text-slate-800">Evidências Fotográficas (Opcional)</Label>
                             <div className="flex items-center gap-3">
-                                <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-rose-300 bg-rose-50/50 text-xs text-rose-800 cursor-pointer hover:bg-rose-100/50 transition-colors">
+                                <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border border-dashed border-rose-300 bg-rose-50/50 text-xs text-rose-800 transition-colors ${canHoldQuality ? 'cursor-pointer hover:bg-rose-100/50' : 'opacity-60 cursor-not-allowed'}`}>
                                     <Upload size={14} /> Anexar Fotos
-                                    <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
+                                    <input type="file" accept="image/*" multiple disabled={!canHoldQuality} className="hidden" onChange={handleImageUpload} />
                                 </label>
                                 <span className="text-[10px] text-slate-500">{images.length} foto(s)</span>
                             </div>
@@ -531,13 +558,15 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                                     {images.map((img, idx) => (
                                         <div key={idx} className="relative group w-12 h-12 rounded-lg overflow-hidden border border-rose-300">
                                             <img src={img.base64Data} alt="Evidência" className="w-full h-full object-cover" />
-                                            <button
-                                                type="button"
-                                                onClick={() => removeImage(idx)}
-                                                className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 size={12} />
-                                            </button>
+                                            {canHoldQuality && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeImage(idx)}
+                                                    className="absolute inset-0 bg-rose-900/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -550,19 +579,21 @@ export default function BulkHoldModal({ open, onOpenChange, onSuccess }) {
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                         Cancelar
                     </Button>
-                    <Button
-                        type="submit"
-                        form="bulk-hold-form"
-                        disabled={isSubmitting || selectedList.length === 0}
-                        className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs min-w-[190px]"
-                    >
-                        {isSubmitting ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                        ) : (
-                            <ShieldAlert className="h-4 w-4 mr-1.5" />
-                        )}
-                        Aplicar Bloqueio em {selectedList.length} HU(s)
-                    </Button>
+                    {canHoldQuality && (
+                        <Button
+                            type="submit"
+                            form="bulk-hold-form"
+                            disabled={isSubmitting || selectedList.length === 0}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs min-w-[190px]"
+                        >
+                            {isSubmitting ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                            ) : (
+                                <ShieldAlert className="h-4 w-4 mr-1.5" />
+                            )}
+                            Aplicar Bloqueio em {selectedList.length} HU(s)
+                        </Button>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>
