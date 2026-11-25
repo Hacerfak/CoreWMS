@@ -1,9 +1,16 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Map, Layers } from 'lucide-react';
+import { Layers } from 'lucide-react';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import StorageTypesTab from './StorageTypesTab';
 import LayoutFisicoTab from './LayoutFisicoTab';
 
 export default function TopologiaPage() {
+    const canViewTopology = useHasPermission(['topology:view', 'topology:manage']);
+
+    if (!canViewTopology) {
+        return null;
+    }
+
     return (
         <div className="flex flex-col h-full space-y-6">
             <div>
@@ -15,7 +22,7 @@ export default function TopologiaPage() {
                 <div className="bg-white border border-slate-200/60 rounded-xl p-1 w-fit shadow-sm">
                     <TabsList className="bg-transparent h-10 gap-1">
                         <TabsTrigger value="layout" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-none px-4">
-                            <Map className="w-4 h-4 mr-2" /> Layout Físico
+                            Layout Físico
                         </TabsTrigger>
                         <TabsTrigger value="tipos" className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:shadow-none px-4">
                             <Layers className="w-4 h-4 mr-2" /> Regras de Armazenamento
