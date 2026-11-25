@@ -4,37 +4,30 @@ import { Loader2, AlertCircle } from 'lucide-react';
 
 export default function PublicDanfePage() {
     const { accessKey } = useParams();
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+
+    const cleanKey = (accessKey || '').replace(/\D/g, '');
+    const validationError = !accessKey
+        ? 'Chave de acesso não informada.'
+        : cleanKey.length !== 44
+            ? 'Chave de acesso da NF-e inválida. Deve conter 44 dígitos.'
+            : null;
+
+    const [fetchError, setFetchError] = useState(null);
 
     useEffect(() => {
-        if (!accessKey) {
-            setError('Chave de acesso não informada.');
-            setIsLoading(false);
-            return;
-        }
+        if (validationError) return;
 
-        const cleanKey = accessKey.replace(/\D/g, '');
-        if (cleanKey.length !== 44) {
-            setError('Chave de acesso da NF-e inválida. Deve conter 44 dígitos.');
-            setIsLoading(false);
-            return;
-        }
-
-        // Descobre a URL base da API (respeitando a variável de ambiente do Vite se existir)
+        let isMounted = true;
         const apiBaseUrl = import.meta.env.VITE_API_URL || '';
         const endpointUrl = `${apiBaseUrl}/api/public/danfe/${cleanKey}`;
 
         fetch(endpointUrl)
             .then(async (res) => {
-                
-
                 if (!res.ok) {
                     const errText = await res.text();
                     throw new Error(errText || 'Documento fiscal não localizado ou ainda não autorizado.');
                 }
 
-                // Se a resposta for o index.html do Vite por engano, rejeita
                 const html = await res.text();
                 if (html.includes('<div id="root">') || !html.includes('DANFE')) {
                     throw new Error('A API retornou a aplicação React em vez do documento fiscal. Verifique se o backend está em execução e acessível.');
@@ -43,18 +36,25 @@ export default function PublicDanfePage() {
                 return html;
             })
             .then((html) => {
-                // Injeta o HTML oficial diretamente no documento (substitui o React na aba e permite imprimir nativamente com Ctrl+P)
+                if (!isMounted) return;
                 document.open();
                 document.write(html);
                 document.close();
             })
             .catch((err) => {
-                setError(err.message || 'Erro ao carregar visualização da DANFE.');
-                setIsLoading(false);
+                if (isMounted) {
+                    setFetchError(err.message || 'Erro ao carregar visualização da DANFE.');
+                }
             });
-    }, [accessKey]);
 
-    if (isLoading) {
+        return () => {
+            isMounted = false;
+        };
+    }, [cleanKey, validationError]);
+
+    const error = validationError || fetchError;
+
+    if (!error) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-slate-100 font-sans">
                 <Loader2 className="h-8 w-8 animate-spin text-orange-600 mb-2" />

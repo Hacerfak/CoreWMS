@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
     DialogDescription, DialogFooter
@@ -17,6 +18,8 @@ export default function CancelNfeModal({
     accessKey,
     onSuccess
 }) {
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+
     const [justification, setJustification] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -27,6 +30,7 @@ export default function CancelNfeModal({
 
     const handleSubmit = async (e) => {
         e?.preventDefault();
+        if (!canEmitFiscal) return;
 
         if (!targetId) {
             return toast.error('Identificador da NF-e não informado.');
@@ -106,7 +110,7 @@ export default function CancelNfeModal({
                             placeholder="Descreva o motivo do cancelamento (ex: Desistência da compra pelo destinatário, erro de conferência ou emissão duplicada)..."
                             className="w-full min-h-[95px] rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-sans resize-none"
                             maxLength={255}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !canEmitFiscal}
                         />
 
                         {charCount > 0 && charCount < 15 && (
@@ -126,23 +130,25 @@ export default function CancelNfeModal({
                         >
                             Voltar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting || !isJustificationValid}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 px-4 text-xs"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    Transmitindo Cancelamento...
-                                </>
-                            ) : (
-                                <>
-                                    <Ban className="h-4 w-4 mr-1.5" />
-                                    Confirmar Cancelamento
-                                </>
-                            )}
-                        </Button>
+                        {canEmitFiscal && (
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting || !isJustificationValid}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold h-9 px-4 text-xs"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        Transmitindo Cancelamento...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Ban className="h-4 w-4 mr-1.5" />
+                                        Confirmar Cancelamento
+                                    </>
+                                )}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

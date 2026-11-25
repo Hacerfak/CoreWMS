@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -31,11 +32,25 @@ const FORMAS_PAGAMENTO = [
     { value: '99', label: '99 - Outros' }
 ];
 
+const isRuleFinancialBilling = (rule) => {
+    if (!rule) return false;
+    return (
+        rule.cfopStateInternal === '5124' ||
+        rule.cfopInterstate === '6124' ||
+        rule.description?.toLowerCase().includes('industrialização') ||
+        rule.description?.toLowerCase().includes('serviço') ||
+        rule.description?.toLowerCase().includes('cobrança')
+    );
+};
+
 export default function CreateStandaloneNfePage() {
     const navigate = useNavigate();
 
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+    const canConsultSefaz = useHasPermission('customers:create');
+
     const [activeTab, setActiveTab] = useState('operacao');
-    const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+    const [isLoadingInitial, setIsLoadingInitial] = useState(canEmitFiscal);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isConsultingDestSefaz, setIsConsultingDestSefaz] = useState(false);
     const [isConsultingCarrierSefaz, setIsConsultingCarrierSefaz] = useState(false);
@@ -112,13 +127,18 @@ export default function CreateStandaloneNfePage() {
     };
 
     useEffect(() => {
+        if (!canEmitFiscal) return;
+
+        let isMounted = true;
+
         const loadAuxiliaryData = async () => {
             try {
-                setIsLoadingInitial(true);
                 const [rulesRes, prodsRes] = await Promise.all([
                     customInstance({ url: '/api/fiscal/rules', method: 'GET' }),
                     customInstance({ url: '/api/products?PageSize=1000', method: 'GET' })
                 ]);
+
+                if (!isMounted) return;
 
                 const rules = extractArray(rulesRes);
                 const prods = extractArray(prodsRes);
@@ -127,38 +147,41 @@ export default function CreateStandaloneNfePage() {
                 setProducts(prods);
 
                 if (rules.length > 0) {
-                    setFiscalRuleId(rules[0].id);
+                    const firstRule = rules[0];
+                    setFiscalRuleId(firstRule.id);
+                    if (isRuleFinancialBilling(firstRule)) {
+                        setHasFinancialBilling(true);
+                        setPaymentMethod('15');
+                        setPaymentIndicator('1');
+                    }
                 }
             } catch {
-                toast.error('Erro ao carregar naturezas de operação ou catálogo de produtos.');
+                if (isMounted) toast.error('Erro ao carregar naturezas de operação ou catálogo de produtos.');
             } finally {
-                setIsLoadingInitial(false);
+                if (isMounted) setIsLoadingInitial(false);
             }
         };
 
         loadAuxiliaryData();
-    }, []);
+
+        return () => {
+            isMounted = false;
+        };
+    }, [canEmitFiscal]);
 
     const activeRule = useMemo(() => {
         return fiscalRules.find(r => r.id === fiscalRuleId);
     }, [fiscalRules, fiscalRuleId]);
 
-    useEffect(() => {
-        if (activeRule) {
-            const is5124OrService =
-                activeRule.cfopStateInternal === '5124' ||
-                activeRule.cfopInterstate === '6124' ||
-                activeRule.description?.toLowerCase().includes('industrialização') ||
-                activeRule.description?.toLowerCase().includes('serviço') ||
-                activeRule.description?.toLowerCase().includes('cobrança');
-
-            if (is5124OrService) {
-                setHasFinancialBilling(true);
-                setPaymentMethod('15');
-                setPaymentIndicator('1');
-            }
+    const handleFiscalRuleChange = (newRuleId) => {
+        setFiscalRuleId(newRuleId);
+        const selected = fiscalRules.find(r => r.id === newRuleId);
+        if (isRuleFinancialBilling(selected)) {
+            setHasFinancialBilling(true);
+            setPaymentMethod('15');
+            setPaymentIndicator('1');
         }
-    }, [activeRule]);
+    };
 
     const totalProductsValue = useMemo(() => {
         return itemsList.reduce((acc, curr) => acc + curr.totalValue, 0);
@@ -197,6 +220,8 @@ export default function CreateStandaloneNfePage() {
     };
 
     const handleConsultDestSefaz = async () => {
+        if (!canConsultSefaz) return;
+
         const cleanCnpj = destCnpjCpf.replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Informe um CNPJ válido com 14 dígitos para consultar.');
 
@@ -227,6 +252,8 @@ export default function CreateStandaloneNfePage() {
     };
 
     const handleConsultCarrierSefaz = async () => {
+        if (!canConsultSefaz) return;
+
         const cleanCnpj = carrierCnpjCpf.replace(/\D/g, '');
         if (cleanCnpj.length !== 14) return toast.warning('Informe um CNPJ válido com 14 dígitos para consultar.');
 
@@ -312,7 +339,7 @@ export default function CreateStandaloneNfePage() {
         }
 
         const parcelValue = Math.round((invoiceNetValue / count) * 100) / 100;
-        let remainder = Math.round((invoiceNetValue - (parcelValue * count)) * 100) / 100;
+        const remainder = Math.round((invoiceNetValue - (parcelValue * count)) * 100) / 100;
 
         const generated = [];
         const today = new Date();
@@ -362,6 +389,7 @@ export default function CreateStandaloneNfePage() {
 
     const handleSubmitNfe = async (e) => {
         e?.preventDefault();
+        if (!canEmitFiscal) return;
 
         if (!fiscalRuleId) {
             setActiveTab('operacao');
@@ -435,7 +463,6 @@ export default function CreateStandaloneNfePage() {
                 additionalNotes: additionalNotes.trim() || null,
                 freightModality: Number(freightModality),
 
-                // Se modalidade for 9 (Sem Frete), envia estritamente nulo
                 carrierCnpjCpf: !isSemFrete && carrierCnpjCpf ? carrierCnpjCpf.replace(/\D/g, '') : null,
                 carrierName: !isSemFrete ? (carrierName.trim() || null) : null,
                 carrierStateRegistration: !isSemFrete ? (carrierIe.trim() || null) : null,
@@ -515,17 +542,19 @@ export default function CreateStandaloneNfePage() {
                         Cancelar
                     </Button>
 
-                    <Button onClick={handleSubmitNfe} disabled={isSubmitting} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5">
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="animate-spin h-4 w-4 mr-2" /> Transmitindo à SEFAZ...
-                            </>
-                        ) : (
-                            <>
-                                <Send className="h-4 w-4 mr-2" /> Emitir & Transmitir NF-e
-                            </>
-                        )}
-                    </Button>
+                    {canEmitFiscal && (
+                        <Button onClick={handleSubmitNfe} disabled={isSubmitting} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5">
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="animate-spin h-4 w-4 mr-2" /> Transmitindo à SEFAZ...
+                                </>
+                            ) : (
+                                <>
+                                    <Send className="h-4 w-4 mr-2" /> Emitir & Transmitir NF-e
+                                </>
+                            )}
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -564,7 +593,7 @@ export default function CreateStandaloneNfePage() {
                             <CardContent className="p-5 space-y-5">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs font-bold text-slate-800">Natureza de Operação (Regra Fiscal Aplicada) *</Label>
-                                    <Select value={fiscalRuleId} onValueChange={setFiscalRuleId}>
+                                    <Select value={fiscalRuleId} onValueChange={handleFiscalRuleChange} disabled={!canEmitFiscal}>
                                         <SelectTrigger className="bg-white h-10 text-xs font-semibold">
                                             <SelectValue placeholder="Selecione a Regra Fiscal..." />
                                         </SelectTrigger>
@@ -586,7 +615,7 @@ export default function CreateStandaloneNfePage() {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-700">Consumidor Final (indFinal) *</Label>
-                                        <Select value={indFinal} onValueChange={setIndFinal}>
+                                        <Select value={indFinal} onValueChange={setIndFinal} disabled={!canEmitFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="0">0 - Normal / Não Consumidor Final</SelectItem>
@@ -597,7 +626,7 @@ export default function CreateStandaloneNfePage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-700">Presença do Comprador (indPres) *</Label>
-                                        <Select value={indPres} onValueChange={setIndPres}>
+                                        <Select value={indPres} onValueChange={setIndPres} disabled={!canEmitFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="0">0 - Não se aplica</SelectItem>
@@ -610,7 +639,7 @@ export default function CreateStandaloneNfePage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-700">Formato DANFE (tpImp) *</Label>
-                                        <Select value={tpImp} onValueChange={setTpImp}>
+                                        <Select value={tpImp} onValueChange={setTpImp} disabled={!canEmitFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="1">1 - Retrato (Padrão)</SelectItem>
@@ -638,6 +667,7 @@ export default function CreateStandaloneNfePage() {
                                         <Input
                                             value={refKeyInput}
                                             onChange={e => setRefKeyInput(e.target.value)}
+                                            disabled={!canEmitFiscal}
                                             placeholder="Digite ou bipe a chave de 44 dígitos da NF-e referenciada..."
                                             className="font-mono text-xs bg-white h-9 flex-1"
                                             maxLength={44}
@@ -645,6 +675,7 @@ export default function CreateStandaloneNfePage() {
                                         <Button
                                             type="button"
                                             onClick={handleAddReferencedKey}
+                                            disabled={!canEmitFiscal}
                                             variant="outline"
                                             className="bg-white text-orange-700 border-orange-200 hover:bg-orange-50 text-xs h-9"
                                         >
@@ -691,19 +722,22 @@ export default function CreateStandaloneNfePage() {
                                             <Input
                                                 value={destCnpjCpf}
                                                 onChange={e => setDestCnpjCpf(e.target.value)}
+                                                disabled={!canEmitFiscal}
                                                 placeholder="00.000.000/0000-00"
                                                 className="font-mono text-xs flex-1 bg-white h-9"
                                             />
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={handleConsultDestSefaz}
-                                                disabled={isConsultingDestSefaz}
-                                                className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
-                                            >
-                                                {isConsultingDestSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                                                Consultar SEFAZ
-                                            </Button>
+                                            {canConsultSefaz && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={handleConsultDestSefaz}
+                                                    disabled={isConsultingDestSefaz}
+                                                    className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
+                                                >
+                                                    {isConsultingDestSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                                    Consultar SEFAZ
+                                                </Button>
+                                            )}
                                         </div>
                                     </div>
 
@@ -712,6 +746,7 @@ export default function CreateStandaloneNfePage() {
                                         <Input
                                             value={destName}
                                             onChange={e => setDestName(e.target.value)}
+                                            disabled={!canEmitFiscal}
                                             placeholder="Nome do cliente ou parceiro"
                                             className="text-xs bg-white h-9"
                                         />
@@ -721,7 +756,7 @@ export default function CreateStandaloneNfePage() {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-3">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs">Indicador de Inscrição Estadual (indIEDest) *</Label>
-                                        <Select value={destIeIndicator} onValueChange={setDestIeIndicator}>
+                                        <Select value={destIeIndicator} onValueChange={setDestIeIndicator} disabled={!canEmitFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="1">1 - Contribuinte ICMS</SelectItem>
@@ -736,6 +771,7 @@ export default function CreateStandaloneNfePage() {
                                         <Input
                                             value={destIe}
                                             onChange={e => setDestIe(e.target.value)}
+                                            disabled={!canEmitFiscal}
                                             placeholder="Deixe vazio ou informe ISENTO se aplicável"
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -748,46 +784,46 @@ export default function CreateStandaloneNfePage() {
                                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                         <div className="space-y-1.5 md:col-span-2">
                                             <Label className="text-xs">Logradouro / Rua *</Label>
-                                            <Input value={destStreet} onChange={e => setDestStreet(e.target.value)} placeholder="Ex: Av. das Indústrias" className="text-xs bg-white h-9" />
+                                            <Input value={destStreet} onChange={e => setDestStreet(e.target.value)} disabled={!canEmitFiscal} placeholder="Ex: Av. das Indústrias" className="text-xs bg-white h-9" />
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <Label className="text-xs">Número *</Label>
-                                            <Input value={destNumber} onChange={e => setDestNumber(e.target.value)} placeholder="Ex: 500" className="text-xs bg-white h-9 font-mono" />
+                                            <Input value={destNumber} onChange={e => setDestNumber(e.target.value)} disabled={!canEmitFiscal} placeholder="Ex: 500" className="text-xs bg-white h-9 font-mono" />
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <Label className="text-xs">Complemento</Label>
-                                            <Input value={destComplement} onChange={e => setDestComplement(e.target.value)} placeholder="Ex: Galpão A" className="text-xs bg-white h-9" />
+                                            <Input value={destComplement} onChange={e => setDestComplement(e.target.value)} disabled={!canEmitFiscal} placeholder="Ex: Galpão A" className="text-xs bg-white h-9" />
                                         </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                         <div className="space-y-1.5 md:col-span-2">
                                             <Label className="text-xs">Bairro *</Label>
-                                            <Input value={destNeighborhood} onChange={e => setDestNeighborhood(e.target.value)} placeholder="Ex: Distrito Industrial" className="text-xs bg-white h-9" />
+                                            <Input value={destNeighborhood} onChange={e => setDestNeighborhood(e.target.value)} disabled={!canEmitFiscal} placeholder="Ex: Distrito Industrial" className="text-xs bg-white h-9" />
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <Label className="text-xs">Cidade *</Label>
-                                            <Input value={destCity} onChange={e => setDestCity(e.target.value)} placeholder="Nome do Município" className="text-xs bg-white h-9" />
+                                            <Input value={destCity} onChange={e => setDestCity(e.target.value)} disabled={!canEmitFiscal} placeholder="Nome do Município" className="text-xs bg-white h-9" />
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <Label className="text-xs">Cód. IBGE Cidade *</Label>
-                                            <Input value={destCityCode} onChange={e => setDestCityCode(e.target.value)} placeholder="4305108" className="font-mono text-xs bg-white h-9" />
+                                            <Input value={destCityCode} onChange={e => setDestCityCode(e.target.value)} disabled={!canEmitFiscal} placeholder="4305108" className="font-mono text-xs bg-white h-9" />
                                         </div>
 
                                         <div className="space-y-1.5">
                                             <Label className="text-xs">UF / CEP *</Label>
                                             <div className="flex gap-2">
-                                                <Select value={destState} onValueChange={setDestState}>
+                                                <Select value={destState} onValueChange={setDestState} disabled={!canEmitFiscal}>
                                                     <SelectTrigger className="text-xs bg-white w-20 h-9"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
                                                     </SelectContent>
                                                 </Select>
-                                                <Input value={destZipCode} onChange={e => setDestZipCode(e.target.value)} placeholder="CEP..." className="font-mono text-xs bg-white flex-1 h-9" />
+                                                <Input value={destZipCode} onChange={e => setDestZipCode(e.target.value)} disabled={!canEmitFiscal} placeholder="CEP..." className="font-mono text-xs bg-white flex-1 h-9" />
                                             </div>
                                         </div>
                                     </div>
@@ -808,7 +844,7 @@ export default function CreateStandaloneNfePage() {
                                 <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                                     <div className="md:col-span-3 space-y-1">
                                         <Label className="text-xs font-semibold text-slate-800">Produto do Catálogo *</Label>
-                                        <Select value={selectedProductId} onValueChange={setSelectedProductId}>
+                                        <Select value={selectedProductId} onValueChange={setSelectedProductId} disabled={!canEmitFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9">
                                                 <SelectValue placeholder="Selecione um produto..." />
                                             </SelectTrigger>
@@ -829,6 +865,7 @@ export default function CreateStandaloneNfePage() {
                                             step="0.001"
                                             value={itemQty}
                                             onChange={e => setItemQty(e.target.value)}
+                                            disabled={!canEmitFiscal}
                                             className="font-mono text-xs bg-white h-9"
                                         />
                                     </div>
@@ -840,6 +877,7 @@ export default function CreateStandaloneNfePage() {
                                             step="0.01"
                                             value={itemUnitVal}
                                             onChange={e => setItemUnitVal(e.target.value)}
+                                            disabled={!canEmitFiscal}
                                             placeholder="0,00"
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -849,6 +887,7 @@ export default function CreateStandaloneNfePage() {
                                         <Button
                                             type="button"
                                             onClick={handleAddItem}
+                                            disabled={!canEmitFiscal}
                                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 text-xs"
                                         >
                                             <Plus size={14} className="mr-1" /> Inserir Item
@@ -872,6 +911,7 @@ export default function CreateStandaloneNfePage() {
                                             <Input
                                                 value={itemBatch}
                                                 onChange={e => setItemBatch(e.target.value)}
+                                                disabled={!canEmitFiscal}
                                                 placeholder="Ex: 2610A"
                                                 className="font-mono text-xs bg-white h-8"
                                             />
@@ -883,6 +923,7 @@ export default function CreateStandaloneNfePage() {
                                                 type="date"
                                                 value={itemManufactureDate}
                                                 onChange={e => setItemManufactureDate(e.target.value)}
+                                                disabled={!canEmitFiscal}
                                                 className="font-mono text-xs bg-white h-8"
                                             />
                                         </div>
@@ -893,6 +934,7 @@ export default function CreateStandaloneNfePage() {
                                                 type="date"
                                                 value={itemExpirationDate}
                                                 onChange={e => setItemExpirationDate(e.target.value)}
+                                                disabled={!canEmitFiscal}
                                                 className="font-mono text-xs bg-white h-8"
                                             />
                                         </div>
@@ -902,6 +944,7 @@ export default function CreateStandaloneNfePage() {
                                             <Input
                                                 value={itemXPed}
                                                 onChange={e => setItemXPed(e.target.value)}
+                                                disabled={!canEmitFiscal}
                                                 placeholder="Max 15 carac."
                                                 maxLength={15}
                                                 className="font-mono text-xs bg-white h-8"
@@ -914,6 +957,7 @@ export default function CreateStandaloneNfePage() {
                                                 type="number"
                                                 value={itemNItemPed}
                                                 onChange={e => setItemNItemPed(e.target.value)}
+                                                disabled={!canEmitFiscal}
                                                 placeholder="Ex: 1"
                                                 className="font-mono text-xs bg-white h-8"
                                             />
@@ -1028,6 +1072,7 @@ export default function CreateStandaloneNfePage() {
                                     <Switch
                                         id="billing-switch"
                                         checked={hasFinancialBilling}
+                                        disabled={!canEmitFiscal}
                                         onCheckedChange={setHasFinancialBilling}
                                     />
                                 </div>
@@ -1051,7 +1096,7 @@ export default function CreateStandaloneNfePage() {
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                             <div className="space-y-1.5 md:col-span-2">
                                                 <Label className="text-xs font-semibold text-slate-800">Forma de Pagamento (tPag) *</Label>
-                                                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                                                <Select value={paymentMethod} onValueChange={setPaymentMethod} disabled={!canEmitFiscal}>
                                                     <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         {FORMAS_PAGAMENTO.map(f => (
@@ -1063,7 +1108,7 @@ export default function CreateStandaloneNfePage() {
 
                                             <div className="space-y-1.5">
                                                 <Label className="text-xs font-semibold text-slate-800">Indicador de Pagamento (indPag) *</Label>
-                                                <Select value={paymentIndicator} onValueChange={setPaymentIndicator}>
+                                                <Select value={paymentIndicator} onValueChange={setPaymentIndicator} disabled={!canEmitFiscal}>
                                                     <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="0">0 - À Vista</SelectItem>
@@ -1077,6 +1122,7 @@ export default function CreateStandaloneNfePage() {
                                                 <Input
                                                     value={invoiceNumber}
                                                     onChange={e => setInvoiceNumber(e.target.value)}
+                                                    disabled={!canEmitFiscal}
                                                     placeholder="Padrão = Nº da NF-e"
                                                     className="font-mono text-xs bg-white h-9"
                                                 />
@@ -1098,6 +1144,7 @@ export default function CreateStandaloneNfePage() {
                                                     step="0.01"
                                                     value={invoiceDiscount}
                                                     onChange={e => setInvoiceDiscount(e.target.value)}
+                                                    disabled={!canEmitFiscal}
                                                     className="font-mono text-xs bg-white h-8"
                                                 />
                                             </div>
@@ -1126,6 +1173,7 @@ export default function CreateStandaloneNfePage() {
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
+                                                        disabled={!canEmitFiscal}
                                                         onClick={() => handleGenerateInstallments(1)}
                                                         className="text-[11px] h-8 bg-white"
                                                     >
@@ -1135,6 +1183,7 @@ export default function CreateStandaloneNfePage() {
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
+                                                        disabled={!canEmitFiscal}
                                                         onClick={() => handleGenerateInstallments(2)}
                                                         className="text-[11px] h-8 bg-white"
                                                     >
@@ -1144,6 +1193,7 @@ export default function CreateStandaloneNfePage() {
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
+                                                        disabled={!canEmitFiscal}
                                                         onClick={() => handleGenerateInstallments(3)}
                                                         className="text-[11px] h-8 bg-white"
                                                     >
@@ -1152,6 +1202,7 @@ export default function CreateStandaloneNfePage() {
                                                     <Button
                                                         type="button"
                                                         size="sm"
+                                                        disabled={!canEmitFiscal}
                                                         onClick={handleAddDuplicataRow}
                                                         className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] h-8"
                                                     >
@@ -1183,6 +1234,7 @@ export default function CreateStandaloneNfePage() {
                                                                     <TableCell>
                                                                         <Input
                                                                             value={dup.numero}
+                                                                            disabled={!canEmitFiscal}
                                                                             onChange={e => handleDuplicataChange(idx, 'numero', e.target.value)}
                                                                             className="font-mono text-xs text-center bg-white h-8"
                                                                         />
@@ -1191,6 +1243,7 @@ export default function CreateStandaloneNfePage() {
                                                                         <Input
                                                                             type="date"
                                                                             value={dup.dataVencimento}
+                                                                            disabled={!canEmitFiscal}
                                                                             onChange={e => handleDuplicataChange(idx, 'dataVencimento', e.target.value)}
                                                                             className="font-mono text-xs bg-white h-8"
                                                                         />
@@ -1200,6 +1253,7 @@ export default function CreateStandaloneNfePage() {
                                                                             type="number"
                                                                             step="0.01"
                                                                             value={dup.valor}
+                                                                            disabled={!canEmitFiscal}
                                                                             onChange={e => handleDuplicataChange(idx, 'valor', e.target.value)}
                                                                             className="font-mono text-xs text-right bg-white h-8"
                                                                         />
@@ -1209,6 +1263,7 @@ export default function CreateStandaloneNfePage() {
                                                                             type="button"
                                                                             variant="ghost"
                                                                             size="sm"
+                                                                            disabled={!canEmitFiscal}
                                                                             onClick={() => handleRemoveDuplicata(idx)}
                                                                             className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
                                                                         >
@@ -1261,7 +1316,7 @@ export default function CreateStandaloneNfePage() {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="space-y-1.5 md:col-span-3">
                                         <Label className="text-xs font-semibold text-slate-800">Modalidade do Frete *</Label>
-                                        <Select value={freightModality} onValueChange={setFreightModality}>
+                                        <Select value={freightModality} onValueChange={setFreightModality} disabled={!canEmitFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="9">9 - Sem Ocorrência de Transporte (Padrão)</SelectItem>
@@ -1293,19 +1348,22 @@ export default function CreateStandaloneNfePage() {
                                                     <Input
                                                         value={carrierCnpjCpf}
                                                         onChange={e => setCarrierCnpjCpf(e.target.value)}
+                                                        disabled={!canEmitFiscal}
                                                         placeholder="00.000.000/0000-00"
                                                         className="font-mono text-xs flex-1 bg-white h-9"
                                                     />
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        onClick={handleConsultCarrierSefaz}
-                                                        disabled={isConsultingCarrierSefaz}
-                                                        className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
-                                                    >
-                                                        {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                                                        SEFAZ
-                                                    </Button>
+                                                    {canConsultSefaz && (
+                                                        <Button
+                                                            type="button"
+                                                            variant="outline"
+                                                            onClick={handleConsultCarrierSefaz}
+                                                            disabled={isConsultingCarrierSefaz}
+                                                            className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50 text-xs h-9 shrink-0"
+                                                        >
+                                                            {isConsultingCarrierSefaz ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                                                            SEFAZ
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -1314,6 +1372,7 @@ export default function CreateStandaloneNfePage() {
                                                 <Input
                                                     value={carrierName}
                                                     onChange={e => setCarrierName(e.target.value)}
+                                                    disabled={!canEmitFiscal}
                                                     placeholder="Nome da Transportadora"
                                                     className="text-xs bg-white h-9"
                                                 />
@@ -1326,6 +1385,7 @@ export default function CreateStandaloneNfePage() {
                                                 <Input
                                                     value={carrierIe}
                                                     onChange={e => setCarrierIe(e.target.value)}
+                                                    disabled={!canEmitFiscal}
                                                     placeholder="IE da Transportadora"
                                                     className="font-mono text-xs bg-white h-9"
                                                 />
@@ -1337,10 +1397,11 @@ export default function CreateStandaloneNfePage() {
                                                     <Input
                                                         value={vehiclePlate}
                                                         onChange={e => setVehiclePlate(e.target.value)}
+                                                        disabled={!canEmitFiscal}
                                                         placeholder="ABC1D23"
                                                         className="font-mono uppercase text-xs bg-white h-9 flex-1"
                                                     />
-                                                    <Select value={vehiclePlateState} onValueChange={setVehiclePlateState}>
+                                                    <Select value={vehiclePlateState} onValueChange={setVehiclePlateState} disabled={!canEmitFiscal}>
                                                         <SelectTrigger className="text-xs bg-white w-20 h-9"><SelectValue /></SelectTrigger>
                                                         <SelectContent>
                                                             {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
@@ -1354,6 +1415,7 @@ export default function CreateStandaloneNfePage() {
                                                 <Input
                                                     value={carrierAddress}
                                                     onChange={e => setCarrierAddress(e.target.value)}
+                                                    disabled={!canEmitFiscal}
                                                     placeholder="Rua, Número, Bairro..."
                                                     className="text-xs bg-white h-9"
                                                 />
@@ -1366,6 +1428,7 @@ export default function CreateStandaloneNfePage() {
                                                 <Input
                                                     value={carrierCity}
                                                     onChange={e => setCarrierCity(e.target.value)}
+                                                    disabled={!canEmitFiscal}
                                                     placeholder="Cidade da transportadora"
                                                     className="text-xs bg-white h-9"
                                                 />
@@ -1373,7 +1436,7 @@ export default function CreateStandaloneNfePage() {
 
                                             <div className="space-y-1.5">
                                                 <Label className="text-xs font-semibold">UF da Transportadora (UF) *</Label>
-                                                <Select value={carrierState} onValueChange={setCarrierState}>
+                                                <Select value={carrierState} onValueChange={setCarrierState} disabled={!canEmitFiscal}>
                                                     <SelectTrigger className="text-xs bg-white font-mono font-bold h-9"><SelectValue placeholder="UF" /></SelectTrigger>
                                                     <SelectContent>
                                                         {ESTADOS_BR.map(uf => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
@@ -1404,6 +1467,7 @@ export default function CreateStandaloneNfePage() {
                                         rows={4}
                                         value={additionalNotes}
                                         onChange={e => setAdditionalNotes(e.target.value)}
+                                        disabled={!canEmitFiscal}
                                         placeholder="Informações adicionais impressas no rodapé do DANFE..."
                                         className="w-full rounded-lg border border-slate-200 p-3 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />

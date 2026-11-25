@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -45,8 +46,12 @@ export default function CreateOrEditFiscalRulePage() {
     const navigate = useNavigate();
     const isEditing = Boolean(id);
 
+    const canAccessRule = useHasPermission(['fiscal:manage', 'fiscal:view']);
+    const canManageFiscal = useHasPermission('fiscal:manage');
+
     const [activeTab, setActiveTab] = useState('identificacao');
-    const [isLoadingData, setIsLoadingData] = useState(isEditing);
+    const [isLoadingData, setIsLoadingData] = useState(Boolean(isEditing && canAccessRule));
+    const [refreshTick, setRefreshTick] = useState(0);
     const [isSaving, setIsSaving] = useState(false);
 
     // --- ABA 1: IDENTIFICAÇÃO & CFOP ---
@@ -93,66 +98,73 @@ export default function CreateOrEditFiscalRulePage() {
     const [exceptionToDelete, setExceptionToDelete] = useState(null);
     const [isDeletingException, setIsDeletingException] = useState(false);
 
-    const loadRule = async () => {
-        if (!id) return;
-        try {
-            setIsLoadingData(true);
-            const res = await customInstance({ url: `/api/fiscal/rules/${id}`, method: 'GET' });
-            const rule = res?.data || res;
-
-            setDescription(rule.description || '');
-            setFinalidade(rule.finalidade?.toString() || '1');
-            setCfopStateInternal(rule.cfopStateInternal || '5906');
-            setCfopInterstate(rule.cfopInterstate || '6906');
-
-            setCstCsosnIcms(rule.cstCsosnIcms || '400');
-            setModBcIcms(rule.modBcIcms?.toString() || '3');
-            setAliqIcms(rule.aliqIcms?.toString() || '0');
-            setReducaoBcIcms(rule.reducaoBcIcms?.toString() || '0');
-            setAliqCreditoSimples(rule.aliqCreditoSimples?.toString() || '0');
-            setMotivoDesoneracaoIcms(rule.motivoDesoneracaoIcms ? rule.motivoDesoneracaoIcms.toString() : 'NONE');
-
-            setModBcIcmsSt(rule.modBcIcmsSt?.toString() || '4');
-            setMvaIcmsSt(rule.mvaIcmsSt?.toString() || '0');
-            setReducaoBcIcmsSt(rule.reducaoBcIcmsSt?.toString() || '0');
-            setAliqIcmsSt(rule.aliqIcmsSt?.toString() || '0');
-
-            setCstIpi(rule.cstIpi || '53');
-            setCodigoEnquadramentoIpi(rule.codigoEnquadramentoIpi?.toString() || '999');
-            setAliqIpi(rule.aliqIpi?.toString() || '0');
-            setCstPis(rule.cstPis || '08');
-            setAliqPis(rule.aliqPis?.toString() || '0');
-            setCstCofins(rule.cstCofins || '08');
-            setAliqCofins(rule.aliqCofins?.toString() || '0');
-
-            setCstIbs(rule.cstIbs || '410');
-            setAliqIbs(rule.aliqIbs?.toString() || '0.10');
-            setCstCbs(rule.cstCbs || '410');
-            setAliqCbs(rule.aliqCbs?.toString() || '0.90');
-            setClassificacaoTributaria(rule.classificacaoTributaria || '410999');
-            setAdditionalNotes(rule.additionalNotes || '');
-
-            setExceptions(rule.exceptions || []);
-        } catch {
-            toast.error('Erro ao carregar detalhes da natureza de operação.');
-            navigate('/fiscal/regras');
-        } finally {
-            setIsLoadingData(false);
-        }
+    const triggerReload = () => {
+        if (!id || !canAccessRule) return;
+        setIsLoadingData(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        if (isEditing) {
-            loadRule();
-        }
-    }, [
-	id,
-	isEditing,
-	
-]);
+        if (!isEditing || !id || !canAccessRule) return;
+
+        let isMounted = true;
+
+        customInstance({ url: `/api/fiscal/rules/${id}`, method: 'GET' })
+            .then(res => {
+                if (!isMounted) return;
+                const rule = res?.data || res;
+
+                setDescription(rule.description || '');
+                setFinalidade(rule.finalidade?.toString() || '1');
+                setCfopStateInternal(rule.cfopStateInternal || '5906');
+                setCfopInterstate(rule.cfopInterstate || '6906');
+
+                setCstCsosnIcms(rule.cstCsosnIcms || '400');
+                setModBcIcms(rule.modBcIcms?.toString() || '3');
+                setAliqIcms(rule.aliqIcms?.toString() || '0');
+                setReducaoBcIcms(rule.reducaoBcIcms?.toString() || '0');
+                setAliqCreditoSimples(rule.aliqCreditoSimples?.toString() || '0');
+                setMotivoDesoneracaoIcms(rule.motivoDesoneracaoIcms ? rule.motivoDesoneracaoIcms.toString() : 'NONE');
+
+                setModBcIcmsSt(rule.modBcIcmsSt?.toString() || '4');
+                setMvaIcmsSt(rule.mvaIcmsSt?.toString() || '0');
+                setReducaoBcIcmsSt(rule.reducaoBcIcmsSt?.toString() || '0');
+                setAliqIcmsSt(rule.aliqIcmsSt?.toString() || '0');
+
+                setCstIpi(rule.cstIpi || '53');
+                setCodigoEnquadramentoIpi(rule.codigoEnquadramentoIpi?.toString() || '999');
+                setAliqIpi(rule.aliqIpi?.toString() || '0');
+                setCstPis(rule.cstPis || '08');
+                setAliqPis(rule.aliqPis?.toString() || '0');
+                setCstCofins(rule.cstCofins || '08');
+                setAliqCofins(rule.aliqCofins?.toString() || '0');
+
+                setCstIbs(rule.cstIbs || '410');
+                setAliqIbs(rule.aliqIbs?.toString() || '0.10');
+                setCstCbs(rule.cstCbs || '410');
+                setAliqCbs(rule.aliqCbs?.toString() || '0.90');
+                setClassificacaoTributaria(rule.classificacaoTributaria || '410999');
+                setAdditionalNotes(rule.additionalNotes || '');
+
+                setExceptions(rule.exceptions || []);
+            })
+            .catch(() => {
+                if (!isMounted) return;
+                toast.error('Erro ao carregar detalhes da natureza de operação.');
+                navigate('/fiscal/regras');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoadingData(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [id, isEditing, canAccessRule, navigate, refreshTick]);
 
     const handleSave = async (e) => {
         e?.preventDefault();
+        if (!canManageFiscal) return;
 
         if (!description.trim()) {
             setActiveTab('identificacao');
@@ -213,7 +225,7 @@ export default function CreateOrEditFiscalRulePage() {
     };
 
     const handleConfirmDeleteException = async () => {
-        if (!exceptionToDelete) return;
+        if (!exceptionToDelete || !canManageFiscal) return;
         try {
             setIsDeletingException(true);
             await customInstance({
@@ -222,7 +234,7 @@ export default function CreateOrEditFiscalRulePage() {
             });
             toast.success('Linha de exceção fiscal excluída com sucesso!');
             setExceptionToDelete(null);
-            loadRule();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir exceção fiscal.');
         } finally {
@@ -267,17 +279,19 @@ export default function CreateOrEditFiscalRulePage() {
                         Cancelar
                     </Button>
 
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5">
-                        {isSaving ? (
-                            <>
-                                <Loader2 className="animate-spin h-4 w-4 mr-2" /> Salvando Regra...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="h-4 w-4 mr-2" /> Salvar Natureza Fiscal
-                            </>
-                        )}
-                    </Button>
+                    {canManageFiscal && (
+                        <Button onClick={handleSave} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5">
+                            {isSaving ? (
+                                <>
+                                    <Loader2 className="animate-spin h-4 w-4 mr-2" /> Salvando Regra...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="h-4 w-4 mr-2" /> Salvar Natureza Fiscal
+                                </>
+                            )}
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -327,6 +341,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={description}
                                             onChange={e => setDescription(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={60}
                                             placeholder="Ex: Retorno mercadoria utilizada industrialização encomenda"
                                             className="text-xs bg-white h-9"
@@ -336,7 +351,7 @@ export default function CreateOrEditFiscalRulePage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Finalidade da NF-e (finNFe) *</Label>
-                                        <Select value={finalidade} onValueChange={setFinalidade}>
+                                        <Select value={finalidade} onValueChange={setFinalidade} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="1">1 - NF-e Normal (Vendas, Remessas, Retornos)</SelectItem>
@@ -356,6 +371,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cfopStateInternal}
                                             onChange={e => setCfopStateInternal(e.target.value.replace(/\D/g, ''))}
+                                            disabled={!canManageFiscal}
                                             maxLength={4}
                                             placeholder="Ex: 5906"
                                             className="font-mono text-xs bg-white h-9 font-bold text-blue-700"
@@ -369,6 +385,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cfopInterstate}
                                             onChange={e => setCfopInterstate(e.target.value.replace(/\D/g, ''))}
+                                            disabled={!canManageFiscal}
                                             maxLength={4}
                                             placeholder="Ex: 6906"
                                             className="font-mono text-xs bg-white h-9 font-bold text-purple-700"
@@ -396,6 +413,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cstCsosnIcms}
                                             onChange={e => setCstCsosnIcms(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={3}
                                             placeholder="400 ou 00"
                                             className="font-mono text-xs bg-white h-9 font-bold"
@@ -406,7 +424,7 @@ export default function CreateOrEditFiscalRulePage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Modalidade BC ICMS (modBC)</Label>
-                                        <Select value={modBcIcms} onValueChange={setModBcIcms}>
+                                        <Select value={modBcIcms} onValueChange={setModBcIcms} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9 font-mono"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="0">0 - Margem Valor Agregado (%)</SelectItem>
@@ -423,6 +441,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIcms}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIcms(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -434,6 +453,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={reducaoBcIcms}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setReducaoBcIcms(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -447,6 +467,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqCreditoSimples}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqCreditoSimples(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -455,7 +476,7 @@ export default function CreateOrEditFiscalRulePage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Motivo da Desoneração do ICMS (motDesICMS)</Label>
-                                        <Select value={motivoDesoneracaoIcms} onValueChange={setMotivoDesoneracaoIcms}>
+                                        <Select value={motivoDesoneracaoIcms} onValueChange={setMotivoDesoneracaoIcms} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {MOTIVOS_DESONERACAO.map(m => (
@@ -480,7 +501,7 @@ export default function CreateOrEditFiscalRulePage() {
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Modalidade BC ST (modBCST)</Label>
-                                        <Select value={modBcIcmsSt} onValueChange={setModBcIcmsSt}>
+                                        <Select value={modBcIcmsSt} onValueChange={setModBcIcmsSt} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9 font-mono"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="0">0 - Preço Tabelado / Máximo Sugerido</SelectItem>
@@ -499,6 +520,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={mvaIcmsSt}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setMvaIcmsSt(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -510,6 +532,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={reducaoBcIcmsSt}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setReducaoBcIcmsSt(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -521,6 +544,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIcmsSt}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIcmsSt(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -545,6 +569,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cstIpi}
                                             onChange={e => setCstIpi(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={2}
                                             placeholder="53"
                                             className="font-mono text-xs bg-white h-9 font-bold"
@@ -558,6 +583,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             type="number"
                                             value={codigoEnquadramentoIpi}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setCodigoEnquadramentoIpi(e.target.value)}
                                             placeholder="999"
                                             className="font-mono text-xs bg-white h-9"
@@ -571,6 +597,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIpi}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIpi(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -592,6 +619,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cstPis}
                                             onChange={e => setCstPis(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={2}
                                             placeholder="08"
                                             className="font-mono text-xs bg-white h-9 font-bold"
@@ -606,6 +634,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqPis}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqPis(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -616,6 +645,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cstCofins}
                                             onChange={e => setCstCofins(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={2}
                                             placeholder="08"
                                             className="font-mono text-xs bg-white h-9 font-bold"
@@ -630,6 +660,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqCofins}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqCofins(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -654,6 +685,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cstIbs}
                                             onChange={e => setCstIbs(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={3}
                                             placeholder="410"
                                             className="font-mono text-xs bg-white h-9"
@@ -667,6 +699,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIbs}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIbs(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -677,6 +710,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={cstCbs}
                                             onChange={e => setCstCbs(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={3}
                                             placeholder="410"
                                             className="font-mono text-xs bg-white h-9"
@@ -690,6 +724,7 @@ export default function CreateOrEditFiscalRulePage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqCbs}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqCbs(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -700,6 +735,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         <Input
                                             value={classificacaoTributaria}
                                             onChange={e => setClassificacaoTributaria(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={6}
                                             placeholder="410999"
                                             className="font-mono text-xs bg-white h-9"
@@ -728,6 +764,7 @@ export default function CreateOrEditFiscalRulePage() {
                                         rows={6}
                                         value={additionalNotes}
                                         onChange={e => setAdditionalNotes(e.target.value)}
+                                        disabled={!canManageFiscal}
                                         placeholder="Texto que será automaticamente incluído no campo de Informações Complementares do DANFE sempre que esta natureza de operação for selecionada..."
                                         className="w-full rounded-lg border border-slate-200 p-3 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
@@ -752,18 +789,20 @@ export default function CreateOrEditFiscalRulePage() {
                                     </p>
                                 </div>
 
-                                <Button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!isEditing) {
-                                            return toast.warning('Salve a Natureza de Operação primeiro antes de cadastrar linhas de exceção.');
-                                        }
-                                        navigate(`/fiscal/regras/${id}/excecoes/nova`);
-                                    }}
-                                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-8 text-xs"
-                                >
-                                    <Plus size={13} className="mr-1" /> Nova Linha de Exceção
-                                </Button>
+                                {canManageFiscal && (
+                                    <Button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!isEditing) {
+                                                return toast.warning('Salve a Natureza de Operação primeiro antes de cadastrar linhas de exceção.');
+                                            }
+                                            navigate(`/fiscal/regras/${id}/excecoes/nova`);
+                                        }}
+                                        className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-8 text-xs"
+                                    >
+                                        <Plus size={13} className="mr-1" /> Nova Linha de Exceção
+                                    </Button>
+                                )}
                             </CardHeader>
 
                             <CardContent className="p-0 overflow-x-auto">
@@ -775,13 +814,13 @@ export default function CreateOrEditFiscalRulePage() {
                                             <TableHead className="text-center">ICMS</TableHead>
                                             <TableHead className="text-center">IPI</TableHead>
                                             <TableHead className="text-center">PIS / COFINS</TableHead>
-                                            <TableHead className="text-right">Ações</TableHead>
+                                            {canManageFiscal && <TableHead className="text-right">Ações</TableHead>}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {exceptions.length === 0 ? (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="h-28 text-center text-slate-400 italic">
+                                                <TableCell colSpan={canManageFiscal ? 6 : 5} className="h-28 text-center text-slate-400 italic">
                                                     Nenhuma exceção cadastrada. Todos os itens emitidos nesta natureza seguirão as alíquotas base da matriz.
                                                 </TableCell>
                                             </TableRow>
@@ -818,28 +857,30 @@ export default function CreateOrEditFiscalRulePage() {
                                                     <TableCell className="text-center font-mono">
                                                         {exc.cstPis ? <span>PIS {exc.cstPis}</span> : <span className="text-slate-400 italic">Padrão</span>}
                                                     </TableCell>
-                                                    <TableCell className="text-right space-x-1">
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={() => navigate(`/fiscal/regras/${id}/excecoes/${exc.id}`)}
-                                                            className="h-7 w-7 p-0"
-                                                            title="Editar Exceção Completa"
-                                                        >
-                                                            <Pencil size={13} className="text-slate-600" />
-                                                        </Button>
-                                                        <Button
-                                                            type="button"
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={() => setExceptionToDelete(exc)}
-                                                            className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
-                                                            title="Excluir"
-                                                        >
-                                                            <Trash2 size={13} />
-                                                        </Button>
-                                                    </TableCell>
+                                                    {canManageFiscal && (
+                                                        <TableCell className="text-right space-x-1">
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => navigate(`/fiscal/regras/${id}/excecoes/${exc.id}`)}
+                                                                className="h-7 w-7 p-0"
+                                                                title="Editar Exceção Completa"
+                                                            >
+                                                                <Pencil size={13} className="text-slate-600" />
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => setExceptionToDelete(exc)}
+                                                                className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
+                                                                title="Excluir"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </Button>
+                                                        </TableCell>
+                                                    )}
                                                 </TableRow>
                                             ))
                                         )}
@@ -851,33 +892,35 @@ export default function CreateOrEditFiscalRulePage() {
                 </Tabs>
             </form>
 
-            {/* ALERTA DE EXCLUSÃO DE LINHA DE EXCEÇÃO (SHADCN/UI) */}
-            <AlertDialog open={!!exceptionToDelete} onOpenChange={(open) => !open && setExceptionToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                            <Trash2 className="h-5 w-5" /> Remover Linha de Exceção?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Tem certeza de que deseja remover esta linha de exceção fiscal vinculada à regra{' '}
-                            <strong className="text-slate-900">{description}</strong>?
-                            <br /><br />
-                            Os produtos e operações que atendiam a estes critérios passarão a seguir as alíquotas base da matriz.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeletingException}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmDeleteException}
-                            disabled={isDeletingException}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeletingException ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Remoção
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* ALERTA DE EXCLUSÃO DE LINHA DE EXCEÇÃO */}
+            {canManageFiscal && (
+                <AlertDialog open={!!exceptionToDelete} onOpenChange={(open) => !open && setExceptionToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                                <Trash2 className="h-5 w-5" /> Remover Linha de Exceção?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Tem certeza de que deseja remover esta linha de exceção fiscal vinculada à regra{' '}
+                                <strong className="text-slate-900">{description}</strong>?
+                                <br /><br />
+                                Os produtos e operações que atendiam a estes critérios passarão a seguir as alíquotas base da matriz.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeletingException}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmDeleteException}
+                                disabled={isDeletingException}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeletingException ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Remoção
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

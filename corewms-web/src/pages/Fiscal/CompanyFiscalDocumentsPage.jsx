@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -28,9 +29,14 @@ import SendNfeEmailModal from '@/pages/Fiscal/SendNfeEmailModal';
 export default function CompanyFiscalDocumentsPage() {
     const navigate = useNavigate();
 
+    const canViewFiscal = useHasPermission('fiscal:view');
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+    const canManageFiscal = useHasPermission('fiscal:manage');
+
     const [documents, setDocuments] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(canViewFiscal);
+    const [refreshTick, setRefreshTick] = useState(0);
 
     // Paginação
     const [page, setPage] = useState(1);
@@ -38,6 +44,7 @@ export default function CompanyFiscalDocumentsPage() {
 
     // Filtros
     const [search, setSearch] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [typeFilter, setTypeFilter] = useState('ALL');
 
@@ -58,48 +65,81 @@ export default function CompanyFiscalDocumentsPage() {
     const [docToDelete, setDocToDelete] = useState(null);
     const [isDeletingDoc, setIsDeletingDoc] = useState(false);
 
-    const loadDocuments = async () => {
-        try {
-            setIsLoading(true);
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            if (statusFilter !== 'ALL') params.append('status', statusFilter);
-            if (typeFilter !== 'ALL') params.append('type', typeFilter);
-            params.append('page', page);
-            params.append('pageSize', pageSize);
-
-            const res = await customInstance({
-                url: `/api/fiscal/documents?${params.toString()}`,
-                method: 'GET'
-            });
-
-            const data = res?.data || res;
-            setDocuments(data?.items || []);
-            setTotalCount(data?.totalCount || 0);
-        } catch {
-            toast.error('Erro ao carregar documentos fiscais.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!canViewFiscal) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        loadDocuments();
-    }, [
-	page,
-	pageSize,
-	statusFilter,
-	typeFilter,
-	
-]);
+        if (!canViewFiscal) return;
+
+        let isMounted = true;
+        const params = new URLSearchParams();
+        if (appliedSearch) params.append('search', appliedSearch);
+        if (statusFilter !== 'ALL') params.append('status', statusFilter);
+        if (typeFilter !== 'ALL') params.append('type', typeFilter);
+        params.append('page', String(page));
+        params.append('pageSize', String(pageSize));
+
+        customInstance({
+            url: `/api/fiscal/documents?${params.toString()}`,
+            method: 'GET'
+        })
+            .then(res => {
+                if (!isMounted) return;
+                const data = res?.data || res;
+                setDocuments(data?.items || []);
+                setTotalCount(data?.totalCount || 0);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar documentos fiscais.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [page, pageSize, statusFilter, typeFilter, appliedSearch, canViewFiscal, refreshTick]);
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
         setPage(1);
-        loadDocuments();
+        setAppliedSearch(search);
+        if (canViewFiscal) {
+            setIsLoading(true);
+            setRefreshTick(t => t + 1);
+        }
+    };
+
+    const handleStatusFilterChange = (val) => {
+        setStatusFilter(val);
+        setPage(1);
+        if (canViewFiscal) setIsLoading(true);
+    };
+
+    const handleTypeFilterChange = (val) => {
+        setTypeFilter(val);
+        setPage(1);
+        if (canViewFiscal) setIsLoading(true);
+    };
+
+    const handlePageSizeChange = (val) => {
+        setPageSize(Number(val));
+        setPage(1);
+        if (canViewFiscal) setIsLoading(true);
+    };
+
+    const handlePageChange = (newPage) => {
+        setPage(newPage);
+        if (canViewFiscal) setIsLoading(true);
     };
 
     const handleDownloadPdf = async (docId) => {
+        if (!canViewFiscal) return;
+
         const printWindow = window.open('', '_blank');
         if (printWindow) {
             printWindow.document.write(`
@@ -121,13 +161,15 @@ export default function CompanyFiscalDocumentsPage() {
                 printWindow.document.write(html);
                 printWindow.document.close();
             }
-        } catch  {
+        } catch {
             if (printWindow) printWindow.close();
             toast.error('Erro ao carregar visualização da DANFE.');
         }
     };
 
     const handleDownloadXml = async (docId, accessKey) => {
+        if (!canViewFiscal) return;
+
         try {
             toast.success('Iniciando download do XML...');
             const response = await customInstance({
@@ -151,7 +193,8 @@ export default function CompanyFiscalDocumentsPage() {
     };
 
     const handleConfirmDeleteDoc = async () => {
-        if (!docToDelete) return;
+        if (!docToDelete || !canManageFiscal) return;
+
         try {
             setIsDeletingDoc(true);
             await customInstance({
@@ -160,7 +203,7 @@ export default function CompanyFiscalDocumentsPage() {
             });
             toast.success('Documento fiscal excluído com sucesso!');
             setDocToDelete(null);
-            loadDocuments();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir documento fiscal.');
         } finally {
@@ -182,17 +225,21 @@ export default function CompanyFiscalDocumentsPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        onClick={() => navigate('/fiscal/regras')}
-                        className="bg-white text-slate-700 border-slate-300 hover:bg-slate-50 font-semibold h-9"
-                    >
-                        <Settings className="mr-1.5 h-4 w-4 text-slate-500" /> Gerenciar Regras Fiscais
-                    </Button>
+                    {canManageFiscal && (
+                        <Button
+                            variant="outline"
+                            onClick={() => navigate('/fiscal/regras')}
+                            className="bg-white text-slate-700 border-slate-300 hover:bg-slate-50 font-semibold h-9"
+                        >
+                            <Settings className="mr-1.5 h-4 w-4 text-slate-500" /> Gerenciar Regras Fiscais
+                        </Button>
+                    )}
 
-                    <Button onClick={() => navigate('/fiscal/documentos/novo')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
-                        <Plus className="mr-1.5 h-4 w-4" /> Nova NF-e Avulsa
-                    </Button>
+                    {canEmitFiscal && (
+                        <Button onClick={() => navigate('/fiscal/documentos/novo')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
+                            <Plus className="mr-1.5 h-4 w-4" /> Nova NF-e Avulsa
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -211,7 +258,7 @@ export default function CompanyFiscalDocumentsPage() {
                         </div>
 
                         <div className="w-full md:w-44">
-                            <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val); setPage(1); }}>
+                            <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
                                 <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Status" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="ALL">Todos os Status</SelectItem>
@@ -224,7 +271,7 @@ export default function CompanyFiscalDocumentsPage() {
                         </div>
 
                         <div className="w-full md:w-48">
-                            <Select value={typeFilter} onValueChange={(val) => { setTypeFilter(val); setPage(1); }}>
+                            <Select value={typeFilter} onValueChange={handleTypeFilterChange}>
                                 <SelectTrigger className="bg-white text-xs h-9"><SelectValue placeholder="Finalidade" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="ALL">Todas as Finalidades</SelectItem>
@@ -346,8 +393,8 @@ export default function CompanyFiscalDocumentsPage() {
                                                 {eventsCount > 0 ? (
                                                     <Badge
                                                         variant="secondary"
-                                                        className="cursor-pointer font-mono text-[10px] hover:bg-slate-200"
-                                                        onClick={() => navigate(`/fiscal/documentos/${doc.id}`)}
+                                                        className={`font-mono text-[10px] ${canViewFiscal ? 'cursor-pointer hover:bg-slate-200' : ''}`}
+                                                        onClick={() => canViewFiscal && navigate(`/fiscal/documentos/${doc.id}`)}
                                                     >
                                                         {eventsCount} evento(s)
                                                     </Badge>
@@ -357,17 +404,19 @@ export default function CompanyFiscalDocumentsPage() {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-1">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => navigate(`/fiscal/documentos/${doc.id}`)}
-                                                        className="h-8 w-8 p-0"
-                                                        title="Ver Detalhes da NF-e"
-                                                    >
-                                                        <Eye size={14} className="text-slate-600" />
-                                                    </Button>
+                                                    {canViewFiscal && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => navigate(`/fiscal/documentos/${doc.id}`)}
+                                                            className="h-8 w-8 p-0"
+                                                            title="Ver Detalhes da NF-e"
+                                                        >
+                                                            <Eye size={14} className="text-slate-600" />
+                                                        </Button>
+                                                    )}
 
-                                                    {(isAuthorized || isPendingOrRejected) && doc.accessKey && (
+                                                    {canViewFiscal && (isAuthorized || isPendingOrRejected) && doc.accessKey && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -381,57 +430,62 @@ export default function CompanyFiscalDocumentsPage() {
 
                                                     {isAuthorized && (
                                                         <>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleDownloadPdf(doc.id)}
-                                                                disabled={downloadingDocId === doc.id}
-                                                                className="h-8 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-medium px-2"
-                                                                title="Visualizar / Imprimir DANFE"
-                                                            >
-                                                                {downloadingDocId === doc.id ? (
-                                                                    <Loader2 size={13} className="animate-spin" />
-                                                                ) : (
-                                                                    <>
-                                                                        <Download size={13} className="mr-1" /> DANFE
-                                                                    </>
-                                                                )}
-                                                            </Button>
+                                                            {canViewFiscal && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleDownloadPdf(doc.id)}
+                                                                    disabled={downloadingDocId === doc.id}
+                                                                    className="h-8 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-medium px-2"
+                                                                    title="Visualizar / Imprimir DANFE"
+                                                                >
+                                                                    {downloadingDocId === doc.id ? (
+                                                                        <Loader2 size={13} className="animate-spin" />
+                                                                    ) : (
+                                                                        <>
+                                                                            <Download size={13} className="mr-1" /> DANFE
+                                                                        </>
+                                                                    )}
+                                                                </Button>
+                                                            )}
 
-                                                            {/* AÇÃO MANUAL DE DISPARO DE E-MAIL */}
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => { setSelectedDocForEmail(doc); setIsEmailModalOpen(true); }}
-                                                                className="h-8 text-xs bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 font-medium px-2"
-                                                                title="Enviar NF-e por E-mail (XML e DANFE)"
-                                                            >
-                                                                <Mail size={13} className="text-emerald-600" />
-                                                            </Button>
+                                                            {canEmitFiscal && (
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => { setSelectedDocForEmail(doc); setIsEmailModalOpen(true); }}
+                                                                        className="h-8 text-xs bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 font-medium px-2"
+                                                                        title="Enviar NF-e por E-mail (XML e DANFE)"
+                                                                    >
+                                                                        <Mail size={13} className="text-emerald-600" />
+                                                                    </Button>
 
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => { setSelectedDocForCorrection(doc); setIsCorrectionModalOpen(true); }}
-                                                                className="h-8 text-xs bg-white text-purple-700 border-purple-200 hover:bg-purple-50 font-medium px-2"
-                                                                title="Emitir Carta de Correção (CC-e)"
-                                                            >
-                                                                <FileSignature size={13} className="text-purple-600" />
-                                                            </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => { setSelectedDocForCorrection(doc); setIsCorrectionModalOpen(true); }}
+                                                                        className="h-8 text-xs bg-white text-purple-700 border-purple-200 hover:bg-purple-50 font-medium px-2"
+                                                                        title="Emitir Carta de Correção (CC-e)"
+                                                                    >
+                                                                        <FileSignature size={13} className="text-purple-600" />
+                                                                    </Button>
 
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => { setSelectedDocForCancel(doc); setIsCancelModalOpen(true); }}
-                                                                className="h-8 text-xs bg-white text-rose-700 border-rose-200 hover:bg-rose-50 font-medium px-2"
-                                                                title="Cancelar NF-e na SEFAZ"
-                                                            >
-                                                                <Ban size={13} className="text-rose-600" />
-                                                            </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => { setSelectedDocForCancel(doc); setIsCancelModalOpen(true); }}
+                                                                        className="h-8 text-xs bg-white text-rose-700 border-rose-200 hover:bg-rose-50 font-medium px-2"
+                                                                        title="Cancelar NF-e na SEFAZ"
+                                                                    >
+                                                                        <Ban size={13} className="text-rose-600" />
+                                                                    </Button>
+                                                                </>
+                                                            )}
                                                         </>
                                                     )}
 
-                                                    {isPendingOrRejected && (
+                                                    {canManageFiscal && isPendingOrRejected && (
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -463,7 +517,7 @@ export default function CompanyFiscalDocumentsPage() {
                     <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5 mr-3">
                             <span>Linhas por página:</span>
-                            <Select value={String(pageSize)} onValueChange={(val) => { setPageSize(Number(val)); setPage(1); }}>
+                            <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
                                 <SelectTrigger className="h-8 w-16 bg-white text-xs font-mono"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="10">10</SelectItem>
@@ -477,7 +531,7 @@ export default function CompanyFiscalDocumentsPage() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            onClick={() => handlePageChange(Math.max(1, page - 1))}
                             disabled={page <= 1 || isLoading}
                             className="h-8 text-xs bg-white"
                         >
@@ -491,7 +545,7 @@ export default function CompanyFiscalDocumentsPage() {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                            onClick={() => handlePageChange(Math.min(totalPages, page + 1))}
                             disabled={page >= totalPages || isLoading}
                             className="h-8 text-xs bg-white"
                         >
@@ -501,67 +555,71 @@ export default function CompanyFiscalDocumentsPage() {
                 </div>
             </Card>
 
-            {/* MODAL DISPARO MANUAL DE E-MAIL */}
-            <SendNfeEmailModal
-                open={isEmailModalOpen}
-                onOpenChange={setIsEmailModalOpen}
-                document={selectedDocForEmail}
-                defaultEmail={selectedDocForEmail?.customerEmail || selectedDocForEmail?.recipientEmail || ''}
-            />
+            {/* MODAIS FISCAIS (EMISSÃO / EVENTOS SEFAZ) */}
+            {canEmitFiscal && (
+                <>
+                    <SendNfeEmailModal
+                        open={isEmailModalOpen}
+                        onOpenChange={setIsEmailModalOpen}
+                        document={selectedDocForEmail}
+                        defaultEmail={selectedDocForEmail?.customerEmail || selectedDocForEmail?.recipientEmail || ''}
+                    />
 
-            {/* MODAL CANCELAMENTO */}
-            <CancelNfeModal
-                open={isCancelModalOpen}
-                onOpenChange={setIsCancelModalOpen}
-                orderId={selectedDocForCancel?.outboundOrderId}
-                documentId={selectedDocForCancel?.id}
-                orderNumber={selectedDocForCancel?.outboundOrderNumber || 'Avulsa'}
-                accessKey={selectedDocForCancel?.accessKey}
-                onSuccess={loadDocuments}
-            />
+                    <CancelNfeModal
+                        open={isCancelModalOpen}
+                        onOpenChange={setIsCancelModalOpen}
+                        orderId={selectedDocForCancel?.outboundOrderId}
+                        documentId={selectedDocForCancel?.id}
+                        orderNumber={selectedDocForCancel?.outboundOrderNumber || 'Avulsa'}
+                        accessKey={selectedDocForCancel?.accessKey}
+                        onSuccess={triggerReload}
+                    />
 
-            {/* MODAL CARTA DE CORREÇÃO (CC-e) */}
-            <CorrectionLetterModal
-                open={isCorrectionModalOpen}
-                onOpenChange={setIsCorrectionModalOpen}
-                orderId={selectedDocForCorrection?.outboundOrderId}
-                documentId={selectedDocForCorrection?.id}
-                orderNumber={selectedDocForCorrection?.outboundOrderNumber || 'Avulsa'}
-                accessKey={selectedDocForCorrection?.accessKey}
-                onSuccess={loadDocuments}
-            />
+                    <CorrectionLetterModal
+                        open={isCorrectionModalOpen}
+                        onOpenChange={setIsCorrectionModalOpen}
+                        orderId={selectedDocForCorrection?.outboundOrderId}
+                        documentId={selectedDocForCorrection?.id}
+                        orderNumber={selectedDocForCorrection?.outboundOrderNumber || 'Avulsa'}
+                        accessKey={selectedDocForCorrection?.accessKey}
+                        onSuccess={triggerReload}
+                    />
+                </>
+            )}
 
-            {/* ALERTA DE EXCLUSÃO DE DOCUMENTO FISCAL (SHADCN/UI) */}
-            <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                            <Trash2 className="h-5 w-5" /> Excluir Documento Fiscal?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Tem certeza de que deseja remover o documento fiscal{' '}
-                            <strong className="text-slate-900 font-mono">
-                                {docToDelete?.accessKey
-                                    ? `${docToDelete.accessKey.substring(0, 8)}...${docToDelete.accessKey.substring(36)}`
-                                    : `#${docToDelete?.id}`}
-                            </strong>?
-                            <br /><br />
-                            Esta ação removerá a nota rejeitada/pendente e permitirá gerar uma nova NF-e sem bloqueios de notas ativas.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeletingDoc}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmDeleteDoc}
-                            disabled={isDeletingDoc}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Exclusão
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* ALERTA DE EXCLUSÃO DE DOCUMENTO FISCAL */}
+            {canManageFiscal && (
+                <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                                <Trash2 className="h-5 w-5" /> Excluir Documento Fiscal?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Tem certeza de que deseja remover o documento fiscal{' '}
+                                <strong className="text-slate-900 font-mono">
+                                    {docToDelete?.accessKey
+                                        ? `${docToDelete.accessKey.substring(0, 8)}...${docToDelete.accessKey.substring(36)}`
+                                        : `#${docToDelete?.id}`}
+                                </strong>?
+                                <br /><br />
+                                Esta ação removerá a nota rejeitada/pendente e permitirá gerar uma nova NF-e sem bloqueios de notas ativas.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeletingDoc}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmDeleteDoc}
+                                disabled={isDeletingDoc}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeletingDoc ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Exclusão
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

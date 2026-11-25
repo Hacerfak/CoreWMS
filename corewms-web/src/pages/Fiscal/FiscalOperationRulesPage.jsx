@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -25,8 +26,12 @@ import { toast } from 'sonner';
 export default function FiscalOperationRulesPage() {
     const navigate = useNavigate();
 
+    const canAccessRules = useHasPermission(['fiscal:manage', 'fiscal:view']);
+    const canManageFiscal = useHasPermission('fiscal:manage');
+
     const [rules, setRules] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(canAccessRules);
+    const [refreshTick, setRefreshTick] = useState(0);
     const [search, setSearch] = useState('');
     const [expandedRuleIds, setExpandedRuleIds] = useState({});
 
@@ -35,28 +40,38 @@ export default function FiscalOperationRulesPage() {
     const [exceptionToDelete, setExceptionToDelete] = useState(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const loadRules = async () => {
-        try {
-            setIsLoading(true);
-            const res = await customInstance({ url: '/api/fiscal/rules', method: 'GET' });
-            setRules(res?.data || res || []);
-        } catch {
-            toast.error('Erro ao carregar naturezas de operação fiscal.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!canAccessRules) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        loadRules();
-    }, []);
+        if (!canAccessRules) return;
+
+        let isMounted = true;
+        customInstance({ url: '/api/fiscal/rules', method: 'GET' })
+            .then(res => {
+                if (isMounted) setRules(res?.data || res || []);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar naturezas de operação fiscal.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [canAccessRules, refreshTick]);
 
     const toggleExpand = (ruleId) => {
         setExpandedRuleIds(prev => ({ ...prev, [ruleId]: !prev[ruleId] }));
     };
 
     const handleConfirmDeleteException = async () => {
-        if (!exceptionToDelete) return;
+        if (!exceptionToDelete || !canManageFiscal) return;
         try {
             setIsDeleting(true);
             await customInstance({
@@ -65,7 +80,7 @@ export default function FiscalOperationRulesPage() {
             });
             toast.success('Linha de exceção fiscal excluída com sucesso!');
             setExceptionToDelete(null);
-            loadRules();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir exceção fiscal.');
         } finally {
@@ -74,23 +89,24 @@ export default function FiscalOperationRulesPage() {
     };
 
     const handleToggleActive = async (id) => {
+        if (!canManageFiscal) return;
         try {
             await customInstance({ url: `/api/fiscal/rules/${id}/toggle`, method: 'PATCH' });
             toast.success('Status da natureza atualizado!');
-            loadRules();
+            triggerReload();
         } catch {
             toast.error('Erro ao alterar status.');
         }
     };
 
     const handleConfirmDeleteRule = async () => {
-        if (!ruleToDelete) return;
+        if (!ruleToDelete || !canManageFiscal) return;
         try {
             setIsDeleting(true);
             await customInstance({ url: `/api/fiscal/rules/${ruleToDelete.id}`, method: 'DELETE' });
             toast.success('Natureza de Operação excluída com sucesso!');
             setRuleToDelete(null);
-            loadRules();
+            triggerReload();
         } catch (error) {
             toast.error(error.response?.data?.message || 'Erro ao excluir natureza fiscal.');
         } finally {
@@ -116,6 +132,8 @@ export default function FiscalOperationRulesPage() {
         }
     };
 
+    const colSpanCount = canManageFiscal ? 8 : 7;
+
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in duration-300">
             {/* CABEÇALHO */}
@@ -126,9 +144,11 @@ export default function FiscalOperationRulesPage() {
                         Configure a matriz tributária universal (CFOP, ICMS, ICMS-ST, IPI, PIS/COFINS, IBS/CBS) e as linhas de exceção.
                     </p>
                 </div>
-                <Button onClick={() => navigate('/fiscal/regras/nova')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
-                    <Plus className="mr-1.5 h-4 w-4" /> Nova Natureza de Operação
-                </Button>
+                {canManageFiscal && (
+                    <Button onClick={() => navigate('/fiscal/regras/nova')} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
+                        <Plus className="mr-1.5 h-4 w-4" /> Nova Natureza de Operação
+                    </Button>
+                )}
             </div>
 
             {/* TABELA PRINCIPAL */}
@@ -156,13 +176,13 @@ export default function FiscalOperationRulesPage() {
                                 <TableHead className="text-center">Tributação Base (ICMS / IPI / PIS)</TableHead>
                                 <TableHead className="text-center">Exceções</TableHead>
                                 <TableHead className="text-center">Status</TableHead>
-                                <TableHead className="text-right">Ações</TableHead>
+                                {canManageFiscal && <TableHead className="text-right">Ações</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-32 text-center">
+                                    <TableCell colSpan={colSpanCount} className="h-32 text-center">
                                         <div className="flex justify-center items-center gap-2 text-slate-500 text-xs">
                                             <Loader2 className="animate-spin h-4 w-4 text-orange-600" /> Carregando naturezas de operação...
                                         </div>
@@ -170,7 +190,7 @@ export default function FiscalOperationRulesPage() {
                                 </TableRow>
                             ) : filteredRules.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={8} className="h-28 text-center text-slate-400 italic">
+                                    <TableCell colSpan={colSpanCount} className="h-28 text-center text-slate-400 italic">
                                         Nenhuma natureza de operação cadastrada.
                                     </TableCell>
                                 </TableRow>
@@ -210,35 +230,43 @@ export default function FiscalOperationRulesPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <Switch checked={rule.isActive} onCheckedChange={() => handleToggleActive(rule.id)} />
+                                                    <Switch
+                                                        checked={rule.isActive}
+                                                        disabled={!canManageFiscal}
+                                                        onCheckedChange={() => handleToggleActive(rule.id)}
+                                                    />
                                                 </TableCell>
-                                                <TableCell className="text-right space-x-1">
-                                                    <Button size="sm" variant="ghost" onClick={() => navigate(`/fiscal/regras/${rule.id}`)} className="h-7 w-7 p-0" title="Editar Natureza Completa">
-                                                        <Pencil className="h-3.5 w-3.5 text-slate-600" />
-                                                    </Button>
-                                                    <Button size="sm" variant="ghost" onClick={() => setRuleToDelete(rule)} className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50" title="Excluir">
-                                                        <Trash2 className="h-3.5 w-3.5" />
-                                                    </Button>
-                                                </TableCell>
+                                                {canManageFiscal && (
+                                                    <TableCell className="text-right space-x-1">
+                                                        <Button size="sm" variant="ghost" onClick={() => navigate(`/fiscal/regras/${rule.id}`)} className="h-7 w-7 p-0" title="Editar Natureza Completa">
+                                                            <Pencil className="h-3.5 w-3.5 text-slate-600" />
+                                                        </Button>
+                                                        <Button size="sm" variant="ghost" onClick={() => setRuleToDelete(rule)} className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50" title="Excluir">
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </TableCell>
+                                                )}
                                             </TableRow>
 
                                             {/* LINHAS DE EXCEÇÃO EXPANDIDAS */}
                                             {isExpanded && (
                                                 <TableRow className="bg-slate-50/80">
-                                                    <TableCell colSpan={8} className="p-3 pl-12">
+                                                    <TableCell colSpan={colSpanCount} className="p-3 pl-12">
                                                         <div className="space-y-2 border border-slate-200 rounded-lg p-3 bg-white">
                                                             <div className="flex justify-between items-center">
-                                                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+                                                                <span className="font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
                                                                     <Filter size={13} className="text-orange-600" /> Exceções Tributárias Vinculadas ({excCount})
                                                                 </span>
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    onClick={() => navigate(`/fiscal/regras/${rule.id}`)}
-                                                                    className="h-7 text-[11px]"
-                                                                >
-                                                                    <Pencil size={12} className="mr-1" /> Gerenciar Exceções na Regra
-                                                                </Button>
+                                                                {canManageFiscal && (
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => navigate(`/fiscal/regras/${rule.id}`)}
+                                                                        className="h-7 text-[11px]"
+                                                                    >
+                                                                        <Pencil size={12} className="mr-1" /> Gerenciar Exceções na Regra
+                                                                    </Button>
+                                                                )}
                                                             </div>
 
                                                             {excCount === 0 ? (
@@ -254,7 +282,7 @@ export default function FiscalOperationRulesPage() {
                                                                             <TableHead className="text-center">ICMS</TableHead>
                                                                             <TableHead className="text-center">IPI</TableHead>
                                                                             <TableHead className="text-center">PIS / COFINS</TableHead>
-                                                                            <TableHead className="text-right">Ações</TableHead>
+                                                                            {canManageFiscal && <TableHead className="text-right">Ações</TableHead>}
                                                                         </TableRow>
                                                                     </TableHeader>
                                                                     <TableBody>
@@ -290,26 +318,28 @@ export default function FiscalOperationRulesPage() {
                                                                                 <TableCell className="text-center font-mono">
                                                                                     {exc.cstPis ? <span>PIS {exc.cstPis}</span> : <span className="text-slate-400 italic">Padrão</span>}
                                                                                 </TableCell>
-                                                                                <TableCell className="text-right space-x-1">
-                                                                                    <Button
-                                                                                        size="sm"
-                                                                                        variant="ghost"
-                                                                                        onClick={() => navigate(`/fiscal/regras/${rule.id}/excecoes/${exc.id}`)}
-                                                                                        className="h-6 w-6 p-0"
-                                                                                        title="Editar exceção"
-                                                                                    >
-                                                                                        <Pencil size={12} className="text-slate-600" />
-                                                                                    </Button>
-                                                                                    <Button
-                                                                                        size="sm"
-                                                                                        variant="ghost"
-                                                                                        onClick={() => setExceptionToDelete({ ruleId: rule.id, exceptionId: exc.id })}
-                                                                                        className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-50"
-                                                                                        title="Remover exceção"
-                                                                                    >
-                                                                                        <Trash2 size={12} />
-                                                                                    </Button>
-                                                                                </TableCell>
+                                                                                {canManageFiscal && (
+                                                                                    <TableCell className="text-right space-x-1">
+                                                                                        <Button
+                                                                                            size="sm"
+                                                                                            variant="ghost"
+                                                                                            onClick={() => navigate(`/fiscal/regras/${rule.id}/excecoes/${exc.id}`)}
+                                                                                            className="h-6 w-6 p-0"
+                                                                                            title="Editar exceção"
+                                                                                        >
+                                                                                            <Pencil size={12} className="text-slate-600" />
+                                                                                        </Button>
+                                                                                        <Button
+                                                                                            size="sm"
+                                                                                            variant="ghost"
+                                                                                            onClick={() => setExceptionToDelete({ ruleId: rule.id, exceptionId: exc.id })}
+                                                                                            className="h-6 w-6 p-0 text-rose-600 hover:bg-rose-50"
+                                                                                            title="Remover exceção"
+                                                                                        >
+                                                                                            <Trash2 size={12} />
+                                                                                        </Button>
+                                                                                    </TableCell>
+                                                                                )}
                                                                             </TableRow>
                                                                         ))}
                                                                     </TableBody>
@@ -328,60 +358,64 @@ export default function FiscalOperationRulesPage() {
                 </CardContent>
             </Card>
 
-            {/* ALERTA DE EXCLUSÃO DA NATUREZA DE OPERAÇÃO (SHADCN/UI) */}
-            <AlertDialog open={!!ruleToDelete} onOpenChange={(open) => !open && setRuleToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                            <Trash2 className="h-5 w-5" /> Excluir Natureza de Operação?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Tem certeza de que deseja remover a natureza de operação{' '}
-                            <strong className="text-slate-900">{ruleToDelete?.description}</strong>?
-                            <br /><br />
-                            Todas as linhas de exceção vinculadas a esta regra também serão excluídas permanentemente.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmDeleteRule}
-                            disabled={isDeleting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Confirmar Exclusão
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* ALERTA DE EXCLUSÃO DA NATUREZA DE OPERAÇÃO */}
+            {canManageFiscal && (
+                <AlertDialog open={!!ruleToDelete} onOpenChange={(open) => !open && setRuleToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                                <Trash2 className="h-5 w-5" /> Excluir Natureza de Operação?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Tem certeza de que deseja remover a natureza de operação{' '}
+                                <strong className="text-slate-900">{ruleToDelete?.description}</strong>?
+                                <br /><br />
+                                Todas as linhas de exceção vinculadas a esta regra também serão excluídas permanentemente.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmDeleteRule}
+                                disabled={isDeleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Confirmar Exclusão
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
-            {/* ALERTA DE EXCLUSÃO DE LINHA DE EXCEÇÃO (SHADCN/UI) */}
-            <AlertDialog open={!!exceptionToDelete} onOpenChange={(open) => !open && setExceptionToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                            <Trash2 className="h-5 w-5" /> Remover Linha de Exceção?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Tem certeza de que deseja remover esta linha de exceção tributária?
-                            <br /><br />
-                            Os produtos e operações que atendiam a estes critérios passarão a seguir as alíquotas e CFOPs padrão da natureza base.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirmDeleteException}
-                            disabled={isDeleting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-                            Remover Exceção
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {/* ALERTA DE EXCLUSÃO DE LINHA DE EXCEÇÃO */}
+            {canManageFiscal && (
+                <AlertDialog open={!!exceptionToDelete} onOpenChange={(open) => !open && setExceptionToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                                <Trash2 className="h-5 w-5" /> Remover Linha de Exceção?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Tem certeza de que deseja remover esta linha de exceção tributária?
+                                <br /><br />
+                                Os produtos e operações que atendiam a estes critérios passarão a seguir as alíquotas e CFOPs padrão da natureza base.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirmDeleteException}
+                                disabled={isDeleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+                                Remover Exceção
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

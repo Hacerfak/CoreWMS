@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -52,8 +53,12 @@ export default function CompanyFiscalDocumentDetailsPage() {
     const { id: documentId } = useParams();
     const navigate = useNavigate();
 
+    const canViewFiscal = useHasPermission('fiscal:view');
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+
     const [doc, setDoc] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(Boolean(documentId && canViewFiscal));
+    const [refreshTick, setRefreshTick] = useState(0);
     const [downloadingType, setDownloadingType] = useState(null);
     const [hasCopiedKey, setHasCopiedKey] = useState(false);
 
@@ -62,26 +67,39 @@ export default function CompanyFiscalDocumentDetailsPage() {
     const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 
-    const loadDocumentDetails = async () => {
-        try {
-            setIsLoading(true);
-            const res = await customInstance({
-                url: `/api/fiscal/documents/${documentId}`,
-                method: 'GET'
-            });
-            const data = res?.data || res;
-            setDoc(data);
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Erro ao carregar detalhes do documento fiscal.');
-            navigate('/fiscal/documentos');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!documentId || !canViewFiscal) return;
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
     useEffect(() => {
-        if (documentId) loadDocumentDetails();
-    }, [documentId, ]);
+        if (!documentId || !canViewFiscal) return;
+
+        let isMounted = true;
+
+        customInstance({
+            url: `/api/fiscal/documents/${documentId}`,
+            method: 'GET'
+        })
+            .then(res => {
+                if (!isMounted) return;
+                const data = res?.data || res;
+                setDoc(data);
+            })
+            .catch(error => {
+                if (!isMounted) return;
+                toast.error(error.response?.data?.message || 'Erro ao carregar detalhes do documento fiscal.');
+                navigate('/fiscal/documentos');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [documentId, canViewFiscal, navigate, refreshTick]);
 
     const handleCopyAccessKey = () => {
         if (!doc?.accessKey) return;
@@ -92,6 +110,8 @@ export default function CompanyFiscalDocumentDetailsPage() {
     };
 
     const handleDownloadXml = async (targetDocId, accessKey, isEvent = false) => {
+        if (!canViewFiscal) return;
+
         try {
             setDownloadingType('xml');
             const response = await customInstance({
@@ -119,6 +139,8 @@ export default function CompanyFiscalDocumentDetailsPage() {
     };
 
     const handleDownloadPdf = async (targetDocId, accessKey, isEvent = false) => {
+        if (!canViewFiscal) return;
+
         try {
             setDownloadingType('pdf');
             const response = await customInstance({
@@ -199,8 +221,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
 
                 {/* BOTÕES DE AÇÕES NO CABEÇALHO */}
                 <div className="flex items-center gap-2 flex-wrap">
-                    {/* DOWNLOAD XML */}
-                    {doc?.accessKey && (
+                    {canViewFiscal && doc?.accessKey && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -213,8 +234,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
                         </Button>
                     )}
 
-                    {/* DOWNLOAD DANFE */}
-                    {isAuthorized && (
+                    {canViewFiscal && isAuthorized && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -227,8 +247,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
                         </Button>
                     )}
 
-                    {/* DISPARO MANUAL DE E-MAIL */}
-                    {isAuthorized && (
+                    {canEmitFiscal && isAuthorized && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -240,8 +259,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
                         </Button>
                     )}
 
-                    {/* EVENTOS SEFAZ */}
-                    {isAuthorized && isNfeOriginal && (
+                    {canEmitFiscal && isAuthorized && isNfeOriginal && (
                         <>
                             <Button
                                 variant="outline"
@@ -398,7 +416,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
 
                     {/* DADOS DO EMITENTE E DESTINATÁRIO */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* EMITENTE */}
                         <Card className="border-slate-200/80 bg-white shadow-2xs">
                             <CardHeader className="p-4 border-b bg-slate-50/60">
                                 <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
@@ -431,7 +448,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
                             </CardContent>
                         </Card>
 
-                        {/* DESTINATÁRIO */}
                         <Card className="border-slate-200/80 bg-white shadow-2xs">
                             <CardHeader className="p-4 border-b bg-slate-50/60">
                                 <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
@@ -464,7 +480,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
                         </Card>
                     </div>
 
-                    {/* OBSERVAÇÕES FISCAIS (INFCPL) */}
                     {doc?.informacoesComplementares && (
                         <Card className="border-slate-200/80 bg-white shadow-2xs">
                             <CardHeader className="p-3 border-b bg-slate-50/60">
@@ -590,7 +605,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
                                 </div>
                             </div>
 
-                            {/* DADOS DA TRANSPORTADORA */}
                             <div className="pt-2 border-t border-slate-100 space-y-2">
                                 <span className="font-bold text-slate-800 uppercase text-[11px] block">Dados da Transportadora Contratada</span>
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50/60 p-3 rounded-xl border">
@@ -634,7 +648,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
                             )}
                         </CardHeader>
                         <CardContent className="p-5 space-y-4 text-xs">
-                            {/* DADOS DA FATURA */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border">
                                 <div>
                                     <span className="text-[10px] text-slate-400 block uppercase font-bold">Número da Fatura</span>
@@ -654,7 +667,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
                                 </div>
                             </div>
 
-                            {/* DUPLICATAS */}
                             <div className="pt-2">
                                 <span className="font-bold text-slate-800 uppercase text-[11px] block mb-2">Duplicatas / Parcelas a Receber</span>
                                 {!doc?.duplicatas || doc.duplicatas.length === 0 ? (
@@ -685,7 +697,6 @@ export default function CompanyFiscalDocumentDetailsPage() {
                                 )}
                             </div>
 
-                            {/* FORMAS DE PAGAMENTO */}
                             {doc?.pagamentos && doc.pagamentos.length > 0 && (
                                 <div className="pt-2 border-t border-slate-100">
                                     <span className="font-bold text-slate-800 uppercase text-[11px] block mb-2">Forma de Pagamento Declarada</span>
@@ -716,7 +727,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
                                 </p>
                             </div>
 
-                            {isAuthorized && isNfeOriginal && (
+                            {canEmitFiscal && isAuthorized && isNfeOriginal && (
                                 <div className="flex items-center gap-2">
                                     <Button
                                         size="sm"
@@ -752,7 +763,7 @@ export default function CompanyFiscalDocumentDetailsPage() {
                                                 <TableHead>Tipo de Evento</TableHead>
                                                 <TableHead>Protocolo SEFAZ</TableHead>
                                                 <TableHead>Mensagem de Retorno</TableHead>
-                                                <TableHead className="text-right w-44">Downloads</TableHead>
+                                                {canViewFiscal && <TableHead className="text-right w-44">Downloads</TableHead>}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -768,26 +779,28 @@ export default function CompanyFiscalDocumentDetailsPage() {
                                                     <TableCell className="text-slate-600 font-sans truncate max-w-xs" title={evt.returnMessage}>
                                                         {evt.returnMessage || '-'}
                                                     </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <div className="flex justify-end gap-1.5">
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleDownloadXml(evt.id, doc.accessKey, true)}
-                                                                className="h-7 text-[11px] px-2 bg-white"
-                                                            >
-                                                                XML
-                                                            </Button>
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => handleDownloadPdf(evt.id, doc.accessKey, true)}
-                                                                className="h-7 text-[11px] px-2 bg-white"
-                                                            >
-                                                                PDF
-                                                            </Button>
-                                                        </div>
-                                                    </TableCell>
+                                                    {canViewFiscal && (
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end gap-1.5">
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleDownloadXml(evt.id, doc.accessKey, true)}
+                                                                    className="h-7 text-[11px] px-2 bg-white"
+                                                                >
+                                                                    XML
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    onClick={() => handleDownloadPdf(evt.id, doc.accessKey, true)}
+                                                                    className="h-7 text-[11px] px-2 bg-white"
+                                                                >
+                                                                    PDF
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    )}
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -799,35 +812,37 @@ export default function CompanyFiscalDocumentDetailsPage() {
                 </TabsContent>
             </Tabs>
 
-            {/* MODAL DISPARO MANUAL DE E-MAIL */}
-            <SendNfeEmailModal
-                open={isEmailModalOpen}
-                onOpenChange={setIsEmailModalOpen}
-                document={doc}
-                defaultEmail={doc?.destinatarioEmail || doc?.customerEmail || ''}
-            />
+            {/* MODAIS FISCAIS (EMISSÃO / EVENTOS SEFAZ) */}
+            {canEmitFiscal && (
+                <>
+                    <SendNfeEmailModal
+                        open={isEmailModalOpen}
+                        onOpenChange={setIsEmailModalOpen}
+                        document={doc}
+                        defaultEmail={doc?.destinatarioEmail || doc?.customerEmail || ''}
+                    />
 
-            {/* MODAL DE CANCELAMENTO */}
-            <CancelNfeModal
-                open={isCancelModalOpen}
-                onOpenChange={setIsCancelModalOpen}
-                documentId={doc?.id}
-                orderId={doc?.outboundOrderId}
-                orderNumber={doc?.outboundOrderNumber || 'Avulsa'}
-                accessKey={doc?.accessKey}
-                onSuccess={loadDocumentDetails}
-            />
+                    <CancelNfeModal
+                        open={isCancelModalOpen}
+                        onOpenChange={setIsCancelModalOpen}
+                        documentId={doc?.id}
+                        orderId={doc?.outboundOrderId}
+                        orderNumber={doc?.outboundOrderNumber || 'Avulsa'}
+                        accessKey={doc?.accessKey}
+                        onSuccess={triggerReload}
+                    />
 
-            {/* MODAL DE CARTA DE CORREÇÃO (CC-e) */}
-            <CorrectionLetterModal
-                open={isCorrectionModalOpen}
-                onOpenChange={setIsCorrectionModalOpen}
-                documentId={doc?.id}
-                orderId={doc?.outboundOrderId}
-                orderNumber={doc?.outboundOrderNumber || 'Avulsa'}
-                accessKey={doc?.accessKey}
-                onSuccess={loadDocumentDetails}
-            />
+                    <CorrectionLetterModal
+                        open={isCorrectionModalOpen}
+                        onOpenChange={setIsCorrectionModalOpen}
+                        documentId={doc?.id}
+                        orderId={doc?.outboundOrderId}
+                        orderNumber={doc?.outboundOrderNumber || 'Avulsa'}
+                        accessKey={doc?.accessKey}
+                        onSuccess={triggerReload}
+                    />
+                </>
+            )}
         </div>
     );
 }

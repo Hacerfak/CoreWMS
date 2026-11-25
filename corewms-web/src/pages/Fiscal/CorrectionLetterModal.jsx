@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
     DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { FileSignature, Loader2, AlertCircle } from 'lucide-react';
+import { FileSignature, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function CorrectionLetterModal({
@@ -17,6 +18,8 @@ export default function CorrectionLetterModal({
     accessKey,
     onSuccess
 }) {
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+
     const [correctionText, setCorrectionText] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -27,6 +30,7 @@ export default function CorrectionLetterModal({
 
     const handleSubmit = async (e) => {
         e?.preventDefault();
+        if (!canEmitFiscal) return;
 
         if (!targetId) {
             return toast.error('Identificador da NF-e não informado.');
@@ -107,7 +111,7 @@ export default function CorrectionLetterModal({
                             placeholder="Descreva as correções necessárias com clareza (ex: Onde constava endereço de entrega X, considere endereço Y; Informações complementares corrigidas para...)"
                             className="w-full min-h-[110px] rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-sans resize-none"
                             maxLength={1000}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !canEmitFiscal}
                         />
 
                         {charCount > 0 && charCount < 15 && (
@@ -127,23 +131,25 @@ export default function CorrectionLetterModal({
                         >
                             Voltar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting || !isTextValid}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 px-4 text-xs"
-                        >
-                            {isSubmitting ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    Transmitindo CC-e...
-                                </>
-                            ) : (
-                                <>
-                                    <FileSignature className="h-4 w-4 mr-1.5" />
-                                    Transmitir Carta de Correção
-                                </>
-                            )}
-                        </Button>
+                        {canEmitFiscal && (
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting || !isTextValid}
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 px-4 text-xs"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        Transmitindo CC-e...
+                                    </>
+                                ) : (
+                                    <>
+                                        <FileSignature className="h-4 w-4 mr-1.5" />
+                                        Transmitir Carta de Correção
+                                    </>
+                                )}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

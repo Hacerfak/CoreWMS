@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -16,17 +17,24 @@ import { Loader2, Mail, Send, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SendNfeEmailModal({ open, onOpenChange, document, defaultEmail = '' }) {
-    const [destinationEmail, setDestinationEmail] = useState('');
+    const canEmitFiscal = useHasPermission('fiscal:emit');
+
+    const [destinationEmail, setDestinationEmail] = useState(
+        () => defaultEmail || document?.customerEmail || ''
+    );
     const [isSending, setIsSending] = useState(false);
 
-    useEffect(() => {
-        if (open) {
+    const handleOpenChange = (nextOpen) => {
+        if (isSending) return;
+        if (nextOpen) {
             setDestinationEmail(defaultEmail || document?.customerEmail || '');
         }
-    }, [open, defaultEmail, document]);
+        onOpenChange(nextOpen);
+    };
 
     const handleSend = async (e) => {
         e?.preventDefault();
+        if (!canEmitFiscal) return;
 
         if (!destinationEmail || !destinationEmail.includes('@')) {
             return toast.warning('Por favor, informe um endereço de e-mail válido.');
@@ -51,7 +59,7 @@ export default function SendNfeEmailModal({ open, onOpenChange, document, defaul
     if (!document) return null;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[480px] bg-white">
                 <DialogHeader>
                     <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -86,6 +94,7 @@ export default function SendNfeEmailModal({ open, onOpenChange, document, defaul
                             autoFocus
                             placeholder="exemplo@empresa.com.br"
                             value={destinationEmail}
+                            disabled={isSending || !canEmitFiscal}
                             onChange={(e) => setDestinationEmail(e.target.value)}
                             className="h-10 text-xs bg-white font-mono"
                             required
@@ -111,18 +120,20 @@ export default function SendNfeEmailModal({ open, onOpenChange, document, defaul
                         >
                             Cancelar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSending || !destinationEmail}
-                            className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 text-xs px-4 shadow-xs"
-                        >
-                            {isSending ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                            ) : (
-                                <Send className="h-3.5 w-3.5 mr-1.5" />
-                            )}
-                            Disparar E-mail
-                        </Button>
+                        {canEmitFiscal && (
+                            <Button
+                                type="submit"
+                                disabled={isSending || !destinationEmail}
+                                className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 text-xs px-4 shadow-xs"
+                            >
+                                {isSending ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                                ) : (
+                                    <Send className="h-3.5 w-3.5 mr-1.5" />
+                                )}
+                                Disparar E-mail
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

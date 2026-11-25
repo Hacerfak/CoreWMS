@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -49,8 +50,11 @@ export default function CreateOrEditRuleExceptionPage() {
     const navigate = useNavigate();
     const isEditing = Boolean(exceptionId);
 
+    const canAccessRule = useHasPermission(['fiscal:manage', 'fiscal:view']);
+    const canManageFiscal = useHasPermission('fiscal:manage');
+
     const [activeTab, setActiveTab] = useState('gatilhos');
-    const [isLoadingInitial, setIsLoadingInitial] = useState(true);
+    const [isLoadingInitial, setIsLoadingInitial] = useState(Boolean(ruleId && canAccessRule));
     const [isSaving, setIsSaving] = useState(false);
     const [parentRule, setParentRule] = useState(null);
 
@@ -95,10 +99,15 @@ export default function CreateOrEditRuleExceptionPage() {
     const [additionalNotes, setAdditionalNotes] = useState('');
 
     useEffect(() => {
+        if (!ruleId || !canAccessRule) return;
+
+        let isMounted = true;
+
         const loadData = async () => {
             try {
-                setIsLoadingInitial(true);
                 const ruleRes = await customInstance({ url: `/api/fiscal/rules/${ruleId}`, method: 'GET' });
+                if (!isMounted) return;
+
                 const rule = ruleRes?.data || ruleRes;
                 setParentRule(rule);
 
@@ -147,23 +156,24 @@ export default function CreateOrEditRuleExceptionPage() {
                     }
                 }
             } catch {
+                if (!isMounted) return;
                 toast.error('Erro ao carregar dados da regra fiscal.');
                 navigate(`/fiscal/regras/${ruleId}`);
             } finally {
-                setIsLoadingInitial(false);
+                if (isMounted) setIsLoadingInitial(false);
             }
         };
 
         loadData();
-    }, [
-	ruleId,
-	exceptionId,
-	isEditing,
-	navigate
-]);
+
+        return () => {
+            isMounted = false;
+        };
+    }, [ruleId, exceptionId, isEditing, canAccessRule, navigate]);
 
     const handleSave = async (e) => {
         e?.preventDefault();
+        if (!canManageFiscal) return;
 
         if (cfopStateInternal && cfopStateInternal.length !== 4) {
             setActiveTab('cfop_icms');
@@ -261,17 +271,19 @@ export default function CreateOrEditRuleExceptionPage() {
                         Cancelar
                     </Button>
 
-                    <Button onClick={handleSave} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5">
-                        {isSaving ? (
-                            <>
-                                <Loader2 className="animate-spin h-4 w-4 mr-2" /> Salvando Exceção...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="h-4 w-4 mr-2" /> Salvar Exceção
-                            </>
-                        )}
-                    </Button>
+                    {canManageFiscal && (
+                        <Button onClick={handleSave} disabled={isSaving} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 px-5">
+                            {isSaving ? (
+                                <>
+                                    <Loader2 className="animate-spin h-4 w-4 mr-2" /> Salvando Exceção...
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="h-4 w-4 mr-2" /> Salvar Exceção
+                                </>
+                            )}
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -324,7 +336,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Estado de Destino (UF)</Label>
-                                        <Select value={specificDestinationState} onValueChange={setSpecificDestinationState}>
+                                        <Select value={specificDestinationState} onValueChange={setSpecificDestinationState} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-10"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="ALL">Todas as UFs (Válido Nacionalmente)</SelectItem>
@@ -341,6 +353,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={specificNcmStart}
                                             onChange={e => setSpecificNcmStart(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             placeholder="Ex: 2204 ou 82119200"
                                             className="font-mono text-xs bg-white h-10"
                                         />
@@ -349,7 +362,7 @@ export default function CreateOrEditRuleExceptionPage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Origem da Mercadoria</Label>
-                                        <Select value={specificOrigin} onValueChange={setSpecificOrigin}>
+                                        <Select value={specificOrigin} onValueChange={setSpecificOrigin} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-10 truncate"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {ORIGENS_MERCADORIA.map(o => (
@@ -379,6 +392,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cfopStateInternal}
                                             onChange={e => setCfopStateInternal(e.target.value.replace(/\D/g, ''))}
+                                            disabled={!canManageFiscal}
                                             maxLength={4}
                                             placeholder={`Padrão Regra Base: ${parentRule?.cfopStateInternal || '5906'}`}
                                             className="font-mono text-xs bg-white h-9 font-bold text-blue-700"
@@ -391,6 +405,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cfopInterstate}
                                             onChange={e => setCfopInterstate(e.target.value.replace(/\D/g, ''))}
+                                            disabled={!canManageFiscal}
                                             maxLength={4}
                                             placeholder={`Padrão Regra Base: ${parentRule?.cfopInterstate || '6906'}`}
                                             className="font-mono text-xs bg-white h-9 font-bold text-purple-700"
@@ -405,6 +420,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cstCsosnIcms}
                                             onChange={e => setCstCsosnIcms(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={3}
                                             placeholder={`Padrão: ${parentRule?.cstCsosnIcms || '400'}`}
                                             className="font-mono text-xs bg-white h-9 font-bold"
@@ -413,7 +429,7 @@ export default function CreateOrEditRuleExceptionPage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Modalidade BC ICMS (modBC)</Label>
-                                        <Select value={modBcIcms} onValueChange={setModBcIcms}>
+                                        <Select value={modBcIcms} onValueChange={setModBcIcms} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9 font-mono"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="NONE">Manter da Regra Base</SelectItem>
@@ -431,6 +447,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIcms}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIcms(e.target.value)}
                                             placeholder={`Padrão: ${parentRule?.aliqIcms || '0'}%`}
                                             className="font-mono text-xs bg-white h-9"
@@ -443,6 +460,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={reducaoBcIcms}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setReducaoBcIcms(e.target.value)}
                                             placeholder={`Padrão: ${parentRule?.reducaoBcIcms || '0'}%`}
                                             className="font-mono text-xs bg-white h-9"
@@ -457,6 +475,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqCreditoSimples}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqCreditoSimples(e.target.value)}
                                             placeholder="Ex: 2.82"
                                             className="font-mono text-xs bg-white h-9"
@@ -465,7 +484,7 @@ export default function CreateOrEditRuleExceptionPage() {
 
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Motivo da Desoneração ICMS</Label>
-                                        <Select value={motivoDesoneracaoIcms} onValueChange={setMotivoDesoneracaoIcms}>
+                                        <Select value={motivoDesoneracaoIcms} onValueChange={setMotivoDesoneracaoIcms} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 {MOTIVOS_DESONERACAO.map(m => (
@@ -491,7 +510,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold text-slate-800">Modalidade BC ST (modBCST)</Label>
-                                        <Select value={modBcIcmsSt} onValueChange={setModBcIcmsSt}>
+                                        <Select value={modBcIcmsSt} onValueChange={setModBcIcmsSt} disabled={!canManageFiscal}>
                                             <SelectTrigger className="bg-white text-xs h-9 font-mono"><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="NONE">Manter da Regra Base</SelectItem>
@@ -511,6 +530,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={mvaIcmsSt}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setMvaIcmsSt(e.target.value)}
                                             placeholder="Ex: 40.00"
                                             className="font-mono text-xs bg-white h-9"
@@ -523,6 +543,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={reducaoBcIcmsSt}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setReducaoBcIcmsSt(e.target.value)}
                                             placeholder="Ex: 10.00"
                                             className="font-mono text-xs bg-white h-9"
@@ -535,6 +556,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIcmsSt}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIcmsSt(e.target.value)}
                                             placeholder="Ex: 18.00"
                                             className="font-mono text-xs bg-white h-9"
@@ -560,6 +582,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cstIpi}
                                             onChange={e => setCstIpi(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={2}
                                             placeholder={`Padrão: ${parentRule?.cstIpi || '53'}`}
                                             className="font-mono text-xs bg-white h-9"
@@ -571,6 +594,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             type="number"
                                             value={codigoEnquadramentoIpi}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setCodigoEnquadramentoIpi(e.target.value)}
                                             placeholder="Ex: 999"
                                             className="font-mono text-xs bg-white h-9"
@@ -583,6 +607,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIpi}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIpi(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -604,6 +629,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cstPis}
                                             onChange={e => setCstPis(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={2}
                                             placeholder={`Padrão: ${parentRule?.cstPis || '08'}`}
                                             className="font-mono text-xs bg-white h-9"
@@ -616,6 +642,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqPis}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqPis(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -626,6 +653,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cstCofins}
                                             onChange={e => setCstCofins(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={2}
                                             placeholder={`Padrão: ${parentRule?.cstCofins || '08'}`}
                                             className="font-mono text-xs bg-white h-9"
@@ -638,6 +666,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqCofins}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqCofins(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -662,6 +691,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cstIbs}
                                             onChange={e => setCstIbs(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={3}
                                             placeholder="410"
                                             className="font-mono text-xs bg-white h-9"
@@ -674,6 +704,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqIbs}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqIbs(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -684,6 +715,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={cstCbs}
                                             onChange={e => setCstCbs(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={3}
                                             placeholder="410"
                                             className="font-mono text-xs bg-white h-9"
@@ -696,6 +728,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                             type="number"
                                             step="0.01"
                                             value={aliqCbs}
+                                            disabled={!canManageFiscal}
                                             onChange={e => setAliqCbs(e.target.value)}
                                             className="font-mono text-xs bg-white h-9"
                                         />
@@ -706,6 +739,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         <Input
                                             value={classificacaoTributaria}
                                             onChange={e => setClassificacaoTributaria(e.target.value)}
+                                            disabled={!canManageFiscal}
                                             maxLength={6}
                                             placeholder="410999"
                                             className="font-mono text-xs bg-white h-9"
@@ -733,6 +767,7 @@ export default function CreateOrEditRuleExceptionPage() {
                                         rows={4}
                                         value={additionalNotes}
                                         onChange={e => setAdditionalNotes(e.target.value)}
+                                        disabled={!canManageFiscal}
                                         placeholder="Texto específico a ser impresso no DANFE quando esta exceção for acionada (ex: artigo de benefício fiscal interestadual, termo de acordo, etc)..."
                                         className="w-full rounded-lg border border-slate-200 p-3 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                                     />
