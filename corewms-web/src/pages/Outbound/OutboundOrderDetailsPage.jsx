@@ -104,7 +104,7 @@ export default function OutboundOrderDetailsPage() {
                 if (!isMounted) return;
                 const data = res?.data || res;
 
-                if (!data.yardAppointment) {
+                if (!data.yardAppointment && canViewYard && data.yardAppointmentId !== null) {
                     try {
                         const yardRes = await customInstance({
                             url: `/api/yard/appointments/by-order/${orderId}`,
@@ -141,7 +141,7 @@ export default function OutboundOrderDetailsPage() {
         return () => {
             isMounted = false;
         };
-    }, [orderId, canViewOutbound, refreshTick]);
+    }, [orderId, canViewOutbound, canViewYard, refreshTick]);
 
     const toggleExpandItem = (itemId) => {
         setExpandedItemIds(prev => ({ ...prev, [itemId]: !prev[itemId] }));

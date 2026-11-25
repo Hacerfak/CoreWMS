@@ -74,20 +74,21 @@ export default function InboundOperacaoPage() {
     });
 
     const reloadYardAppointment = async () => {
-        if (!orderId || !canViewInbound) return;
+        if (!orderId || !canViewInbound || !canViewYard) return;
         try {
             const res = await customInstance({
                 url: `/api/yard/appointments/by-order/${orderId}`,
                 method: 'GET'
             });
-            setYardAppointment(res?.data || res || null);
+            const yardData = res?.data || res;
+            setYardAppointment(yardData && yardData.id ? yardData : null);
         } catch {
             setYardAppointment(null);
         }
     };
 
     useEffect(() => {
-        if (!orderId || !canViewInbound) return;
+        if (!orderId || !canViewInbound || !canViewYard || order?.yardAppointmentId === null) return;
 
         let isMounted = true;
         customInstance({
@@ -95,7 +96,9 @@ export default function InboundOperacaoPage() {
             method: 'GET'
         })
             .then(res => {
-                if (isMounted) setYardAppointment(res?.data || res || null);
+                if (!isMounted) return;
+                const yardData = res?.data || res;
+                setYardAppointment(yardData && yardData.id ? yardData : null);
             })
             .catch(() => {
                 if (isMounted) setYardAppointment(null);
@@ -104,7 +107,7 @@ export default function InboundOperacaoPage() {
         return () => {
             isMounted = false;
         };
-    }, [orderId, canViewInbound]);
+    }, [orderId, canViewInbound, canViewYard, order?.yardAppointmentId]);
 
     const { mutate: startReceiving, isPending: isStarting } = usePostApiInboundReceiveStart({
         mutation: {

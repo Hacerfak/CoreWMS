@@ -311,7 +311,7 @@ public class LinkYardAppointmentHandler :
             .FirstOrDefaultAsync(x => (x.OutboundOrderId == request.OrderId || x.InboundOrderId == request.OrderId) && x.CompanyId == companyId, ct);
 
         if (y == null)
-            return Results.NotFound(new { Message = "Nenhum agendamento vinculado a esta ordem." });
+            return Results.NoContent();
 
         var effectiveCustomerId = y.CustomerId ?? y.InboundOrder?.CustomerId ?? y.OutboundOrder?.CustomerId;
 
