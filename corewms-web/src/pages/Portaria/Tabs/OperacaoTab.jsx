@@ -1,3 +1,4 @@
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +34,8 @@ export default function OperacaoTab({
     setSelectedDockId,
     setAppointmentToLink,
 }) {
+    const canOperateYard = useHasPermission('yard:operate');
+
     const scheduledList = appointments.filter(a => a.status === 1 || a.status === 'Scheduled');
     const inYardList = appointments.filter(a => a.status === 2 || a.status === 'InYard');
     const inDockList = appointments.filter(a => a.status === 3 || a.status === 'InDock');
@@ -41,35 +44,37 @@ export default function OperacaoTab({
     return (
         <div className="flex flex-col space-y-4 h-full overflow-y-auto pr-1 pb-6">
             {/* ENTRADA RÁPIDA (CHECK-IN) */}
-            <div className="bg-white border border-slate-200/60 rounded-xl p-3.5 shadow-xs shrink-0">
-                <form
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        handleCheckin(checkinCode);
-                    }}
-                    className="flex flex-col sm:flex-row items-center gap-3"
-                >
-                    <div className="relative flex-1 w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <Input
-                            placeholder="Bipar QR Code da reserva ou digitar a placa para dar entrada rápida..."
-                            className="pl-9 bg-white h-9 text-xs font-mono border-slate-200"
-                            value={checkinCode}
-                            onChange={(e) => setCheckinCode(e.target.value.toUpperCase())}
-                        />
-                    </div>
-                    <Button
-                        type="submit"
-                        disabled={isCheckingIn || !checkinCode}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shrink-0 shadow-xs text-xs"
+            {canOperateYard && (
+                <div className="bg-white border border-slate-200/60 rounded-xl p-3.5 shadow-xs shrink-0">
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            handleCheckin(checkinCode);
+                        }}
+                        className="flex flex-col sm:flex-row items-center gap-3"
                     >
-                        {isCheckingIn ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <LogIn className="h-4 w-4 mr-1.5" />}
-                        Registrar Entrada (Check-in)
-                    </Button>
-                </form>
-            </div>
+                        <div className="relative flex-1 w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Input
+                                placeholder="Bipar QR Code da reserva ou digitar a placa para dar entrada rápida..."
+                                className="pl-9 bg-white h-9 text-xs font-mono border-slate-200"
+                                value={checkinCode}
+                                onChange={(e) => setCheckinCode(e.target.value.toUpperCase())}
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={isCheckingIn || !checkinCode}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-5 shrink-0 shadow-xs text-xs"
+                        >
+                            {isCheckingIn ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <LogIn className="h-4 w-4 mr-1.5" />}
+                            Registrar Entrada (Check-in)
+                        </Button>
+                    </form>
+                </div>
+            )}
 
-            {/* KPIS (ESTILO ESTOQUE / KARDEX) */}
+            {/* KPIS */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 shrink-0">
                 <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
                     <div>
@@ -83,7 +88,7 @@ export default function OperacaoTab({
 
                 <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
                     <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">No Pátio (Espera)</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">No Pátio (Espera)</span>
                         <span className="text-xl font-bold font-mono text-amber-700 mt-0.5 block">{inYardList.length}</span>
                     </div>
                     <div className="p-2.5 bg-amber-50 text-amber-800 border border-amber-200/60 rounded-lg shrink-0">
@@ -93,7 +98,7 @@ export default function OperacaoTab({
 
                 <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
                     <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Em Operação (Docas)</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Em Operação (Docas)</span>
                         <span className="text-xl font-bold font-mono text-blue-700 mt-0.5 block">{inDockList.length}</span>
                     </div>
                     <div className="p-2.5 bg-blue-50 text-blue-700 border border-blue-200/60 rounded-lg shrink-0">
@@ -103,7 +108,7 @@ export default function OperacaoTab({
 
                 <div className="bg-white border border-slate-200/80 rounded-xl p-3.5 shadow-2xs flex items-center justify-between">
                     <div>
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Finalizados Hoje</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Finalizados Hoje</span>
                         <span className="text-xl font-bold font-mono text-emerald-700 mt-0.5 block">{finishedList.length}</span>
                     </div>
                     <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded-lg shrink-0">
@@ -112,7 +117,7 @@ export default function OperacaoTab({
                 </div>
             </div>
 
-            {/* 4 CARDS EM 2 COLUNAS (2 CARDS POR COLUNA) */}
+            {/* 4 CARDS EM 2 COLUNAS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                 {/* COLUNA 1: ENTRADA E ESPERA */}
                 <div className="space-y-4">
@@ -160,26 +165,28 @@ export default function OperacaoTab({
                                             {!a.inboundOrderNumber && !a.outboundOrderNumber && a.invoiceNumber && <span>NF-e #{a.invoiceNumber}</span>}
                                         </div>
 
-                                        <div className="flex items-center gap-2 pt-1">
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleCheckin(a.reservationCode)}
-                                                className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                                            >
-                                                <LogIn size={13} className="mr-1" /> Dar Entrada (Check-in)
-                                            </Button>
-
-                                            {!a.inboundOrderId && !a.outboundOrderId && (
+                                        {canOperateYard && (
+                                            <div className="flex items-center gap-2 pt-1">
                                                 <Button
                                                     size="sm"
-                                                    variant="outline"
-                                                    onClick={() => setAppointmentToLink(a)}
-                                                    className="h-8 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 px-3 font-semibold bg-white"
+                                                    onClick={() => handleCheckin(a.reservationCode)}
+                                                    className="flex-1 h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
                                                 >
-                                                    <Link2 size={13} className="mr-1 text-blue-600" /> Vincular
+                                                    <LogIn size={13} className="mr-1" /> Dar Entrada (Check-in)
                                                 </Button>
-                                            )}
-                                        </div>
+
+                                                {!a.inboundOrderId && !a.outboundOrderId && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => setAppointmentToLink(a)}
+                                                        className="h-8 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 px-3 font-semibold bg-white"
+                                                    >
+                                                        <Link2 size={13} className="mr-1 text-blue-600" /> Vincular
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ))
                             )}
@@ -231,35 +238,39 @@ export default function OperacaoTab({
                                                 {!a.inboundOrderNumber && !a.outboundOrderNumber && a.invoiceNumber && <span>NF-e #{a.invoiceNumber}</span>}
                                             </div>
 
-                                            {!a.inboundOrderId && !a.outboundOrderId && (
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => setAppointmentToLink(a)}
-                                                    className="w-full h-7 text-xs border-blue-200 text-blue-700 bg-white hover:bg-blue-50 font-semibold"
-                                                >
-                                                    <Link2 size={12} className="mr-1 text-blue-600" /> Vincular Ordem Existente
-                                                </Button>
-                                            )}
+                                            {canOperateYard && (
+                                                <>
+                                                    {!a.inboundOrderId && !a.outboundOrderId && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => setAppointmentToLink(a)}
+                                                            className="w-full h-7 text-xs border-blue-200 text-blue-700 bg-white hover:bg-blue-50 font-semibold"
+                                                        >
+                                                            <Link2 size={12} className="mr-1 text-blue-600" /> Vincular Ordem Existente
+                                                        </Button>
+                                                    )}
 
-                                            <div className="grid grid-cols-2 gap-2 pt-1">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => { setDocToMoveDock(a); setSelectedDockId(a.dockLocationId || ''); }}
-                                                    className="h-8 text-xs border-blue-200 text-blue-700 bg-white hover:bg-blue-50 font-bold"
-                                                >
-                                                    <MapPin size={13} className="mr-1" /> Encostar na Doca
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => handleCheckout(a.id)}
-                                                    className="h-8 text-xs border-rose-200 text-rose-700 bg-white hover:bg-rose-50 font-bold"
-                                                >
-                                                    <LogOut size={13} className="mr-1" /> Saída (Check-out)
-                                                </Button>
-                                            </div>
+                                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => { setDocToMoveDock(a); setSelectedDockId(a.dockLocationId || ''); }}
+                                                            className="h-8 text-xs border-blue-200 text-blue-700 bg-white hover:bg-blue-50 font-bold"
+                                                        >
+                                                            <MapPin size={13} className="mr-1" /> Encostar na Doca
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleCheckout(a.id)}
+                                                            className="h-8 text-xs border-rose-200 text-rose-700 bg-white hover:bg-rose-50 font-bold"
+                                                        >
+                                                            <LogOut size={13} className="mr-1" /> Saída (Check-out)
+                                                        </Button>
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     );
                                 })
@@ -285,7 +296,7 @@ export default function OperacaoTab({
                                 </div>
                             ) : (
                                 inDockList.map(a => {
-                                    const esperaPátio = getDurationMinutes(a.arrivedAt, a.dockedAt);
+                                    const esperaPatio = getDurationMinutes(a.arrivedAt, a.dockedAt);
                                     const operacaoMin = getDurationMinutes(a.dockedAt, null);
                                     const totalMin = getDurationMinutes(a.arrivedAt, null);
 
@@ -318,7 +329,7 @@ export default function OperacaoTab({
                                             <div className="p-2.5 bg-white border border-slate-200/60 rounded-lg text-xs font-mono grid grid-cols-3 gap-2 text-center">
                                                 <div>
                                                     <span className="text-[10px] text-slate-400 block font-sans">Espera Pátio</span>
-                                                    <span className="font-semibold text-amber-800">{formatDuration(esperaPátio)}</span>
+                                                    <span className="font-semibold text-amber-800">{formatDuration(esperaPatio)}</span>
                                                 </div>
                                                 <div>
                                                     <span className="text-[10px] text-slate-400 block font-sans">Operação Doca</span>
@@ -330,13 +341,15 @@ export default function OperacaoTab({
                                                 </div>
                                             </div>
 
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleCheckout(a.id)}
-                                                className="w-full h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-1 shadow-2xs"
-                                            >
-                                                <LogOut size={13} className="mr-1" /> Liberar e Finalizar
-                                            </Button>
+                                            {canOperateYard && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleCheckout(a.id)}
+                                                    className="w-full h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-1 shadow-2xs"
+                                                >
+                                                    <LogOut size={13} className="mr-1" /> Liberar e Finalizar
+                                                </Button>
+                                            )}
                                         </div>
                                     );
                                 })
@@ -359,7 +372,7 @@ export default function OperacaoTab({
                                 </div>
                             ) : (
                                 finishedList.map(a => {
-                                    const esperaPátio = getDurationMinutes(a.arrivedAt, a.dockedAt);
+                                    const esperaPatio = getDurationMinutes(a.arrivedAt, a.dockedAt);
                                     const operacaoDoca = getDurationMinutes(a.dockedAt, a.departedAt);
                                     const permanenciaTotal = getDurationMinutes(a.arrivedAt, a.departedAt);
 
@@ -391,7 +404,7 @@ export default function OperacaoTab({
                                             </div>
 
                                             <div className="flex justify-between text-[11px] font-mono text-slate-500 pt-1 border-t border-slate-200/50">
-                                                <span>Espera: <strong className="text-amber-800">{formatDuration(esperaPátio)}</strong></span>
+                                                <span>Espera: <strong className="text-amber-800">{formatDuration(esperaPatio)}</strong></span>
                                                 <span>Operação: <strong className="text-blue-800">{formatDuration(operacaoDoca)}</strong></span>
                                             </div>
                                         </div>

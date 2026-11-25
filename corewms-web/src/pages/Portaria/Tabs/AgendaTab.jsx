@@ -1,3 +1,4 @@
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,10 +42,17 @@ export default function AgendaTab({
     setDocToCancel,
     setDocToDelete
 }) {
+    const canOperateYard = useHasPermission('yard:operate');
+    const canScheduleOrManageYard = useHasPermission(['yard:schedule', 'yard:manage']);
+    const canManageYard = useHasPermission('yard:manage');
+    const hasAnyRowAction = canOperateYard || canScheduleOrManageYard || canManageYard;
+
     const handleSearchSubmit = (e) => {
         if (e) e.preventDefault();
         loadData();
     };
+
+    const colSpanCount = hasAnyRowAction ? 11 : 10;
 
     return (
         <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex flex-col overflow-hidden h-full">
@@ -127,20 +135,20 @@ export default function AgendaTab({
                             <TableHead>Doca</TableHead>
                             <TableHead>Marcos & Durações</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Ações</TableHead>
+                            {hasAnyRowAction && <TableHead className="text-right">Ações</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-32 text-center text-slate-500 text-xs">
+                                <TableCell colSpan={colSpanCount} className="h-32 text-center text-slate-500 text-xs">
                                     <Loader2 className="animate-spin h-6 w-6 mx-auto text-blue-600 mb-1" />
                                     Carregando agendamentos...
                                 </TableCell>
                             </TableRow>
                         ) : appointments.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={11} className="h-32 text-center text-slate-500 text-xs italic">
+                                <TableCell colSpan={colSpanCount} className="h-32 text-center text-slate-500 text-xs italic">
                                     Nenhum agendamento encontrado para o período.
                                 </TableCell>
                             </TableRow>
@@ -150,7 +158,9 @@ export default function AgendaTab({
                                 const isCanceled = a.status === 5 || a.status === 'Canceled';
                                 const isFinished = a.status === 4 || a.status === 'Finished';
 
-                                const permanenciaTotal = a.arrivedAt ? getDurationMinutes(a.arrivedAt, a.departedAt || (isFinished ? a.departedAt : null)) : null;
+                                const permanenciaTotal = a.arrivedAt
+                                    ? getDurationMinutes(a.arrivedAt, a.departedAt || (isFinished ? a.departedAt : null))
+                                    : null;
 
                                 return (
                                     <TableRow key={a.id} className="hover:bg-slate-50/50 text-xs transition-colors">
@@ -225,70 +235,71 @@ export default function AgendaTab({
                                             </Badge>
                                         </TableCell>
 
-                                        <TableCell className="text-right">
-                                            <div className="flex items-center justify-end gap-1">
-                                                {!isFinished && !isCanceled && !a.inboundOrderId && !a.outboundOrderId && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => setAppointmentToLink(a)}
-                                                        className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                                        title="Vincular a uma Ordem existente"
-                                                    >
-                                                        <Link2 size={13} />
-                                                    </Button>
-                                                )}
+                                        {hasAnyRowAction && (
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    {canOperateYard && !isFinished && !isCanceled && !a.inboundOrderId && !a.outboundOrderId && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => setAppointmentToLink(a)}
+                                                            className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                            title="Vincular a uma Ordem existente"
+                                                        >
+                                                            <Link2 size={13} />
+                                                        </Button>
+                                                    )}
 
-                                                {/* BOTÃO DE EDIÇÃO RECONECTADO COM ONEDITAPPOINTMENT */}
-                                                {!isFinished && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => onEditAppointment(a)}
-                                                        className="h-7 w-7 p-0 text-slate-600 hover:text-blue-600 hover:bg-blue-50"
-                                                        title="Editar Agendamento"
-                                                    >
-                                                        <Pencil size={13} />
-                                                    </Button>
-                                                )}
+                                                    {canScheduleOrManageYard && !isFinished && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => onEditAppointment(a)}
+                                                            className="h-7 w-7 p-0 text-slate-600 hover:text-blue-600 hover:bg-blue-50"
+                                                            title="Editar Agendamento"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </Button>
+                                                    )}
 
-                                                {isScheduled && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => handleCheckin(a.reservationCode)}
-                                                        className="h-7 text-[10px] bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 px-2"
-                                                        title="Registrar Check-in"
-                                                    >
-                                                        <LogIn size={11} className="mr-1" /> Entrada
-                                                    </Button>
-                                                )}
+                                                    {canOperateYard && isScheduled && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => handleCheckin(a.reservationCode)}
+                                                            className="h-7 text-[10px] bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50 px-2"
+                                                            title="Registrar Check-in"
+                                                        >
+                                                            <LogIn size={11} className="mr-1" /> Entrada
+                                                        </Button>
+                                                    )}
 
-                                                {isScheduled && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => setDocToCancel(a)}
-                                                        className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                                                        title="Cancelar"
-                                                    >
-                                                        <Ban size={13} />
-                                                    </Button>
-                                                )}
+                                                    {canScheduleOrManageYard && isScheduled && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => setDocToCancel(a)}
+                                                            className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                                                            title="Cancelar"
+                                                        >
+                                                            <Ban size={13} />
+                                                        </Button>
+                                                    )}
 
-                                                {isCanceled && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        onClick={() => setDocToDelete(a)}
-                                                        className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
-                                                        title="Excluir Definitivamente"
-                                                    >
-                                                        <Trash2 size={13} />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </TableCell>
+                                                    {canManageYard && isCanceled && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => setDocToDelete(a)}
+                                                            className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
+                                                            title="Excluir Definitivamente"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 );
                             })

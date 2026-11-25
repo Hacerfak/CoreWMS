@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -19,59 +20,58 @@ export default function VincularAgendamentoModal({
     open,
     onOpenChange,
     onSuccess,
-    // Modo 1: A partir de uma Ordem
     orderId = null,
     orderNumber = '',
-    orderType = 1, // 1 = Inbound, 2 = Outbound
-    // Modo 2: A partir de um Agendamento
+    orderType = 1,
     appointment = null
 }) {
+    const canOperateYard = useHasPermission('yard:operate');
+
     const isFromOrder = Boolean(orderId);
     const targetType = isFromOrder ? orderType : (appointment?.type === 1 || appointment?.type === 'Inbound' ? 1 : 2);
+    const appointmentId = appointment?.id || null;
 
     const [items, setItems] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(Boolean(open && canOperateYard));
     const [isSaving, setIsSaving] = useState(false);
     const [selectedId, setSelectedId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
 
-    const loadData = async () => {
-        try {
-            setIsLoading(true);
-            setSelectedId(null);
-
-            const endpoint = isFromOrder
-                ? `/api/yard/appointments/available-for-linking?type=${targetType}`
-                : `/api/yard/orders/available-for-linking?type=${targetType}`;
-
-            const res = await customInstance({ url: endpoint, method: 'GET' });
-            setItems(Array.isArray(res?.data || res) ? (res?.data || res) : []);
-        } catch {
-            toast.error('Erro ao carregar registros disponíveis para vínculo.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     useEffect(() => {
-        if (open) {
-            loadData();
-        }
-    }, [
-	open,
-	orderId,
-	appointment,
-	
-]);
+        if (!open || !canOperateYard) return;
+
+        let isMounted = true;
+        const endpoint = isFromOrder
+            ? `/api/yard/appointments/available-for-linking?type=${targetType}`
+            : `/api/yard/orders/available-for-linking?type=${targetType}`;
+
+        customInstance({ url: endpoint, method: 'GET' })
+            .then(res => {
+                if (!isMounted) return;
+                const list = res?.data || res;
+                setItems(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar registros disponíveis para vínculo.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [open, isFromOrder, targetType, orderId, appointmentId, canOperateYard]);
 
     const handleConfirmLink = async () => {
+        if (!canOperateYard) return;
         if (!selectedId) {
             return toast.warning('Selecione um registro para vincular.');
         }
 
         try {
             setIsSaving(true);
-            const targetAppointmentId = isFromOrder ? selectedId : appointment.id;
+            const targetAppointmentId = isFromOrder ? selectedId : appointmentId;
             const targetOrderId = isFromOrder ? orderId : selectedId;
 
             const res = await customInstance({
@@ -87,6 +87,16 @@ export default function VincularAgendamentoModal({
         } finally {
             setIsSaving(false);
         }
+    };
+
+    const handleOpenChange = (nextOpen) => {
+        if (isSaving) return;
+        if (nextOpen) {
+            setSelectedId(null);
+            setSearchTerm('');
+            if (canOperateYard) setIsLoading(true);
+        }
+        onOpenChange(nextOpen);
     };
 
     const filteredItems = items.filter(i => {
@@ -112,7 +122,7 @@ export default function VincularAgendamentoModal({
     });
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[700px] bg-white max-h-[85vh] flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -132,7 +142,7 @@ export default function VincularAgendamentoModal({
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <Input
-                            placeholder={isFromOrder ? "Filtrar por placa, motorista, reserva ou nota..." : "Filtrar por número da ordem, nota fiscal, cliente..."}
+                            placeholder={isFromOrder ? 'Filtrar por placa, motorista, reserva ou nota...' : 'Filtrar por número da ordem, nota fiscal, cliente...'}
                             className="pl-9 h-9 text-xs bg-white"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -250,15 +260,17 @@ export default function VincularAgendamentoModal({
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                             Cancelar
                         </Button>
-                        <Button
-                            type="button"
-                            onClick={handleConfirmLink}
-                            disabled={isSaving || !selectedId}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9"
-                        >
-                            {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Confirmar Vínculo
-                        </Button>
+                        {canOperateYard && (
+                            <Button
+                                type="button"
+                                onClick={handleConfirmLink}
+                                disabled={isSaving || !selectedId}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9"
+                            >
+                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                Confirmar Vínculo
+                            </Button>
+                        )}
                     </div>
                 </DialogFooter>
             </DialogContent>

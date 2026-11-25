@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -31,15 +32,22 @@ import NovoAgendamentoModal from './NovoAgendamentoModal';
 import VincularAgendamentoModal from './VincularAgendamentoModal';
 
 export default function PortariaPage() {
+    const canViewYard = useHasPermission('yard:view');
+    const canOperateYard = useHasPermission('yard:operate');
+    const canScheduleOrManageYard = useHasPermission(['yard:schedule', 'yard:manage']);
+    const canManageYard = useHasPermission('yard:manage');
+
     const [currentTab, setCurrentTab] = useState('operacao');
     const [appointments, setAppointments] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(canViewYard);
+    const [refreshTick, setRefreshTick] = useState(0);
 
     // Filtros de Agenda (padrão Date estrito)
     const [filterDate, setFilterDate] = useState(() => new Date());
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterType, setFilterType] = useState('ALL');
     const [searchTerm, setSearchTerm] = useState('');
+    const [appliedSearch, setAppliedSearch] = useState('');
 
     // Check-in
     const [checkinCode, setCheckinCode] = useState('');
@@ -56,60 +64,89 @@ export default function PortariaPage() {
     const [selectedDockId, setSelectedDockId] = useState('');
     const [docks, setDocks] = useState([]);
 
-    const loadData = async () => {
-        try {
-            setIsLoading(true);
-            const params = new URLSearchParams();
-
-            if (filterDate instanceof Date && !isNaN(filterDate.getTime())) {
-                const pad = (n) => String(n).padStart(2, '0');
-                const dStr = `${filterDate.getFullYear()}-${pad(filterDate.getMonth() + 1)}-${pad(filterDate.getDate())}`;
-                params.append('startDate', dStr);
-                params.append('endDate', dStr);
-            }
-
-            if (filterStatus !== 'ALL') params.append('status', filterStatus);
-            if (filterType !== 'ALL') params.append('type', filterType);
-            if (searchTerm) params.append('search', searchTerm);
-
-            const res = await customInstance({
-                url: `/api/yard/appointments?${params.toString()}`,
-                method: 'GET'
-            });
-
-            setAppointments(res?.data || res || []);
-        } catch {
-            toast.error('Erro ao carregar dados de pátio e agendamentos.');
-        } finally {
-            setIsLoading(false);
-        }
+    const triggerReload = () => {
+        if (!canViewYard) return;
+        setAppliedSearch(searchTerm);
+        setIsLoading(true);
+        setRefreshTick(t => t + 1);
     };
 
-    const loadDocks = async () => {
-        try {
-            const res = await customInstance({ url: '/api/topology/locations/docks', method: 'GET' });
-            setDocks(res?.data || res || []);
-        } catch { }
+    const handleFilterDateChange = (newDate) => {
+        setFilterDate(newDate);
+        if (canViewYard) setIsLoading(true);
+    };
+
+    const handleFilterStatusChange = (newStatus) => {
+        setFilterStatus(newStatus);
+        if (canViewYard) setIsLoading(true);
+    };
+
+    const handleFilterTypeChange = (newType) => {
+        setFilterType(newType);
+        if (canViewYard) setIsLoading(true);
     };
 
     useEffect(() => {
-        loadData();
-        loadDocks();
-    }, [
-	filterDate,
-	filterStatus,
-	filterType,
-	
-]);
+        if (!canViewYard) return;
 
-    // Abertura atômica do modal em modo de edição
+        let isMounted = true;
+        const params = new URLSearchParams();
+
+        if (filterDate instanceof Date && !isNaN(filterDate.getTime())) {
+            const pad = (n) => String(n).padStart(2, '0');
+            const dStr = `${filterDate.getFullYear()}-${pad(filterDate.getMonth() + 1)}-${pad(filterDate.getDate())}`;
+            params.append('startDate', dStr);
+            params.append('endDate', dStr);
+        }
+
+        if (filterStatus !== 'ALL') params.append('status', filterStatus);
+        if (filterType !== 'ALL') params.append('type', filterType);
+        if (appliedSearch) params.append('search', appliedSearch);
+
+        customInstance({
+            url: `/api/yard/appointments?${params.toString()}`,
+            method: 'GET'
+        })
+            .then(res => {
+                if (isMounted) setAppointments(res?.data || res || []);
+            })
+            .catch(() => {
+                if (isMounted) toast.error('Erro ao carregar dados de pátio e agendamentos.');
+            })
+            .finally(() => {
+                if (isMounted) setIsLoading(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [filterDate, filterStatus, filterType, appliedSearch, canViewYard, refreshTick]);
+
+    useEffect(() => {
+        if (!canOperateYard) return;
+
+        let isMounted = true;
+        customInstance({ url: '/api/topology/locations/docks', method: 'GET' })
+            .then(res => {
+                if (isMounted) setDocks(res?.data || res || []);
+            })
+            .catch(() => {
+                if (isMounted) setDocks([]);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [canOperateYard]);
+
     const handleEditAppointment = (appointment) => {
+        if (!canScheduleOrManageYard) return;
         setAppointmentToEdit(appointment);
         setIsModalOpen(true);
     };
 
     const handleCheckin = async (codeOrPlate) => {
-        if (!codeOrPlate) return;
+        if (!codeOrPlate || !canOperateYard) return;
         try {
             setIsCheckingIn(true);
             const res = await customInstance({
@@ -120,7 +157,7 @@ export default function PortariaPage() {
 
             toast.success(res?.message || 'Check-in realizado com sucesso!');
             setCheckinCode('');
-            loadData();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao realizar check-in.');
         } finally {
@@ -129,19 +166,21 @@ export default function PortariaPage() {
     };
 
     const handleCheckout = async (appointmentId) => {
+        if (!canOperateYard) return;
         try {
             const res = await customInstance({
                 url: `/api/yard/appointments/${appointmentId}/checkout`,
                 method: 'POST'
             });
             toast.success(res?.message || 'Check-out finalizado!');
-            loadData();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao realizar check-out.');
         }
     };
 
     const handleConfirmMoveDock = async () => {
+        if (!canOperateYard || !docToMoveDock) return;
         if (!selectedDockId) return toast.warning('Selecione uma doca.');
         try {
             await customInstance({
@@ -151,13 +190,14 @@ export default function PortariaPage() {
             toast.success('Veículo posicionado na doca!');
             setDocToMoveDock(null);
             setSelectedDockId('');
-            loadData();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao posicionar na doca.');
         }
     };
 
     const handleConfirmCancel = async () => {
+        if (!canScheduleOrManageYard || !docToCancel) return;
         try {
             await customInstance({
                 url: `/api/yard/appointments/${docToCancel.id}/cancel`,
@@ -165,13 +205,14 @@ export default function PortariaPage() {
             });
             toast.success('Agendamento cancelado com sucesso.');
             setDocToCancel(null);
-            loadData();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao cancelar.');
         }
     };
 
     const handleConfirmDelete = async () => {
+        if (!canManageYard || !docToDelete) return;
         try {
             await customInstance({
                 url: `/api/yard/appointments/${docToDelete.id}`,
@@ -179,7 +220,7 @@ export default function PortariaPage() {
             });
             toast.success('Agendamento excluído definitivamente.');
             setDocToDelete(null);
-            loadData();
+            triggerReload();
         } catch (err) {
             toast.error(err.response?.data?.message || 'Erro ao excluir agendamento.');
         }
@@ -199,18 +240,22 @@ export default function PortariaPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={loadData} className="h-9 bg-white border-slate-200 text-slate-700 text-xs font-semibold shadow-xs">
-                        <RefreshCw size={14} className="mr-1.5" /> Atualizar
-                    </Button>
-                    <Button
-                        onClick={() => {
-                            setAppointmentToEdit(null);
-                            setIsModalOpen(true);
-                        }}
-                        className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm text-xs font-semibold h-9"
-                    >
-                        <Plus size={16} className="mr-1.5" /> Novo Agendamento / Entrada
-                    </Button>
+                    {canViewYard && (
+                        <Button variant="outline" size="sm" onClick={triggerReload} className="h-9 bg-white border-slate-200 text-slate-700 text-xs font-semibold shadow-xs">
+                            <RefreshCw size={14} className="mr-1.5" /> Atualizar
+                        </Button>
+                    )}
+                    {canScheduleOrManageYard && (
+                        <Button
+                            onClick={() => {
+                                setAppointmentToEdit(null);
+                                setIsModalOpen(true);
+                            }}
+                            className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm text-xs font-semibold h-9"
+                        >
+                            <Plus size={16} className="mr-1.5" /> Novo Agendamento / Entrada
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -250,14 +295,14 @@ export default function PortariaPage() {
                                 appointments={appointments}
                                 isLoading={isLoading}
                                 filterDate={filterDate}
-                                setFilterDate={setFilterDate}
+                                setFilterDate={handleFilterDateChange}
                                 filterStatus={filterStatus}
-                                setFilterStatus={setFilterStatus}
+                                setFilterStatus={handleFilterStatusChange}
                                 filterType={filterType}
-                                setFilterType={setFilterType}
+                                setFilterType={handleFilterTypeChange}
                                 searchTerm={searchTerm}
                                 setSearchTerm={setSearchTerm}
-                                loadData={loadData}
+                                loadData={triggerReload}
                                 handleCheckin={handleCheckin}
                                 setAppointmentToLink={setAppointmentToLink}
                                 onEditAppointment={handleEditAppointment}
@@ -270,93 +315,103 @@ export default function PortariaPage() {
             </Tabs>
 
             {/* MODAL NOVO/EDITAR AGENDAMENTO */}
-            <NovoAgendamentoModal
-                open={isModalOpen}
-                onOpenChange={(open) => {
-                    setIsModalOpen(open);
-                    if (!open) setAppointmentToEdit(null);
-                }}
-                appointmentToEdit={appointmentToEdit}
-                onSuccess={loadData}
-            />
+            {canScheduleOrManageYard && (
+                <NovoAgendamentoModal
+                    open={isModalOpen}
+                    onOpenChange={(open) => {
+                        setIsModalOpen(open);
+                        if (!open) setAppointmentToEdit(null);
+                    }}
+                    appointmentToEdit={appointmentToEdit}
+                    onSuccess={triggerReload}
+                />
+            )}
 
             {/* MODAL VINCULAR ORDEM A AGENDAMENTO */}
-            <VincularAgendamentoModal
-                open={Boolean(appointmentToLink)}
-                onOpenChange={(open) => !open && setAppointmentToLink(null)}
-                appointment={appointmentToLink}
-                onSuccess={loadData}
-            />
+            {canOperateYard && (
+                <VincularAgendamentoModal
+                    open={Boolean(appointmentToLink)}
+                    onOpenChange={(open) => !open && setAppointmentToLink(null)}
+                    appointment={appointmentToLink}
+                    onSuccess={triggerReload}
+                />
+            )}
 
             {/* DIALOG: ENCOSTE NA DOCA */}
-            <Dialog open={!!docToMoveDock} onOpenChange={(open) => !open && setDocToMoveDock(null)}>
-                <DialogContent className="sm:max-w-xs bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-sm font-bold flex items-center gap-1.5">
-                            <MapPin className="h-4 w-4 text-blue-600" /> Encostar Veículo na Doca
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="py-2 space-y-2 text-xs">
-                        <p>Selecione a doca para o veículo <strong className="font-mono">{docToMoveDock?.vehiclePlate}</strong>:</p>
-                        <Select value={selectedDockId} onValueChange={setSelectedDockId}>
-                            <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Selecione a doca..." /></SelectTrigger>
-                            <SelectContent>
-                                {docks.map(d => (
-                                    <SelectItem key={d.id} value={d.id}>{d.fullPath || d.name || d.code}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" size="sm" onClick={() => setDocToMoveDock(null)}>Cancelar</Button>
-                        <Button size="sm" onClick={handleConfirmMoveDock} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
-                            Confirmar Encoste
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {canOperateYard && (
+                <Dialog open={!!docToMoveDock} onOpenChange={(open) => !open && setDocToMoveDock(null)}>
+                    <DialogContent className="sm:max-w-xs bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="text-sm font-bold flex items-center gap-1.5">
+                                <MapPin className="h-4 w-4 text-blue-600" /> Encostar Veículo na Doca
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="py-2 space-y-2 text-xs">
+                            <p>Selecione a doca para o veículo <strong className="font-mono">{docToMoveDock?.vehiclePlate}</strong>:</p>
+                            <Select value={selectedDockId} onValueChange={setSelectedDockId}>
+                                <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="Selecione a doca..." /></SelectTrigger>
+                                <SelectContent>
+                                    {docks.map(d => (
+                                        <SelectItem key={d.id} value={d.id}>{d.fullPath || d.name || d.code}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <DialogFooter>
+                            <Button variant="outline" size="sm" onClick={() => setDocToMoveDock(null)}>Cancelar</Button>
+                            <Button size="sm" onClick={handleConfirmMoveDock} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                                Confirmar Encoste
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* ALERTA: CANCELAR */}
-            <AlertDialog open={!!docToCancel} onOpenChange={(open) => !open && setDocToCancel(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-amber-800">
-                            <Ban className="h-5 w-5 text-amber-600" /> Cancelar Agendamento?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Deseja cancelar o agendamento <strong className="font-mono text-slate-900">{docToCancel?.reservationCode}</strong>?
-                            O horário e a doca prevista serão liberados.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmCancel} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
-                            Confirmar Cancelamento
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canScheduleOrManageYard && (
+                <AlertDialog open={!!docToCancel} onOpenChange={(open) => !open && setDocToCancel(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-amber-800">
+                                <Ban className="h-5 w-5 text-amber-600" /> Cancelar Agendamento?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Deseja cancelar o agendamento <strong className="font-mono text-slate-900">{docToCancel?.reservationCode}</strong>?
+                                O horário e a doca prevista serão liberados.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmCancel} className="bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                                Confirmar Cancelamento
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* ALERTA: EXCLUIR */}
-            <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-                            <Trash2 className="h-5 w-5" /> Excluir Definitivamente?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Tem certeza que deseja remover o agendamento cancelado <strong className="font-mono text-slate-900">{docToDelete?.reservationCode}</strong>?
-                            Esta ação removerá o registro do histórico permanentemente.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Voltar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmDelete} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
-                            Confirmar Exclusão
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageYard && (
+                <AlertDialog open={!!docToDelete} onOpenChange={(open) => !open && setDocToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
+                                <Trash2 className="h-5 w-5" /> Excluir Definitivamente?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Tem certeza que deseja remover o agendamento cancelado <strong className="font-mono text-slate-900">{docToDelete?.reservationCode}</strong>?
+                                Esta ação removerá o registro do histórico permanentemente.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Voltar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmDelete} className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
+                                Confirmar Exclusão
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }
