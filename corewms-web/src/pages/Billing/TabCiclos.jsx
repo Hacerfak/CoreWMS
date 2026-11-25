@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ const formatDatePtBr = (dateStr) => {
 
 export default function TabCiclos({ cycles, isLoading }) {
     const navigate = useNavigate();
+    const canViewBilling = useHasPermission(['billing:view', 'billing:manage']);
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredCycles = useMemo(() => {
@@ -53,19 +55,19 @@ export default function TabCiclos({ cycles, isLoading }) {
                             <TableHead>Período Contábil</TableHead>
                             <TableHead className="text-right">Total Acumulado</TableHead>
                             <TableHead className="text-center">Situação</TableHead>
-                            <TableHead className="text-right w-36">Ações</TableHead>
+                            {canViewBilling && <TableHead className="text-right w-36">Ações</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {isLoading ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-28 text-center text-xs text-slate-500">
+                                <TableCell colSpan={canViewBilling ? 6 : 5} className="h-28 text-center text-xs text-slate-500">
                                     <Loader2 className="h-5 w-5 animate-spin mx-auto text-blue-600" />
                                 </TableCell>
                             </TableRow>
                         ) : filteredCycles.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-28 text-center text-xs text-slate-400 italic">
+                                <TableCell colSpan={canViewBilling ? 6 : 5} className="h-28 text-center text-xs text-slate-400 italic">
                                     Nenhum ciclo de apuração encontrado.
                                 </TableCell>
                             </TableRow>
@@ -90,16 +92,18 @@ export default function TabCiclos({ cycles, isLoading }) {
                                             {isDraft ? '🟢 Aberto (Acumulando)' : '🔒 Encerrado'}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button
-                                            onClick={() => navigate(`/billing/ciclos/${c.id}`)}
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-8 text-xs bg-white text-slate-700 hover:bg-slate-100 font-semibold shadow-xs"
-                                        >
-                                            <Eye size={13} className="mr-1 text-slate-500" /> Extrato Analítico
-                                        </Button>
-                                    </TableCell>
+                                    {canViewBilling && (
+                                        <TableCell className="text-right">
+                                            <Button
+                                                onClick={() => navigate(`/billing/ciclos/${c.id}`)}
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8 text-xs bg-white text-slate-700 hover:bg-slate-100 font-semibold shadow-xs"
+                                            >
+                                                <Eye size={13} className="mr-1 text-slate-500" /> Extrato Analítico
+                                            </Button>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             );
                         })}

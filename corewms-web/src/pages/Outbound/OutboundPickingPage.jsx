@@ -46,7 +46,7 @@ export default function OutboundPickingPage() {
     const canPickOutbound = useHasPermission('outbound:pick');
     const canManageOutbound = useHasPermission('outbound:manage');
     const canCheckOutbound = useHasPermission('outbound:check');
-    const canPackOutbound = useHasPermission('packing:manage');
+    const canPackOutbound = useHasPermission('outbound:pack');
     const canViewBillingServices = useHasPermission(['billing:manage', 'billing:view']);
 
     const [orderData, setOrderData] = useState(null);

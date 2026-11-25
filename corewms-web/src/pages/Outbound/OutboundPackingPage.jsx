@@ -21,7 +21,7 @@ export default function OutboundPackingPage() {
     const { id: orderId } = useParams();
     const navigate = useNavigate();
 
-    const canPackOutbound = useHasPermission('packing:manage');
+    const canPackOutbound = useHasPermission('outbound:pack');
     const canViewBillingServices = useHasPermission(['billing:manage', 'billing:view']);
 
     const [order, setOrder] = useState(null);

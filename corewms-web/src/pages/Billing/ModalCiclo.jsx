@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,8 @@ const getCurrentRefMonth = () => {
 };
 
 export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) {
+    const canManageBilling = useHasPermission('billing:manage');
+
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [dateRange, setDateRange] = useState(() => getDefaultRangeForMonth(getCurrentRefMonth()));
 
@@ -58,15 +61,19 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
         }
     };
 
-    useEffect(() => {
-        if (isOpen) {
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen) {
             const current = getCurrentRefMonth();
-            setValue('referenceMonth', current);
+            reset({ customerId: '', referenceMonth: current });
             setDateRange(getDefaultRangeForMonth(current));
         }
-    }, [isOpen, setValue]);
+        onOpenChange(nextOpen);
+    };
 
     const onSave = async (data) => {
+        if (!canManageBilling) return;
+
         if (!dateRange?.from) {
             toast.warning('Selecione o período contábil do ciclo.');
             return;
@@ -111,7 +118,7 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-md bg-white">
                 <DialogHeader>
                     <DialogTitle className="text-slate-900 flex items-center gap-2">
@@ -125,7 +132,11 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
                 <form onSubmit={handleSubmit(onSave)} className="space-y-4 py-2">
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Depositante *</Label>
-                        <Select value={selectedCustomerId} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
+                        <Select
+                            value={selectedCustomerId}
+                            disabled={!canManageBilling || isSubmitting}
+                            onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}
+                        >
                             <SelectTrigger className="bg-white text-xs h-9">
                                 <SelectValue placeholder="Escolha o depositante..." />
                             </SelectTrigger>
@@ -142,6 +153,7 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
                         <Label className="text-xs font-semibold text-slate-700">Mês de Competência Contábil *</Label>
                         <MonthPicker
                             value={selectedRefMonth}
+                            disabled={!canManageBilling || isSubmitting}
                             onChange={handleMonthChange}
                             className="h-9"
                         />
@@ -155,17 +167,19 @@ export default function ModalCiclo({ isOpen, onOpenChange, customers, reload }) 
                         </div>
                         <DateRangePicker
                             date={dateRange}
-                            setDate={setDateRange}
+                            setDate={(r) => canManageBilling && setDateRange(r)}
                             className="w-full"
                         />
                     </div>
 
                     <DialogFooter className="pt-3">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancelar</Button>
-                        <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Abrir Ciclo
-                        </Button>
+                        {canManageBilling && (
+                            <Button type="submit" disabled={isSubmitting} className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9">
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                Abrir Ciclo
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

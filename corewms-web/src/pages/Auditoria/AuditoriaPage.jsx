@@ -23,17 +23,18 @@ export default function AuditoriaPage() {
     const [page, setPage] = useState(1);
     const pageSize = 20;
 
-    // Inicializa o seletor com a data de hoje (início e fim)
-    const [dateRange, setDateRange] = useState({
+    // Inicialização preguiçosa (lazy) para evitar chamadas impuras durante o render
+    const [dateRange, setDateRange] = useState(() => ({
         from: new Date(),
         to: new Date()
-    });
+    }));
 
     const [appliedFilters, setAppliedFilters] = useState(() => {
-        const today = new Date();
-        const start = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-        const end = new Date(today.setHours(23, 59, 59, 999)).toISOString();
-        return { StartDate: start, EndDate: end };
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return { StartDate: start.toISOString(), EndDate: end.toISOString() };
     });
 
     const [selectedLog, setSelectedLog] = useState(null);

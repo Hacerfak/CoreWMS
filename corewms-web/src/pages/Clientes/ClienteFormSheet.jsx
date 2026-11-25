@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useMemo } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     usePostApiCustomersConsultSefazCnpj,
     usePostApiCustomers,
@@ -61,50 +61,90 @@ const customerSchema = z.object({
     returnInvoicePerReferencedInvoice: z.boolean().default(false),
 });
 
+const EMPTY_CUSTOMER_VALUES = {
+    cnpj: '',
+    corporateName: '',
+    tradeName: '',
+    stateRegistration: '',
+    ieIndicator: 9,
+    municipalRegistration: '',
+    crt: 1,
+    cnae: '',
+    email: '',
+    phone: '',
+    zipCode: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    cityName: '',
+    cityCode: 0,
+    state: 'RS',
+    tracksBatch: false,
+    strictBatch: false,
+    tracksManufacture: false,
+    strictManufacture: false,
+    tracksExpiration: false,
+    strictExpiration: false,
+    tracksSerial: false,
+    strictSerial: false,
+    defaultPickingStrategy: 1,
+    defaultPickingBaseDate: 1,
+    maxDailyInboundOrders: '',
+    maxDailyOutboundOrders: '',
+    minStockVolume: '',
+    maxStockVolume: '',
+    requiresBlindInbound: true,
+    requiresBlindOutbound: true,
+    returnInvoicePerReferencedInvoice: false
+};
+
 export default function ClienteFormSheet({ open, onOpenChange, clienteId = null }) {
     const queryClient = useQueryClient();
+    const canViewCustomer = useHasPermission('customers:view');
     const canCreateCustomer = useHasPermission('customers:create');
     const canEditCustomer = useHasPermission('customers:edit');
 
     const [activeTab, setActiveTab] = useState('dados-gerais');
-    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-    const isEditing = !!clienteId;
+    const isEditing = Boolean(clienteId);
     const isReadOnly = isEditing ? !canEditCustomer : !canCreateCustomer;
 
-    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
-        resolver: zodResolver(customerSchema),
-        defaultValues: { state: 'RS', crt: 1, ieIndicator: 9, defaultPickingStrategy: 1, defaultPickingBaseDate: 1, requiresBlindInbound: true, requiresBlindOutbound: true }
+    const { data: customerDetails, isLoading: isLoadingDetails } = useQuery({
+        queryKey: ['/api/customers', clienteId],
+        queryFn: () => customInstance({ url: `/api/customers/${clienteId}`, method: 'GET' }),
+        enabled: open && isEditing && canViewCustomer
     });
 
-    useEffect(() => {
-        if (!open) return;
+    const formValues = useMemo(() => {
+        if (!open) return EMPTY_CUSTOMER_VALUES;
+        if (isEditing && customerDetails) {
+            return {
+                ...EMPTY_CUSTOMER_VALUES,
+                ...customerDetails,
+                maxDailyInboundOrders: customerDetails.maxDailyInboundOrders ?? '',
+                maxDailyOutboundOrders: customerDetails.maxDailyOutboundOrders ?? '',
+                minStockVolume: customerDetails.minStockVolume ?? '',
+                maxStockVolume: customerDetails.maxStockVolume ?? ''
+            };
+        }
+        return EMPTY_CUSTOMER_VALUES;
+    }, [open, isEditing, customerDetails]);
 
-        if (clienteId) {
-            setIsLoadingDetails(true);
-            customInstance({ url: `/api/customers/${clienteId}`, method: 'GET' })
-                .then((data) => {
-                    reset(data);
-                    setActiveTab('dados-gerais');
-                })
-                .catch(() => toast.error('Erro ao carregar detalhes do cliente.'))
-                .finally(() => setIsLoadingDetails(false));
-        } else {
-            reset({
-                cnpj: '', corporateName: '', tradeName: '', stateRegistration: '', ieIndicator: 9, municipalRegistration: '',
-                crt: 1, cnae: '', email: '', phone: '', zipCode: '', street: '', number: '',
-                complement: '', neighborhood: '', cityName: '', cityCode: 0, state: 'RS',
-                tracksBatch: false, strictBatch: false, tracksManufacture: false, strictManufacture: false,
-                tracksExpiration: false, strictExpiration: false, tracksSerial: false, strictSerial: false,
-                defaultPickingStrategy: 1, defaultPickingBaseDate: 1,
-                maxDailyInboundOrders: '', maxDailyOutboundOrders: '', minStockVolume: '', maxStockVolume: '',
-                requiresBlindInbound: true, requiresBlindOutbound: true, returnInvoicePerReferencedInvoice: false
-            });
+    const { register, control, handleSubmit, setValue, getValues, formState: { errors } } = useForm({
+        resolver: zodResolver(customerSchema),
+        defaultValues: EMPTY_CUSTOMER_VALUES,
+        values: formValues
+    });
+
+    const watchedValues = useWatch({ control });
+    const watchState = watchedValues?.state || 'RS';
+
+    const handleOpenChange = (nextOpen) => {
+        if (nextOpen) {
             setActiveTab('dados-gerais');
         }
-    }, [clienteId, open, reset]);
-
-    const watchCnpj = watch('cnpj');
-    const watchState = watch('state');
+        onOpenChange(nextOpen);
+    };
 
     const { mutate: consultSefaz, isPending: isSefazPending } = usePostApiCustomersConsultSefazCnpj({
         mutation: {
@@ -121,7 +161,7 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                 setValue('neighborhood', sefazData.neighborhood || '');
                 setValue('cityCode', sefazData.cityCode || 0);
                 setValue('cityName', sefazData.cityName || '');
-                setValue('state', sefazData.state || watchState);
+                setValue('state', sefazData.state || getValues('state'));
                 setValue('zipCode', sefazData.zipCode || '');
                 if (sefazData.stateRegistration) setValue('ieIndicator', 1);
             },
@@ -153,10 +193,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
 
     const handleConsultSefaz = () => {
         if (!canCreateCustomer) return;
-        const cleanCnpj = (watchCnpj || '').replace(/\D/g, '');
+        const cleanCnpj = (getValues('cnpj') || '').replace(/\D/g, '');
+        const currentUf = getValues('state');
         if (cleanCnpj.length !== 14) return toast.warning('Digite um CNPJ válido com 14 dígitos.');
-        if (!watchState) return toast.warning('Selecione a UF.');
-        consultSefaz({ cnpj: cleanCnpj, params: { uf: watchState } });
+        if (!currentUf) return toast.warning('Selecione a UF.');
+        consultSefaz({ cnpj: cleanCnpj, params: { uf: currentUf } });
     };
 
     const onSubmit = (data) => {
@@ -171,45 +212,53 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
             maxStockVolume: data.maxStockVolume === '' ? null : data.maxStockVolume,
         };
 
-        if (isEditing) updateCustomer({ id: clienteId, data: cleanPayload });
-        else createCustomer({ data: cleanPayload });
+        if (isEditing) {
+            updateCustomer({ id: clienteId, data: cleanPayload });
+        } else {
+            createCustomer({ data: cleanPayload });
+        }
     };
 
     const isSaving = isCreating || isUpdating;
 
-    const renderToggle = (title, desc, trackField, strictField) => (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-                <div>
-                    <Label className="text-sm text-slate-900 font-bold">{title}</Label>
-                    <p className="text-[10px] text-slate-500">{desc}</p>
+    const renderToggle = (title, desc, trackField, strictField) => {
+        const isTracked = Boolean(watchedValues?.[trackField]);
+        const isStrict = Boolean(watchedValues?.[strictField]);
+
+        return (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <Label className="text-sm text-slate-900 font-bold">{title}</Label>
+                        <p className="text-[10px] text-slate-500">{desc}</p>
+                    </div>
+                    <Switch
+                        checked={isTracked}
+                        disabled={isReadOnly}
+                        onCheckedChange={(v) => {
+                            setValue(trackField, v);
+                            if (!v) setValue(strictField, false);
+                        }}
+                    />
                 </div>
-                <Switch
-                    checked={watch(trackField)}
-                    disabled={isReadOnly}
-                    onCheckedChange={(v) => {
-                        setValue(trackField, v);
-                        if (!v) setValue(strictField, false);
-                    }}
-                />
+                {isTracked && (
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 ml-2 animate-in slide-in-from-top-2">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                            <Checkbox
+                                checked={isStrict}
+                                disabled={isReadOnly}
+                                onCheckedChange={(v) => setValue(strictField, Boolean(v))}
+                            />
+                            <span className="text-rose-700">Exigência Fiscal Obrigatória</span>
+                        </label>
+                    </div>
+                )}
             </div>
-            {watch(trackField) && (
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/60 ml-2 animate-in slide-in-from-top-2">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                        <Checkbox
-                            checked={watch(strictField)}
-                            disabled={isReadOnly}
-                            onCheckedChange={(v) => setValue(strictField, v)}
-                        />
-                        <span className="text-rose-700">Exigência Fiscal Obrigatória</span>
-                    </label>
-                </div>
-            )}
-        </div>
-    );
+        );
+    };
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
+        <Sheet open={open} onOpenChange={handleOpenChange}>
             <SheetContent className="w-full sm:w-[850px] !max-w-[850px] flex flex-col p-0 bg-white shadow-2xl">
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <SheetTitle className="text-xl font-bold text-slate-900">
@@ -301,7 +350,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                     <div className="grid grid-cols-3 gap-4">
                                         <div className="col-span-2 space-y-1.5">
                                             <Label className="text-slate-900 font-semibold">Regime Tributário (CRT) *</Label>
-                                            <Select value={String(watch('crt'))} onValueChange={(val) => setValue('crt', Number(val))} disabled={isReadOnly}>
+                                            <Select
+                                                value={String(watchedValues?.crt ?? 1)}
+                                                onValueChange={(val) => setValue('crt', Number(val))}
+                                                disabled={isReadOnly}
+                                            >
                                                 <SelectTrigger className={`bg-white h-10 ${errors.crt ? 'border-rose-500' : ''}`}>
                                                     <SelectValue placeholder="Selecione o CRT" />
                                                 </SelectTrigger>
@@ -328,7 +381,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label className="text-slate-900 font-semibold">Indicação IE *</Label>
-                                            <Select value={String(watch('ieIndicator'))} onValueChange={(val) => setValue('ieIndicator', Number(val))} disabled={isReadOnly}>
+                                            <Select
+                                                value={String(watchedValues?.ieIndicator ?? 9)}
+                                                onValueChange={(val) => setValue('ieIndicator', Number(val))}
+                                                disabled={isReadOnly}
+                                            >
                                                 <SelectTrigger className={`bg-white h-10 ${errors.ieIndicator ? 'border-rose-500' : ''}`}>
                                                     <SelectValue />
                                                 </SelectTrigger>
@@ -424,11 +481,15 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
                                                 <Label>Estratégia de Fila</Label>
-                                                <Select value={String(watch('defaultPickingStrategy'))} onValueChange={(val) => setValue('defaultPickingStrategy', Number(val))} disabled={isReadOnly}>
+                                                <Select
+                                                    value={String(watchedValues?.defaultPickingStrategy ?? 1)}
+                                                    onValueChange={(val) => setValue('defaultPickingStrategy', Number(val))}
+                                                    disabled={isReadOnly}
+                                                >
                                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="1">FIFO</SelectItem>
-                                                        <SelectItem value="2" disabled={!watch('tracksExpiration')}>FEFO</SelectItem>
+                                                        <SelectItem value="2" disabled={!watchedValues?.tracksExpiration}>FEFO</SelectItem>
                                                         <SelectItem value="3">LIFO</SelectItem>
                                                     </SelectContent>
                                                 </Select>
@@ -436,7 +497,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
 
                                             <div className="space-y-2">
                                                 <Label>Data Base Analisada</Label>
-                                                <Select value={String(watch('defaultPickingBaseDate'))} onValueChange={(val) => setValue('defaultPickingBaseDate', Number(val))} disabled={isReadOnly || watch('defaultPickingStrategy') == 2}>
+                                                <Select
+                                                    value={String(watchedValues?.defaultPickingBaseDate ?? 1)}
+                                                    onValueChange={(val) => setValue('defaultPickingBaseDate', Number(val))}
+                                                    disabled={isReadOnly || Number(watchedValues?.defaultPickingStrategy) === 2}
+                                                >
                                                     <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                                                     <SelectContent>
                                                         <SelectItem value="1">Data de Recebimento</SelectItem>
@@ -479,7 +544,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     <Label className="text-base text-slate-900">Exige Conferência Cega no Recebimento</Label>
                                                     <p className="text-xs text-slate-500">Operador bipa produtos sem saber a quantidade da NF-e.</p>
                                                 </div>
-                                                <Switch checked={watch('requiresBlindInbound')} disabled={isReadOnly} onCheckedChange={(val) => setValue('requiresBlindInbound', val)} />
+                                                <Switch
+                                                    checked={Boolean(watchedValues?.requiresBlindInbound)}
+                                                    disabled={isReadOnly}
+                                                    onCheckedChange={(val) => setValue('requiresBlindInbound', val)}
+                                                />
                                             </div>
 
                                             <div className="flex items-center justify-between">
@@ -487,7 +556,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     <Label className="text-base text-slate-900">Exige Conferência Cega na Expedição</Label>
                                                     <p className="text-xs text-slate-500">Verifica fisicamente a mercadoria antes do carregamento.</p>
                                                 </div>
-                                                <Switch checked={watch('requiresBlindOutbound')} disabled={isReadOnly} onCheckedChange={(val) => setValue('requiresBlindOutbound', val)} />
+                                                <Switch
+                                                    checked={Boolean(watchedValues?.requiresBlindOutbound)}
+                                                    disabled={isReadOnly}
+                                                    onCheckedChange={(val) => setValue('requiresBlindOutbound', val)}
+                                                />
                                             </div>
                                         </div>
 
@@ -500,7 +573,11 @@ export default function ClienteFormSheet({ open, onOpenChange, clienteId = null 
                                                     <strong className="text-slate-700">Se inativo:</strong> O sistema agrupa todos os itens expedidos numa única NF-e de retorno (com várias tags refNFe).
                                                 </p>
                                             </div>
-                                            <Switch checked={watch('returnInvoicePerReferencedInvoice')} disabled={isReadOnly} onCheckedChange={(val) => setValue('returnInvoicePerReferencedInvoice', val)} />
+                                            <Switch
+                                                checked={Boolean(watchedValues?.returnInvoicePerReferencedInvoice)}
+                                                disabled={isReadOnly}
+                                                onCheckedChange={(val) => setValue('returnInvoicePerReferencedInvoice', val)}
+                                            />
                                         </div>
                                     </div>
                                 </TabsContent>

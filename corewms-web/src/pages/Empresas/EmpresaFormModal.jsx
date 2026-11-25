@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useMemo } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
@@ -64,31 +64,95 @@ const certSchema = z.object({
     password: z.string().min(1, 'A senha é obrigatória.')
 });
 
+const EMPTY_EMPRESA_VALUES = {
+    corporateName: '',
+    tradeName: '',
+    stateRegistration: '',
+    municipalRegistration: '',
+    cnae: '',
+    crt: 1,
+    environment: 2,
+    nfeSerie: 1,
+    nfeNextNumber: 1,
+    rntrc: '',
+    iest: '',
+    email: '',
+    phone: '',
+    zipCode: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    cityName: '',
+    cityCode: 0,
+    state: '',
+    logoBase64: null,
+    emailProvider: 0,
+    emailSenderName: '',
+    emailSenderAddress: '',
+    smtpHost: '',
+    smtpPort: 587,
+    smtpUser: '',
+    smtpPassword: '',
+    smtpEnableSsl: true
+};
+
 export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) {
     const queryClient = useQueryClient();
     const canManageCompanies = useHasPermission('companies:manage');
     const [activeTab, setActiveTab] = useState('dados');
 
-    const [testEmailDestination, setTestEmailDestination] = useState('');
+    const [testEmailDestination, setTestEmailDestination] = useState(() => empresaToEdit?.email || '');
     const [isTestingEmail, setIsTestingEmail] = useState(false);
+
+    const dadosValues = useMemo(() => {
+        if (!open || !empresaToEdit) return EMPTY_EMPRESA_VALUES;
+        return {
+            corporateName: empresaToEdit.corporateName || '',
+            tradeName: empresaToEdit.tradeName || '',
+            stateRegistration: empresaToEdit.stateRegistration || '',
+            municipalRegistration: empresaToEdit.municipalRegistration || '',
+            cnae: empresaToEdit.cnae || '',
+            crt: empresaToEdit.crt || 1,
+            environment: empresaToEdit.environment ?? 2,
+            nfeSerie: empresaToEdit.nfeSerie || 1,
+            nfeNextNumber: empresaToEdit.nfeNextNumber || 1,
+            rntrc: empresaToEdit.rntrc || '',
+            iest: empresaToEdit.iest || '',
+            email: empresaToEdit.email || '',
+            phone: empresaToEdit.phone || '',
+            zipCode: empresaToEdit.zipCode || '',
+            street: empresaToEdit.street || '',
+            number: empresaToEdit.number || '',
+            complement: empresaToEdit.complement || '',
+            neighborhood: empresaToEdit.neighborhood || '',
+            cityName: empresaToEdit.cityName || '',
+            cityCode: empresaToEdit.cityCode || 0,
+            state: empresaToEdit.state || '',
+            logoBase64: empresaToEdit.logoBase64 || null,
+
+            emailProvider: empresaToEdit.emailProvider ?? 0,
+            emailSenderName: empresaToEdit.emailSenderName || '',
+            emailSenderAddress: empresaToEdit.emailSenderAddress || '',
+            smtpHost: empresaToEdit.smtpHost || '',
+            smtpPort: empresaToEdit.smtpPort || 587,
+            smtpUser: empresaToEdit.smtpUser || '',
+            smtpPassword: '',
+            smtpEnableSsl: empresaToEdit.smtpEnableSsl ?? true
+        };
+    }, [open, empresaToEdit]);
 
     const {
         register: regDados,
+        control: controlDados,
         handleSubmit: submitDados,
         setValue: setDadosValue,
-        reset: resetDados,
-        watch: watchDados,
+        getValues: getDadosValues,
         formState: { errors: errDados }
     } = useForm({
         resolver: zodResolver(empresaSchema),
-        defaultValues: {
-            environment: 2,
-            nfeSerie: 1,
-            nfeNextNumber: 1,
-            emailProvider: 0,
-            smtpPort: 587,
-            smtpEnableSsl: true
-        }
+        defaultValues: EMPTY_EMPRESA_VALUES,
+        values: dadosValues
     });
 
     const {
@@ -100,49 +164,18 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
         resolver: zodResolver(certSchema)
     });
 
-    const logoBase64 = watchDados('logoBase64');
-    const emailProvider = Number(watchDados('emailProvider') ?? 0);
+    const logoBase64 = useWatch({ control: controlDados, name: 'logoBase64' });
+    const watchedEmailProvider = useWatch({ control: controlDados, name: 'emailProvider' });
+    const emailProvider = Number(watchedEmailProvider ?? 0);
 
-    useEffect(() => {
-        if (open && empresaToEdit) {
-            resetDados({
-                corporateName: empresaToEdit.corporateName || '',
-                tradeName: empresaToEdit.tradeName || '',
-                stateRegistration: empresaToEdit.stateRegistration || '',
-                municipalRegistration: empresaToEdit.municipalRegistration || '',
-                cnae: empresaToEdit.cnae || '',
-                crt: empresaToEdit.crt || 1,
-                environment: empresaToEdit.environment ?? 2,
-                nfeSerie: empresaToEdit.nfeSerie || 1,
-                nfeNextNumber: empresaToEdit.nfeNextNumber || 1,
-                rntrc: empresaToEdit.rntrc || '',
-                iest: empresaToEdit.iest || '',
-                email: empresaToEdit.email || '',
-                phone: empresaToEdit.phone || '',
-                zipCode: empresaToEdit.zipCode || '',
-                street: empresaToEdit.street || '',
-                number: empresaToEdit.number || '',
-                complement: empresaToEdit.complement || '',
-                neighborhood: empresaToEdit.neighborhood || '',
-                cityName: empresaToEdit.cityName || '',
-                cityCode: empresaToEdit.cityCode || 0,
-                state: empresaToEdit.state || '',
-                logoBase64: empresaToEdit.logoBase64 || null,
-
-                emailProvider: empresaToEdit.emailProvider ?? 0,
-                emailSenderName: empresaToEdit.emailSenderName || '',
-                emailSenderAddress: empresaToEdit.emailSenderAddress || '',
-                smtpHost: empresaToEdit.smtpHost || '',
-                smtpPort: empresaToEdit.smtpPort || 587,
-                smtpUser: empresaToEdit.smtpUser || '',
-                smtpPassword: '',
-                smtpEnableSsl: empresaToEdit.smtpEnableSsl ?? true
-            });
+    const handleOpenChange = (nextOpen) => {
+        if (nextOpen) {
             resetCert();
-            setTestEmailDestination(empresaToEdit.email || '');
+            setTestEmailDestination(empresaToEdit?.email || '');
             setActiveTab('dados');
         }
-    }, [open, empresaToEdit, resetDados, resetCert]);
+        onOpenChange(nextOpen);
+    };
 
     const handleLogoUpload = (e) => {
         if (!canManageCompanies) return;
@@ -185,19 +218,20 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
         mutation: {
             onSuccess: (sefazData) => {
                 toast.success('Dados sincronizados com a SEFAZ!');
-                setDadosValue('corporateName', sefazData.corporateName || watchDados('corporateName'), { shouldValidate: true });
-                setDadosValue('tradeName', sefazData.tradeName || watchDados('tradeName'), { shouldValidate: true });
-                setDadosValue('stateRegistration', sefazData.stateRegistration || watchDados('stateRegistration'), { shouldValidate: true });
-                setDadosValue('cnae', sefazData.cnae || watchDados('cnae'), { shouldValidate: true });
-                setDadosValue('crt', sefazData.crt ?? watchDados('crt'), { shouldValidate: true });
-                setDadosValue('zipCode', sefazData.zipCode || watchDados('zipCode'), { shouldValidate: true });
-                setDadosValue('street', sefazData.street || watchDados('street'), { shouldValidate: true });
-                setDadosValue('number', sefazData.number || watchDados('number'), { shouldValidate: true });
-                setDadosValue('complement', sefazData.complement || watchDados('complement'), { shouldValidate: true });
-                setDadosValue('neighborhood', sefazData.neighborhood || watchDados('neighborhood'), { shouldValidate: true });
-                setDadosValue('cityName', sefazData.cityName || watchDados('cityName'), { shouldValidate: true });
-                setDadosValue('cityCode', sefazData.cityCode || watchDados('cityCode'), { shouldValidate: true });
-                setDadosValue('state', sefazData.state || watchDados('state'), { shouldValidate: true });
+                const current = getDadosValues();
+                setDadosValue('corporateName', sefazData.corporateName || current.corporateName, { shouldValidate: true });
+                setDadosValue('tradeName', sefazData.tradeName || current.tradeName, { shouldValidate: true });
+                setDadosValue('stateRegistration', sefazData.stateRegistration || current.stateRegistration, { shouldValidate: true });
+                setDadosValue('cnae', sefazData.cnae || current.cnae, { shouldValidate: true });
+                setDadosValue('crt', sefazData.crt ?? current.crt, { shouldValidate: true });
+                setDadosValue('zipCode', sefazData.zipCode || current.zipCode, { shouldValidate: true });
+                setDadosValue('street', sefazData.street || current.street, { shouldValidate: true });
+                setDadosValue('number', sefazData.number || current.number, { shouldValidate: true });
+                setDadosValue('complement', sefazData.complement || current.complement, { shouldValidate: true });
+                setDadosValue('neighborhood', sefazData.neighborhood || current.neighborhood, { shouldValidate: true });
+                setDadosValue('cityName', sefazData.cityName || current.cityName, { shouldValidate: true });
+                setDadosValue('cityCode', sefazData.cityCode || current.cityCode, { shouldValidate: true });
+                setDadosValue('state', sefazData.state || current.state, { shouldValidate: true });
             },
             onError: (err) => toast.error(err.response?.data?.message || 'Erro ao consultar SEFAZ.')
         }
@@ -289,7 +323,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
     };
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
+        <Sheet open={open} onOpenChange={handleOpenChange}>
             <SheetContent className="w-full sm:w-[880px] !max-w-[880px] flex flex-col p-0 bg-white shadow-2xl">
                 <SheetHeader className="p-6 border-b border-slate-100 bg-slate-50/50">
                     <SheetTitle className="text-xl font-bold text-slate-900">
@@ -403,17 +437,18 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     <div className="grid grid-cols-12 gap-4">
                                         <div className="col-span-7 space-y-1.5">
                                             <Label>Razão Social *</Label>
-                                            <Input {...regDados('corporateName')} className="h-10" />
+                                            <Input {...regDados('corporateName')} disabled={!canManageCompanies} className="h-10" />
                                             {errDados.corporateName && <p className="text-xs text-rose-500">{errDados.corporateName.message}</p>}
                                         </div>
                                         <div className="col-span-5 space-y-1.5">
                                             <Label>Nome Fantasia</Label>
-                                            <Input {...regDados('tradeName')} className="h-10" />
+                                            <Input {...regDados('tradeName')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-6 space-y-1.5">
                                             <Label className="font-semibold text-slate-800">Ambiente SEFAZ *</Label>
                                             <select
-                                                className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-amber-50/50 px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500"
+                                                disabled={!canManageCompanies}
+                                                className="flex h-10 w-full items-center justify-between rounded-md border border-slate-300 bg-amber-50/50 px-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                                                 {...regDados('environment')}
                                             >
                                                 <option value={2}>🧪 Homologação (Testes sem valor fiscal)</option>
@@ -423,7 +458,8 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                         <div className="col-span-6 space-y-1.5">
                                             <Label>Regime Tributário (CRT)</Label>
                                             <select
-                                                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                                                disabled={!canManageCompanies}
+                                                className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60"
                                                 {...regDados('crt')}
                                             >
                                                 <option value={1}>1 - Simples Nacional</option>
@@ -434,15 +470,15 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                         </div>
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>Inscrição Estadual (IE)</Label>
-                                            <Input {...regDados('stateRegistration')} className="h-10" />
+                                            <Input {...regDados('stateRegistration')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>CNAE Fiscal</Label>
-                                            <Input {...regDados('cnae')} placeholder="Ex: 4930-2/02" className="font-mono h-10" />
+                                            <Input {...regDados('cnae')} disabled={!canManageCompanies} placeholder="Ex: 4930-2/02" className="font-mono h-10" />
                                         </div>
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>Inscrição Municipal</Label>
-                                            <Input {...regDados('municipalRegistration')} className="h-10" />
+                                            <Input {...regDados('municipalRegistration')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                     </div>
                                 </div>
@@ -455,19 +491,19 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     <div className="grid grid-cols-12 gap-4">
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>Série NF-e *</Label>
-                                            <Input type="number" min="1" {...regDados('nfeSerie')} className="font-mono h-10" />
+                                            <Input type="number" min="1" {...regDados('nfeSerie')} disabled={!canManageCompanies} className="font-mono h-10" />
                                             {errDados.nfeSerie && <p className="text-xs text-rose-500">{errDados.nfeSerie.message}</p>}
                                         </div>
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>Próximo Nº NF-e *</Label>
-                                            <Input type="number" min="1" {...regDados('nfeNextNumber')} className="font-mono h-10" />
+                                            <Input type="number" min="1" {...regDados('nfeNextNumber')} disabled={!canManageCompanies} className="font-mono h-10" />
                                             {errDados.nfeNextNumber && <p className="text-xs text-rose-500">{errDados.nfeNextNumber.message}</p>}
                                         </div>
                                         <div className="col-span-4 space-y-1.5">
                                             <Label className="flex items-center gap-1">
                                                 <Truck size={13} /> RNTRC (ANTT)
                                             </Label>
-                                            <Input {...regDados('rntrc')} placeholder="Ex: 12345678" className="font-mono h-10" />
+                                            <Input {...regDados('rntrc')} disabled={!canManageCompanies} placeholder="Ex: 12345678" className="font-mono h-10" />
                                         </div>
                                     </div>
                                 </div>
@@ -478,11 +514,11 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <Label>E-mail Corporativo</Label>
-                                            <Input type="email" {...regDados('email')} className="h-10" />
+                                            <Input type="email" {...regDados('email')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="space-y-1.5">
                                             <Label>Telefone / Celular</Label>
-                                            <Input {...regDados('phone')} className="h-10" />
+                                            <Input {...regDados('phone')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                     </div>
                                 </div>
@@ -495,35 +531,35 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     <div className="grid grid-cols-12 gap-4">
                                         <div className="col-span-3 space-y-1.5">
                                             <Label>CEP</Label>
-                                            <Input {...regDados('zipCode')} className="font-mono h-10" />
+                                            <Input {...regDados('zipCode')} disabled={!canManageCompanies} className="font-mono h-10" />
                                         </div>
                                         <div className="col-span-7 space-y-1.5">
                                             <Label>Logradouro</Label>
-                                            <Input {...regDados('street')} className="h-10" />
+                                            <Input {...regDados('street')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-2 space-y-1.5">
                                             <Label>Número</Label>
-                                            <Input {...regDados('number')} className="h-10" />
+                                            <Input {...regDados('number')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-4 space-y-1.5">
                                             <Label>Complemento</Label>
-                                            <Input {...regDados('complement')} className="h-10" />
+                                            <Input {...regDados('complement')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-3 space-y-1.5">
                                             <Label>Bairro</Label>
-                                            <Input {...regDados('neighborhood')} className="h-10" />
+                                            <Input {...regDados('neighborhood')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-5 space-y-1.5">
                                             <Label>Cidade</Label>
-                                            <Input {...regDados('cityName')} className="h-10" />
+                                            <Input {...regDados('cityName')} disabled={!canManageCompanies} className="h-10" />
                                         </div>
                                         <div className="col-span-3 space-y-1.5">
                                             <Label>Código IBGE</Label>
-                                            <Input {...regDados('cityCode')} placeholder="Ex: 4308605" maxLength={7} className="font-mono h-10" />
+                                            <Input {...regDados('cityCode')} disabled={!canManageCompanies} placeholder="Ex: 4308605" maxLength={7} className="font-mono h-10" />
                                         </div>
                                         <div className="col-span-2 space-y-1.5">
                                             <Label>UF *</Label>
-                                            <Input maxLength={2} className="uppercase font-mono text-center h-10" {...regDados('state')} />
+                                            <Input maxLength={2} disabled={!canManageCompanies} className="uppercase font-mono text-center h-10" {...regDados('state')} />
                                             {errDados.state && <p className="text-xs text-rose-500">{errDados.state.message}</p>}
                                         </div>
                                     </div>
@@ -539,6 +575,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                     <div className="grid grid-cols-3 gap-3">
                                         <button
                                             type="button"
+                                            disabled={!canManageCompanies}
                                             onClick={() => setDadosValue('emailProvider', 0, { shouldValidate: true })}
                                             className={`p-4 rounded-xl border text-left transition-all ${emailProvider === 0
                                                 ? 'border-slate-800 bg-slate-50 ring-2 ring-slate-800/10'
@@ -551,6 +588,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
 
                                         <button
                                             type="button"
+                                            disabled={!canManageCompanies}
                                             onClick={() => setDadosValue('emailProvider', 1, { shouldValidate: true })}
                                             className={`p-4 rounded-xl border text-left transition-all ${emailProvider === 1
                                                 ? 'border-blue-600 bg-blue-50/40 ring-2 ring-blue-600/20'
@@ -566,6 +604,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
 
                                         <button
                                             type="button"
+                                            disabled={!canManageCompanies}
                                             onClick={() => setDadosValue('emailProvider', 2, { shouldValidate: true })}
                                             className={`p-4 rounded-xl border text-left transition-all ${emailProvider === 2
                                                 ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-600/20'
@@ -591,6 +630,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <Label>Nome de Exibição do Remetente</Label>
                                                 <Input
                                                     {...regDados('emailSenderName')}
+                                                    disabled={!canManageCompanies}
                                                     placeholder="Ex: Faturamento Tramontina"
                                                     className="h-10 text-xs bg-white"
                                                 />
@@ -599,6 +639,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <Label>E-mail do Remetente *</Label>
                                                 <Input
                                                     {...regDados('emailSenderAddress')}
+                                                    disabled={!canManageCompanies}
                                                     placeholder="Ex: faturamento@empresa.com.br"
                                                     className="h-10 text-xs font-mono bg-white"
                                                 />
@@ -619,6 +660,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <Label>Servidor SMTP (Host) *</Label>
                                                 <Input
                                                     {...regDados('smtpHost')}
+                                                    disabled={!canManageCompanies}
                                                     placeholder="Ex: smtp.gmail.com ou smtp.office365.com"
                                                     className="h-10 text-xs font-mono bg-white"
                                                 />
@@ -628,6 +670,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <Input
                                                     type="number"
                                                     {...regDados('smtpPort')}
+                                                    disabled={!canManageCompanies}
                                                     placeholder="587"
                                                     className="h-10 text-xs font-mono bg-white"
                                                 />
@@ -637,6 +680,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <Label>Utilizador de Autenticação</Label>
                                                 <Input
                                                     {...regDados('smtpUser')}
+                                                    disabled={!canManageCompanies}
                                                     placeholder="Geralmente o e-mail completo"
                                                     className="h-10 text-xs font-mono bg-white"
                                                 />
@@ -654,6 +698,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <Input
                                                     type="password"
                                                     {...regDados('smtpPassword')}
+                                                    disabled={!canManageCompanies}
                                                     placeholder={empresaToEdit?.hasSmtpPassword ? "•••••••• (Preencha apenas para alterar)" : "Digite a senha do SMTP"}
                                                     className="h-10 text-xs font-mono bg-white"
                                                 />
@@ -663,6 +708,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 <input
                                                     type="checkbox"
                                                     id="smtpSslCheck"
+                                                    disabled={!canManageCompanies}
                                                     {...regDados('smtpEnableSsl')}
                                                     className="rounded border-slate-300 text-blue-600 h-4 w-4"
                                                 />
@@ -760,6 +806,7 @@ export default function EmpresaFormModal({ open, onOpenChange, empresaToEdit }) 
                                                 type="email"
                                                 placeholder="Digite o e-mail de destino para o teste..."
                                                 value={testEmailDestination}
+                                                disabled={!canManageCompanies}
                                                 onChange={(e) => setTestEmailDestination(e.target.value)}
                                                 className="h-10 text-xs bg-white flex-1"
                                             />

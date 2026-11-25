@@ -461,14 +461,13 @@ export default function OutboundItemsPanelPage() {
     // Cálculo das peças totais selecionadas nas HUs ativas
     const selectedClosedStats = useMemo(() => {
         if (!availableStockData?.receiptGroups || selectedHuIds.size === 0) return { count: 0, pieces: 0 };
-        let pieces = 0;
-        availableStockData.receiptGroups.forEach(g => {
-            g.availableHus?.forEach(h => {
-                if (selectedHuIds.has(h.handlingUnitId)) {
-                    pieces += Number(h.currentQuantity) || 0;
-                }
-            });
-        });
+        const pieces = availableStockData.receiptGroups.reduce((acc, g) => {
+            const groupPieces = (g.availableHus || []).reduce(
+                (hAcc, h) => (selectedHuIds.has(h.handlingUnitId) ? hAcc + (Number(h.currentQuantity) || 0) : hAcc),
+                0
+            );
+            return acc + groupPieces;
+        }, 0);
         return { count: selectedHuIds.size, pieces };
     }, [availableStockData, selectedHuIds]);
 
@@ -479,15 +478,9 @@ export default function OutboundItemsPanelPage() {
             return { totalSkus: 0, totalUnits: 0, totalHus: 0, skuBreakdown: [] };
         }
 
-        const totalSkus = orderItems.length;
-        let totalUnits = 0;
-        let totalHus = 0;
-
         const skuBreakdown = orderItems.map(item => {
             const qty = Number(item.allocatedQuantity) || Number(item.expectedQuantity) || 0;
-            totalUnits += qty;
             const itemAllocations = item.allocations || [];
-            totalHus += itemAllocations.length;
 
             const invoiceGroupsMap = new Map();
             itemAllocations.forEach(alloc => {
@@ -514,10 +507,15 @@ export default function OutboundItemsPanelPage() {
                 description: item.description,
                 unit: item.unit || 'UN',
                 quantity: qty,
+                allocationsCount: itemAllocations.length,
                 status: item.status,
                 invoiceGroups: Array.from(invoiceGroupsMap.values())
             };
         });
+
+        const totalSkus = skuBreakdown.length;
+        const totalUnits = skuBreakdown.reduce((acc, sb) => acc + sb.quantity, 0);
+        const totalHus = skuBreakdown.reduce((acc, sb) => acc + sb.allocationsCount, 0);
 
         return { totalSkus, totalUnits, totalHus, skuBreakdown };
     }, [orderItems]);
@@ -636,7 +634,7 @@ export default function OutboundItemsPanelPage() {
                                 </div>
 
                                 {availableStockData?.receiptGroups?.map((group, gIdx) => {
-                                    const isExpanded = !!expandedGroupIdx[gIdx];
+                                    const isExpanded = Boolean(expandedGroupIdx[gIdx]);
 
                                     const filteredHus = group.availableHus?.filter(h => {
                                         if (!huFilterTerm.trim()) return true;
@@ -861,7 +859,7 @@ export default function OutboundItemsPanelPage() {
                     ) : (
                         <div className="space-y-3">
                             {orderItemsSummary.skuBreakdown.map((item) => {
-                                const isExpanded = !!expandedItemIds[item.id];
+                                const isExpanded = Boolean(expandedItemIds[item.id]);
 
                                 return (
                                     <div key={item.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">

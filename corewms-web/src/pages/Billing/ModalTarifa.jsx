@@ -3,6 +3,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,24 +20,42 @@ const tariffSchema = z.object({
     validFrom: z.date({ required_error: 'Informe a data de início da vigência.' })
 });
 
+const EMPTY_TARIFF_VALUES = {
+    customerId: '',
+    billingServiceId: '',
+    unitValue: 0,
+    validFrom: undefined
+};
+
 export default function ModalTarifa({ isOpen, onOpenChange, customers, services, reload }) {
+    const canManageBilling = useHasPermission('billing:manage');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { handleSubmit, setValue, control, reset, formState: { errors } } = useForm({
         resolver: zodResolver(tariffSchema),
-        defaultValues: {
-            customerId: '',
-            billingServiceId: '',
-            unitValue: 0,
-            validFrom: new Date()
-        }
+        defaultValues: EMPTY_TARIFF_VALUES
     });
 
     const selectedCustomerId = useWatch({ control, name: 'customerId' });
     const selectedServiceId = useWatch({ control, name: 'billingServiceId' });
     const selectedValidFrom = useWatch({ control, name: 'validFrom' });
 
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen) {
+            reset({
+                customerId: '',
+                billingServiceId: '',
+                unitValue: 0,
+                validFrom: new Date()
+            });
+        }
+        onOpenChange(nextOpen);
+    };
+
     const onSave = async (data) => {
+        if (!canManageBilling) return;
+
         try {
             setIsSubmitting(true);
 
@@ -69,7 +88,7 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-md bg-white">
                 <DialogHeader>
                     <DialogTitle className="text-slate-900 flex items-center gap-2">
@@ -83,7 +102,11 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                 <form onSubmit={handleSubmit(onSave)} className="space-y-4 py-2">
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Depositante *</Label>
-                        <Select value={selectedCustomerId} onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}>
+                        <Select
+                            value={selectedCustomerId}
+                            disabled={!canManageBilling || isSubmitting}
+                            onValueChange={(v) => setValue('customerId', v, { shouldValidate: true })}
+                        >
                             <SelectTrigger className="bg-white text-xs h-9">
                                 <SelectValue placeholder="Escolha o depositante..." />
                             </SelectTrigger>
@@ -98,7 +121,11 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
 
                     <div className="space-y-1.5">
                         <Label className="text-xs font-semibold text-slate-700">Serviço Logístico *</Label>
-                        <Select value={selectedServiceId} onValueChange={(v) => setValue('billingServiceId', v, { shouldValidate: true })}>
+                        <Select
+                            value={selectedServiceId}
+                            disabled={!canManageBilling || isSubmitting}
+                            onValueChange={(v) => setValue('billingServiceId', v, { shouldValidate: true })}
+                        >
                             <SelectTrigger className="bg-white text-xs h-9">
                                 <SelectValue placeholder="Escolha o serviço..." />
                             </SelectTrigger>
@@ -117,6 +144,7 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                             <Input
                                 type="number"
                                 step="any"
+                                disabled={!canManageBilling || isSubmitting}
                                 placeholder="0,0000000000"
                                 onChange={(e) => setValue('unitValue', parseFloat(e.target.value) || 0, { shouldValidate: true })}
                                 className="bg-white font-mono text-xs h-9"
@@ -128,6 +156,7 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
                             <Label className="text-xs font-semibold text-slate-700">Início da Vigência *</Label>
                             <DatePicker
                                 date={selectedValidFrom}
+                                disabled={!canManageBilling || isSubmitting}
                                 setDate={(d) => setValue('validFrom', d, { shouldValidate: true })}
                                 className="h-9"
                             />
@@ -137,10 +166,12 @@ export default function ModalTarifa({ isOpen, onOpenChange, customers, services,
 
                     <DialogFooter className="pt-3">
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancelar</Button>
-                        <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Gravar Tarifa
-                        </Button>
+                        {canManageBilling && (
+                            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9">
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                Gravar Tarifa
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

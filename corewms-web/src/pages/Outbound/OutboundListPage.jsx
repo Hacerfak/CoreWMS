@@ -27,7 +27,7 @@ export default function OutboundListPage() {
     const canCancelOutbound = useHasPermission('outbound:cancel');
     const canAllocateOutbound = useHasPermission('outbound:allocate');
     const canPickOutbound = useHasPermission('outbound:pick');
-    const canPackOutbound = useHasPermission('packing:manage');
+    const canPackOutbound = useHasPermission('outbound:pack');
     const canCheckOutbound = useHasPermission('outbound:check');
     const canShipOrEmitOutbound = useHasPermission(['outbound:ship', 'fiscal:emit']);
     const canManageOutbound = useHasPermission('outbound:manage');

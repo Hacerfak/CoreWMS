@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,39 +21,39 @@ const serviceSchema = z.object({
     sqlTemplate: z.string().optional()
 });
 
+const EMPTY_SERVICE = {
+    name: '',
+    type: 'Automatic_Daily',
+    sqlTemplate: ''
+};
+
 export default function ModalServico({ isOpen, onOpenChange, editingService, reload }) {
     const canManageBilling = useHasPermission('billing:manage');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { handleSubmit, setValue, control, reset, formState: { errors } } = useForm({
+    const formValues = useMemo(() => {
+        if (!isOpen || !editingService) return EMPTY_SERVICE;
+        const isAuto =
+            editingService.type === 'Automatic_Daily' ||
+            editingService.type === 'Automatic_SQL' ||
+            editingService.type === 1;
+
+        return {
+            name: editingService.name || '',
+            type: isAuto ? 'Automatic_Daily' : 'Operational_Event',
+            sqlTemplate: editingService.sqlTemplate || ''
+        };
+    }, [isOpen, editingService]);
+
+    const { handleSubmit, setValue, control, formState: { errors } } = useForm({
         resolver: zodResolver(serviceSchema),
-        defaultValues: {
-            name: '',
-            type: 'Automatic_Daily',
-            sqlTemplate: ''
-        }
+        defaultValues: EMPTY_SERVICE,
+        values: formValues
     });
 
     const watchName = useWatch({ control, name: 'name' });
     const watchType = useWatch({ control, name: 'type' });
     const watchSqlTemplate = useWatch({ control, name: 'sqlTemplate' });
-
-    useEffect(() => {
-        if (isOpen) {
-            if (editingService) {
-                setValue('name', editingService.name || '');
-                const isAuto = editingService.type === 'Automatic_Daily' || editingService.type === 'Automatic_SQL' || editingService.type === 1;
-                setValue('type', isAuto ? 'Automatic_Daily' : 'Operational_Event');
-                setValue('sqlTemplate', editingService.sqlTemplate || '');
-            } else {
-                reset({
-                    name: '',
-                    type: 'Automatic_Daily',
-                    sqlTemplate: ''
-                });
-            }
-        }
-    }, [isOpen, editingService, setValue, reset]);
 
     const onSave = async (data) => {
         if (!canManageBilling) return;
@@ -94,6 +94,7 @@ export default function ModalServico({ isOpen, onOpenChange, editingService, rel
     };
 
     const applySqlPreset = (presetKey) => {
+        if (!canManageBilling) return;
         let sql = '';
         switch (presetKey) {
             case 'storage_daily':
@@ -290,7 +291,7 @@ GROUP BY pt."Code";`;
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <Dialog open={isOpen} onOpenChange={(v) => !isSubmitting && onOpenChange(v)}>
             <DialogContent className="sm:max-w-3xl bg-white max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="text-slate-900 flex items-center gap-2">
@@ -309,6 +310,7 @@ GROUP BY pt."Code";`;
                             <Input
                                 placeholder="Ex: Armazenagem Diária (Palete) / Expedição de Caixa"
                                 value={watchName || ''}
+                                disabled={!canManageBilling || isSubmitting}
                                 onChange={(e) => setValue('name', e.target.value, { shouldValidate: true })}
                                 className="bg-white text-xs h-9"
                             />
@@ -317,7 +319,11 @@ GROUP BY pt."Code";`;
 
                         <div className="space-y-1.5">
                             <Label className="text-xs font-semibold text-slate-700">Modalidade de Apuração *</Label>
-                            <Select value={watchType || 'Automatic_Daily'} onValueChange={(v) => setValue('type', v, { shouldValidate: true })}>
+                            <Select
+                                value={watchType || 'Automatic_Daily'}
+                                disabled={!canManageBilling || isSubmitting}
+                                onValueChange={(v) => setValue('type', v, { shouldValidate: true })}
+                            >
                                 <SelectTrigger className="bg-white text-xs h-9">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -336,30 +342,33 @@ GROUP BY pt."Code";`;
                                 <Code2 size={14} className="text-purple-600" /> Query SQL Dinâmica (PostgreSQL Dapper)
                             </Label>
 
-                            <div className="flex flex-wrap gap-1">
-                                <span className="text-[10px] text-slate-400 self-center mr-1">Modelos Prontos:</span>
-                                <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('storage_daily')} className="h-6 text-[10px] px-2 bg-slate-50">
-                                    Armazenagem
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('ad_valorem')} className="h-6 text-[10px] px-2 bg-slate-50">
-                                    Ad-Valorem
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('inbound_volumes')} className="h-6 text-[10px] px-2 bg-slate-50">
-                                    Recebimento
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('outbound_handling')} className="h-6 text-[10px] px-2 bg-slate-50">
-                                    Handling Out
-                                </Button>
-                                <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('outbound_stretch')} className="h-6 text-[10px] px-2 bg-slate-50">
-                                    Stretch
-                                </Button>
-                            </div>
+                            {canManageBilling && (
+                                <div className="flex flex-wrap gap-1">
+                                    <span className="text-[10px] text-slate-400 self-center mr-1">Modelos Prontos:</span>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('storage_daily')} className="h-6 text-[10px] px-2 bg-slate-50">
+                                        Armazenagem
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('ad_valorem')} className="h-6 text-[10px] px-2 bg-slate-50">
+                                        Ad-Valorem
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('inbound_volumes')} className="h-6 text-[10px] px-2 bg-slate-50">
+                                        Recebimento
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('outbound_handling')} className="h-6 text-[10px] px-2 bg-slate-50">
+                                        Handling Out
+                                    </Button>
+                                    <Button type="button" variant="outline" size="sm" onClick={() => applySqlPreset('outbound_stretch')} className="h-6 text-[10px] px-2 bg-slate-50">
+                                        Stretch
+                                    </Button>
+                                </div>
+                            )}
                         </div>
 
                         <Textarea
                             rows={8}
                             placeholder="SELECT COUNT(*) AS VOLUME, COUNT(*) * @ServicoValor AS VALOR_TOTAL FROM ..."
                             value={watchSqlTemplate || ''}
+                            disabled={!canManageBilling || isSubmitting}
                             onChange={(e) => setValue('sqlTemplate', e.target.value)}
                             className="font-mono text-xs bg-slate-900 text-emerald-400 p-3 leading-relaxed border-slate-800 focus:ring-purple-500 rounded-xl"
                         />
