@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePostApiPrintingTemplates, usePutApiPrintingTemplatesId } from '@/api/generated/printing/printing';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,19 +19,25 @@ const templateSchema = z.object({
     heightMm: z.coerce.number().min(1, 'Obrigatório.')
 });
 
+const EMPTY_TEMPLATE = { name: '', zplContent: '', widthMm: 100, heightMm: 150 };
+
 export default function TemplateFormModal({ open, onOpenChange, templateToEdit }) {
     const queryClient = useQueryClient();
-    const isEditing = !!templateToEdit;
+    const canManagePrinting = useHasPermission('printing:manage');
+    const isEditing = Boolean(templateToEdit);
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm({
-        resolver: zodResolver(templateSchema)
+    const { register, handleSubmit, formState: { errors } } = useForm({
+        resolver: zodResolver(templateSchema),
+        defaultValues: EMPTY_TEMPLATE,
+        values: open && isEditing
+            ? {
+                name: templateToEdit.name || '',
+                zplContent: templateToEdit.zplContent || '',
+                widthMm: templateToEdit.widthMm ?? 100,
+                heightMm: templateToEdit.heightMm ?? 150
+            }
+            : EMPTY_TEMPLATE
     });
-
-    useEffect(() => {
-        if (open) {
-            reset(isEditing ? templateToEdit : { name: '', zplContent: '', widthMm: 100, heightMm: 150 });
-        }
-    }, [open, isEditing, templateToEdit, reset]);
 
     const { mutate: createTemplate, isPending: isCreating } = usePostApiPrintingTemplates({
         mutation: {
@@ -54,6 +60,7 @@ export default function TemplateFormModal({ open, onOpenChange, templateToEdit }
     };
 
     const onSubmit = (data) => {
+        if (!canManagePrinting) return;
         if (isEditing) updateTemplate({ id: templateToEdit.id, data });
         else createTemplate({ data });
     };
@@ -61,7 +68,7 @@ export default function TemplateFormModal({ open, onOpenChange, templateToEdit }
     const isPending = isCreating || isUpdating;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(v) => !isPending && onOpenChange(v)}>
             <DialogContent className="sm:max-w-xl bg-white">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -73,32 +80,34 @@ export default function TemplateFormModal({ open, onOpenChange, templateToEdit }
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
                     <div className="space-y-2">
                         <Label>Nome do Template *</Label>
-                        <Input {...register('name')} placeholder="Ex: Etiqueta de Expedição Padrão" />
+                        <Input {...register('name')} disabled={!canManagePrinting || isPending} placeholder="Ex: Etiqueta de Expedição Padrão" />
                         {errors.name && <p className="text-xs text-rose-500">{errors.name.message}</p>}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>Largura (mm) *</Label>
-                            <Input type="number" {...register('widthMm')} />
+                            <Input type="number" {...register('widthMm')} disabled={!canManagePrinting || isPending} />
                         </div>
                         <div className="space-y-2">
                             <Label>Altura (mm) *</Label>
-                            <Input type="number" {...register('heightMm')} />
+                            <Input type="number" {...register('heightMm')} disabled={!canManagePrinting || isPending} />
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <Label>Código ZPL *</Label>
-                        <Textarea {...register('zplContent')} className="h-40 font-mono text-xs" placeholder="^XA...^XZ" />
+                        <Textarea {...register('zplContent')} disabled={!canManagePrinting || isPending} className="h-40 font-mono text-xs" placeholder="^XA...^XZ" />
                         {errors.zplContent && <p className="text-xs text-rose-500">{errors.zplContent.message}</p>}
                     </div>
 
                     <DialogFooter className="pt-4 border-t border-slate-100">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                        <Button type="submit" disabled={isPending} className="bg-slate-900 text-white min-w-[120px]">
-                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
-                        </Button>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Cancelar</Button>
+                        {canManagePrinting && (
+                            <Button type="submit" disabled={isPending} className="bg-slate-900 text-white min-w-[120px]">
+                                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

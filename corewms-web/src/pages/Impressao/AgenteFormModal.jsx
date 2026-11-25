@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePostApiPrintingAgents, usePutApiPrintingAgentsId } from '@/api/generated/printing/printing';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,20 +15,18 @@ const agenteSchema = z.object({
     name: z.string().min(3, 'Mínimo 3 caracteres.').max(100)
 });
 
+const EMPTY_AGENT = { name: '' };
+
 export default function AgenteFormModal({ open, onOpenChange, agenteToEdit }) {
     const queryClient = useQueryClient();
-    const isEditing = !!agenteToEdit;
+    const canManagePrinting = useHasPermission('printing:manage');
+    const isEditing = Boolean(agenteToEdit);
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    const { register, handleSubmit, formState: { errors } } = useForm({
         resolver: zodResolver(agenteSchema),
-        defaultValues: { name: '' }
+        defaultValues: EMPTY_AGENT,
+        values: open && isEditing ? { name: agenteToEdit.name || '' } : EMPTY_AGENT
     });
-
-    useEffect(() => {
-        if (open) {
-            reset(isEditing ? { name: agenteToEdit.name } : { name: '' });
-        }
-    }, [open, isEditing, agenteToEdit, reset]);
 
     const { mutate: createAgent, isPending: isCreating } = usePostApiPrintingAgents({
         mutation: {
@@ -51,6 +49,7 @@ export default function AgenteFormModal({ open, onOpenChange, agenteToEdit }) {
     };
 
     const onSubmit = (data) => {
+        if (!canManagePrinting) return;
         if (isEditing) updateAgent({ id: agenteToEdit.id, data: { name: data.name } });
         else createAgent({ data });
     };
@@ -58,7 +57,7 @@ export default function AgenteFormModal({ open, onOpenChange, agenteToEdit }) {
     const isPending = isCreating || isUpdating;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(v) => !isPending && onOpenChange(v)}>
             <DialogContent className="sm:max-w-md bg-white">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -70,15 +69,17 @@ export default function AgenteFormModal({ open, onOpenChange, agenteToEdit }) {
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
                     <div className="space-y-2">
                         <Label>Nome da Estação *</Label>
-                        <Input {...register('name')} placeholder="Ex: PC-EXPEDICAO-01" />
+                        <Input {...register('name')} disabled={!canManagePrinting || isPending} placeholder="Ex: PC-EXPEDICAO-01" />
                         {errors.name && <p className="text-xs text-rose-500 flex items-center gap-1 mt-1"><AlertCircle size={12} /> {errors.name.message}</p>}
                     </div>
 
                     <DialogFooter className="pt-2 border-t border-slate-100">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                        <Button type="submit" disabled={isPending} className="bg-slate-900 text-white min-w-[120px]">
-                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
-                        </Button>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Cancelar</Button>
+                        {canManagePrinting && (
+                            <Button type="submit" disabled={isPending} className="bg-slate-900 text-white min-w-[120px]">
+                                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

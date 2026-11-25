@@ -1,10 +1,13 @@
 import { usePostApiPrintSendTest } from '@/api/generated/printing/printing';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Printer, Server, Loader2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function PrintTemplateModal({ open, onOpenChange, template, agentes }) {
+    const canManagePrinting = useHasPermission('printing:manage');
+
     const { mutate: testPrint, isPending: isTesting } = usePostApiPrintSendTest({
         mutation: {
             onSuccess: (data) => {
@@ -16,17 +19,19 @@ export default function PrintTemplateModal({ open, onOpenChange, template, agent
     });
 
     const handlePrint = (agente, impressora) => {
+        if (!canManagePrinting) return;
+
         testPrint({
             data: {
                 stationName: agente.name,
                 printerName: impressora.name,
-                customZpl: template?.zplContent || '' // Injetamos o ZPL do template aqui!
+                customZpl: template?.zplContent || ''
             }
         });
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(v) => !isTesting && onOpenChange(v)}>
             <DialogContent className="sm:max-w-md bg-white">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -53,16 +58,18 @@ export default function PrintTemplateModal({ open, onOpenChange, template, agent
                                 {agente.printers?.map(p => (
                                     <div key={p.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md border border-slate-100">
                                         <span className="text-xs font-medium text-slate-700">{p.name}</span>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 text-xs bg-white text-blue-600 border-blue-200 hover:bg-blue-50"
-                                            onClick={() => handlePrint(agente, p)}
-                                            disabled={isTesting}
-                                        >
-                                            {isTesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />}
-                                            Imprimir
-                                        </Button>
+                                        {canManagePrinting && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 text-xs bg-white text-blue-600 border-blue-200 hover:bg-blue-50"
+                                                onClick={() => handlePrint(agente, p)}
+                                                disabled={isTesting}
+                                            >
+                                                {isTesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Play className="w-3 h-3 mr-1" />}
+                                                Imprimir
+                                            </Button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

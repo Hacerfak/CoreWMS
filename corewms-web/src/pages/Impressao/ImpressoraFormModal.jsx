@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePostApiPrintingPrinters, usePutApiPrintingPrintersId } from '@/api/generated/printing/printing';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,20 +16,20 @@ const impressoraSchema = z.object({
     target: z.string().min(4, 'Informe o alvo válido.')
 });
 
+const EMPTY_PRINTER = { name: '', target: '' };
+
 export default function ImpressoraFormModal({ open, onOpenChange, agentId, impressoraToEdit }) {
     const queryClient = useQueryClient();
-    const isEditing = !!impressoraToEdit;
+    const canManagePrinting = useHasPermission('printing:manage');
+    const isEditing = Boolean(impressoraToEdit);
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    const { register, handleSubmit, formState: { errors } } = useForm({
         resolver: zodResolver(impressoraSchema),
-        defaultValues: { name: '', target: '' }
+        defaultValues: EMPTY_PRINTER,
+        values: open && isEditing
+            ? { name: impressoraToEdit.name || '', target: impressoraToEdit.target || '' }
+            : EMPTY_PRINTER
     });
-
-    useEffect(() => {
-        if (open) {
-            reset(isEditing ? { name: impressoraToEdit.name, target: impressoraToEdit.target } : { name: '', target: '' });
-        }
-    }, [open, isEditing, impressoraToEdit, reset]);
 
     const { mutate: createPrinter, isPending: isCreating } = usePostApiPrintingPrinters({
         mutation: {
@@ -52,6 +52,7 @@ export default function ImpressoraFormModal({ open, onOpenChange, agentId, impre
     };
 
     const onSubmit = (data) => {
+        if (!canManagePrinting) return;
         if (isEditing) updatePrinter({ id: impressoraToEdit.id, data: { name: data.name, target: data.target } });
         else createPrinter({ data: { printAgentId: agentId, name: data.name, target: data.target } });
     };
@@ -59,7 +60,7 @@ export default function ImpressoraFormModal({ open, onOpenChange, agentId, impre
     const isPending = isCreating || isUpdating;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(v) => !isPending && onOpenChange(v)}>
             <DialogContent className="sm:max-w-md bg-white">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -71,20 +72,22 @@ export default function ImpressoraFormModal({ open, onOpenChange, agentId, impre
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
                     <div className="space-y-2">
                         <Label>Nome da Impressora *</Label>
-                        <Input {...register('name')} placeholder="Ex: ZEBRA-EXPEDICAO" />
+                        <Input {...register('name')} disabled={!canManagePrinting || isPending} placeholder="Ex: ZEBRA-EXPEDICAO" />
                         {errors.name && <p className="text-xs text-rose-500 flex items-center gap-1 mt-1"><AlertCircle size={12} /> {errors.name.message}</p>}
                     </div>
                     <div className="space-y-2">
                         <Label>Target (IP ou Caminho) *</Label>
-                        <Input {...register('target')} placeholder="Ex: 192.168.0.100:9100" />
+                        <Input {...register('target')} disabled={!canManagePrinting || isPending} placeholder="Ex: 192.168.0.100:9100" />
                         {errors.target && <p className="text-xs text-rose-500 flex items-center gap-1 mt-1"><AlertCircle size={12} /> {errors.target.message}</p>}
                     </div>
 
                     <DialogFooter className="pt-4 border-t border-slate-100">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                        <Button type="submit" disabled={isPending} className="bg-slate-900 text-white min-w-[120px]">
-                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
-                        </Button>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>Cancelar</Button>
+                        {canManagePrinting && (
+                            <Button type="submit" disabled={isPending} className="bg-slate-900 text-white min-w-[120px]">
+                                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save className="mr-2 h-4 w-4" /> Salvar</>}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

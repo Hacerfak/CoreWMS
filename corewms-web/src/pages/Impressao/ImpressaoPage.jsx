@@ -8,6 +8,7 @@ import {
     useDeleteApiPrintingTemplatesId
 } from '@/api/generated/printing/printing';
 import { useQueryClient } from '@tanstack/react-query';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import PrintTemplateModal from './PrintTemplateModal';
 
 export default function ImpressaoPage() {
     const queryClient = useQueryClient();
+    const canManagePrinting = useHasPermission('printing:manage');
 
     // Estados - Agentes
     const [isAgenteModalOpen, setIsAgenteModalOpen] = useState(false);
@@ -45,8 +47,12 @@ export default function ImpressaoPage() {
     const [templateToPrint, setTemplateToPrint] = useState(null);
 
     // Dados da API
-    const { data: agentes = [], isLoading: isLoadingAgentes } = useGetApiPrintingAgents();
-    const { data: templates = [], isLoading: isLoadingTemplates } = useGetApiPrintingTemplates();
+    const { data: agentes = [], isLoading: isLoadingAgentes } = useGetApiPrintingAgents({
+        query: { enabled: canManagePrinting }
+    });
+    const { data: templates = [], isLoading: isLoadingTemplates } = useGetApiPrintingTemplates({
+        query: { enabled: canManagePrinting }
+    });
 
     const { mutate: testPrint, isPending: isTesting } = usePostApiPrintSendTest({
         mutation: {
@@ -86,12 +92,15 @@ export default function ImpressaoPage() {
         }
     });
 
+    if (!canManagePrinting) {
+        return null;
+    }
+
     const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text);
         toast.success('Copiado para a área de transferência!');
     };
 
-    // Ações de abertura
     const handleOpenAgenteModal = (agente = null) => {
         setSelectedAgentForEdit(agente);
         setIsAgenteModalOpen(true);
@@ -241,7 +250,7 @@ export default function ImpressaoPage() {
                                 </TableHeader>
                                 <TableBody>
                                     {isLoadingTemplates ? (
-                                        <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={3} className="h-24 text-center"><Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
                                     ) : templates.map((tpl) => (
                                         <TableRow key={tpl.id}>
                                             <TableCell className="font-medium text-slate-900">{tpl.name}</TableCell>
