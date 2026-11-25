@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { getMyPermissions } from '@/api/generated/users/users';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Building2, LogOut, ArrowRight, Plus, Loader2, ShieldCheck } from 'lucide-react';
@@ -12,15 +13,16 @@ export default function SelecaoEmpresa() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { user, empresas, setCompanyId, logout, setPermissions } = useAuthStore();
+    const canManageCompanies = useHasPermission('companies:manage');
     const [loadingContext, setLoadingContext] = useState(false);
 
-    const isMasterOrAdmin = user?.isMaster || user?.role === 'ADMIN';
+    const canCreateCompany = Boolean(user?.isMaster || user?.role === 'ADMIN' || canManageCompanies);
 
     useEffect(() => {
-        if (empresas.length === 0 && isMasterOrAdmin) {
+        if (empresas.length === 0 && canCreateCompany) {
             navigate('/onboarding', { replace: true });
         }
-    }, [empresas, navigate, isMasterOrAdmin]);
+    }, [empresas, navigate, canCreateCompany]);
 
     const handleSelectCompany = async (empresaId) => {
         try {
@@ -33,7 +35,7 @@ export default function SelecaoEmpresa() {
 
             setPermissions(userPermissions);
             navigate('/dashboard');
-        } catch  {
+        } catch {
             toast.error('Erro ao carregar matriz de permissões. Tente novamente.');
             setCompanyId(null);
         } finally {
@@ -95,7 +97,7 @@ export default function SelecaoEmpresa() {
                             </Card>
                         ))}
 
-                        {isMasterOrAdmin && (
+                        {canCreateCompany && (
                             <button
                                 onClick={() => navigate('/onboarding')}
                                 className="group flex flex-col items-center justify-center h-full min-h-[220px] rounded-xl border-2 border-dashed border-slate-200 bg-transparent hover:border-blue-400 hover:bg-blue-50/50 transition-all duration-300"

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { postApiCompanies } from '@/api/generated/companies/companies';
 import { customInstance } from '@/api/orval-mutator';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,11 @@ export default function Onboarding() {
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
+
+    const user = useAuthStore((state) => state.user);
+    const canManageCompanies = useHasPermission('companies:manage');
+    const canOnboard = Boolean(user?.isMaster || user?.role === 'ADMIN' || canManageCompanies);
+
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
     const [uf, setUf] = useState('RS');
@@ -27,6 +33,10 @@ export default function Onboarding() {
         mutationFn: (data) => postApiCompanies(data),
     });
 
+    if (!canOnboard) {
+        return <Navigate to="/selecao-empresa" replace />;
+    }
+
     const handleLogout = () => {
         queryClient.clear();
         useAuthStore.getState().logout();
@@ -35,6 +45,8 @@ export default function Onboarding() {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (!canOnboard) return;
+
         setErrorMsg('');
         if (!file || !senha) {
             setErrorMsg('Selecione o arquivo do certificado e informe a senha.');
@@ -80,7 +92,7 @@ export default function Onboarding() {
                                 ]
                             });
                         }
-                    } catch  {
+                    } catch {
                         useAuthStore.setState({
                             empresas: [
                                 ...authStore.empresas,
