@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useGetApiInventoryBalances } from '@/api/generated/inventory/inventory';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -91,6 +92,9 @@ function SearchableCustomerSelect({ value, onChange, customers, placeholder = "S
 }
 
 export default function BalancoTab() {
+    const canViewInventory = useHasPermission(['inventory:view', 'inventory:manage']);
+    const canViewCustomers = useHasPermission('customers:view');
+
     // FILTROS BÁSICOS
     const [searchSku, setSearchSku] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState('ALL');
@@ -100,7 +104,10 @@ export default function BalancoTab() {
     const [page, setPage] = useState(1);
     const PAGE_SIZE = 20;
 
-    const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const { data: customersData } = useGetApiCustomers(
+        { OnlyActive: true, PageSize: 500 },
+        { query: { enabled: canViewCustomers } }
+    );
     const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
 
     const handleSearchSubmit = (e) => {
@@ -142,7 +149,10 @@ export default function BalancoTab() {
         ...appliedFilters
     };
 
-    const { data: apiResponse, isLoading, isFetching } = useGetApiInventoryBalances(queryParams);
+    const { data: apiResponse, isLoading, isFetching } = useGetApiInventoryBalances(
+        queryParams,
+        { query: { enabled: canViewInventory } }
+    );
     const balances = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -159,6 +169,7 @@ export default function BalancoTab() {
     }, [apiResponse]);
 
     const handleExport = () => {
+        if (!canViewInventory) return;
         downloadBackendCsv('/api/inventory/balances/export', appliedFilters, 'balanco_estoque');
     };
 
@@ -222,14 +233,16 @@ export default function BalancoTab() {
                 <form onSubmit={handleSearchSubmit} className="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-4">
                     <div className="flex items-center justify-between gap-3">
                         <span className="text-xs font-bold text-slate-700 font-mono uppercase">Filtros de Balanço</span>
-                        <Button type="button" onClick={handleExport} variant="outline" size="sm" disabled={totalCount === 0} className="bg-white border-slate-200 text-slate-700 text-xs h-9">
-                            <Download className="mr-1 h-3.5 w-3.5" /> Exportar CSV
-                        </Button>
+                        {canViewInventory && (
+                            <Button type="button" onClick={handleExport} variant="outline" size="sm" disabled={totalCount === 0} className="bg-white border-slate-200 text-slate-700 text-xs h-9">
+                                <Download className="mr-1 h-3.5 w-3.5" /> Exportar CSV
+                            </Button>
+                        )}
                     </div>
 
                     {/* FILTROS BÁSICOS */}
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-                        <div className="sm:col-span-4 space-y-1">
+                        <div className={`${canViewCustomers ? 'sm:col-span-4' : 'sm:col-span-8'} space-y-1`}>
                             <Label className="text-[11px] font-bold text-slate-700 uppercase">SKU / Descrição do Produto</Label>
                             <div className="relative">
                                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
@@ -242,15 +255,17 @@ export default function BalancoTab() {
                             </div>
                         </div>
 
-                        <div className="sm:col-span-4 space-y-1">
-                            <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
-                            <SearchableCustomerSelect
-                                value={selectedCustomer}
-                                onChange={(cust) => setSelectedCustomer(cust)}
-                                customers={customers}
-                                placeholder="Todos os Depositantes"
-                            />
-                        </div>
+                        {canViewCustomers && (
+                            <div className="sm:col-span-4 space-y-1">
+                                <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
+                                <SearchableCustomerSelect
+                                    value={selectedCustomer}
+                                    onChange={(cust) => setSelectedCustomer(cust)}
+                                    customers={customers}
+                                    placeholder="Todos os Depositantes"
+                                />
+                            </div>
+                        )}
 
                         <div className="sm:col-span-2 space-y-1">
                             <Label className="text-[11px] font-bold text-slate-700 uppercase">NF-e / Chave</Label>

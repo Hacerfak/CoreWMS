@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -18,10 +19,34 @@ import { toast } from 'sonner';
 import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerTime } from '@/components/ui/date-picker-time';
 
+const buildInitialForm = (firstHu, isBatch) => {
+    if (!firstHu || isBatch) {
+        return {
+            batch: '',
+            mfgDate: undefined,
+            expDate: undefined,
+            serialNumber: '',
+            createdAt: undefined,
+            packagingTypeId: '',
+            unitNetWeight: '',
+            unitGrossWeight: ''
+        };
+    }
+
+    return {
+        batch: firstHu.batch || '',
+        mfgDate: firstHu.manufactureDate ? new Date(firstHu.manufactureDate) : undefined,
+        expDate: firstHu.expirationDate ? new Date(firstHu.expirationDate) : undefined,
+        serialNumber: firstHu.serialNumber || '',
+        createdAt: firstHu.createdAt ? new Date(firstHu.createdAt) : new Date(),
+        packagingTypeId: firstHu.packagingTypeId || '',
+        unitNetWeight: firstHu.unitNetWeight !== undefined && firstHu.unitNetWeight !== null ? String(firstHu.unitNetWeight) : '',
+        unitGrossWeight: firstHu.unitGrossWeight !== undefined && firstHu.unitGrossWeight !== null ? String(firstHu.unitGrossWeight) : ''
+    };
+};
+
 export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [], onSuccess }) {
-    const [packagings, setPackagings] = useState([]);
-    const [isLoadingPackagings, setIsLoadingPackagings] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    const canManageInventory = useHasPermission('inventory:manage');
 
     const targetHus = useMemo(() => {
         if (Array.isArray(hus) && hus.length > 0) return hus;
@@ -31,65 +56,52 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
 
     const isBatch = targetHus.length > 1;
     const firstHu = targetHus[0];
+    const productId = firstHu?.productId;
 
-    const [form, setForm] = useState({
-        batch: '',
-        mfgDate: undefined,
-        expDate: undefined,
-        serialNumber: '',
-        createdAt: undefined,
-        packagingTypeId: '',
-        unitNetWeight: '',
-        unitGrossWeight: ''
-    });
+    const [packagings, setPackagings] = useState([]);
+    const [isLoadingPackagings, setIsLoadingPackagings] = useState(Boolean(open && productId && canManageInventory));
+    const [isLoading, setIsLoading] = useState(false);
+
+    const [form, setForm] = useState(() => buildInitialForm(firstHu, isBatch));
 
     useEffect(() => {
-        if (!open || targetHus.length === 0) return;
+        if (!open || !productId || !canManageInventory) return;
 
-        // Recupera o ProductId de forma resiliente
-        const productId = firstHu?.productId;
+        let isMounted = true;
 
-        if (productId) {
-            setIsLoadingPackagings(true);
-            customInstance({ url: `/api/products/${productId}/packagings`, method: 'GET' })
-                .then(res => {
-                    const items = res?.data || res || [];
-                    setPackagings(Array.isArray(items) ? items : []);
-                })
-                .catch(() => {
-                    setPackagings([]);
-                })
-                .finally(() => setIsLoadingPackagings(false));
-        } else {
-            setPackagings([]);
-        }
-
-        if (!isBatch) {
-            setForm({
-                batch: firstHu.batch || '',
-                mfgDate: firstHu.manufactureDate ? new Date(firstHu.manufactureDate) : undefined,
-                expDate: firstHu.expirationDate ? new Date(firstHu.expirationDate) : undefined,
-                serialNumber: firstHu.serialNumber || '',
-                createdAt: firstHu.createdAt ? new Date(firstHu.createdAt) : new Date(),
-                packagingTypeId: firstHu.packagingTypeId || '',
-                unitNetWeight: firstHu.unitNetWeight !== undefined && firstHu.unitNetWeight !== null ? String(firstHu.unitNetWeight) : '',
-                unitGrossWeight: firstHu.unitGrossWeight !== undefined && firstHu.unitGrossWeight !== null ? String(firstHu.unitGrossWeight) : ''
+        customInstance({ url: `/api/products/${productId}/packagings`, method: 'GET' })
+            .then(res => {
+                if (!isMounted) return;
+                const items = res?.data || res || [];
+                setPackagings(Array.isArray(items) ? items : []);
+            })
+            .catch(() => {
+                if (isMounted) setPackagings([]);
+            })
+            .finally(() => {
+                if (isMounted) setIsLoadingPackagings(false);
             });
-        } else {
-            setForm({
-                batch: '',
-                mfgDate: undefined,
-                expDate: undefined,
-                serialNumber: '',
-                createdAt: undefined,
-                packagingTypeId: '',
-                unitNetWeight: '',
-                unitGrossWeight: ''
-            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [open, productId, canManageInventory]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (isLoading) return;
+        if (nextOpen) {
+            setForm(buildInitialForm(firstHu, isBatch));
+            if (productId && canManageInventory) {
+                setIsLoadingPackagings(true);
+            } else {
+                setPackagings([]);
+            }
         }
-    }, [open, targetHus, isBatch, firstHu]);
+        onOpenChange(nextOpen);
+    };
 
     const handlePackagingSelect = (packagingTypeId) => {
+        if (!canManageInventory) return;
         const selectedPack = packagings.find(p => p.packagingTypeId === packagingTypeId);
         setForm(prev => ({
             ...prev,
@@ -101,6 +113,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!canManageInventory) return;
 
         const netWeightNum = form.unitNetWeight !== '' ? Number(form.unitNetWeight) : null;
         const grossWeightNum = form.unitGrossWeight !== '' ? Number(form.unitGrossWeight) : null;
@@ -167,7 +180,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-2xl bg-white p-0 overflow-hidden shadow-xl border-slate-200">
                 {/* CABEÇALHO PADRÃO WMS */}
                 <DialogHeader className="p-5 border-b border-slate-100 bg-slate-50/70">
@@ -234,6 +247,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                 <Label className="text-xs font-semibold text-slate-700">Lote Físico</Label>
                                 <Input
                                     placeholder="Digite o lote..."
+                                    disabled={!canManageInventory || isLoading}
                                     className="h-9 font-mono uppercase bg-white border-slate-200 text-xs"
                                     value={form.batch}
                                     onChange={(e) => setForm({ ...form, batch: e.target.value })}
@@ -247,7 +261,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                 </Label>
                                 <Input
                                     placeholder={isBatch ? "Indisponível em lote" : "Digite a série..."}
-                                    disabled={isBatch}
+                                    disabled={isBatch || !canManageInventory || isLoading}
                                     className="h-9 font-mono uppercase bg-white border-slate-200 text-xs disabled:bg-slate-100"
                                     value={form.serialNumber}
                                     onChange={(e) => setForm({ ...form, serialNumber: e.target.value })}
@@ -256,7 +270,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                         </div>
                     </div>
 
-                    {/* SEÇÃO 2: MARCOS TEMPORAIS (ORGANIZAÇÃO EM 2 COLUNAS PARA EVITAR CORTES) */}
+                    {/* SEÇÃO 2: MARCOS TEMPORAIS */}
                     <div className="space-y-3">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 border-b border-slate-100 pb-1.5 uppercase tracking-wide">
                             <Calendar className="h-3.5 w-3.5 text-blue-600" /> Prazos e Entrada
@@ -267,7 +281,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                 <Label className="text-xs font-semibold text-slate-700">Data de Fabricação</Label>
                                 <DatePicker
                                     date={form.mfgDate}
-                                    setDate={(d) => setForm({ ...form, mfgDate: d })}
+                                    setDate={(d) => canManageInventory && setForm({ ...form, mfgDate: d })}
                                     placeholder="DD/MM/AAAA"
                                     className="w-full"
                                 />
@@ -277,7 +291,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                 <Label className="text-xs font-semibold text-slate-700">Data de Validade</Label>
                                 <DatePicker
                                     date={form.expDate}
-                                    setDate={(d) => setForm({ ...form, expDate: d })}
+                                    setDate={(d) => canManageInventory && setForm({ ...form, expDate: d })}
                                     placeholder="DD/MM/AAAA"
                                     className="w-full"
                                 />
@@ -288,7 +302,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                             <Label className="text-xs font-semibold text-slate-700">Entrada no Armazém</Label>
                             <DatePickerTime
                                 date={form.createdAt}
-                                setDate={(d) => setForm({ ...form, createdAt: d })}
+                                setDate={(d) => canManageInventory && setForm({ ...form, createdAt: d })}
                                 className="w-full sm:w-80"
                             />
                         </div>
@@ -306,7 +320,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                 <Select
                                     value={form.packagingTypeId}
                                     onValueChange={handlePackagingSelect}
-                                    disabled={isLoadingPackagings || packagings.length === 0}
+                                    disabled={!canManageInventory || isLoadingPackagings || packagings.length === 0}
                                 >
                                     <SelectTrigger className="h-9 bg-white border-slate-200 text-xs">
                                         <SelectValue placeholder={
@@ -340,6 +354,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                     step="0.0001"
                                     min="0"
                                     placeholder="0.0000"
+                                    disabled={!canManageInventory || isLoading}
                                     className="h-9 font-mono bg-white border-slate-200 text-xs"
                                     value={form.unitNetWeight}
                                     onChange={(e) => setForm({ ...form, unitNetWeight: e.target.value })}
@@ -353,6 +368,7 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
                                     step="0.0001"
                                     min="0"
                                     placeholder="0.0000"
+                                    disabled={!canManageInventory || isLoading}
                                     className="h-9 font-mono bg-white border-slate-200 text-xs"
                                     value={form.unitGrossWeight}
                                     onChange={(e) => setForm({ ...form, unitGrossWeight: e.target.value })}
@@ -363,17 +379,19 @@ export default function EditarHuModal({ open, onOpenChange, hu = null, hus = [],
 
                     {/* RODAPÉ */}
                     <DialogFooter className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-9 text-xs bg-white">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading} className="h-9 text-xs bg-white">
                             Cancelar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isLoading}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-5 text-xs shadow-xs"
-                        >
-                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            {isBatch ? `Aplicar a ${targetHus.length} HUs` : 'Salvar Alterações'}
-                        </Button>
+                        {canManageInventory && (
+                            <Button
+                                type="submit"
+                                disabled={isLoading}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 px-5 text-xs shadow-xs"
+                            >
+                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                {isBatch ? `Aplicar a ${targetHus.length} HUs` : 'Salvar Alterações'}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

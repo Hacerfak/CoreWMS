@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useGetApiInventoryKardex } from '@/api/generated/inventory/inventory';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -108,6 +109,9 @@ function SearchableCustomerSelect({ value, onChange, customers, placeholder = "S
 }
 
 export default function KardexTab() {
+    const canViewInventory = useHasPermission(['inventory:view', 'inventory:manage']);
+    const canViewCustomers = useHasPermission('customers:view');
+
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
     // Estado da Customização de Colunas Visíveis
@@ -141,16 +145,19 @@ export default function KardexTab() {
     const PAGE_SIZE = 20;
 
     // APIs
-    const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const { data: customersData } = useGetApiCustomers(
+        { OnlyActive: true, PageSize: 500 },
+        { query: { enabled: canViewCustomers } }
+    );
     const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
 
     const activeAdvancedCount = useMemo(() => {
         let count = 0;
-        if (selectedCustomer !== 'ALL') count++;
+        if (canViewCustomers && selectedCustomer !== 'ALL') count++;
         if (searchBatch.trim()) count++;
         if (searchNfe.trim()) count++;
         return count;
-    }, [selectedCustomer, searchBatch, searchNfe]);
+    }, [canViewCustomers, selectedCustomer, searchBatch, searchNfe]);
 
     const handleSearchSubmit = (e) => {
         if (e) e.preventDefault();
@@ -178,7 +185,7 @@ export default function KardexTab() {
         setAppliedFilters({
             ...(searchLpn.trim() && { Lpn: searchLpn.trim() }),
             ...(searchSku.trim() && { Sku: searchSku.trim() }),
-            ...(selectedCustomer !== 'ALL' && { CustomerId: selectedCustomer }),
+            ...(canViewCustomers && selectedCustomer !== 'ALL' && { CustomerId: selectedCustomer }),
             ...(searchBatch.trim() && { Batch: searchBatch.trim() }),
             ...(searchNfe.trim() && { NfeNumber: searchNfe.trim() }),
             ...(startString && { StartDate: startString }),
@@ -207,7 +214,10 @@ export default function KardexTab() {
         ...appliedFilters
     };
 
-    const { data: apiResponse, isLoading, isFetching } = useGetApiInventoryKardex(queryParams);
+    const { data: apiResponse, isLoading, isFetching } = useGetApiInventoryKardex(
+        queryParams,
+        { query: { enabled: canViewInventory } }
+    );
     const transactions = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -221,6 +231,7 @@ export default function KardexTab() {
     }, [apiResponse]);
 
     const handleExport = () => {
+        if (!canViewInventory) return;
         downloadBackendCsv('/api/inventory/kardex/export', appliedFilters, 'kardex_extrato_movimentacoes');
     };
 
@@ -401,9 +412,11 @@ export default function KardexTab() {
                             </Popover>
                         </div>
 
-                        <Button type="button" onClick={handleExport} variant="outline" size="sm" disabled={totalCount === 0} className="bg-white border-slate-200 text-slate-700 text-xs h-9">
-                            <Download className="mr-1 h-3.5 w-3.5" /> Exportar CSV
-                        </Button>
+                        {canViewInventory && (
+                            <Button type="button" onClick={handleExport} variant="outline" size="sm" disabled={totalCount === 0} className="bg-white border-slate-200 text-slate-700 text-xs h-9">
+                                <Download className="mr-1 h-3.5 w-3.5" /> Exportar CSV
+                            </Button>
+                        )}
                     </div>
 
                     {/* FILTROS BÁSICOS (LPN, SKU E DATE PICKER) */}
@@ -456,16 +469,18 @@ export default function KardexTab() {
                     {/* FILTROS AVANÇADOS */}
                     {showAdvancedFilters && (
                         <div className="pt-3 border-t border-slate-200/80 animate-in fade-in duration-200">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div className="space-y-1">
-                                    <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
-                                    <SearchableCustomerSelect
-                                        value={selectedCustomer}
-                                        onChange={(cust) => setSelectedCustomer(cust)}
-                                        customers={customers}
-                                        placeholder="Todos os Depositantes"
-                                    />
-                                </div>
+                            <div className={`grid grid-cols-1 ${canViewCustomers ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
+                                {canViewCustomers && (
+                                    <div className="space-y-1">
+                                        <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
+                                        <SearchableCustomerSelect
+                                            value={selectedCustomer}
+                                            onChange={(cust) => setSelectedCustomer(cust)}
+                                            customers={customers}
+                                            placeholder="Todos os Depositantes"
+                                        />
+                                    </div>
+                                )}
 
                                 <div className="space-y-1">
                                     <Label className="text-[11px] font-bold text-slate-700 uppercase">Lote Físico</Label>

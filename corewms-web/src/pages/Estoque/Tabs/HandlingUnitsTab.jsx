@@ -4,6 +4,7 @@ import { useGetApiInventoryHandlingUnits } from '@/api/generated/inventory/inven
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
 import { useGetApiTopologyLocationsStorage } from '@/api/generated/topology/topology';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -172,6 +173,15 @@ function SearchableCustomerSelect({ value, onChange, customers, placeholder = "S
 
 export default function HandlingUnitsTab() {
     const queryClient = useQueryClient();
+
+    const canViewInventory = useHasPermission(['inventory:view', 'inventory:manage']);
+    const canManageInventory = useHasPermission('inventory:manage');
+    const canMoveInventory = useHasPermission(['inventory:move', 'inventory:manage']);
+    const canHoldQuality = useHasPermission('quality:hold');
+    const canRollbackInbound = useHasPermission(['inbound:receive', 'inventory:manage']);
+    const canPrintLabels = useHasPermission(['print:execute', 'inbound:receive', 'inventory:manage']);
+    const canViewCustomers = useHasPermission('customers:view');
+
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
     const [visibleColumns, setVisibleColumns] = useState({
@@ -211,16 +221,32 @@ export default function HandlingUnitsTab() {
     const [editingHus, setEditingHus] = useState([]);
     const [openPopoverId, setOpenPopoverId] = useState(null);
 
-    const { data: customersData } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const { data: customersData } = useGetApiCustomers(
+        { OnlyActive: true, PageSize: 500 },
+        { query: { enabled: canViewCustomers } }
+    );
     const customers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
-    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage();
+    const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage({
+        query: { enabled: canViewInventory }
+    });
     const [qualityLocations, setQualityLocations] = useState([]);
 
     useEffect(() => {
+        if (!canViewInventory) return;
+
+        let isMounted = true;
         customInstance({ url: '/api/topology/locations/quality', method: 'GET' })
-            .then(res => setQualityLocations(Array.isArray(res) ? res : []))
-            .catch(() => setQualityLocations([]));
-    }, []);
+            .then(res => {
+                if (isMounted) setQualityLocations(Array.isArray(res) ? res : []);
+            })
+            .catch(() => {
+                if (isMounted) setQualityLocations([]);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [canViewInventory]);
 
     const allTopologyLocations = useMemo(() => [...storageLocations, ...qualityLocations], [storageLocations, qualityLocations]);
 
@@ -270,7 +296,10 @@ export default function HandlingUnitsTab() {
     };
 
     const queryParams = { Page: page, PageSize: PAGE_SIZE, ...appliedFilters };
-    const { data: apiResponse, isLoading, isFetching, refetch } = useGetApiInventoryHandlingUnits(queryParams);
+    const { data: apiResponse, isLoading, isFetching, refetch } = useGetApiInventoryHandlingUnits(
+        queryParams,
+        { query: { enabled: canViewInventory } }
+    );
     const hus = apiResponse?.items || (Array.isArray(apiResponse) ? apiResponse : []);
     const totalCount = apiResponse?.totalCount || 0;
     const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -296,6 +325,7 @@ export default function HandlingUnitsTab() {
     };
 
     const handleOpenMoveModal = (targetHus) => {
+        if (!canMoveInventory) return;
         setHusToMove(targetHus);
         setTargetLocationId('');
         const hasQualityRestriction = targetHus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
@@ -305,6 +335,7 @@ export default function HandlingUnitsTab() {
 
     // EXECUÇÃO DO MOVIMENTO COM TOAST E RECARGA
     const handleExecuteMove = async () => {
+        if (!canMoveInventory) return;
         if (!targetLocationId || husToMove.length === 0) return toast.warning('Selecione o endereço de destino.');
         setIsMoving(true);
         try {
@@ -330,6 +361,7 @@ export default function HandlingUnitsTab() {
 
     // EXECUÇÃO DO ESTORNO COM TOAST E RECARGA
     const handleConfirmRollback = async () => {
+        if (!canRollbackInbound) return;
         if (!husToRollback || husToRollback.length === 0) return;
         setIsRollingBack(true);
         try {
@@ -351,7 +383,10 @@ export default function HandlingUnitsTab() {
         }
     };
 
-    const handleExport = () => downloadBackendCsv('/api/inventory/handling-units/export', appliedFilters, 'unidades_manuseio_hus');
+    const handleExport = () => {
+        if (!canViewInventory) return;
+        downloadBackendCsv('/api/inventory/handling-units/export', appliedFilters, 'unidades_manuseio_hus');
+    };
 
     const renderQualityBadge = (qualityStatus) => {
         const statusStr = String(qualityStatus);
@@ -373,7 +408,8 @@ export default function HandlingUnitsTab() {
         }
     };
 
-    const isSelectedRestricted = selectedHus.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
+    const isMoveTargetsRestricted = husToMove.some(h => String(h.qualityStatus) !== '1' && String(h.qualityStatus) !== 'Available');
+    const hasAnyRowAction = canHoldQuality || canMoveInventory || canPrintLabels || canManageInventory || canRollbackInbound;
 
     return (
         <div className="bg-white border border-slate-200/60 rounded-xl shadow-xs flex flex-col overflow-hidden h-full">
@@ -406,32 +442,42 @@ export default function HandlingUnitsTab() {
 
                     {/* AÇÕES EM LOTE NO CABEÇALHO */}
                     <div className="flex items-center gap-2 flex-wrap">
-                        <Button type="button" onClick={() => setHusToHold(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 text-xs font-semibold h-9">
-                            <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-600" /> Avaria ({selectedHus.length})
-                        </Button>
-                        <Button type="button" onClick={() => handleOpenMoveModal(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="text-xs font-semibold h-9">
-                            <MapPin className="w-3.5 h-3.5 mr-1 text-blue-600" /> Mover ({selectedHus.length})
-                        </Button>
-
-                        <Button
-                            type="button"
-                            onClick={() => setEditingHus(selectedHus)}
-                            disabled={selectedHus.length === 0}
-                            variant="outline"
-                            className="border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100 text-xs font-semibold h-9"
-                        >
-                            <Pencil className="w-3.5 h-3.5 mr-1 text-blue-600" /> Editar ({selectedHus.length})
-                        </Button>
-
-                        <Button type="button" onClick={() => setHusToRollback(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold h-9">
-                            <Undo2 className="w-3.5 h-3.5 mr-1 text-rose-600" /> Estornar ({selectedHus.length})
-                        </Button>
-                        <Button type="button" onClick={() => setIsPrintModalOpen(true)} disabled={selectedHus.length === 0} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold h-9">
-                            <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir ({selectedHus.length})
-                        </Button>
-                        <Button type="button" onClick={handleExport} variant="outline" size="sm" disabled={totalCount === 0} className="bg-white border-slate-200 text-slate-700 text-xs h-9">
-                            <Download className="mr-1 h-3.5 w-3.5" /> CSV
-                        </Button>
+                        {canHoldQuality && (
+                            <Button type="button" onClick={() => setHusToHold(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 text-xs font-semibold h-9">
+                                <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-600" /> Avaria ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canMoveInventory && (
+                            <Button type="button" onClick={() => handleOpenMoveModal(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="text-xs font-semibold h-9">
+                                <MapPin className="w-3.5 h-3.5 mr-1 text-blue-600" /> Mover ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canManageInventory && (
+                            <Button
+                                type="button"
+                                onClick={() => setEditingHus(selectedHus)}
+                                disabled={selectedHus.length === 0}
+                                variant="outline"
+                                className="border-blue-300 text-blue-800 bg-blue-50 hover:bg-blue-100 text-xs font-semibold h-9"
+                            >
+                                <Pencil className="w-3.5 h-3.5 mr-1 text-blue-600" /> Editar ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canRollbackInbound && (
+                            <Button type="button" onClick={() => setHusToRollback(selectedHus)} disabled={selectedHus.length === 0} variant="outline" className="border-rose-300 text-rose-800 bg-rose-50 hover:bg-rose-100 text-xs font-semibold h-9">
+                                <Undo2 className="w-3.5 h-3.5 mr-1 text-rose-600" /> Estornar ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canPrintLabels && (
+                            <Button type="button" onClick={() => setIsPrintModalOpen(true)} disabled={selectedHus.length === 0} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold h-9">
+                                <Printer className="w-3.5 h-3.5 mr-1" /> Imprimir ({selectedHus.length})
+                            </Button>
+                        )}
+                        {canViewInventory && (
+                            <Button type="button" onClick={handleExport} variant="outline" size="sm" disabled={totalCount === 0} className="bg-white border-slate-200 text-slate-700 text-xs h-9">
+                                <Download className="mr-1 h-3.5 w-3.5" /> CSV
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -443,14 +489,16 @@ export default function HandlingUnitsTab() {
                             <Input placeholder="Digite o LPN..." value={searchLpn} onChange={(e) => setSearchLpn(e.target.value)} className="pl-8 bg-white text-xs h-9 font-mono border-slate-200" />
                         </div>
                     </div>
-                    <div className="sm:col-span-4 space-y-1">
+                    <div className={`${canViewCustomers ? 'sm:col-span-4' : 'sm:col-span-7'} space-y-1`}>
                         <Label className="text-[11px] font-bold text-slate-700 uppercase">SKU / Descrição do Produto</Label>
                         <Input placeholder="Digite o código SKU..." value={searchSku} onChange={(e) => setSearchSku(e.target.value)} className="bg-white text-xs h-9 font-mono border-slate-200" />
                     </div>
-                    <div className="sm:col-span-3 space-y-1">
-                        <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
-                        <SearchableCustomerSelect value={selectedCustomer} onChange={(cust) => setSelectedCustomer(cust)} customers={customers} placeholder="Todos os Depositantes" />
-                    </div>
+                    {canViewCustomers && (
+                        <div className="sm:col-span-3 space-y-1">
+                            <Label className="text-[11px] font-bold text-slate-700 uppercase">Depositante</Label>
+                            <SearchableCustomerSelect value={selectedCustomer} onChange={(cust) => setSelectedCustomer(cust)} customers={customers} placeholder="Todos os Depositantes" />
+                        </div>
+                    )}
                     <div className="sm:col-span-2 flex items-center gap-1.5">
                         <Button type="submit" disabled={isFetching} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 flex-1 shadow-2xs">
                             {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Search size={14} className="mr-1.5" /> Pesquisar</>}
@@ -529,7 +577,7 @@ export default function HandlingUnitsTab() {
                             {visibleColumns.totalValue && <TableHead className="text-right font-bold text-slate-900">Valor Total HU</TableHead>}
                             {visibleColumns.quality && <TableHead>Qualidade</TableHead>}
                             {visibleColumns.status && <TableHead>Status HU</TableHead>}
-                            <TableHead className="w-[50px]"></TableHead>
+                            {hasAnyRowAction && <TableHead className="w-[50px]"></TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -613,46 +661,56 @@ export default function HandlingUnitsTab() {
                                     {visibleColumns.quality && <TableCell>{renderQualityBadge(h.qualityStatus)}</TableCell>}
                                     {visibleColumns.status && <TableCell>{renderHuStatusBadge(h.status)}</TableCell>}
 
-                                    <TableCell>
-                                        <Popover open={openPopoverId === h.id} onOpenChange={(open) => setOpenPopoverId(open ? h.id : null)}>
-                                            <PopoverTrigger asChild>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50">
-                                                    <MoreHorizontal size={16} />
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent align="end" className="w-52 p-1 bg-white border-slate-200 shadow-xl rounded-xl">
-                                                <div className="flex flex-col text-xs font-medium text-slate-600">
-                                                    {!isQualityRestricted && (
-                                                        <button onClick={() => { setHusToHold([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-amber-50 hover:text-amber-700 rounded-md transition-colors">
-                                                            <AlertTriangle size={14} className="text-amber-500" /> Registrar Avaria
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => { handleOpenMoveModal([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">
-                                                        <MapPin size={14} className="text-blue-500" /> {isPendingAllocation ? "Alocar no Estoque" : "Mover Posição"}
-                                                    </button>
-                                                    <button onClick={() => { setSelectedHus([h]); setIsPrintModalOpen(true); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                        <Printer size={14} /> Reimprimir Etiqueta
-                                                    </button>
-                                                    {!hasSerial && !isConsumedOrShipped && (
-                                                        <>
-                                                            <button onClick={() => { setHuToMerge(h); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                <Merge size={14} className="text-blue-600" /> Agrupar (Merge)
+                                    {hasAnyRowAction && (
+                                        <TableCell>
+                                            <Popover open={openPopoverId === h.id} onOpenChange={(open) => setOpenPopoverId(open ? h.id : null)}>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50">
+                                                        <MoreHorizontal size={16} />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent align="end" className="w-52 p-1 bg-white border-slate-200 shadow-xl rounded-xl">
+                                                    <div className="flex flex-col text-xs font-medium text-slate-600">
+                                                        {canHoldQuality && !isQualityRestricted && (
+                                                            <button onClick={() => { setHusToHold([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-amber-50 hover:text-amber-700 rounded-md transition-colors">
+                                                                <AlertTriangle size={14} className="text-amber-500" /> Registrar Avaria
                                                             </button>
-                                                            <button onClick={() => { setHuToSplit(h); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                                <Split size={14} className="text-purple-600" /> Transbordo (Split)
+                                                        )}
+                                                        {canMoveInventory && (
+                                                            <button onClick={() => { handleOpenMoveModal([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">
+                                                                <MapPin size={14} className="text-blue-500" /> {isPendingAllocation ? "Alocar no Estoque" : "Mover Posição"}
                                                             </button>
-                                                        </>
-                                                    )}
-                                                    <button onClick={() => { setEditingHus([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
-                                                        <Pencil size={14} className="text-blue-600" /> Editar Dados / Pesos
-                                                    </button>
-                                                    <button onClick={() => { setHusToRollback([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-rose-50 hover:text-rose-700 rounded-md transition-colors border-t border-slate-100 mt-1 pt-2">
-                                                        <Undo2 size={14} className="text-rose-500" /> Estornar Entrada
-                                                    </button>
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </TableCell>
+                                                        )}
+                                                        {canPrintLabels && (
+                                                            <button onClick={() => { setSelectedHus([h]); setIsPrintModalOpen(true); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                <Printer size={14} /> Reimprimir Etiqueta
+                                                            </button>
+                                                        )}
+                                                        {canManageInventory && !hasSerial && !isConsumedOrShipped && (
+                                                            <>
+                                                                <button onClick={() => { setHuToMerge(h); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                    <Merge size={14} className="text-blue-600" /> Agrupar (Merge)
+                                                                </button>
+                                                                <button onClick={() => { setHuToSplit(h); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                    <Split size={14} className="text-purple-600" /> Transbordo (Split)
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {canManageInventory && (
+                                                            <button onClick={() => { setEditingHus([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-slate-100 hover:text-slate-900 rounded-md transition-colors">
+                                                                <Pencil size={14} className="text-blue-600" /> Editar Dados / Pesos
+                                                            </button>
+                                                        )}
+                                                        {canRollbackInbound && (
+                                                            <button onClick={() => { setHusToRollback([h]); setOpenPopoverId(null); }} className="w-full text-left flex items-center gap-2 px-2.5 py-2 hover:bg-rose-50 hover:text-rose-700 rounded-md transition-colors border-t border-slate-100 mt-1 pt-2">
+                                                                <Undo2 size={14} className="text-rose-500" /> Estornar Entrada
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             );
                         })}
@@ -672,61 +730,63 @@ export default function HandlingUnitsTab() {
             )}
 
             {/* MODAL DE MOVIMENTAÇÃO */}
-            <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
-                <DialogContent className="sm:max-w-md bg-white">
-                    <DialogHeader>
-                        <DialogTitle className="text-slate-900 flex items-center gap-2">
-                            <MapPin className="text-blue-600" size={20} /> Mover no Estoque
-                        </DialogTitle>
-                        <DialogDescription className="text-slate-500 text-xs">
-                            Selecione a posição de destino para {husToMove.length} HU(s).
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                        {isSelectedRestricted ? (
-                            <div className="p-3 rounded-lg border bg-rose-50 border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
-                                <ShieldAlert size={18} className="shrink-0 text-rose-600" />
-                                <span>Volumes com restrição só podem ser movimentados para posições do tipo <strong>Qualidade</strong>.</span>
+            {canMoveInventory && (
+                <Dialog open={isMoveModalOpen} onOpenChange={setIsMoveModalOpen}>
+                    <DialogContent className="sm:max-w-md bg-white">
+                        <DialogHeader>
+                            <DialogTitle className="text-slate-900 flex items-center gap-2">
+                                <MapPin className="text-blue-600" size={20} /> Mover no Estoque
+                            </DialogTitle>
+                            <DialogDescription className="text-slate-500 text-xs">
+                                Selecione a posição de destino para {husToMove.length} HU(s).
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                            {isMoveTargetsRestricted ? (
+                                <div className="p-3 rounded-lg border bg-rose-50 border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-medium">
+                                    <ShieldAlert size={18} className="shrink-0 text-rose-600" />
+                                    <span>Volumes com restrição só podem ser movimentados para posições do tipo <strong>Qualidade</strong>.</span>
+                                </div>
+                            ) : (
+                                <div className="flex border-b border-slate-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
+                                        className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        Armazenamento Geral ({storageLocations.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
+                                        className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                    >
+                                        Posições de Qualidade / Retenção ({qualityLocations.length})
+                                    </button>
+                                </div>
+                            )}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-700">Endereço Destino *</label>
+                                <SearchableLocationSelect
+                                    value={targetLocationId}
+                                    onChange={(locId) => setTargetLocationId(locId)}
+                                    locations={isMoveTargetsRestricted || locationTypeTab === 'quality' ? qualityLocations : storageLocations}
+                                    placeholder={isMoveTargetsRestricted || locationTypeTab === 'quality' ? "Pesquisar Posição de Qualidade/Avaria..." : "Pesquisar Posição de Armazenamento..."}
+                                />
                             </div>
-                        ) : (
-                            <div className="flex border-b border-slate-200">
-                                <button
-                                    type="button"
-                                    onClick={() => { setLocationTypeTab('storage'); setTargetLocationId(''); }}
-                                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'storage' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Armazenamento Geral ({storageLocations.length})
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => { setLocationTypeTab('quality'); setTargetLocationId(''); }}
-                                    className={`pb-2 px-3 text-xs font-bold transition-all border-b-2 ${locationTypeTab === 'quality' ? 'border-amber-600 text-amber-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    Posições de Qualidade / Retenção ({qualityLocations.length})
-                                </button>
-                            </div>
-                        )}
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-700">Endereço Destino *</label>
-                            <SearchableLocationSelect
-                                value={targetLocationId}
-                                onChange={(locId) => setTargetLocationId(locId)}
-                                locations={isSelectedRestricted || locationTypeTab === 'quality' ? qualityLocations : storageLocations}
-                                placeholder={isSelectedRestricted || locationTypeTab === 'quality' ? "Pesquisar Posição de Qualidade/Avaria..." : "Pesquisar Posição de Armazenamento..."}
-                            />
                         </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsMoveModalOpen(false)} disabled={isMoving}>Cancelar</Button>
-                        <Button onClick={handleExecuteMove} disabled={!targetLocationId || isMoving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
-                            {isMoving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Confirmar Movimento
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setIsMoveModalOpen(false)} disabled={isMoving}>Cancelar</Button>
+                            <Button onClick={handleExecuteMove} disabled={!targetLocationId || isMoving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                                {isMoving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />} Confirmar Movimento
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {/* MODAL DE APONTAMENTO DE AVARIA */}
-            {husToHold && husToHold.length > 0 && (
+            {canHoldQuality && husToHold && husToHold.length > 0 && (
                 <RegisterHoldModal
                     open={!!husToHold && husToHold.length > 0}
                     onOpenChange={(open) => !open && setHusToHold(null)}
@@ -740,7 +800,7 @@ export default function HandlingUnitsTab() {
             )}
 
             {/* MODAL DE IMPRESSÃO */}
-            {isPrintModalOpen && (
+            {canPrintLabels && isPrintModalOpen && (
                 <PrintHuModal
                     open={isPrintModalOpen}
                     onOpenChange={setIsPrintModalOpen}
@@ -749,27 +809,29 @@ export default function HandlingUnitsTab() {
             )}
 
             {/* ALERTA DE ESTORNO */}
-            <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            Estornar {husToRollback?.length === 1 ? `HU ${husToRollback[0]?.lpn}` : `${husToRollback?.length} HU(s) selecionadas`}?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Deseja estornar a entrada deste(s) volume(s)? A quantidade recebida na NF-e e os saldos em estoque serão reajustados.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isRollingBack}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleConfirmRollback} disabled={isRollingBack} className="bg-rose-600 hover:bg-rose-700 text-white font-semibold">
-                            {isRollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Estorno'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canRollbackInbound && (
+                <AlertDialog open={!!husToRollback && husToRollback.length > 0} onOpenChange={(open) => !open && !isRollingBack && setHusToRollback(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>
+                                Estornar {husToRollback?.length === 1 ? `HU ${husToRollback[0]?.lpn}` : `${husToRollback?.length} HU(s) selecionadas`}?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Deseja estornar a entrada deste(s) volume(s)? A quantidade recebida na NF-e e os saldos em estoque serão reajustados.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isRollingBack}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleConfirmRollback} disabled={isRollingBack} className="bg-rose-600 hover:bg-rose-700 text-white font-semibold">
+                                {isRollingBack ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Estorno'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
 
             {/* MODAL DE AGRUPAMENTO COM RECARGA */}
-            {huToMerge && (
+            {canManageInventory && huToMerge && (
                 <AgruparHuModal
                     open={Boolean(huToMerge)}
                     onOpenChange={(open) => !open && setHuToMerge(null)}
@@ -782,7 +844,7 @@ export default function HandlingUnitsTab() {
             )}
 
             {/* MODAL DE TRANSBORDO COM RECARGA */}
-            {huToSplit && (
+            {canManageInventory && huToSplit && (
                 <TransbordoHuModal
                     open={Boolean(huToSplit)}
                     onOpenChange={(open) => !open && setHuToSplit(null)}
@@ -795,7 +857,7 @@ export default function HandlingUnitsTab() {
             )}
 
             {/* MODAL DE EDIÇÃO INDIVIDUAL OU EM LOTE COM RECARGA */}
-            {editingHus.length > 0 && (
+            {canManageInventory && editingHus.length > 0 && (
                 <EditarHuModal
                     open={editingHus.length > 0}
                     onOpenChange={(open) => !open && setEditingHus([])}

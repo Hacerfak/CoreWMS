@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -17,45 +18,64 @@ import { Split, Loader2, CheckCircle2, Plus, Trash2, AlertCircle } from 'lucide-
 import { toast } from 'sonner';
 
 export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSuccess }) {
+    const canManageInventory = useHasPermission('inventory:manage');
+    const productId = sourceHu?.productId;
+
     const [packagings, setPackagings] = useState([]);
-    const [isLoadingPackagings, setIsLoadingPackagings] = useState(false);
-    const [newHus, setNewHus] = useState([{ quantity: '', packagingTypeId: '' }]);
+    const [isLoadingPackagings, setIsLoadingPackagings] = useState(Boolean(open && productId && canManageInventory));
+    const [newHus, setNewHus] = useState(() => [{ quantity: '', packagingTypeId: sourceHu?.packagingTypeId || '' }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (open && sourceHu) {
-            setNewHus([{ quantity: '', packagingTypeId: sourceHu.packagingTypeId || '' }]);
+        if (!open || !productId || !canManageInventory) return;
 
-            const productId = sourceHu.productId;
-            if (productId) {
+        let isMounted = true;
+
+        customInstance({ url: `/api/products/${productId}/packagings`, method: 'GET' })
+            .then(res => {
+                if (!isMounted) return;
+                const items = res?.data || res || [];
+                setPackagings(Array.isArray(items) ? items : []);
+            })
+            .catch(() => {
+                if (!isMounted) return;
+                toast.error('Não foi possível carregar as embalagens cadastradas para este produto.');
+                setPackagings([]);
+            })
+            .finally(() => {
+                if (isMounted) setIsLoadingPackagings(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [open, productId, canManageInventory]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen) {
+            setNewHus([{ quantity: '', packagingTypeId: sourceHu?.packagingTypeId || '' }]);
+            if (productId && canManageInventory) {
                 setIsLoadingPackagings(true);
-                // Consulta estrita ao endpoint de embalagens do produto
-                customInstance({ url: `/api/products/${productId}/packagings`, method: 'GET' })
-                    .then(res => {
-                        const items = res?.data || res || [];
-                        setPackagings(Array.isArray(items) ? items : []);
-                    })
-                    .catch(() => {
-                        toast.error('Não foi possível carregar as embalagens cadastradas para este produto.');
-                        setPackagings([]);
-                    })
-                    .finally(() => setIsLoadingPackagings(false));
             } else {
                 setPackagings([]);
             }
         }
-    }, [open, sourceHu]);
+        onOpenChange(nextOpen);
+    };
 
     const handleAddLine = () => {
+        if (!canManageInventory) return;
         setNewHus(prev => [...prev, { quantity: '', packagingTypeId: sourceHu?.packagingTypeId || '' }]);
     };
 
     const handleRemoveLine = (index) => {
-        if (newHus.length === 1) return;
+        if (!canManageInventory || newHus.length === 1) return;
         setNewHus(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleUpdateLine = (index, field, value) => {
+        if (!canManageInventory) return;
         setNewHus(prev => prev.map((item, i) => i === index ? { ...item, [field]: value } : item));
     };
 
@@ -64,6 +84,7 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!canManageInventory) return;
 
         if (newHus.some(h => !h.quantity || Number(h.quantity) <= 0)) {
             return toast.warning('Indique uma quantidade válida (> 0) para cada nova HU gerada.');
@@ -103,7 +124,7 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -147,15 +168,18 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                             <Label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
                                 Novas HUs a Gerar
                             </Label>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={handleAddLine}
-                                className="h-7 text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
-                            >
-                                <Plus size={12} className="mr-1" /> Adicionar HU
-                            </Button>
+                            {canManageInventory && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleAddLine}
+                                    disabled={isSubmitting}
+                                    className="h-7 text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                                >
+                                    <Plus size={12} className="mr-1" /> Adicionar HU
+                                </Button>
+                            )}
                         </div>
 
                         <div className="space-y-2">
@@ -169,6 +193,7 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                                             step="0.0001"
                                             placeholder="Quantidade..."
                                             value={item.quantity}
+                                            disabled={!canManageInventory || isSubmitting}
                                             onChange={(e) => handleUpdateLine(index, 'quantity', e.target.value)}
                                             className="h-8 text-xs font-mono font-bold bg-white"
                                             required
@@ -178,6 +203,7 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                                     <div className="w-48">
                                         <Select
                                             value={item.packagingTypeId}
+                                            disabled={!canManageInventory || isSubmitting}
                                             onValueChange={(val) => handleUpdateLine(index, 'packagingTypeId', val)}
                                         >
                                             <SelectTrigger className="h-8 text-xs bg-white">
@@ -199,11 +225,12 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                                         </Select>
                                     </div>
 
-                                    {newHus.length > 1 && (
+                                    {canManageInventory && newHus.length > 1 && (
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="sm"
+                                            disabled={isSubmitting}
                                             onClick={() => handleRemoveLine(index)}
                                             className="h-8 w-8 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
                                         >
@@ -216,17 +243,19 @@ export default function TransbordoHuModal({ open, onOpenChange, sourceHu, onSucc
                     </div>
 
                     <DialogFooter className="pt-2">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Cancelar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting || totalToTransfer <= 0 || remainingInSource <= 0}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 shadow-xs text-xs"
-                        >
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Gerar {newHus.length} Nova(s) HU(s)
-                        </Button>
+                        {canManageInventory && (
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting || totalToTransfer <= 0 || remainingInSource <= 0}
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold h-9 shadow-xs text-xs"
+                            >
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                Gerar {newHus.length} Nova(s) HU(s)
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

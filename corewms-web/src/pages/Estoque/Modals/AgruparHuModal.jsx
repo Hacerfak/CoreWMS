@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import {
     Dialog,
     DialogContent,
@@ -16,26 +17,36 @@ import { Merge, Loader2, CheckCircle2, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess }) {
+    const canManageInventory = useHasPermission('inventory:manage');
+
     const [destinationLpn, setDestinationLpn] = useState('');
-    const [quantity, setQuantity] = useState('');
+    const [quantity, setQuantity] = useState(() => (sourceHu ? String(sourceHu.currentQuantity) : ''));
     const [isAllQuantity, setIsAllQuantity] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const inputLpnRef = useRef(null);
 
     useEffect(() => {
-        if (open && sourceHu) {
+        if (!open) return;
+
+        const timer = setTimeout(() => {
+            inputLpnRef.current?.focus();
+        }, 100);
+
+        return () => clearTimeout(timer);
+    }, [open]);
+
+    const handleOpenChange = (nextOpen) => {
+        if (isSubmitting) return;
+        if (nextOpen && sourceHu) {
             setIsAllQuantity(true);
             setQuantity(String(sourceHu.currentQuantity));
             setDestinationLpn('');
-
-            // Foca automaticamente no campo de bipagem ao abrir o modal
-            setTimeout(() => {
-                inputLpnRef.current?.focus();
-            }, 100);
         }
-    }, [open, sourceHu]);
+        onOpenChange(nextOpen);
+    };
 
     const handleQuantityTypeChange = (isAll) => {
+        if (!canManageInventory) return;
         setIsAllQuantity(isAll);
         if (isAll && sourceHu) {
             setQuantity(String(sourceHu.currentQuantity));
@@ -46,6 +57,7 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!canManageInventory) return;
 
         const cleanDestLpn = destinationLpn.trim().toUpperCase();
         const numQty = Number(quantity);
@@ -91,7 +103,7 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-md bg-white">
                 <DialogHeader>
                     <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -124,8 +136,9 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 type="button"
+                                disabled={!canManageInventory}
                                 onClick={() => handleQuantityTypeChange(true)}
-                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all ${isAllQuantity
+                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all disabled:opacity-60 ${isAllQuantity
                                     ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-2xs'
                                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                                     }`}
@@ -135,8 +148,9 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
                             </button>
                             <button
                                 type="button"
+                                disabled={!canManageInventory}
                                 onClick={() => handleQuantityTypeChange(false)}
-                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all ${!isAllQuantity
+                                className={`p-2.5 rounded-lg border text-xs font-semibold transition-all disabled:opacity-60 ${!isAllQuantity
                                     ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-2xs'
                                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                                     }`}
@@ -154,6 +168,7 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
                                     max={sourceHu?.currentQuantity}
                                     placeholder="Informe a quantidade..."
                                     value={quantity}
+                                    disabled={!canManageInventory || isSubmitting}
                                     onChange={(e) => setQuantity(e.target.value)}
                                     className="h-9 text-xs font-mono font-bold bg-white"
                                     required
@@ -174,6 +189,7 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
                                 ref={inputLpnRef}
                                 placeholder="Bipar código da HU de destino..."
                                 value={destinationLpn}
+                                disabled={!canManageInventory || isSubmitting}
                                 onChange={(e) => setDestinationLpn(e.target.value.toUpperCase())}
                                 className="pl-9 h-10 text-xs font-mono font-bold uppercase tracking-wider bg-white border-slate-200 focus:border-blue-500"
                                 required
@@ -182,17 +198,19 @@ export default function AgruparHuModal({ open, onOpenChange, sourceHu, onSuccess
                     </div>
 
                     <DialogFooter className="pt-2">
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                             Cancelar
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={isSubmitting || !destinationLpn.trim() || !quantity}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 shadow-xs text-xs"
-                        >
-                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-                            Confirmar Agrupamento
-                        </Button>
+                        {canManageInventory && (
+                            <Button
+                                type="submit"
+                                disabled={isSubmitting || !destinationLpn.trim() || !quantity}
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold h-9 shadow-xs text-xs"
+                            >
+                                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
+                                Confirmar Agrupamento
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>

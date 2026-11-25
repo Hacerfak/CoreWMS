@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,11 +10,14 @@ import { toast } from 'sonner';
 
 export default function ImportarLegadoModal({ open, onOpenChange }) {
     const queryClient = useQueryClient();
+    const canManageInventory = useHasPermission('inventory:manage');
+
     const [file, setFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [result, setResult] = useState(null);
 
     const handleFileChange = (e) => {
+        if (!canManageInventory) return;
         if (e.target.files && e.target.files[0]) {
             setFile(e.target.files[0]);
             setResult(null);
@@ -21,7 +25,7 @@ export default function ImportarLegadoModal({ open, onOpenChange }) {
     };
 
     const handleImport = async () => {
-        if (!file) return;
+        if (!file || !canManageInventory) return;
 
         try {
             setIsUploading(true);
@@ -47,10 +51,13 @@ export default function ImportarLegadoModal({ open, onOpenChange }) {
         }
     };
 
-    const handleClose = () => {
-        setFile(null);
-        setResult(null);
-        onOpenChange(false);
+    const handleClose = (nextOpen) => {
+        if (isUploading) return;
+        if (!nextOpen) {
+            setFile(null);
+            setResult(null);
+        }
+        onOpenChange(nextOpen);
     };
 
     return (
@@ -70,7 +77,7 @@ export default function ImportarLegadoModal({ open, onOpenChange }) {
                         <Label className="text-slate-700 font-semibold text-xs">Planilha CSV (.csv)</Label>
                         <label
                             htmlFor="legacy-file-upload"
-                            className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all ${file ? 'border-blue-400 bg-blue-50/50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
+                            className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl transition-all ${!canManageInventory ? 'opacity-60 cursor-not-allowed bg-slate-50 border-slate-200' : file ? 'cursor-pointer border-blue-400 bg-blue-50/50' : 'cursor-pointer border-slate-300 bg-slate-50 hover:bg-slate-100'
                                 }`}
                         >
                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -92,7 +99,7 @@ export default function ImportarLegadoModal({ open, onOpenChange }) {
                                 id="legacy-file-upload"
                                 type="file"
                                 accept=".csv,.txt"
-                                disabled={isUploading}
+                                disabled={isUploading || !canManageInventory}
                                 className="hidden"
                                 onChange={handleFileChange}
                             />
@@ -121,17 +128,19 @@ export default function ImportarLegadoModal({ open, onOpenChange }) {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t">
-                    <Button variant="outline" onClick={handleClose} disabled={isUploading}>
+                    <Button variant="outline" onClick={() => handleClose(false)} disabled={isUploading}>
                         Fechar
                     </Button>
-                    <Button
-                        onClick={handleImport}
-                        disabled={!file || isUploading}
-                        className="bg-slate-900 hover:bg-slate-800 text-white min-w-[140px]"
-                    >
-                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
-                        Processar Carga
-                    </Button>
+                    {canManageInventory && (
+                        <Button
+                            onClick={handleImport}
+                            disabled={!file || isUploading}
+                            className="bg-slate-900 hover:bg-slate-800 text-white min-w-[140px]"
+                        >
+                            {isUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UploadCloud className="h-4 w-4 mr-2" />}
+                            Processar Carga
+                        </Button>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>
