@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -29,9 +30,14 @@ export default function UserFormPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // Dados cadastrais básicos
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
+    const canManageUsers = useHasPermission('users:manage');
+    const canViewCompanies = useHasPermission(['companies:view', 'companies:manage']);
+    const canViewRoles = useHasPermission(['roles:view', 'roles:manage']);
+    const canViewCustomers = useHasPermission('customers:view');
+
+    // Dados cadastrais básicos (null = usa o valor carregado de currentUser)
+    const [editedName, setEditedName] = useState(null);
+    const [editedEmail, setEditedEmail] = useState(null);
     const [password, setPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
 
@@ -50,10 +56,10 @@ export default function UserFormPage() {
 
     // Estado do Modal de Adicionar / Editar Vínculo
     const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
-    const [editingCompanyId, setEditingCompanyId] = useState(null); // null = novo vínculo
+    const [editingCompanyId, setEditingCompanyId] = useState(null);
     const [modalCompanyId, setModalCompanyId] = useState('');
     const [modalRoleId, setModalRoleId] = useState('');
-    const [modalScope, setModalScope] = useState('INTERNAL'); // 'INTERNAL' | 'EXTERNAL'
+    const [modalScope, setModalScope] = useState('INTERNAL');
     const [modalCustomerIds, setModalCustomerIds] = useState([]);
 
     // Estado do Campo de Pesquisa de Depositantes (Combobox)
@@ -64,17 +70,20 @@ export default function UserFormPage() {
     // Consultas base
     const { data: users = [], isLoading: isLoadingUsers, refetch: refetchUsers } = useQuery({
         queryKey: ['/api/users'],
-        queryFn: () => customInstance({ url: '/api/users', method: 'GET' })
+        queryFn: () => customInstance({ url: '/api/users', method: 'GET' }),
+        enabled: canManageUsers
     });
 
     const { data: companies = [] } = useQuery({
         queryKey: ['/api/companies-list'],
-        queryFn: () => customInstance({ url: '/api/companies-list', method: 'GET' })
+        queryFn: () => customInstance({ url: '/api/companies-list', method: 'GET' }),
+        enabled: canManageUsers && canViewCompanies
     });
 
     const { data: roles = [] } = useQuery({
         queryKey: ['/api/roles'],
-        queryFn: () => customInstance({ url: '/api/roles', method: 'GET' })
+        queryFn: () => customInstance({ url: '/api/roles', method: 'GET' }),
+        enabled: canManageUsers && canViewRoles
     });
 
     const currentUser = useMemo(
@@ -82,14 +91,13 @@ export default function UserFormPage() {
         [isEdit, users, id]
     );
 
-    const activeAssignments = isEdit ? (currentUser?.assignments || []) : draftAssignments;
+    const name = editedName !== null ? editedName : (currentUser?.name || '');
+    const email = editedEmail !== null ? editedEmail : (currentUser?.email || '');
 
-    useEffect(() => {
-        if (isEdit && currentUser) {
-            setName(currentUser.name || '');
-            setEmail(currentUser.email || '');
-        }
-    }, [isEdit, currentUser]);
+    const activeAssignments = useMemo(
+        () => (isEdit ? (currentUser?.assignments || []) : draftAssignments),
+        [isEdit, currentUser, draftAssignments]
+    );
 
     // Fecha o dropdown de pesquisa ao clicar fora
     useEffect(() => {
@@ -103,9 +111,8 @@ export default function UserFormPage() {
     }, []);
 
     // Carrega depositantes de uma empresa sob demanda (com cache em memória)
-    const fetchCustomersForCompany = async (companyId) => {
-        if (!companyId) return;
-        if (customersByCompany[companyId]) return;
+    const fetchCustomersForCompany = useCallback(async (companyId) => {
+        if (!companyId || !canViewCustomers) return;
 
         setIsLoadingCustomers(true);
         try {
@@ -113,32 +120,33 @@ export default function UserFormPage() {
                 url: `/api/customers/summary?companyId=${companyId}`,
                 method: 'GET'
             });
-            setCustomersByCompany(prev => ({
-                ...prev,
-                [companyId]: Array.isArray(res) ? res : []
-            }));
+            setCustomersByCompany(prev => {
+                if (prev[companyId]) return prev;
+                return {
+                    ...prev,
+                    [companyId]: Array.isArray(res) ? res : []
+                };
+            });
         } catch {
-            setCustomersByCompany(prev => ({ ...prev, [companyId]: [] }));
+            setCustomersByCompany(prev => (prev[companyId] ? prev : { ...prev, [companyId]: [] }));
         } finally {
             setIsLoadingCustomers(false);
         }
-    };
+    }, [canViewCustomers]);
 
     // Pré-carrega nomes dos depositantes para vínculos externos já existentes
     useEffect(() => {
+        if (!canViewCustomers) return;
         activeAssignments.forEach((a) => {
             if (a.allowedCustomerIds?.length > 0 && !customersByCompany[a.companyId]) {
                 fetchCustomersForCompany(a.companyId);
             }
         });
-    }, [
-	
-	customersByCompany,
-	
-]);
+    }, [activeAssignments, customersByCompany, fetchCustomersForCompany, canViewCustomers]);
 
     // Abre modal para NOVO vínculo
     const handleOpenNewAssignmentModal = () => {
+        if (!canManageUsers) return;
         setEditingCompanyId(null);
         setModalCompanyId('');
         setModalRoleId('');
@@ -151,16 +159,19 @@ export default function UserFormPage() {
 
     // Abre modal para EDITAR vínculo existente
     const handleOpenEditAssignmentModal = (assignment) => {
+        if (!canManageUsers) return;
         setEditingCompanyId(assignment.companyId);
         setModalCompanyId(assignment.companyId);
         const matchedRole = roles.find(r => r.id === assignment.roleId || r.name === assignment.roleName);
         setModalRoleId(matchedRole?.id || '');
         const isExternal = assignment.allowedCustomerIds && assignment.allowedCustomerIds.length > 0;
-        setModalScope(isExternal ? 'EXTERNAL' : 'INTERNAL');
-        setModalCustomerIds(isExternal ? [...assignment.allowedCustomerIds] : []);
+        setModalScope(isExternal && canViewCustomers ? 'EXTERNAL' : 'INTERNAL');
+        setModalCustomerIds(isExternal && canViewCustomers ? [...assignment.allowedCustomerIds] : []);
         setCustomerSearch('');
         setIsCustomerDropdownOpen(false);
-        fetchCustomersForCompany(assignment.companyId);
+        if (!customersByCompany[assignment.companyId]) {
+            fetchCustomersForCompany(assignment.companyId);
+        }
         setIsLinkModalOpen(true);
     };
 
@@ -168,10 +179,15 @@ export default function UserFormPage() {
         setModalCompanyId(companyId);
         setModalCustomerIds([]);
         setCustomerSearch('');
-        fetchCustomersForCompany(companyId);
+        if (!customersByCompany[companyId]) {
+            fetchCustomersForCompany(companyId);
+        }
     };
 
-    const modalCompanyCustomers = customersByCompany[modalCompanyId] || [];
+    const modalCompanyCustomers = useMemo(
+        () => customersByCompany[modalCompanyId] || [],
+        [customersByCompany, modalCompanyId]
+    );
 
     const filteredSearchCustomers = useMemo(() => {
         const term = customerSearch.trim().toLowerCase();
@@ -202,6 +218,7 @@ export default function UserFormPage() {
 
     // Salva vínculo a partir do Modal
     const handleConfirmModalAssignment = async () => {
+        if (!canManageUsers) return;
         if (!modalCompanyId) return toast.warning('Selecione uma empresa.');
         if (!modalRoleId) return toast.warning('Selecione um perfil de acesso.');
         if (modalScope === 'EXTERNAL' && modalCustomerIds.length === 0) {
@@ -253,6 +270,7 @@ export default function UserFormPage() {
     };
 
     const handleRemoveAssignment = async (companyId) => {
+        if (!canManageUsers) return;
         if (!isEdit) {
             setDraftAssignments(prev => prev.filter(a => a.companyId !== companyId));
             return;
@@ -276,6 +294,8 @@ export default function UserFormPage() {
     // Salva dados cadastrais (ou cria usuário + vínculos staged)
     const handleSaveUser = async (e) => {
         e.preventDefault();
+        if (!canManageUsers) return;
+
         if (!name.trim() || name.trim().length < 3) {
             return toast.warning('Informe o nome completo (mínimo 3 caracteres).');
         }
@@ -291,6 +311,8 @@ export default function UserFormPage() {
                     method: 'PUT',
                     data: { name: name.trim(), email: email.trim() }
                 });
+                setEditedName(null);
+                setEditedEmail(null);
                 toast.success('Dados cadastrais atualizados!');
                 queryClient.invalidateQueries({ queryKey: ['/api/users'] });
             } else {
@@ -335,6 +357,7 @@ export default function UserFormPage() {
     };
 
     const handleResetPassword = async () => {
+        if (!canManageUsers) return;
         if (!newPassword || newPassword.length < 6) {
             return toast.warning('A nova senha deve ter no mínimo 6 caracteres.');
         }
@@ -359,6 +382,10 @@ export default function UserFormPage() {
         const linkedIds = new Set(activeAssignments.map(a => a.companyId));
         return companies.filter(c => !linkedIds.has(c.id));
     }, [companies, activeAssignments]);
+
+    if (!canManageUsers) {
+        return null;
+    }
 
     if (isEdit && isLoadingUsers) {
         return (
@@ -452,7 +479,7 @@ export default function UserFormPage() {
                                     <Label className="text-xs font-bold text-slate-700">Nome Completo *</Label>
                                     <Input
                                         value={name}
-                                        onChange={(e) => setName(e.target.value)}
+                                        onChange={(e) => setEditedName(e.target.value)}
                                         placeholder="Ex: João da Silva"
                                         className="bg-white h-9 text-xs"
                                     />
@@ -463,7 +490,7 @@ export default function UserFormPage() {
                                     <Input
                                         type="email"
                                         value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
+                                        onChange={(e) => setEditedEmail(e.target.value)}
                                         placeholder="usuario@empresa.com.br"
                                         className="bg-white h-9 text-xs font-mono"
                                     />
@@ -713,7 +740,7 @@ export default function UserFormPage() {
                         {/* TIPO DE ESCOPO: INTERNO VS EXTERNO */}
                         <div className="space-y-1.5">
                             <Label className="text-xs font-bold text-slate-700 block">Tipo de Acesso *</Label>
-                            <div className="grid grid-cols-2 gap-2.5">
+                            <div className={`grid ${canViewCustomers ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5`}>
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -734,27 +761,29 @@ export default function UserFormPage() {
                                     </div>
                                 </button>
 
-                                <button
-                                    type="button"
-                                    onClick={() => setModalScope('EXTERNAL')}
-                                    className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${modalScope === 'EXTERNAL'
-                                        ? 'border-amber-500 bg-amber-50/50 text-amber-950'
-                                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                        }`}
-                                >
-                                    <Globe size={15} className="text-amber-600 shrink-0 mt-0.5" />
-                                    <div>
-                                        <span className="text-xs font-bold block">Externo</span>
-                                        <span className="text-[10px] text-slate-500 block">
-                                            Restrito aos depositantes escolhidos.
-                                        </span>
-                                    </div>
-                                </button>
+                                {canViewCustomers && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setModalScope('EXTERNAL')}
+                                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${modalScope === 'EXTERNAL'
+                                            ? 'border-amber-500 bg-amber-50/50 text-amber-950'
+                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                            }`}
+                                    >
+                                        <Globe size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                                        <div>
+                                            <span className="text-xs font-bold block">Externo</span>
+                                            <span className="text-[10px] text-slate-500 block">
+                                                Restrito aos depositantes escolhidos.
+                                            </span>
+                                        </div>
+                                    </button>
+                                )}
                             </div>
                         </div>
 
                         {/* CAMPO DE PESQUISA DE DEPOSITANTES (QUANDO EXTERNO) */}
-                        {modalScope === 'EXTERNAL' && (
+                        {canViewCustomers && modalScope === 'EXTERNAL' && (
                             <div className="space-y-2.5 pt-1">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-xs font-bold text-slate-700">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ import {
 import { useGetApiCompanies } from '@/api/generated/companies/companies';
 import { useGetApiRoles } from '@/api/generated/roles/roles';
 import { useGetApiCustomers } from '@/api/generated/customers/customers';
+import { useHasPermission } from '@/hooks/useHasPermission';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,31 +39,46 @@ export default function GerenciarAcessosPage() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const canManageUsers = useHasPermission('users:manage');
+    const canViewCompanies = useHasPermission(['companies:view', 'companies:manage']);
+    const canViewRoles = useHasPermission(['roles:view', 'roles:manage']);
+    const canViewCustomers = useHasPermission('customers:view');
+
     const [customerSearch, setCustomerSearch] = useState('');
 
     // 1. Busca Usuário Atual
-    const { data: usersData, isLoading: loadingUsers } = useGetApiUsers();
+    const { data: usersData, isLoading: loadingUsers } = useGetApiUsers({
+        query: { enabled: canManageUsers }
+    });
     const users = usersData?.items || (Array.isArray(usersData) ? usersData : []);
     const currentUser = users.find(u => u.id === userId);
 
     // 2. Busca Listas de Apoio
-    const { data: companiesData, isLoading: loadingCompanies } = useGetApiCompanies();
+    const { data: companiesData, isLoading: loadingCompanies } = useGetApiCompanies({
+        query: { enabled: canManageUsers && canViewCompanies }
+    });
     const companies = Array.isArray(companiesData) ? companiesData : (companiesData?.items || []);
 
-    const { data: rolesData, isLoading: loadingRoles } = useGetApiRoles();
+    const { data: rolesData, isLoading: loadingRoles } = useGetApiRoles({
+        query: { enabled: canManageUsers && canViewRoles }
+    });
     const roles = Array.isArray(rolesData) ? rolesData : (rolesData?.items || []);
 
-    const { data: customersData, isLoading: loadingCustomers } = useGetApiCustomers({ OnlyActive: true, PageSize: 500 });
+    const { data: customersData, isLoading: loadingCustomers } = useGetApiCustomers(
+        { OnlyActive: true, PageSize: 500 },
+        { query: { enabled: canManageUsers && canViewCustomers } }
+    );
     const allCustomers = customersData?.items || (Array.isArray(customersData) ? customersData : []);
 
-    const { handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { control, handleSubmit, setValue, reset, formState: { errors } } = useForm({
         resolver: zodResolver(assignSchema),
         defaultValues: { companyId: '', roleId: '', allowedCustomerIds: [] }
     });
 
-    const watchCompanyId = watch('companyId');
-    const watchRoleId = watch('roleId');
-    const watchAllowedCustomerIds = watch('allowedCustomerIds') || [];
+    const watchedValues = useWatch({ control });
+    const watchCompanyId = watchedValues?.companyId || '';
+    const watchRoleId = watchedValues?.roleId || '';
+    const watchAllowedCustomerIds = watchedValues?.allowedCustomerIds || [];
 
     // Filtra depositantes pertencentes à empresa selecionada no formulário
     const availableCustomers = allCustomers.filter(c => !watchCompanyId || c.companyId === watchCompanyId);
@@ -95,12 +111,14 @@ export default function GerenciarAcessosPage() {
     });
 
     const onSubmit = (data) => {
+        if (!canManageUsers) return;
+
         assignUser({
             userId,
             data: {
                 companyId: data.companyId,
                 roleId: data.roleId,
-                allowedCustomerIds: data.allowedCustomerIds.length > 0 ? data.allowedCustomerIds : null
+                allowedCustomerIds: data.allowedCustomerIds?.length > 0 ? data.allowedCustomerIds : null
             }
         });
     };
@@ -113,6 +131,7 @@ export default function GerenciarAcessosPage() {
     };
 
     const handleRemove = (companyId) => {
+        if (!canManageUsers) return;
         removeAssignment({ userId, companyId });
     };
 
@@ -131,6 +150,10 @@ export default function GerenciarAcessosPage() {
     const clearCustomerSelection = () => {
         setValue('allowedCustomerIds', [], { shouldValidate: true });
     };
+
+    if (!canManageUsers) {
+        return null;
+    }
 
     const isLoadingData = loadingUsers || loadingCompanies || loadingRoles || loadingCustomers;
     const assignments = currentUser?.assignments || [];
@@ -410,14 +433,14 @@ export default function GerenciarAcessosPage() {
                                             <>
                                                 <Users className="text-amber-600 shrink-0" size={16} />
                                                 <span>
-                                                    Modo **Externo**: O usuário visualiza apenas **{watchAllowedCustomerIds.length} depositante(s)** nesta empresa.
+                                                    Modo <strong>Externo</strong>: O usuário visualiza apenas <strong>{watchAllowedCustomerIds.length} depositante(s)</strong> nesta empresa.
                                                 </span>
                                             </>
                                         ) : (
                                             <>
                                                 <UserCheck className="text-emerald-600 shrink-0" size={16} />
                                                 <span>
-                                                    Modo **Interno**: Acesso a todos os depositantes cadastrados nesta empresa.
+                                                    Modo <strong>Interno</strong>: Acesso a todos os depositantes cadastrados nesta empresa.
                                                 </span>
                                             </>
                                         )}

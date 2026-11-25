@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { customInstance } from '@/api/orval-mutator';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,13 +27,17 @@ export default function UsersList() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
+    const canViewUsers = useHasPermission(['users:view', 'users:manage']);
+    const canManageUsers = useHasPermission('users:manage');
+
     const [search, setSearch] = useState('');
-    const [typeFilter, setTypeFilter] = useState('ALL'); // ALL, INTERNAL, EXTERNAL
+    const [typeFilter, setTypeFilter] = useState('ALL');
     const [userToDelete, setUserToDelete] = useState(null);
 
     const { data: users = [], isLoading, isFetching, refetch } = useQuery({
         queryKey: ['/api/users'],
-        queryFn: () => customInstance({ url: '/api/users', method: 'GET' })
+        queryFn: () => customInstance({ url: '/api/users', method: 'GET' }),
+        enabled: canViewUsers
     });
 
     const { mutate: deleteUser, isPending: isDeleting } = useMutation({
@@ -127,6 +132,8 @@ export default function UsersList() {
         );
     };
 
+    const colSpanCount = canManageUsers ? 4 : 3;
+
     return (
         <div className="flex flex-col h-full space-y-6 animate-in fade-in duration-300">
             {/* CABEÇALHO */}
@@ -140,20 +147,24 @@ export default function UsersList() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => refetch()}
-                        className="bg-white h-9 text-xs"
-                    >
-                        <RefreshCw size={14} className={`mr-1.5 ${isFetching ? 'animate-spin' : ''}`} /> Atualizar
-                    </Button>
-                    <Button
-                        onClick={() => navigate('/usuarios/novo')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold h-9 text-xs"
-                    >
-                        <UserPlus className="mr-1.5 h-4 w-4" /> Novo Usuário
-                    </Button>
+                    {canViewUsers && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => refetch()}
+                            className="bg-white h-9 text-xs"
+                        >
+                            <RefreshCw size={14} className={`mr-1.5 ${isFetching ? 'animate-spin' : ''}`} /> Atualizar
+                        </Button>
+                    )}
+                    {canManageUsers && (
+                        <Button
+                            onClick={() => navigate('/usuarios/novo')}
+                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold h-9 text-xs"
+                        >
+                            <UserPlus className="mr-1.5 h-4 w-4" /> Novo Usuário
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -198,19 +209,19 @@ export default function UsersList() {
                                 <TableHead>Usuário</TableHead>
                                 <TableHead className="w-[210px]">Tipo</TableHead>
                                 <TableHead className="w-[260px]">Vínculos</TableHead>
-                                <TableHead className="text-right w-[180px]">Ações</TableHead>
+                                {canManageUsers && <TableHead className="text-right w-[180px]">Ações</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-32 text-center">
+                                    <TableCell colSpan={colSpanCount} className="h-32 text-center">
                                         <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
                                     </TableCell>
                                 </TableRow>
                             ) : filteredUsers.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-32 text-center text-xs text-slate-500 italic">
+                                    <TableCell colSpan={colSpanCount} className="h-32 text-center text-xs text-slate-500 italic">
                                         Nenhum usuário encontrado com os filtros informados.
                                     </TableCell>
                                 </TableRow>
@@ -236,26 +247,28 @@ export default function UsersList() {
                                             {renderAssignmentsSummary(user, isExternal)}
                                         </TableCell>
 
-                                        <TableCell className="text-right space-x-1">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => navigate(`/usuarios/${user.id}`)}
-                                                className="h-8 text-xs text-blue-700 border-blue-200 hover:bg-blue-50 bg-white"
-                                            >
-                                                <Edit className="h-3.5 w-3.5 mr-1" /> Gerenciar
-                                            </Button>
-                                            {!user.isMaster && (
+                                        {canManageUsers && (
+                                            <TableCell className="text-right space-x-1">
                                                 <Button
-                                                    variant="ghost"
+                                                    variant="outline"
                                                     size="sm"
-                                                    onClick={() => setUserToDelete(user)}
-                                                    className="h-8 text-xs text-rose-600 hover:bg-rose-50"
+                                                    onClick={() => navigate(`/usuarios/${user.id}`)}
+                                                    className="h-8 text-xs text-blue-700 border-blue-200 hover:bg-blue-50 bg-white"
                                                 >
-                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                    <Edit className="h-3.5 w-3.5 mr-1" /> Gerenciar
                                                 </Button>
-                                            )}
-                                        </TableCell>
+                                                {!user.isMaster && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => setUserToDelete(user)}
+                                                        className="h-8 text-xs text-rose-600 hover:bg-rose-50"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                )}
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 );
                             })}
@@ -265,26 +278,28 @@ export default function UsersList() {
             </div>
 
             {/* CONFIRMAÇÃO DE EXCLUSÃO */}
-            <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900">Excluir Usuário?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-xs text-slate-600">
-                            Deseja remover permanentemente o usuário <strong className="text-slate-900">{userToDelete?.name}</strong> ({userToDelete?.email}) e todos os seus vínculos de acesso?
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => deleteUser(userToDelete.id)}
-                            disabled={isDeleting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageUsers && (
+                <AlertDialog open={!!userToDelete} onOpenChange={(open) => !open && setUserToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-slate-900">Excluir Usuário?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-xs text-slate-600">
+                                Deseja remover permanentemente o usuário <strong className="text-slate-900">{userToDelete?.name}</strong> ({userToDelete?.email}) e todos os seus vínculos de acesso?
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => deleteUser(userToDelete.id)}
+                                disabled={isDeleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }
