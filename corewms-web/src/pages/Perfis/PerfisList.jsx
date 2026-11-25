@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiRoles, useDeleteApiRolesId } from '@/api/generated/roles/roles';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,10 +23,16 @@ import { toast } from 'sonner';
 export default function PerfisList() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+
+    const canViewRoles = useHasPermission(['roles:view', 'roles:manage']);
+    const canManageRoles = useHasPermission('roles:manage');
+
     const [search, setSearch] = useState('');
     const [roleToDelete, setRoleToDelete] = useState(null);
 
-    const { data: roles = [], isLoading } = useGetApiRoles();
+    const { data: roles = [], isLoading } = useGetApiRoles({
+        query: { enabled: canViewRoles }
+    });
 
     const { mutate: deleteRole, isPending: isDeleting } = useDeleteApiRolesId({
         mutation: {
@@ -42,6 +49,8 @@ export default function PerfisList() {
         r.name?.toLowerCase().includes(search.toLowerCase())
     );
 
+    const colSpanCount = canManageRoles ? 4 : 3;
+
     return (
         <div className="flex flex-col h-full space-y-6 animate-in fade-in duration-300">
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -53,12 +62,14 @@ export default function PerfisList() {
                         Configure os papéis operacionais, administrativos e perfis externos (Portal B2B).
                     </p>
                 </div>
-                <Button
-                    onClick={() => navigate('/perfis/novo')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold"
-                >
-                    <Plus className="mr-2 h-4 w-4" /> Novo Perfil
-                </Button>
+                {canManageRoles && (
+                    <Button
+                        onClick={() => navigate('/perfis/novo')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-semibold"
+                    >
+                        <Plus className="mr-2 h-4 w-4" /> Novo Perfil
+                    </Button>
+                )}
             </div>
 
             <div className="bg-white border border-slate-200/80 rounded-xl shadow-xs flex-1 flex flex-col overflow-hidden">
@@ -84,19 +95,19 @@ export default function PerfisList() {
                                 <TableHead className="w-[340px]">Nome do Perfil</TableHead>
                                 <TableHead>Privilégios Concedidos</TableHead>
                                 <TableHead className="w-[150px]">Criado em</TableHead>
-                                <TableHead className="text-right w-[200px]">Ações</TableHead>
+                                {canManageRoles && <TableHead className="text-right w-[200px]">Ações</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {isLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-28 text-center">
+                                    <TableCell colSpan={colSpanCount} className="h-28 text-center">
                                         <Loader2 className="h-6 w-6 animate-spin text-blue-600 mx-auto" />
                                     </TableCell>
                                 </TableRow>
                             ) : filteredRoles.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-28 text-center text-slate-500 text-xs italic">
+                                    <TableCell colSpan={colSpanCount} className="h-28 text-center text-slate-500 text-xs italic">
                                         Nenhum perfil encontrado.
                                     </TableCell>
                                 </TableRow>
@@ -124,24 +135,26 @@ export default function PerfisList() {
                                     <TableCell className="font-mono text-xs text-slate-500">
                                         {role.createdAt ? new Date(role.createdAt).toLocaleDateString('pt-BR') : '-'}
                                     </TableCell>
-                                    <TableCell className="text-right space-x-1">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigate(`/perfis/${role.id}/editar`)}
-                                            className="h-8 text-xs text-blue-700 border-blue-200 hover:bg-blue-50 bg-white"
-                                        >
-                                            <Edit className="h-3.5 w-3.5 mr-1" /> Configurar
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setRoleToDelete(role)}
-                                            className="h-8 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                        >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                    </TableCell>
+                                    {canManageRoles && (
+                                        <TableCell className="text-right space-x-1">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => navigate(`/perfis/${role.id}/editar`)}
+                                                className="h-8 text-xs text-blue-700 border-blue-200 hover:bg-blue-50 bg-white"
+                                            >
+                                                <Edit className="h-3.5 w-3.5 mr-1" /> Configurar
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setRoleToDelete(role)}
+                                                className="h-8 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -149,26 +162,28 @@ export default function PerfisList() {
                 </div>
             </div>
 
-            <AlertDialog open={!!roleToDelete} onOpenChange={(open) => !open && setRoleToDelete(null)}>
-                <AlertDialogContent className="bg-white">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="text-slate-900">Excluir Perfil de Acesso?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-500 text-xs">
-                            Esta ação removerá o perfil <strong className="text-slate-800">{roleToDelete?.name}</strong> permanentemente. Certifique-se de que nenhum usuário dependa dele.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => deleteRole({ id: roleToDelete.id })}
-                            disabled={isDeleting}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
-                        >
-                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            {canManageRoles && (
+                <AlertDialog open={!!roleToDelete} onOpenChange={(open) => !open && setRoleToDelete(null)}>
+                    <AlertDialogContent className="bg-white">
+                        <AlertDialogHeader>
+                            <AlertDialogTitle className="text-slate-900">Excluir Perfil de Acesso?</AlertDialogTitle>
+                            <AlertDialogDescription className="text-slate-500 text-xs">
+                                Esta ação removerá o perfil <strong className="text-slate-800">{roleToDelete?.name}</strong> permanentemente. Certifique-se de que nenhum usuário dependa dele.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={() => deleteRole({ id: roleToDelete.id })}
+                                disabled={isDeleting}
+                                className="bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                            >
+                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar Exclusão'}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
         </div>
     );
 }

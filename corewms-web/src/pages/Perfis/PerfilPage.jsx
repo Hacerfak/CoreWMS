@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetApiRoles, usePostApiRoles, usePutApiRolesId } from '@/api/generated/roles/roles';
+import { useHasPermission } from '@/hooks/useHasPermission';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,7 @@ import { ArrowLeft, Shield, Loader2, Save, CheckSquare, Square } from 'lucide-re
 import { toast } from 'sonner';
 
 // Matriz Completa mapeada de Constants/Permissions.cs
-export const MODULE_PERMISSIONS = [
+const MODULE_PERMISSIONS = [
     {
         module: 'Inbound (Recebimento)',
         permissions: [
@@ -138,30 +138,33 @@ const roleSchema = z.object({
     permissions: z.array(z.string()).min(1, 'Selecione pelo menos uma permissão.')
 });
 
+const EMPTY_ROLE = { name: '', permissions: [] };
+
 export default function PerfilFormPage() {
     const { id } = useParams();
     const isEdit = Boolean(id);
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    const { data: roles = [], isLoading: isLoadingRoles } = useGetApiRoles();
+    const canManageRoles = useHasPermission('roles:manage');
+
+    const { data: roles = [], isLoading: isLoadingRoles } = useGetApiRoles({
+        query: { enabled: canManageRoles }
+    });
     const currentRole = isEdit ? roles.find(r => r.id === id) : null;
 
-    const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
+    const { register, control, handleSubmit, setValue, formState: { errors } } = useForm({
         resolver: zodResolver(roleSchema),
-        defaultValues: { name: '', permissions: [] }
-    });
-
-    const watchedPermissions = watch('permissions') || [];
-
-    useEffect(() => {
-        if (isEdit && currentRole) {
-            reset({
+        defaultValues: EMPTY_ROLE,
+        values: isEdit && currentRole
+            ? {
                 name: currentRole.name || '',
                 permissions: currentRole.permissions || []
-            });
-        }
-    }, [isEdit, currentRole, reset]);
+            }
+            : EMPTY_ROLE
+    });
+
+    const watchedPermissions = useWatch({ control, name: 'permissions' }) || [];
 
     const { mutate: createRole, isPending: isCreating } = usePostApiRoles({
         mutation: {
@@ -186,6 +189,7 @@ export default function PerfilFormPage() {
     });
 
     const togglePermission = (permId, checked) => {
+        if (!canManageRoles) return;
         const updated = checked
             ? [...watchedPermissions, permId]
             : watchedPermissions.filter(p => p !== permId);
@@ -193,6 +197,7 @@ export default function PerfilFormPage() {
     };
 
     const toggleModulePermissions = (group, checked) => {
+        if (!canManageRoles) return;
         const groupIds = group.permissions.map(p => p.id);
         const updated = checked
             ? [...watchedPermissions, ...groupIds.filter(pid => !watchedPermissions.includes(pid))]
@@ -201,10 +206,12 @@ export default function PerfilFormPage() {
     };
 
     const handleSelectAllGlobal = (selectAll) => {
+        if (!canManageRoles) return;
         setValue('permissions', selectAll ? [...ALL_PERMISSION_IDS] : [], { shouldValidate: true });
     };
 
     const onSubmit = (data) => {
+        if (!canManageRoles) return;
         if (isEdit) {
             updateRole({ id, data });
         } else {
@@ -213,6 +220,10 @@ export default function PerfilFormPage() {
     };
 
     const isSaving = isCreating || isUpdating;
+
+    if (!canManageRoles) {
+        return null;
+    }
 
     if (isEdit && isLoadingRoles) {
         return (
