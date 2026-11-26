@@ -12,6 +12,9 @@ export type GetApiInventoryKardexExportParams = {
   Batch?: string;
   NfeNumber?: string;
   ProductId?: string;
+  LocationId?: string;
+  Status?: number;
+  QualityStatus?: number;
   StartDate?: string;
   EndDate?: string;
 };

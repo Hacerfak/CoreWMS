@@ -10,4 +10,11 @@ export type GetApiInventoryBalancesExportParams = {
   Sku?: string;
   NfeNumber?: string;
   ProductId?: string;
+  Lpn?: string;
+  Batch?: string;
+  LocationId?: string;
+  Status?: number;
+  QualityStatus?: number;
+  StartDate?: string;
+  EndDate?: string;
 };

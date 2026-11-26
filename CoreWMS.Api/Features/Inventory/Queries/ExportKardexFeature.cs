@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using CoreWMS.Api.Features.Identity.Constants;
+using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using MediatR;
@@ -15,8 +16,11 @@ public record ExportKardexQuery(
     string? Batch,
     string? NfeNumber,
     Guid? ProductId,
-    DateTime? StartDate,
-    DateTime? EndDate
+    Guid? LocationId = null,
+    int? Status = null,
+    int? QualityStatus = null,
+    DateTime? StartDate = null,
+    DateTime? EndDate = null
 ) : IRequest<IResult>;
 
 public class ExportKardexHandler : IRequestHandler<ExportKardexQuery, IResult>
@@ -48,6 +52,7 @@ public class ExportKardexHandler : IRequestHandler<ExportKardexQuery, IResult>
                     select new
                     {
                         Transaction = t,
+                        HandlingUnit = hu,
                         CustomerCnpj = c.Cnpj,
                         CustomerName = c.CorporateName,
                         ProductSku = p.Sku,
@@ -64,20 +69,60 @@ public class ExportKardexHandler : IRequestHandler<ExportKardexQuery, IResult>
             query = query.Where(q => allowedCustomerIds.Contains(q.Transaction.CustomerId));
         }
 
-        if (request.CustomerId.HasValue) query = query.Where(q => q.Transaction.CustomerId == request.CustomerId);
-        if (request.ProductId.HasValue) query = query.Where(q => q.Transaction.ProductId == request.ProductId);
+        if (request.CustomerId.HasValue)
+            query = query.Where(q => q.Transaction.CustomerId == request.CustomerId.Value);
+
+        if (request.ProductId.HasValue)
+            query = query.Where(q => q.Transaction.ProductId == request.ProductId.Value);
+
+        if (request.LocationId.HasValue)
+            query = query.Where(q => q.Transaction.LocationId == request.LocationId.Value);
+
+        if (request.Status.HasValue)
+        {
+            var statusEnum = (HuStatus)request.Status.Value;
+            query = query.Where(q => q.HandlingUnit != null && q.HandlingUnit.Status == statusEnum);
+        }
+
+        if (request.QualityStatus.HasValue)
+        {
+            var qualityEnum = (QualityStatus)request.QualityStatus.Value;
+            query = query.Where(q => q.HandlingUnit != null && q.HandlingUnit.QualityStatus == qualityEnum);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Lpn))
-            query = query.Where(q => q.HandlingUnitLpn != null && EF.Functions.ILike(q.HandlingUnitLpn, $"%{request.Lpn.Trim()}%"));
+        {
+            var lpnTerm = request.Lpn.Trim();
+            query = query.Where(q => q.HandlingUnitLpn != null && EF.Functions.ILike(q.HandlingUnitLpn, $"%{lpnTerm}%"));
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Sku))
-            query = query.Where(q => EF.Functions.ILike(q.ProductSku, $"%{request.Sku.Trim()}%") || EF.Functions.ILike(q.ProductDescription, $"%{request.Sku.Trim()}%"));
+        {
+            var skuTerm = request.Sku.Trim();
+            query = query.Where(q => EF.Functions.ILike(q.ProductSku, $"%{skuTerm}%") || EF.Functions.ILike(q.ProductDescription, $"%{skuTerm}%"));
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Batch))
-            query = query.Where(q => q.HandlingUnitBatch != null && EF.Functions.ILike(q.HandlingUnitBatch, $"%{request.Batch.Trim()}%"));
+        {
+            var batchTerm = request.Batch.Trim();
+            query = query.Where(q => q.HandlingUnitBatch != null && EF.Functions.ILike(q.HandlingUnitBatch, $"%{batchTerm}%"));
+        }
 
         if (!string.IsNullOrWhiteSpace(request.NfeNumber))
-            query = query.Where(q => q.Transaction.SourceDocumentNumber != null && EF.Functions.ILike(q.Transaction.SourceDocumentNumber, $"%{request.NfeNumber.Trim()}%"));
+        {
+            var term = request.NfeNumber.Trim();
+            var inboundOrderIds = await _db.InboundOrders
+                .AsNoTracking()
+                .Where(o => o.CompanyId == companyId && (EF.Functions.ILike(o.AccessKey, $"%{term}%") || o.AccessKey.Contains(term)))
+                .Select(o => o.Id)
+                .ToListAsync(ct);
+
+            query = query.Where(q =>
+                (q.Transaction.SourceDocumentNumber != null && EF.Functions.ILike(q.Transaction.SourceDocumentNumber, $"%{term}%")) ||
+                (q.HandlingUnit != null && q.HandlingUnit.ReceiptDocumentId.HasValue && inboundOrderIds.Contains(q.HandlingUnit.ReceiptDocumentId.Value)) ||
+                (q.Transaction.SourceDocumentId.HasValue && inboundOrderIds.Contains(q.Transaction.SourceDocumentId.Value))
+            );
+        }
 
         if (request.StartDate.HasValue)
         {
