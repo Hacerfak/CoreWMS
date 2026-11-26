@@ -118,6 +118,8 @@ export * from './postApiYardAppointmentsAppointmentIdMoveToDockParams';
 export * from './postApiYardAppointmentsImportXmlBody';
 export * from './postApiYardAppointmentsImportXmlParams';
 export * from './printHandlingUnitsCommand';
+export * from './printLocationsCommand';
+export * from './printOutboundVolumesCommand';
 export * from './problemDetails';
 export * from './processDailyBillingCycleCommand';
 export * from './productWeightSyncItemDto';

@@ -19,8 +19,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Plus, Edit, Trash2, Building, MapPin, BoxSelect, ChevronRight, FileSpreadsheet, Download, UploadCloud, AlertCircle, Search, Filter } from 'lucide-react';
+import { Loader2, Plus, Edit, Trash2, Building, MapPin, BoxSelect, ChevronRight, FileSpreadsheet, Download, UploadCloud, AlertCircle, Search, Filter, Printer } from 'lucide-react';
 import { toast } from 'sonner';
+import PrintLocationModal from './PrintLocationModal';
 
 // Schemas Zod Simplificados
 const warehouseSchema = z.object({ code: z.string().min(1), name: z.string().min(1), clearanceHeight: z.coerce.number().min(0.1) });
@@ -44,6 +45,7 @@ export default function LayoutFisicoTab() {
     const [selectedZone, setSelectedZone] = useState(null);
     const [modalConfig, setModalConfig] = useState({ open: false, type: null, data: null });
     const [deleteConfig, setDeleteConfig] = useState({ open: false, type: null, data: null });
+    const [locationToPrint, setLocationToPrint] = useState(null);
 
     // Estados do Modal de Importação
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -219,6 +221,7 @@ export default function LayoutFisicoTab() {
 
     // Totais consolidados globais
     const totalGlobalEstimated = warehouses.reduce((sum, w) => sum + (w.totalEstimatedCapacity || 0), 0);
+    const hasLocationActions = canViewTopology || canManageTopology;
 
     return (
         <div className="flex h-full gap-4">
@@ -371,14 +374,14 @@ export default function LayoutFisicoTab() {
                                         <TableHead>Tipo de Armazenagem</TableHead>
                                         <TableHead className="w-[200px]">Capacidade (Estimada)</TableHead>
                                         <TableHead className="w-[100px] text-center">Status</TableHead>
-                                        {canManageTopology && <TableHead className="text-right">Ações</TableHead>}
+                                        {hasLocationActions && <TableHead className="text-right">Ações</TableHead>}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {loadingLocations ? (
-                                        <TableRow><TableCell colSpan={canManageTopology ? 5 : 4} className="h-24 text-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={hasLocationActions ? 5 : 4} className="h-24 text-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto" /></TableCell></TableRow>
                                     ) : paginatedLocations.length === 0 ? (
-                                        <TableRow><TableCell colSpan={canManageTopology ? 5 : 4} className="h-24 text-center text-slate-500">Nenhum endereço listado.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={hasLocationActions ? 5 : 4} className="h-24 text-center text-slate-500">Nenhum endereço listado.</TableCell></TableRow>
                                     ) : paginatedLocations.map(l => (
                                         <TableRow key={l.id}>
                                             <TableCell className="font-mono text-sm font-semibold text-slate-900">{l.fullPath}</TableCell>
@@ -394,10 +397,25 @@ export default function LayoutFisicoTab() {
                                             </TableCell>
 
                                             <TableCell className="text-center">{l.isActive ? <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Ativo</Badge> : <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">Inativo</Badge>}</TableCell>
-                                            {canManageTopology && (
+                                            {hasLocationActions && (
                                                 <TableCell className="text-right space-x-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => setModalConfig({ open: true, type: 'location', data: l })} className="text-blue-600 w-8 h-8"><Edit className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteConfig({ open: true, type: 'location', data: l })} className="text-rose-600 w-8 h-8"><Trash2 className="w-4 h-4" /></Button>
+                                                    {canViewTopology && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => setLocationToPrint(l)}
+                                                            className="text-slate-600 hover:text-blue-600 w-8 h-8"
+                                                            title="Imprimir Etiqueta do Endereço"
+                                                        >
+                                                            <Printer className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                    {canManageTopology && (
+                                                        <>
+                                                            <Button variant="ghost" size="icon" onClick={() => setModalConfig({ open: true, type: 'location', data: l })} className="text-blue-600 w-8 h-8"><Edit className="w-4 h-4" /></Button>
+                                                            <Button variant="ghost" size="icon" onClick={() => setDeleteConfig({ open: true, type: 'location', data: l })} className="text-rose-600 w-8 h-8"><Trash2 className="w-4 h-4" /></Button>
+                                                        </>
+                                                    )}
                                                 </TableCell>
                                             )}
                                         </TableRow>
@@ -421,6 +439,14 @@ export default function LayoutFisicoTab() {
                     </>
                 )}
             </div>
+
+            <PrintLocationModal
+                open={Boolean(locationToPrint)}
+                onOpenChange={(isOpen) => {
+                    if (!isOpen) setLocationToPrint(null);
+                }}
+                location={locationToPrint}
+            />
 
             {/* MODAL GLOBAL PARA CRIAR/EDITAR */}
             {canManageTopology && (

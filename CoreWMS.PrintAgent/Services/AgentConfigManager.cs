@@ -9,9 +9,28 @@ public class AgentConfig
     public string ApiKey { get; set; } = "";
     public int LocalPort { get; set; } = 9191;
 
-    public string ServerUrl => Dominio.StartsWith("http")
-        ? $"{Dominio}/hubs/print"
-        : $"https://{Dominio}/hubs/print";
+    public string ServerUrl
+    {
+        get
+        {
+            var raw = (Dominio ?? string.Empty).Trim().TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(raw))
+                return string.Empty;
+
+            if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{raw}/hubs/print";
+            }
+
+            var isLocalHost = raw.StartsWith("localhost", StringComparison.OrdinalIgnoreCase) ||
+                              raw.StartsWith("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                              raw.StartsWith("[::1]", StringComparison.OrdinalIgnoreCase);
+
+            var scheme = isLocalHost ? "http" : "https";
+            return $"{scheme}://{raw}/hubs/print";
+        }
+    }
 }
 
 public class AgentConfigManager

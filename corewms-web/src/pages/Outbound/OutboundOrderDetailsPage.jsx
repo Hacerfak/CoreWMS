@@ -22,7 +22,7 @@ import {
     ArrowLeft, Box, CheckCircle2, Loader2, PackageCheck, MapPin, Truck, FileText,
     UserCheck, ChevronDown, ChevronRight, Layers, FileCode, Download, Pencil,
     ShoppingCart, Ban, FileSignature, RefreshCw, RotateCcw, Trash2, Sparkles, Mail,
-    Plus, ExternalLink, Link2
+    Plus, ExternalLink, Link2, Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CancelNfeModal from '@/pages/Fiscal/CancelNfeModal';
@@ -30,6 +30,7 @@ import CorrectionLetterModal from '@/pages/Fiscal/CorrectionLetterModal';
 import SendNfeEmailModal from '@/pages/Fiscal/SendNfeEmailModal';
 import NovoAgendamentoModal from '@/pages/Portaria/NovoAgendamentoModal';
 import VincularAgendamentoModal from '@/pages/Portaria/VincularAgendamentoModal';
+import PrintOutboundVolumesModal from './PrintOutboundVolumesModal';
 
 export default function OutboundOrderDetailsPage() {
     const { id: orderId } = useParams();
@@ -57,6 +58,9 @@ export default function OutboundOrderDetailsPage() {
     const [refreshTick, setRefreshTick] = useState(0);
     const [downloadingDocId, setDownloadingDocId] = useState(null);
     const [expandedItemIds, setExpandedItemIds] = useState({});
+
+    // Estado de impressão de volumes
+    const [volumePrintModal, setVolumePrintModal] = useState({ open: false, initialVolumeId: null });
 
     // Ações do cabeçalho
     const [isRevertingShipment, setIsRevertingShipment] = useState(false);
@@ -366,6 +370,7 @@ export default function OutboundOrderDetailsPage() {
     const canDeleteOrder = canManageOutbound && order?.status === 'Canceled' && (!order?.fiscalDocuments || order.fiscalDocuments.length === 0);
 
     const yardAppointment = order?.yardAppointment;
+    const orderVolumes = order?.volumes || [];
 
     return (
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
@@ -617,14 +622,27 @@ export default function OutboundOrderDetailsPage() {
 
                     {/* VOLUMES PACKING COM IDENTIFICAÇÃO DE AUTO-PACKING E CONFERÊNCIA */}
                     <Card className="border-slate-200/80 bg-white shadow-xs">
-                        <CardHeader className="p-4 border-b bg-slate-50/60">
-                            <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center justify-between">
-                                <span className="flex items-center gap-2"><Box size={16} className="text-orange-600" /> Volumes Finais Gerados (Packing & Auto-Packing)</span>
-                                <Badge variant="secondary" className="font-mono">{order?.volumes?.length || 0} Volume(s)</Badge>
+                        <CardHeader className="p-4 border-b bg-slate-50/60 flex flex-row items-center justify-between gap-2">
+                            <CardTitle className="text-xs uppercase font-bold text-slate-800 flex items-center gap-2">
+                                <Box size={16} className="text-orange-600" /> Volumes Finais Gerados (Packing & Auto-Packing)
                             </CardTitle>
+                            <div className="flex items-center gap-2">
+                                {orderVolumes.length > 0 && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setVolumePrintModal({ open: true, initialVolumeId: null })}
+                                        className="h-7 text-xs bg-white text-orange-700 border-orange-200 hover:bg-orange-50 font-semibold"
+                                    >
+                                        <Printer size={13} className="mr-1.5 text-orange-600" /> Imprimir Volumes
+                                    </Button>
+                                )}
+                                <Badge variant="secondary" className="font-mono">{orderVolumes.length} Volume(s)</Badge>
+                            </div>
                         </CardHeader>
                         <CardContent className="p-4">
-                            {!order?.volumes || order.volumes.length === 0 ? (
+                            {orderVolumes.length === 0 ? (
                                 <p className="text-xs text-slate-400 italic">Nenhum volume gerado ainda.</p>
                             ) : (
                                 <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -636,10 +654,11 @@ export default function OutboundOrderDetailsPage() {
                                                 <TableHead>Origem Packing</TableHead>
                                                 <TableHead>Embalado por</TableHead>
                                                 <TableHead>Conferência</TableHead>
+                                                <TableHead className="text-right w-16">Etiqueta</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {order.volumes.map(vol => (
+                                            {orderVolumes.map(vol => (
                                                 <TableRow key={vol.id}>
                                                     <TableCell className="font-mono font-bold text-xs text-slate-900">{vol.volumeLpn}</TableCell>
                                                     <TableCell className="text-xs font-mono">
@@ -670,6 +689,18 @@ export default function OutboundOrderDetailsPage() {
                                                                 Pendente
                                                             </Badge>
                                                         )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => setVolumePrintModal({ open: true, initialVolumeId: vol.id })}
+                                                            className="h-7 w-7 text-slate-600 hover:text-orange-600"
+                                                            title="Imprimir etiqueta deste volume"
+                                                        >
+                                                            <Printer size={14} />
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
@@ -773,7 +804,7 @@ export default function OutboundOrderDetailsPage() {
                                                                                     disabled={downloadingDocId === doc.id}
                                                                                     className={`h-8 text-xs bg-white font-medium px-2 ${isNfeOriginal ? 'text-orange-700 border-orange-200 hover:bg-orange-50' :
                                                                                         doc.type === 'Cancelamento' || doc.type === 7 ? 'text-rose-700 border-rose-200 hover:bg-rose-50' :
-                                                                                            'text-purple-700 border-purple-200 hover:bg-purple-50'
+                                                                                            'text-purple-700 border-rose-200 hover:bg-purple-50'
                                                                                         }`}
                                                                                     title="Baixar PDF Oficial"
                                                                                 >
@@ -1086,6 +1117,13 @@ export default function OutboundOrderDetailsPage() {
                     )}
                 </div>
             </div>
+
+            <PrintOutboundVolumesModal
+                open={volumePrintModal.open}
+                onOpenChange={(isOpen) => setVolumePrintModal((prev) => ({ ...prev, open: isOpen }))}
+                volumes={orderVolumes}
+                initialVolumeId={volumePrintModal.initialVolumeId}
+            />
 
             {/* MODAL AGENDAMENTO DIRETO DE PORTARIA */}
             {canCreateYardAppointment && (

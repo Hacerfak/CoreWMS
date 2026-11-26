@@ -28,6 +28,8 @@ import type {
   CreatePrinterCommand,
   CreateTemplateRequest,
   PrintHandlingUnitsCommand,
+  PrintLocationsCommand,
+  PrintOutboundVolumesCommand,
   SendTestPrintCommand,
   UpdateAgentRequest,
   UpdatePrinterRequest,
@@ -569,6 +571,128 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getPostApiPrintHandlingUnitsMutationOptions(options), queryClient);
+    }
+    export const postApiPrintLocations = (
+    printLocationsCommand: PrintLocationsCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/print/locations`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: printLocationsCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiPrintLocationsMutationKey = () => ['postApiPrintLocations'] as const;
+
+export const getPostApiPrintLocationsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintLocations>>, TError,PostApiPrintLocationsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintLocations>>, TError,PostApiPrintLocationsMutationVariables, TContext> => {
+
+const mutationKey = getPostApiPrintLocationsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPrintLocations>>, PostApiPrintLocationsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiPrintLocations(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPrintLocationsMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPrintLocations>>>
+    export type PostApiPrintLocationsMutationBody = PrintLocationsCommand
+    export type PostApiPrintLocationsMutationError = unknown
+    export type PostApiPrintLocationsMutationVariables = {data: PrintLocationsCommand}
+
+    export const usePostApiPrintLocations = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintLocations>>, TError,PostApiPrintLocationsMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPrintLocations>>,
+        TError,
+        PostApiPrintLocationsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPrintLocationsMutationOptions(options), queryClient);
+    }
+    export const postApiPrintOutboundVolumes = (
+    printOutboundVolumesCommand: PrintOutboundVolumesCommand,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/print/outbound-volumes`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: printOutboundVolumesCommand, signal
+    },
+      options);
+    }
+
+
+
+
+export const getPostApiPrintOutboundVolumesMutationKey = () => ['postApiPrintOutboundVolumes'] as const;
+
+export const getPostApiPrintOutboundVolumesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintOutboundVolumes>>, TError,PostApiPrintOutboundVolumesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof postApiPrintOutboundVolumes>>, TError,PostApiPrintOutboundVolumesMutationVariables, TContext> => {
+
+const mutationKey = getPostApiPrintOutboundVolumesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof postApiPrintOutboundVolumes>>, PostApiPrintOutboundVolumesMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  postApiPrintOutboundVolumes(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PostApiPrintOutboundVolumesMutationResult = NonNullable<Awaited<ReturnType<typeof postApiPrintOutboundVolumes>>>
+    export type PostApiPrintOutboundVolumesMutationBody = PrintOutboundVolumesCommand
+    export type PostApiPrintOutboundVolumesMutationError = unknown
+    export type PostApiPrintOutboundVolumesMutationVariables = {data: PrintOutboundVolumesCommand}
+
+    export const usePostApiPrintOutboundVolumes = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiPrintOutboundVolumes>>, TError,PostApiPrintOutboundVolumesMutationVariables, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof postApiPrintOutboundVolumes>>,
+        TError,
+        PostApiPrintOutboundVolumesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPostApiPrintOutboundVolumesMutationOptions(options), queryClient);
     }
     export const postApiPrintSendTest = (
     sendTestPrintCommand: SendTestPrintCommand,
