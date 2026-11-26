@@ -31,33 +31,50 @@ public class PrintHandlingUnitsCommandValidator : AbstractValidator<PrintHandlin
 public class PrintHandlingUnitsHandler : IRequestHandler<PrintHandlingUnitsCommand, IResult>
 {
     private readonly ApplicationDbContext _db;
+    private readonly ITenantProvider _tenant;
     private readonly IPrintService _printService;
     private readonly IZplTemplateEngine _zplEngine;
 
-    public PrintHandlingUnitsHandler(ApplicationDbContext db, IPrintService printService, IZplTemplateEngine zplEngine)
+    public PrintHandlingUnitsHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IPrintService printService,
+        IZplTemplateEngine zplEngine)
     {
         _db = db;
+        _tenant = tenant;
         _printService = printService;
         _zplEngine = zplEngine;
     }
 
     public async Task<IResult> Handle(PrintHandlingUnitsCommand request, CancellationToken ct)
     {
-        // 1. Busca o Template ZPL cadastrado
-        var template = await _db.LabelTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == request.TemplateId, ct);
-        if (template == null) return Results.BadRequest(new { Message = "Template de etiqueta não encontrado." });
+        var companyId = _tenant.GetCompanyId();
 
-        // 2. Busca todas as HUs solicitadas com dados de Produto e Cliente
+        var template = await _db.LabelTemplates
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == request.TemplateId, ct);
+
+        if (template == null)
+            return Results.BadRequest(new { Message = "Template de etiqueta não encontrado." });
+
         var hus = await _db.HandlingUnits
             .AsNoTracking()
             .Include(h => h.Product)
             .Include(h => h.Customer)
-            .Where(h => request.HandlingUnitIds.Contains(h.Id))
+            .Where(h => h.CompanyId == companyId && request.HandlingUnitIds.Contains(h.Id))
             .ToListAsync(ct);
 
-        if (!hus.Any()) return Results.NotFound(new { Message = "Nenhuma HU encontrada para impressão." });
+        if (!hus.Any())
+            return Results.NotFound(new { Message = "Nenhuma HU encontrada para impressão." });
 
-        // 3. Busca as Ordens de Recebimento atreladas via ReceiptDocumentId
+        if (_tenant.IsPartnerUser())
+        {
+            var allowedCustomerIds = _tenant.GetAllowedCustomerIds();
+            if (hus.Any(h => !allowedCustomerIds.Contains(h.CustomerId)))
+                return Results.Forbid();
+        }
+
         var orderIds = hus
             .Where(h => h.ReceiptDocumentId.HasValue)
             .Select(h => h.ReceiptDocumentId!.Value)
@@ -69,14 +86,12 @@ public class PrintHandlingUnitsHandler : IRequestHandler<PrintHandlingUnitsComma
             .Where(o => orderIds.Contains(o.Id))
             .ToDictionaryAsync(o => o.Id, ct);
 
-        // 4. Resolve o hardware alvo
         var printer = await _db.Printers
             .Include(p => p.PrintAgent)
             .FirstOrDefaultAsync(p => p.PrintAgent.Name == request.StationName && p.Name == request.PrinterName, ct);
 
         var targetHardware = printer?.Target ?? request.PrinterName;
 
-        // 5. Renderiza e concatena o ZPL de cada HU
         var combinedZpl = new StringBuilder();
         foreach (var hu in hus)
         {
@@ -84,9 +99,10 @@ public class PrintHandlingUnitsHandler : IRequestHandler<PrintHandlingUnitsComma
 
             if (hu.ReceiptDocumentId.HasValue && inboundOrders.TryGetValue(hu.ReceiptDocumentId.Value, out var order))
             {
-                if (!string.IsNullOrEmpty(order.AccessKey) && order.AccessKey.Length >= 34)
+                if (!string.IsNullOrEmpty(order.AccessKey) && order.AccessKey.Length >= 34 &&
+                    long.TryParse(order.AccessKey.Substring(25, 9), out var nfNumber))
                 {
-                    docNumber = int.Parse(order.AccessKey.Substring(25, 9)).ToString();
+                    docNumber = nfNumber.ToString();
                 }
             }
 
@@ -94,7 +110,6 @@ public class PrintHandlingUnitsHandler : IRequestHandler<PrintHandlingUnitsComma
             combinedZpl.AppendLine(renderedZpl);
         }
 
-        // 6. Envia o Job via WebSocket
         var jobId = await _printService.SendPrintJobAsync(request.StationName, targetHardware, combinedZpl.ToString());
 
         return Results.Ok(new
@@ -115,6 +130,6 @@ public static class PrintHandlingUnitsEndpoints
             await mediator.Send(command))
         .WithTags("Printing")
         .RequireAuthorization()
-        .RequirePermission(Permissions.Printing.Manage);
+        .RequirePermission(Permissions.Inbound.Receive);
     }
 }

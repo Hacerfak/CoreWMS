@@ -2,6 +2,7 @@ using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Topology.Enums;
 using CoreWMS.Api.Infrastructure.Data;
+using CoreWMS.Api.Infrastructure.Inventory;
 using CoreWMS.Api.Infrastructure.Security;
 using FluentValidation;
 using MediatR;
@@ -25,22 +26,29 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
     private readonly ApplicationDbContext _db;
     private readonly ITenantProvider _tenant;
     private readonly IMediator _mediator;
+    private readonly IDirectLocationAllocationValidator _directLocationValidator;
 
-    public MoveHandlingUnitHandler(ApplicationDbContext db, ITenantProvider tenant, IMediator mediator)
+    public MoveHandlingUnitHandler(
+        ApplicationDbContext db,
+        ITenantProvider tenant,
+        IMediator mediator,
+        IDirectLocationAllocationValidator directLocationValidator)
     {
         _db = db;
         _tenant = tenant;
         _mediator = mediator;
+        _directLocationValidator = directLocationValidator;
     }
 
     public async Task<IResult> Handle(MoveHandlingUnitCommand request, CancellationToken ct)
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Busca o endereço de destino
         var destination = await _db.Locations
             .AsNoTracking()
             .Include(l => l.StorageType)
+            .Include(l => l.Zone)
+                .ThenInclude(z => z.Warehouse)
             .FirstOrDefaultAsync(l => l.Id == request.DestinationLocationId, ct);
 
         if (destination == null || !destination.IsActive)
@@ -48,7 +56,6 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
 
         var destinationRole = destination.StorageType?.Role ?? StorageRole.Storage;
 
-        // 2. Busca as HUs
         var query = _db.HandlingUnits
             .Include(h => h.CurrentLocation)
                 .ThenInclude(l => l!.StorageType)
@@ -65,7 +72,6 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
         if (!hus.Any())
             return Results.NotFound(new { Message = "Nenhuma Unidade de Manuseio encontrada." });
 
-        // Trava estrita de qualidade: Volumes avariados/retidos só podem ir para posições do tipo Qualidade
         var qualityRestrictedHus = hus.Where(h => h.QualityStatus != QualityStatus.Available).ToList();
 
         if (qualityRestrictedHus.Any() && destinationRole != StorageRole.Quality)
@@ -77,10 +83,42 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
             });
         }
 
+        var candidates = hus
+            .GroupBy(h => new
+            {
+                h.ProductId,
+                h.PackagingTypeId,
+                NormalizedBatch = (h.Batch ?? string.Empty).Trim().ToUpper(),
+                EffectiveQuality = (destinationRole == StorageRole.Quality && h.QualityStatus == QualityStatus.Available)
+                    ? QualityStatus.Quarantine
+                    : h.QualityStatus
+            })
+            .Select(g => new DirectAllocationCandidate(
+                TargetLocationId: destination.Id,
+                ProductId: g.Key.ProductId,
+                PackagingTypeId: g.Key.PackagingTypeId,
+                Batch: g.Key.NormalizedBatch,
+                VolumeCount: g.Count(),
+                QualityStatus: g.Key.EffectiveQuality
+            ))
+            .ToList();
+
+        try
+        {
+            await _directLocationValidator.ValidateAndLoadLocationsAsync(companyId, candidates, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { Message = ex.Message });
+        }
+
         var productIds = hus.Select(h => h.ProductId).Distinct().ToList();
+        var customerIds = hus.Select(h => h.CustomerId).Distinct().ToList();
 
         var balances = await _db.InventoryBalances
-            .Where(b => b.CompanyId == companyId && productIds.Contains(b.ProductId))
+            .Where(b => b.CompanyId == companyId &&
+                        productIds.Contains(b.ProductId) &&
+                        customerIds.Contains(b.CustomerId))
             .ToListAsync(ct);
 
         var kardexMovements = new List<RecordKardexMovementItemDto>();
@@ -94,13 +132,12 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
 
             var balance = balances.FirstOrDefault(b => b.ProductId == hu.ProductId && b.CustomerId == hu.CustomerId);
 
-            // CASO A: Putaway saindo da Doca (Received -> Stored)
             if (oldStatus == HuStatus.Received && balance != null)
             {
                 balance.AllocateFromDock(hu.CurrentQuantity, destinationRole, hu.QualityStatus);
             }
-            // CASO B: Item livre sendo movido para uma Posição de Qualidade (Quarentena Automática)
-            else if (destinationRole == StorageRole.Quality && oldQualityStatus == QualityStatus.Available)
+
+            if (destinationRole == StorageRole.Quality && oldQualityStatus == QualityStatus.Available)
             {
                 hu.ChangeQuality(QualityStatus.Quarantine);
                 if (balance != null)
@@ -149,7 +186,6 @@ public class MoveHandlingUnitHandler : IRequestHandler<MoveHandlingUnitCommand, 
             return Results.Conflict(new { Message = "Conflito de concorrência ao mover as HUs. Tente novamente." });
         }
 
-        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
         if (kardexMovements.Any())
         {
             await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);

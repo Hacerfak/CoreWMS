@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using CoreWMS.Api.Features.Printing;
 using CoreWMS.Api.Infrastructure.Audit;
+using CoreWMS.Api.Infrastructure.Inventory;
 using CoreWMS.Api.Infrastructure.Auth;
 using CoreWMS.Api.Infrastructure.Behaviors;
 using CoreWMS.Api.Infrastructure.Caching;
@@ -176,6 +177,7 @@ builder.Services.AddScoped<IEmailSenderService, CompanyEmailSenderService>();
 builder.Services.AddSingleton<KardexChannel>();
 builder.Services.AddHostedService<KardexWorker>();
 builder.Services.AddScoped<IMasterDataCacheService, MasterDataCacheService>();
+builder.Services.AddScoped<IDirectLocationAllocationValidator, DirectLocationAllocationValidator>();
 
 builder.Services.AddHostedService<ImageStorageCleanupWorker>();
 builder.Services.AddScoped<ILocalImageStorageService, LocalImageStorageService>();

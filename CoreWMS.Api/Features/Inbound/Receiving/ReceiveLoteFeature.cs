@@ -7,10 +7,13 @@ using CoreWMS.Api.Features.Inventory.Entities;
 using CoreWMS.Api.Features.Inventory.Enums;
 using CoreWMS.Api.Features.Inventory.Operations;
 using CoreWMS.Api.Features.Quality.Entities;
+using CoreWMS.Api.Features.Topology.Entities;
+using CoreWMS.Api.Features.Topology.Enums;
 using CoreWMS.Api.Infrastructure.Caching;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
 using CoreWMS.Api.Infrastructure.Storage;
+using CoreWMS.Api.Infrastructure.Inventory;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -45,6 +48,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
     private readonly IHttpContextAccessor _http;
     private readonly ILocalImageStorageService _imageStorage;
     private readonly IMediator _mediator;
+    private readonly IDirectLocationAllocationValidator _directLocationValidator;
 
     public ReceiveLoteHandler(
         ApplicationDbContext db,
@@ -52,7 +56,8 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         IMasterDataCacheService masterDataCache,
         IHttpContextAccessor http,
         ILocalImageStorageService imageStorage,
-        IMediator mediator)
+        IMediator mediator,
+        IDirectLocationAllocationValidator directLocationValidator)
     {
         _db = db;
         _tenant = tenant;
@@ -60,6 +65,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
         _http = http;
         _imageStorage = imageStorage;
         _mediator = mediator;
+        _directLocationValidator = directLocationValidator;
     }
 
     public async Task<IResult> Handle(ReceiveLoteCommand request, CancellationToken ct)
@@ -95,6 +101,42 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         if (orderItem.UnitNetWeight <= 0 && baseUnitNet > 0)
             orderItem.SetUnitWeights(baseUnitNet, baseUnitGross);
+
+        var directCandidates = new List<DirectAllocationCandidate>();
+        foreach (var vol in request.Volumes)
+        {
+            if (vol.TargetLocationId != orderItem.DockLocationId)
+            {
+                string? candidateBatch = rules.TracksBatch
+                    ? (!string.IsNullOrWhiteSpace(vol.Batch)
+                        ? vol.Batch.Trim().ToUpper()
+                        : (!string.IsNullOrWhiteSpace(orderItem.ExpectedBatch) ? orderItem.ExpectedBatch.Trim().ToUpper() : null))
+                    : null;
+
+                directCandidates.Add(new DirectAllocationCandidate(
+                    TargetLocationId: vol.TargetLocationId,
+                    ProductId: orderItem.ProductId.Value,
+                    PackagingTypeId: vol.PackagingTypeId,
+                    Batch: candidateBatch,
+                    VolumeCount: vol.VolumeCount,
+                    QualityStatus: vol.QualityStatus
+                ));
+            }
+        }
+
+        var validatedDirectLocations = new Dictionary<Guid, Location>();
+        if (directCandidates.Any())
+        {
+            try
+            {
+                validatedDirectLocations = await _directLocationValidator
+                    .ValidateAndLoadLocationsAsync(companyId, directCandidates, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        }
 
         decimal totalToReceive = 0;
         var husToInsert = new List<HandlingUnit>();
@@ -176,6 +218,9 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 }
             }
 
+            bool isDirectAllocation = validatedDirectLocations.TryGetValue(vol.TargetLocationId, out var directLocation);
+            var directRole = directLocation?.StorageType?.Role ?? StorageRole.Storage;
+
             for (int i = 0; i < vol.VolumeCount; i++)
             {
                 var lpn = GenerateShortLpn();
@@ -219,7 +264,25 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
                 totalToReceive += vol.QuantityPerVolume;
                 balance.ReceiveToDock(vol.QuantityPerVolume);
 
-                // Prepara movimento desacoplado para gravação segura após o commit
+                if (isDirectAllocation)
+                {
+                    hu.MoveTo(vol.TargetLocationId);
+                    balance.AllocateFromDock(vol.QuantityPerVolume, directRole, vol.QualityStatus);
+
+                    kardexMovements.Add(new RecordKardexMovementItemDto(
+                        CustomerId: orderItem.InboundOrder.CustomerId.Value,
+                        ProductId: orderItem.ProductId.Value,
+                        HandlingUnitId: hu.Id,
+                        LocationId: vol.TargetLocationId,
+                        Type: TransactionType.Internal_Move,
+                        QuantityChange: 0m,
+                        BalanceAfter: vol.QuantityPerVolume,
+                        SourceDocumentId: orderItem.InboundOrderId,
+                        SourceDocumentNumber: $"ALOCAÇÃO DIRETA: {directLocation!.FullPath}",
+                        CompanyId: companyId
+                    ));
+                }
+
                 kardexMovements.Add(new RecordKardexMovementItemDto(
                     CustomerId: orderItem.InboundOrder.CustomerId.Value,
                     ProductId: orderItem.ProductId.Value,
@@ -265,13 +328,11 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
             return Results.Conflict(new { Message = "Conflito de concorrência ao atualizar o saldo ou a ordem. Tente novamente." });
         }
 
-        // DELEGAÇÃO VIA MEDIATR: Gravação segura em lote no Kardex
         if (kardexMovements.Any())
         {
             await _mediator.Send(new RecordBatchKardexMovementsCommand(kardexMovements), ct);
         }
 
-        // DELEGAÇÃO VIA MEDIATR: Faturamento Inbound
         var serviceGroups = new Dictionary<Guid, List<Guid>>();
         int huIndex = 0;
 
@@ -308,7 +369,7 @@ public class ReceiveLoteHandler : IRequestHandler<ReceiveLoteCommand, IResult>
 
         return Results.Ok(new
         {
-            Message = "Lote recebido na Doca com sucesso.",
+            Message = "Lote recebido com sucesso.",
             HusGenerated = husToInsert.Select(h => new { h.Id, h.Lpn }).ToList(),
             OrderItemStatus = orderItem.Status.ToString()
         });

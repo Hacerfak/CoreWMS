@@ -1,5 +1,6 @@
 using CoreWMS.Api.Features.Identity.Constants;
 using CoreWMS.Api.Features.Inventory.Enums;
+using CoreWMS.Api.Features.Products.Entities;
 using CoreWMS.Api.Features.Topology.Enums;
 using CoreWMS.Api.Infrastructure.Data;
 using CoreWMS.Api.Infrastructure.Security;
@@ -40,7 +41,6 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
     {
         var companyId = _tenant.GetCompanyId();
 
-        // 1. Busca todas as HUs da Ordem que estão descarregadas na Doca (HuStatus.Received)
         var husQuery = _db.HandlingUnits
             .AsNoTracking()
             .Include(h => h.Product)
@@ -62,14 +62,12 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
         if (!husInDock.Any())
             return Results.Ok(new List<PutawaySuggestionDto>());
 
-        // 2. Carrega as embalagens dos produtos para obter a altura (HeightMm) e o empilhamento máximo (MaxStacking)
         var productIds = husInDock.Select(h => h.ProductId).Distinct().ToList();
         var productPackagings = await _db.ProductPackagings
             .AsNoTracking()
             .Where(p => productIds.Contains(p.ProductId))
             .ToListAsync(ct);
 
-        // 3. Carrega as posições ativas da topologia com hierarquia de pavilhão e papel (Armazenamento / Qualidade)
         var availableLocations = await _db.Locations
             .AsNoTracking()
             .Include(l => l.StorageType)
@@ -80,10 +78,12 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
             .OrderBy(l => l.FullPath)
             .ToListAsync(ct);
 
-        // 4. Mapeia as HUs atualmente armazenadas no estoque para cálculo de ocupação e segregação de lotes
         var storedHus = await _db.HandlingUnits
             .AsNoTracking()
-            .Where(h => h.CompanyId == companyId && h.CurrentLocationId.HasValue && h.Status == HuStatus.Stored)
+            .Where(h => h.CompanyId == companyId &&
+                        h.CurrentLocationId.HasValue &&
+                        h.Status == HuStatus.Stored &&
+                        h.CurrentQuantity > 0)
             .Select(h => new { h.CurrentLocationId, h.ProductId, h.Batch })
             .ToListAsync(ct);
 
@@ -95,7 +95,7 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
             .GroupBy(h => h.CurrentLocationId!.Value)
             .ToDictionary(
                 g => g.Key,
-                g => g.Select(x => new ProductBatchPair(x.ProductId, x.Batch ?? "")).ToList()
+                g => g.Select(x => new ProductBatchPair(x.ProductId, NormalizeBatch(x.Batch))).ToList()
             );
 
         var suggestions = new List<PutawaySuggestionDto>();
@@ -104,18 +104,17 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
         {
             var isQualityRestricted = hu.QualityStatus != QualityStatus.Available;
             var targetRole = isQualityRestricted ? StorageRole.Quality : StorageRole.Storage;
+            var normalizedBatch = NormalizeBatch(hu.Batch);
 
-            // Busca a embalagem do produto atrelada a esta HU
-            var pack = productPackagings.FirstOrDefault(p => p.ProductId == hu.ProductId && p.PackagingTypeId == hu.PackagingTypeId);
+            var pack = productPackagings.FirstOrDefault(p =>
+                p.ProductId == hu.ProductId && p.PackagingTypeId == hu.PackagingTypeId);
 
-            // CONVERSÃO DE UNIDADE: Se a altura vier em mm (ex: 1650mm), converte para metros (1.65m)
             decimal palletHeightMeters = 1.5m;
             if (pack != null && pack.HeightMm > 0)
             {
                 palletHeightMeters = pack.HeightMm > 50 ? pack.HeightMm / 1000m : pack.HeightMm;
             }
 
-            // EMPILHAMENTO MÁXIMO OBTIDO DIRETO DA EMBALAGEM
             int packagingMaxStacking = pack?.MaxStacking > 0 ? pack.MaxStacking : 1;
 
             var candidateLocations = availableLocations
@@ -125,72 +124,73 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
             Topology.Entities.Location? chosenLocation = null;
             string reason = "Posição com capacidade de empilhamento livre";
 
-            // Regra 1: Consolidação na MESMA posição se já existir o mesmo SKU + MESMO Lote armazenado
-            var existingSameBatchLocationId = storedHus
-                .Where(h => h.ProductId == hu.ProductId &&
-                            !string.IsNullOrWhiteSpace(hu.Batch) &&
-                            string.Equals(h.Batch, hu.Batch, StringComparison.OrdinalIgnoreCase))
-                .Select(h => h.CurrentLocationId!.Value)
-                .FirstOrDefault();
-
-            if (existingSameBatchLocationId != Guid.Empty)
+            // Regra 1: Consolidação se já houver o mesmo SKU (e mesmo lote, quando informado) no endereço compatível
+            var consolidationCandidates = candidateLocations.Where(loc =>
             {
-                var candidate = candidateLocations.FirstOrDefault(l => l.Id == existingSameBatchLocationId);
-                if (candidate != null)
-                {
-                    int maxCap = CalculateEffectiveCapacity(candidate, palletHeightMeters, packagingMaxStacking);
-                    simulatedOccupancy.TryGetValue(candidate.Id, out int currentCount);
+                if (!locationContents.TryGetValue(loc.Id, out var contents) || contents.Count == 0)
+                    return false;
 
-                    if (currentCount < maxCap)
-                    {
-                        chosenLocation = candidate;
-                        reason = $"Consolidação com mesmo SKU/Lote ({currentCount + 1}/{maxCap} pos.)";
-                    }
-                }
+                bool hasSameProduct = contents.Any(c => c.ProductId == hu.ProductId);
+                if (!hasSameProduct)
+                    return false;
+
+                if (string.IsNullOrWhiteSpace(normalizedBatch))
+                    return true;
+
+                return contents.Any(c => c.ProductId == hu.ProductId &&
+                                         string.Equals(c.Batch, normalizedBatch, StringComparison.OrdinalIgnoreCase));
+            });
+
+            foreach (var candidate in consolidationCandidates)
+            {
+                if (!CanFitAndMixInLocation(candidate, pack, palletHeightMeters, packagingMaxStacking, simulatedOccupancy, locationContents, hu.ProductId, normalizedBatch))
+                    continue;
+
+                simulatedOccupancy.TryGetValue(candidate.Id, out int currentCount);
+                chosenLocation = candidate;
+                reason = $"Consolidação com mesmo SKU/Lote ({currentCount + 1}/{CalculateEffectiveCapacity(candidate, palletHeightMeters, packagingMaxStacking)} pos.)";
+                break;
             }
 
-            // Regra 2: Busca posição livre que NÃO TENHA conflito de LOTE DIFERENTE do mesmo SKU em boxes adjacentes
+            // Regra 2: Posição compatível sem conflito de lote em boxes adjacentes
             if (chosenLocation == null)
             {
                 foreach (var (loc, index) in candidateLocations.Select((l, idx) => (l, idx)))
                 {
-                    int maxCap = CalculateEffectiveCapacity(loc, palletHeightMeters, packagingMaxStacking);
-                    simulatedOccupancy.TryGetValue(loc.Id, out int currentCount);
+                    if (!CanFitAndMixInLocation(loc, pack, palletHeightMeters, packagingMaxStacking, simulatedOccupancy, locationContents, hu.ProductId, normalizedBatch))
+                        continue;
 
-                    if (currentCount < maxCap)
+                    bool isAdjacentConflict = HasAdjacentBatchConflict(index, candidateLocations, locationContents, hu.ProductId, normalizedBatch);
+                    if (!isAdjacentConflict)
                     {
-                        bool isAdjacentConflict = HasAdjacentBatchConflict(index, candidateLocations, locationContents, hu.ProductId, hu.Batch);
-
-                        if (!isAdjacentConflict)
-                        {
-                            chosenLocation = loc;
-                            reason = isQualityRestricted
-                                ? "Área de Qualidade/Retenção"
-                                : $"Empilhamento em bloco ({currentCount + 1}/{maxCap} pos. - {loc.Zone.Warehouse.Name})";
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Regra 3 (Fallback): Posição disponível ignorando a regra de adjacência de lotes
-            if (chosenLocation == null)
-            {
-                foreach (var loc in candidateLocations)
-                {
-                    int maxCap = CalculateEffectiveCapacity(loc, palletHeightMeters, packagingMaxStacking);
-                    simulatedOccupancy.TryGetValue(loc.Id, out int currentCount);
-
-                    if (currentCount < maxCap)
-                    {
+                        simulatedOccupancy.TryGetValue(loc.Id, out int currentCount);
+                        int maxCap = CalculateEffectiveCapacity(loc, palletHeightMeters, packagingMaxStacking);
                         chosenLocation = loc;
-                        reason = $"Empilhamento em bloco ({currentCount + 1}/{maxCap} pos. - {loc.Zone.Warehouse.Name})";
+                        reason = isQualityRestricted
+                            ? "Área de Qualidade/Retenção"
+                            : $"Empilhamento em bloco ({currentCount + 1}/{maxCap} pos. - {loc.Zone.Warehouse.Name})";
                         break;
                     }
                 }
             }
 
-            // Regra 4 (Fallback Extremo): Armazém 100% cheio
+            // Regra 3: Posição compatível ignorando adjacência de lotes
+            if (chosenLocation == null)
+            {
+                foreach (var loc in candidateLocations)
+                {
+                    if (!CanFitAndMixInLocation(loc, pack, palletHeightMeters, packagingMaxStacking, simulatedOccupancy, locationContents, hu.ProductId, normalizedBatch))
+                        continue;
+
+                    simulatedOccupancy.TryGetValue(loc.Id, out int currentCount);
+                    int maxCap = CalculateEffectiveCapacity(loc, palletHeightMeters, packagingMaxStacking);
+                    chosenLocation = loc;
+                    reason = $"Empilhamento em bloco ({currentCount + 1}/{maxCap} pos. - {loc.Zone.Warehouse.Name})";
+                    break;
+                }
+            }
+
+            // Regra 4 (Fallback): Primeira posição do papel esperado caso todas estejam no limite
             if (chosenLocation == null && candidateLocations.Any())
             {
                 chosenLocation = candidateLocations.First();
@@ -199,13 +199,12 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
 
             if (chosenLocation != null)
             {
-                // Atualiza a ocupação no simulador em memória
                 simulatedOccupancy[chosenLocation.Id] = simulatedOccupancy.GetValueOrDefault(chosenLocation.Id, 0) + 1;
 
                 if (!locationContents.ContainsKey(chosenLocation.Id))
                     locationContents[chosenLocation.Id] = new List<ProductBatchPair>();
 
-                locationContents[chosenLocation.Id].Add(new ProductBatchPair(hu.ProductId, hu.Batch ?? ""));
+                locationContents[chosenLocation.Id].Add(new ProductBatchPair(hu.ProductId, normalizedBatch));
 
                 suggestions.Add(new PutawaySuggestionDto(
                     hu.Id,
@@ -227,13 +226,51 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
         return Results.Ok(suggestions);
     }
 
-    // Verifica se existe o MESMO produto com LOTE DIFERENTE no box imediatamente anterior ou posterior no mesmo corredor
+    private static bool CanFitAndMixInLocation(
+        Topology.Entities.Location loc,
+        ProductPackaging? pack,
+        decimal palletHeightMeters,
+        int packagingMaxStacking,
+        Dictionary<Guid, int> simulatedOccupancy,
+        Dictionary<Guid, List<ProductBatchPair>> locationContents,
+        Guid productId,
+        string normalizedBatch)
+    {
+        int maxCap = CalculateEffectiveCapacity(loc, palletHeightMeters, packagingMaxStacking);
+        int currentCount = simulatedOccupancy.GetValueOrDefault(loc.Id, 0);
+        if (currentCount >= maxCap)
+            return false;
+
+        if (!locationContents.TryGetValue(loc.Id, out var contents) || contents.Count == 0)
+            return true;
+
+        var storageType = loc.StorageType;
+
+        if (!storageType.AllowMixedProducts && contents.Any(c => c.ProductId != productId))
+            return false;
+
+        if (!storageType.AllowMixedBatches && !string.IsNullOrWhiteSpace(normalizedBatch))
+        {
+            bool hasDifferentBatch = contents.Any(c =>
+                c.ProductId == productId &&
+                !string.IsNullOrWhiteSpace(c.Batch) &&
+                !string.Equals(c.Batch, normalizedBatch, StringComparison.OrdinalIgnoreCase));
+
+            if (hasDifferentBatch)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static string NormalizeBatch(string? batch) => (batch ?? string.Empty).Trim().ToUpper();
+
     private static bool HasAdjacentBatchConflict(
         int currentIndex,
         List<Topology.Entities.Location> locations,
         Dictionary<Guid, List<ProductBatchPair>> locationContents,
         Guid productId,
-        string? currentBatch)
+        string currentBatch)
     {
         if (string.IsNullOrWhiteSpace(currentBatch)) return false;
 
@@ -264,7 +301,6 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
         return false;
     }
 
-    // CÁLCULO DE CAPACIDADE EFETIVA EMPILHADA: BaseCapacity × Min(CamadasPéDireito, MaxStackingEmbalagem)
     private static int CalculateEffectiveCapacity(Topology.Entities.Location loc, decimal palletHeightMeters, int packagingMaxStacking)
     {
         if (loc.StorageType.CapacityStrategy == StorageCapacityStrategy.DynamicStacking)
@@ -272,16 +308,14 @@ public class SuggestPutawayHandler : IRequestHandler<SuggestPutawayQuery, IResul
             var clearance = loc.Zone?.Warehouse?.ClearanceHeight ?? 0m;
             var safeHeight = palletHeightMeters <= 0 ? 1.5m : palletHeightMeters;
 
-            // Camadas permitidas pelo teto/pé-direito do prédio
             int clearanceStacking = clearance > 0 ? (int)Math.Max(1, Math.Floor(clearance / safeHeight)) : 1;
 
-            // Trava de segurança: usa o menor valor entre a altura do prédio e o limite da embalagem
             int effectiveStacking = Math.Min(clearanceStacking, packagingMaxStacking > 0 ? packagingMaxStacking : clearanceStacking);
 
-            return loc.BaseCapacity * effectiveStacking; // Ex: 12 posições chão × 3 camadas = 36 posições totais
+            return loc.BaseCapacity * effectiveStacking;
         }
 
-        return loc.BaseCapacity; // Porta-Paletes / Armazenamento Unitário
+        return loc.BaseCapacity;
     }
 
     private record ProductBatchPair(Guid ProductId, string Batch);

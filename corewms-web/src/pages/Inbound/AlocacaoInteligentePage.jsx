@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// SELETOR PESQUISÁVEL COMPACTO PARA A TABELA
 function SearchableLocationCell({ value, onChange, locations, disabled = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -89,15 +88,12 @@ export default function AlocacaoInteligentePage() {
     const [selectedHuIds, setSelectedHuIds] = useState([]);
     const [search, setSearch] = useState('');
 
-    // Bulk override
     const [bulkLocationId, setBulkLocationId] = useState('');
 
-    // 1. Dados da Ordem
     const { data: order } = useGetApiInboundId(orderId, {
         query: { enabled: Boolean(orderId && canViewInbound) }
     });
 
-    // 2. Busca todas as Posições (Armazenamento + Qualidade)
     const { data: storageLocations = [] } = useGetApiTopologyLocationsStorage({
         query: { enabled: canMoveInventory }
     });
@@ -120,7 +116,6 @@ export default function AlocacaoInteligentePage() {
         setRefreshTick(t => t + 1);
     };
 
-    // 3. Carrega Sugestões do Backend
     useEffect(() => {
         if (!orderId || !canMoveInventory) return;
 
@@ -148,7 +143,6 @@ export default function AlocacaoInteligentePage() {
         };
     }, [orderId, canMoveInventory, refreshTick]);
 
-    // Atualização de Posição Individual
     const handleUpdateLocation = (huId, newLocId, newLocPath) => {
         if (!canMoveInventory) return;
         setSuggestions(prev => prev.map(s => {
@@ -164,7 +158,6 @@ export default function AlocacaoInteligentePage() {
         }));
     };
 
-    // Aplicação de Posição em Lote
     const handleApplyBulkLocation = () => {
         if (!canMoveInventory) return;
         if (!bulkLocationId) return toast.warning('Selecione uma posição para aplicar em lote.');
@@ -189,7 +182,6 @@ export default function AlocacaoInteligentePage() {
         setBulkLocationId('');
     };
 
-    // Execução Final da Alocação
     const handleConfirmPutaway = async () => {
         if (!canMoveInventory) return;
 
@@ -245,7 +237,6 @@ export default function AlocacaoInteligentePage() {
 
     return (
         <div className="flex flex-col h-full space-y-6">
-            {/* CABEÇALHO DEDICADO */}
             <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate(`/inbound/operacao/${orderId}/hus`)}>
@@ -281,7 +272,6 @@ export default function AlocacaoInteligentePage() {
                 )}
             </div>
 
-            {/* TABELA DE REVISÃO E AÇÕES EM LOTE */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-4 flex-wrap shrink-0">
                     <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -294,7 +284,6 @@ export default function AlocacaoInteligentePage() {
                         />
                     </div>
 
-                    {/* AÇÃO EM LOTE */}
                     {canMoveInventory && (
                         <div className="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200">
                             <span className="text-xs text-slate-500 px-2 font-semibold">Alterar Selecionados ({selectedHuIds.length}):</span>
@@ -394,7 +383,6 @@ export default function AlocacaoInteligentePage() {
                                                 )}
                                             </TableCell>
 
-                                            {/* SELETOR DE POSIÇÃO INDIVIDUAL */}
                                             <TableCell>
                                                 <SearchableLocationCell
                                                     value={item.suggestedLocationId}
