@@ -97,54 +97,101 @@ import sys, webbrowser
 try:
     import gi
     gi.require_version('Gtk', '3.0')
+    from gi.repository import Gtk, Gio
+
+    use_gio_menu = False
     try:
-        # 1. Tenta a versão GLib mais nova (Debian Testing/Unstable e futuros Ubuntu)
-        gi.require_version('AyatanaAppIndicatorGlib', '0.1')
+        gi.require_version('AyatanaAppIndicatorGlib', '1.0')
         from gi.repository import AyatanaAppIndicatorGlib as AppIndicator
+        use_gio_menu = True
     except Exception:
         try:
-            # 2. Fallback para a versão estável atual (Debian 12 / Ubuntu 22.04+)
             gi.require_version('AyatanaAppIndicator3', '0.1')
             from gi.repository import AyatanaAppIndicator3 as AppIndicator
         except Exception:
-            # 3. Fallback final para sistemas Linux legados
             gi.require_version('AppIndicator3', '0.1')
             from gi.repository import AppIndicator3 as AppIndicator
-    from gi.repository import Gtk
 except Exception as e:
     sys.stderr.write(f'Erro de dependências no Python Tray: {{e}}\n')
     sys.exit(1)
 
-def open_dash(src): webbrowser.open('http://localhost:{port}')
-def open_cfg(src): webbrowser.open('http://localhost:{port}/config')
-def quit_agent(src):
+def open_dash(*args): webbrowser.open('http://localhost:{port}')
+def open_cfg(*args): webbrowser.open('http://localhost:{port}/config')
+def quit_agent(*args):
     import urllib.request
     try:
         req = urllib.request.Request('http://localhost:{port}/api/shutdown', method='POST')
         urllib.request.urlopen(req)
     except: pass
-    Gtk.main_quit()
+    if use_gio_menu and 'app' in globals():
+        app.quit()
+    else:
+        Gtk.main_quit()
 
-indicator = AppIndicator.Indicator.new('corewms-print-agent', 'printer-symbolic', AppIndicator.IndicatorCategory.APPLICATION_STATUS)
+indicator = AppIndicator.Indicator.new(
+    'corewms-print-agent',
+    'printer-symbolic',
+    AppIndicator.IndicatorCategory.APPLICATION_STATUS
+)
 indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
 
-menu = Gtk.Menu()
-item_dash = Gtk.MenuItem(label='🌐 Abrir Dashboard')
-item_dash.connect('activate', open_dash)
-menu.append(item_dash)
+if use_gio_menu:
+        # Testa se o ícone existe no tema GTK; se não, usa fallback garantido
+        icon_theme = Gtk.IconTheme.get_default()
+        icon_name = 'printer-symbolic' if icon_theme.has_icon('printer-symbolic') else 'dialog-information'
 
-item_cfg = Gtk.MenuItem(label='⚙️ Configurações')
-item_cfg.connect('activate', open_cfg)
-menu.append(item_cfg)
+        indicator = AppIndicator.Indicator.new(
+            'corewms-print-agent',
+            icon_name,
+            AppIndicator.IndicatorCategory.APPLICATION_STATUS
+        )
+        indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
 
-menu.append(Gtk.SeparatorMenuItem())
-item_quit = Gtk.MenuItem(label='🛑 Encerrar Agente')
-item_quit.connect('activate', quit_agent)
-menu.append(item_quit)
+        app = Gtk.Application(
+            application_id='com.corewms.printagent.tray.menu',
+            flags=Gio.ApplicationFlags.FLAGS_NONE
+        )
 
-menu.show_all()
-indicator.set_menu(menu)
-Gtk.main()
+        def on_activate(a):
+            a.hold()
+            for name, cb in [
+                ('open-dash', open_dash),
+                ('open-cfg', open_cfg),
+                ('quit-agent', quit_agent),
+            ]:
+                act = Gio.SimpleAction.new(name, None)
+                act.connect('activate', cb)
+                a.add_action(act)
+
+            gmenu = Gio.Menu()
+            gmenu.append('🌐 Abrir Dashboard', 'app.open-dash')
+            gmenu.append('⚙️ Configurações', 'app.open-cfg')
+            gmenu.append('🛑 Encerrar Agente', 'app.quit-agent')
+
+            indicator.set_menu(gmenu)
+
+        app.connect('activate', on_activate)
+        app.run(None)
+else:
+    menu = Gtk.Menu()
+
+    item_dash = Gtk.MenuItem(label='🌐 Abrir Dashboard')
+    item_dash.connect('activate', open_dash)
+    menu.append(item_dash)
+
+    item_cfg = Gtk.MenuItem(label='⚙️ Configurações')
+    item_cfg.connect('activate', open_cfg)
+    menu.append(item_cfg)
+
+    menu.append(Gtk.SeparatorMenuItem())
+
+    item_quit = Gtk.MenuItem(label='🛑 Encerrar Agente')
+    item_quit.connect('activate', quit_agent)
+    menu.append(item_quit)
+
+    menu.show_all()
+    indicator.set_menu(menu)
+    Gtk.main()
 ";
 
         try
